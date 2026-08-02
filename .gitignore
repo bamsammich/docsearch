@@ -1,0 +1,25 @@
+# Build artifacts
+/bin/
+*.exe
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+
+# Runtime state — database, WAL sidecars, ingested library
+/var/
+*.db
+*.db-wal
+*.db-shm
+
+# Local secrets
+.env
+.env.local
+
+# Editor
+.DS_Store
