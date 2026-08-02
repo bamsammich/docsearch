@@ -165,9 +165,19 @@ number below is measured that way because it is the hardest framing.
 
 **Orient first.** `list_documents` → `outline` → `search` with `section_filter`
 set to the chapter that plainly covers the question. Measured on the 15
-single-shot misses at k=8, **14 were recovered at rank 1** by doing exactly
-that. The index is considerably stronger than the cold numbers suggest; the
-gap is in how it is queried, not in what it contains.
+single-shot misses at k=8, **14 came back at rank 1**.
+
+**That 14/15 is an upper bound, not a cold-start figure.** The harness chose
+each `section_filter` using the query's expected section — an oracle it had and
+a real caller does not. A model picking the chapter from the outline alone will
+sometimes pick wrong, and the true figure is lower by however often that
+happens. It has not been measured.
+
+The conclusion survives the caveat comfortably: these 15 queries score **0/15**
+single-shot, so even a substantially degraded real-world recovery rate is a
+large gain. What is established is that the answers are present and reachable
+once the search is scoped; what is not established is how reliably a model
+scopes it correctly.
 
 That is why `outline`'s tool description says to call it before searching.
 
@@ -257,7 +267,8 @@ k=8 full chunks, not a person scanning three results.
 | figure-dominated (6) | 33% | 33% | **50%** | 67% |
 
 Add orientation (`outline` → `section_filter`) and 14 of the 15 remaining @8
-misses come back at rank 1.
+misses come back at rank 1 — an **upper bound under oracle section selection**,
+see above.
 
 Of the 11 queries missing even at @20, 9 share at least one term with their
 target section and 2 share none — so most are reachable in principle and the

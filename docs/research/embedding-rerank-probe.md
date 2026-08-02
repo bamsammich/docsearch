@@ -7,11 +7,22 @@ Throwaway script, no schema change, no production dependency.
 
 ## Verdict: do not build the pipeline
 
-Net **+3** top-3 hits across 53 queries (6 rescued, 3 displaced). That is a
-55% → 61% top-3 move for a dense model, a vector index, an embedding step in
-ingest, and a second recall path to keep correct.
+Measured twice, at two success criteria. The second is the one that counts.
 
-**The category the probe existed to fix nets exactly zero.**
+| success criterion | rescued | displaced | net |
+|---|---|---|---|
+| correct chunk into **top-3** | 6 | 3 | **+3** |
+| correct chunk into **top-8** | 2 | 4 | **−2** |
+
+top-8 is the right target: the consumer is a model reading k=8 full chunks, not
+a person scanning three results. **At that k reranking is actively harmful**,
+and conceptual-slang — the category it existed for — nets −1.
+
+The first measurement used the wrong criterion, not the wrong candidate pool;
+both runs reranked the same 50-deep BM25 pool. Recording both so the correction
+is visible rather than silently replaced.
+
+**At top-3, the category the probe existed to fix nets exactly zero.**
 
 | category | n | rescued | displaced | net |
 |---|---|---|---|---|
