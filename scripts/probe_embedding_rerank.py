@@ -36,7 +36,6 @@ import sys
 from pathlib import Path
 
 MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-import os
 
 TOP_N = int(os.environ.get("PROBE_TOP_N", "3"))
 #: Chunk text is truncated before embedding: MiniLM has a 256-token window and
