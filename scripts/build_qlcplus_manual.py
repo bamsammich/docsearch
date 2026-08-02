@@ -50,7 +50,7 @@ def page_title(soup: BeautifulSoup, fallback: str) -> str:
         el = soup.find(tag)
         if el:
             text = el.get_text(" ", strip=True)
-            text = re.sub(r"\s*[-–|]\s*Q Light Controller.*$", "", text, flags=re.I).strip()
+            text = re.sub(r"\s*[-\u2013|]\s*Q Light Controller.*$", "", text, flags=re.I).strip()
             if text:
                 return text
     return fallback
