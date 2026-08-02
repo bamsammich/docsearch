@@ -182,8 +182,8 @@ def ingest_file(
             conn.execute("BEGIN IMMEDIATE")
             conn.executemany(
                 "INSERT INTO chunks (doc_id, ordinal, section, page_start, page_end,"
-                " printed_page_start, image_count, heading_path, text)"
-                " VALUES (?,?,?,?,?,?,?,?,?)",
+                " printed_page_start, image_count, kind, heading_path, text)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?)",
                 [
                     (
                         doc_id,
@@ -193,6 +193,7 @@ def ingest_file(
                         c.page_end,
                         c.printed_page_start,
                         c.image_count,
+                        c.kind,
                         c.heading_path,
                         c.text,
                     )

@@ -59,7 +59,7 @@ func (s *Store) Close() error { return s.db.Close() }
 // numbers where it once held page numbers passes every structural check while
 // silently changing what the index-term boost resolves to. Only a version
 // number, bumped deliberately, catches that.
-const RequiredSchemaVersion = 3
+const RequiredSchemaVersion = 4
 
 // ErrSchemaVersion reports a database written by a different schema revision.
 type ErrSchemaVersion struct {

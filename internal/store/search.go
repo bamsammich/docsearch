@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -27,6 +28,7 @@ type SearchResult struct {
 	PageEnd     *int    `json:"page_end,omitempty"`
 	PrintedPage *int    `json:"printed_page_start,omitempty"`
 	ImageCount  int     `json:"image_count"`
+	Kind        string  `json:"kind,omitempty"`
 	IndexBoost  bool    `json:"matched_book_index,omitempty"`
 	Text        string  `json:"text"`
 
@@ -56,16 +58,28 @@ func relevance(bm25 float64) float64 {
 
 // SearchParams are the inputs to Search.
 type SearchParams struct {
-	Query         string
-	DocID         string
-	SectionFilter string
-	K             int
+	Query                   string
+	DocID                   string
+	SectionFilter           string
+	K                       int
+	IncludeKeywordReference bool
 }
 
 // indexBoost is subtracted from a BM25 score when the chunk's section was
 // named by a matching back-of-book index entry. SQLite's bm25() returns
 // negative values where lower is better, so subtracting improves rank.
 const indexBoost = 2.0
+
+// keywordReferencePenalty pushes a self-declared keyword-reference entry down
+// the ranking. It is a penalty, not an exclusion: a keyword lookup is a
+// legitimate query and these chunks are its correct answers, reachable with
+// IncludeKeywordReference.
+//
+// Such a family is term-dense and low-prose, so its entries match on incidental
+// token overlap -- "step by step" surfacing StepOut, StepIn and StepFade. In
+// this corpus the family is 326 of 944 chunks, so left alone it crowds a third
+// of the index into every result set.
+const keywordReferencePenalty = 6.0
 
 const maxK = 25
 
@@ -81,6 +95,88 @@ func (s *Store) Search(ctx context.Context, p SearchParams) ([]SearchResult, err
 	if p.K > maxK {
 		p.K = maxK
 	}
+	if p.DocID == "" {
+		return s.searchAcrossDocuments(ctx, p)
+	}
+	return s.searchOneDocument(ctx, p)
+}
+
+// searchAcrossDocuments merges per-document results by within-document rank.
+//
+// BM25 scores are not comparable across documents: IDF is computed over the
+// whole table, so a term rare globally but common inside a small document lifts
+// that document's chunks above better answers in a large one. Measured on this
+// index, a corpus holding 22% of the chunks took 50% of the unscoped top-6.
+//
+// Comparing rank instead of score removes the incomparable quantity entirely:
+// each document's best answer competes with every other document's best answer,
+// its second with their seconds, and so on. Telling callers to scope by doc_id
+// is not a substitute -- the caller who most needs scoping is exactly the one
+// who does not yet know which document holds the answer.
+//
+// Cost is one query per ready document. That is fine at this scale and would
+// need revisiting for a library of hundreds.
+func (s *Store) searchAcrossDocuments(ctx context.Context, p SearchParams) ([]SearchResult, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT doc_id FROM documents WHERE status = 'ready' ORDER BY doc_id`)
+	if err != nil {
+		return nil, err
+	}
+	var docIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		docIDs = append(docIDs, id)
+	}
+	_ = rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	perDoc := make([][]SearchResult, 0, len(docIDs))
+	for _, id := range docIDs {
+		scoped := p
+		scoped.DocID = id
+		res, err := s.searchOneDocument(ctx, scoped)
+		if err != nil {
+			return nil, err
+		}
+		if len(res) > 0 {
+			perDoc = append(perDoc, res)
+		}
+	}
+
+	// Round-robin by within-document rank; relevance only breaks ties at the
+	// same rank, never decides across ranks.
+	var out []SearchResult
+	for depth := 0; len(out) < p.K; depth++ {
+		var tier []SearchResult
+		for _, res := range perDoc {
+			if depth < len(res) {
+				tier = append(tier, res[depth])
+			}
+		}
+		if len(tier) == 0 {
+			break
+		}
+		sort.SliceStable(tier, func(i, j int) bool { return tier[i].bm25 < tier[j].bm25 })
+		for _, r := range tier {
+			if len(out) >= p.K {
+				break
+			}
+			out = append(out, r)
+		}
+	}
+	for i := range out {
+		out[i].Rank = i + 1
+	}
+	return out, nil
+}
+
+func (s *Store) searchOneDocument(ctx context.Context, p SearchParams) ([]SearchResult, error) {
 	match, err := ftsQuery(p.Query)
 	if err != nil {
 		return nil, err
@@ -99,7 +195,8 @@ func (s *Store) Search(ctx context.Context, p SearchParams) ([]SearchResult, err
 	sb.WriteString(`
 		SELECT chunks.doc_id, documents.title, chunks.heading_path, chunks.section,
 		       chunks.id, chunks.page_start, chunks.page_end, chunks.printed_page_start,
-		       chunks.image_count, bm25(chunks_fts, 1.0, 2.0) AS score, chunks.text
+		       chunks.image_count, chunks.kind,
+		       bm25(chunks_fts, 1.0, 2.0) AS score, chunks.text
 		  FROM chunks_fts
 		  JOIN chunks ON chunks.id = chunks_fts.rowid
 		  JOIN documents ON documents.doc_id = chunks.doc_id
@@ -129,7 +226,7 @@ func (s *Store) Search(ctx context.Context, p SearchParams) ([]SearchResult, err
 		var r SearchResult
 		var section sql.NullString
 		if err := rows.Scan(&r.DocID, &r.Title, &r.HeadingPath, &section, &r.ChunkID,
-			&r.PageStart, &r.PageEnd, &r.PrintedPage, &r.ImageCount, &r.bm25,
+			&r.PageStart, &r.PageEnd, &r.PrintedPage, &r.ImageCount, &r.Kind, &r.bm25,
 			&r.Text); err != nil {
 			return nil, err
 		}
@@ -139,6 +236,9 @@ func (s *Store) Search(ctx context.Context, p SearchParams) ([]SearchResult, err
 		if AnySectionCovers(boostSections, r.Section) {
 			r.IndexBoost = true
 			r.bm25 -= indexBoost
+		}
+		if r.Kind == "keyword-reference" && !p.IncludeKeywordReference {
+			r.bm25 += keywordReferencePenalty
 		}
 		out = append(out, r)
 	}

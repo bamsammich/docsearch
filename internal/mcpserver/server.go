@@ -56,10 +56,16 @@ func New(d Deps) *mcp.Server {
 		Name: "search",
 		Description: "Full-text BM25 search over document chunks, weighting section headings " +
 			"above body text. Returns the full chunk text, not a snippet.\n\n" +
-			"Scores are not comparable across documents: IDF is computed over the whole " +
-			"index, so a rare term in a small document outranks the same term in a large " +
-			"one for reasons that have nothing to do with relevance. When you know which " +
-			"document you want, pass doc_id.\n\n" +
+			"'relevance' is 0..1, higher is better. It is comparable WITHIN one scoped " +
+			"result set and not across documents: BM25's IDF is computed over the whole " +
+			"index, so the same relevance figure means different things in a large and a " +
+			"small document. An unscoped search merges each document's results by their " +
+			"within-document rank rather than by score, so no cross-document score " +
+			"comparison is made on your behalf.\n\n" +
+			"Entries from a document's command-keyword reference are deprioritised by " +
+			"default: they are term-dense and match on incidental word overlap. Pass " +
+			"include_keyword_reference when you are looking up a specific command or " +
+			"keyword by name.\n\n" +
 			"Each result carries image_count. A result with a high image_count and little " +
 			"text is a figure-dominated section: its real content is a screenshot or " +
 			"diagram that is NOT in the text you receive. Do not conclude the section is " +
@@ -151,10 +157,11 @@ func (d Deps) outline(ctx context.Context, _ *mcp.CallToolRequest,
 // -- search ---------------------------------------------------------------
 
 type searchInput struct {
-	Query         string `json:"query" jsonschema:"the search query"`
-	DocID         string `json:"doc_id,omitempty" jsonschema:"restrict to one document"`
-	SectionFilter string `json:"section_filter,omitempty" jsonschema:"heading_path prefix filter"`
-	K             int    `json:"k,omitempty" jsonschema:"max results, default 8, max 25"`
+	Query                   string `json:"query" jsonschema:"the search query"`
+	DocID                   string `json:"doc_id,omitempty" jsonschema:"restrict to one document"`
+	SectionFilter           string `json:"section_filter,omitempty" jsonschema:"heading_path prefix filter"`
+	K                       int    `json:"k,omitempty" jsonschema:"max results, default 8, max 25"`
+	IncludeKeywordReference bool   `json:"include_keyword_reference,omitempty" jsonschema:"include command-keyword reference entries, which are deprioritised by default"`
 }
 
 type searchOutput struct {
@@ -170,10 +177,11 @@ func (d Deps) search(ctx context.Context, _ *mcp.CallToolRequest,
 		return nil, searchOutput{}, errors.New("query is required")
 	}
 	results, err := d.Store.Search(ctx, store.SearchParams{
-		Query:         in.Query,
-		DocID:         in.DocID,
-		SectionFilter: in.SectionFilter,
-		K:             in.K,
+		Query:                   in.Query,
+		DocID:                   in.DocID,
+		SectionFilter:           in.SectionFilter,
+		K:                       in.K,
+		IncludeKeywordReference: in.IncludeKeywordReference,
 	})
 	if err != nil {
 		return nil, searchOutput{}, err
@@ -191,16 +199,17 @@ func (d Deps) search(ctx context.Context, _ *mcp.CallToolRequest,
 				"Their real content is in a screenshot or diagram you cannot see. Cite the "+
 				"page rather than concluding from the text alone.", out.FigureHit)
 	}
-	// Ungrouped searches span documents whose BM25 scores are not comparable;
-	// grouping makes that visible rather than implying a single ranking.
+	// Grouping makes the multi-document nature visible rather than implying a
+	// single global ranking.
 	if in.DocID == "" && len(results) > 0 {
 		out.ByDoc = map[string][]store.SearchResult{}
 		for _, r := range results {
 			out.ByDoc[r.DocID] = append(out.ByDoc[r.DocID], r)
 		}
 		if len(out.ByDoc) > 1 {
-			note := "Results span multiple documents; BM25 scores are not comparable " +
-				"across them. Scope to a doc_id to rank within one document."
+			note := "Results span multiple documents and were merged by within-document " +
+				"rank, so relevance figures are not comparable between them. Scope to a " +
+				"doc_id to rank within one document."
 			if out.Note == "" {
 				out.Note = note
 			} else {

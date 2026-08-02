@@ -16,6 +16,8 @@ Two rules do the shaping:
 
 from __future__ import annotations
 
+import re
+from collections import defaultdict
 from dataclasses import dataclass, field, replace
 
 from .blocks import Block, Extraction
@@ -33,6 +35,24 @@ PATH_SEP = " > "
 STUB_MAX_TOKENS = 30
 
 
+#: A section family this large that the document itself labels a keyword list
+#: is a reference index, not a topic.
+REFERENCE_FAMILY_MIN = 30
+
+#: The parent heading must say so. Size alone is not enough: in the grandMA2
+#: manual chapter 7 ("Keys & Buttons on the Console") has 84 siblings of which
+#: 87% end in "Key", and those are exactly the pages an operator asking about
+#: the Flash or B.O. key needs. Only "10.2. All keywords" -- a command-line
+#: syntax reference the document names as such -- is the reference index.
+#: Classifying on shape alone would bury real prose, which is worse than the
+#: problem being solved.
+_REFERENCE_PARENT = re.compile(r"(?i)\bkeywords?\b")
+
+#: Most members of a reference family look like entries.
+_REFERENCE_LEAF = re.compile(r"(?i)\b(keyword|key)\s*$")
+_REFERENCE_LEAF_RATE = 0.6
+
+
 @dataclass(slots=True)
 class Chunk:
     ordinal: int
@@ -43,6 +63,8 @@ class Chunk:
     page_end: int | None = None
     printed_page_start: int | None = None
     image_count: int = 0
+    #: 'prose' | 'keyword-reference'
+    kind: str = "prose"
 
 
 @dataclass(slots=True)
@@ -254,6 +276,38 @@ def _fold_chapter_stubs(units: list[_Unit]) -> list[_Unit]:
     return out
 
 
+def classify_kinds(chunks: list[Chunk]) -> None:
+    """Mark chunks belonging to a self-declared keyword reference index.
+
+    Such a family is term-dense and low-prose, so its entries surface for any
+    query sharing a token with a keyword name -- "step by step" pulling up
+    StepOut, StepIn and StepFade. That is a chunk-population artifact, not a
+    vocabulary gap, and it crowds out real answers.
+
+    They are marked, never dropped: a keyword lookup is a legitimate query and
+    these are its correct answers.
+    """
+    families: defaultdict[str, list[Chunk]] = defaultdict(list)
+    for c in chunks:
+        if not c.section or "." not in c.section:
+            continue
+        families[c.section.rsplit(".", 1)[0]].append(c)
+
+    for members in families.values():
+        if len(members) < REFERENCE_FAMILY_MIN:
+            continue
+        parts = members[0].heading_path.split(PATH_SEP)
+        parent_heading = parts[-2] if len(parts) >= 2 else ""
+        if not _REFERENCE_PARENT.search(parent_heading):
+            continue
+        leaves = [m.heading_path.split(PATH_SEP)[-1] for m in members]
+        matched = sum(1 for leaf in leaves if _REFERENCE_LEAF.search(leaf))
+        if matched / len(members) < _REFERENCE_LEAF_RATE:
+            continue
+        for m in members:
+            m.kind = "keyword-reference"
+
+
 def chunk(extraction: Extraction) -> list[Chunk]:
     units = _fold_chapter_stubs(_merge_small(_group(extraction.blocks)))
     chunks: list[Chunk] = []
@@ -266,4 +320,5 @@ def chunk(extraction: Extraction) -> list[Chunk]:
         for path, blks in _split_oversized(unit):
             if any(b.text.strip() for b in blks):
                 chunks.append(_emit(len(chunks), path, blks, unit.section))
+    classify_kinds(chunks)
     return chunks

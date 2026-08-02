@@ -20,7 +20,7 @@ BUSY_TIMEOUT_MS = 5000
 #: authoritative chunk key -- is invisible to any structural check while
 #: silently changing what queries return. The Go server asserts this value at
 #: readiness and refuses to serve a database it was not built against.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 #: Human-readable history, so a version mismatch can be diagnosed without
 #: reading the git log.
@@ -29,6 +29,8 @@ SCHEMA_HISTORY = {
     2: "index_terms.section replaces page; chunks gains section, printed_page_start, image_count",
     3: "documents.warnings and ingest_jobs.warnings (JSON StructureReport); "
     "ingest_jobs.permanent distinguishes deterministic failure from exhaustion",
+    4: "chunks.kind marks self-declared keyword-reference families so search "
+    "can deprioritise them without deleting them",
 }
 
 #: Tables ``/readyz`` and the CLI check for to decide the schema is present.
@@ -86,6 +88,7 @@ CREATE TABLE IF NOT EXISTS chunks (
   page_end           INTEGER,
   printed_page_start INTEGER,
   image_count        INTEGER NOT NULL DEFAULT 0,
+  kind               TEXT NOT NULL DEFAULT 'prose',
   heading_path       TEXT NOT NULL,
   text               TEXT NOT NULL
 );
@@ -165,6 +168,7 @@ _ADDED_COLUMNS = (
     ("documents", "warnings", "TEXT"),
     ("ingest_jobs", "warnings", "TEXT"),
     ("ingest_jobs", "permanent", "INTEGER NOT NULL DEFAULT 0"),
+    ("chunks", "kind", "TEXT NOT NULL DEFAULT 'prose'"),
 )
 
 
