@@ -158,6 +158,78 @@ numbering. Units over ~1200 tokens subdivide; units under ~100 tokens merge
 forward, but only when the document did not number them. A numbered boundary is
 one the document declared, and small numbered sections stay small.
 
+## Use the tools in the right order
+
+Cold keyword search is the weakest way to use this index, and every headline
+number below is measured that way because it is the hardest framing.
+
+**Orient first.** `list_documents` → `outline` → `search` with `section_filter`
+set to the chapter that plainly covers the question. Measured on the 15
+single-shot misses at k=8, **14 were recovered at rank 1** by doing exactly
+that. The index is considerably stronger than the cold numbers suggest; the
+gap is in how it is queried, not in what it contains.
+
+That is why `outline`'s tool description says to call it before searching.
+
+## What we tried that didn't work
+
+Two plausible retrieval improvements were built, measured, and rejected. Both
+are recorded here rather than only in `docs/research/` because these are the
+decisions most likely to be re-litigated by someone who has not seen the
+numbers.
+
+### Back-of-book index-term boost — too diffuse to discriminate
+
+The grandMA2 index parses cleanly: 1,841 references, 100% resolving to known
+sections. Boosting chunks whose section a matching index term names sounded
+free. On precise queries it works. On the conceptual queries it was supposed to
+rescue, it matched **25, 46 and 21 sections** respectively.
+
+A boost applied to 46 of 827 sections is a constant, not a signal. It is still
+in the code because it costs nothing and helps precise lookups, but it does not
+do the job it was added for.
+
+### Dense reranking — actively harmful at the k that matters
+
+`all-MiniLM-L6-v2` over the top 50 BM25 candidates. Scored into top-3 it was
+net +3 across 53 queries. Scored into **top-8 — the k a model actually reads —
+it is net −2** (2 rescued, 4 displaced), and the conceptual-slang category it
+existed to fix nets −1.
+
+**The corpus vocabulary is the problem.** This manual uses "fader", "look",
+"cue stack", "executor" and "programmer" as terms of art that mean something
+else in general English. Every query built on them got *worse*:
+
+| query | BM25 rank | reranked |
+|---|---|---|
+| sub**master** **fader** to hold a **look** | 4 | **12** |
+| record a snapshot of the current **look** | 13 | **33** |
+| **cue stack** on a **fader** | 6 | **22** |
+
+BM25's ignorance is neutral. The embedder's confidence is wrong, and it is
+wrong precisely on operator slang — the queries a semantic model was supposed
+to help with.
+
+**And it undoes a cheaper fix.** q17, "step by step assign a fader to control a
+group master", was the query that motivated classifying keyword-reference
+chunks. That structural change moved it to **rank 1**. Reranking pushes it back
+to **rank 9**.
+
+Verdict: no vector index, no embedding step in ingest, no second recall path.
+Reopen only if the corpus changes character or a domain-adapted model appears;
+if reopened, the shape stays sqlite-vec as a reranker over the top ~50 BM25
+hits, never primary retrieval, with displacement count as a release gate.
+
+## Backups
+
+**The SQLite index is fully regenerable from the library volume.** Every chunk,
+FTS row, page and index term is derived from the source documents by
+`docsearch ingest`. Losing `docsearch.db` costs the time to re-ingest, nothing
+more.
+
+The volume that needs backing up is **`docsearch-library`**, which holds the
+only irreplaceable data. `docsearch-data` can be treated as a cache.
+
 ## Testing
 
 ```bash
@@ -172,6 +244,28 @@ file unedited** — rewording queries until they pass overfits to a moving test
 set. Baselines are committed alongside it so the effect of a change is
 measurable.
 
-Current: 42% top-1, 55% top-3 across 53 queries. Strong on heading terms (88%
-top-3), weak on conceptual phrasing (30% top-3). Both numbers are honest and
-the misses are printed in full.
+**recall@8 is the headline metric**, not top-3. The consumer is a model reading
+k=8 full chunks, not a person scanning three results.
+
+| cohort | @1 | @3 | **@8** | @20 |
+|---|---|---|---|---|
+| all (n=53) | 42% | 53% | **68%** | 79% |
+| heading-term (16) | 62% | 88% | **94%** | 94% |
+| body-term (5) | 60% | 60% | **80%** | 80% |
+| spans-boundary (6) | 50% | 67% | **83%** | 100% |
+| conceptual-slang (20) | 20% | 25% | **45%** | 65% |
+| figure-dominated (6) | 33% | 33% | **50%** | 67% |
+
+Add orientation (`outline` → `section_filter`) and 14 of the 15 remaining @8
+misses come back at rank 1.
+
+Of the 11 queries missing even at @20, 9 share at least one term with their
+target section and 2 share none — so most are reachable in principle and the
+failure is ranking depth, not absence.
+
+## Outstanding checks
+
+- `kubectl apply --dry-run=server -f deploy/k8s/` from the tailnet. The
+  manifests were validated structurally (parse plus constraint assertions);
+  client dry-run needs live API discovery and the cluster was not reachable
+  from the build host.

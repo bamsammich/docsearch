@@ -31,11 +31,14 @@ priors. The probe answers that empirically rather than assuming either way.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
 MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-TOP_N = 3
+import os
+
+TOP_N = int(os.environ.get("PROBE_TOP_N", "3"))
 #: Chunk text is truncated before embedding: MiniLM has a 256-token window and
 #: silently truncates anyway, so this makes the limit explicit.
 MAX_CHARS = 1200
@@ -67,7 +70,7 @@ def main() -> None:
 
     entries = json.loads(Path(sys.argv[1]).read_text())
     model = SentenceTransformer(MODEL)
-    print(f"model: {MODEL}\n")
+    print(f"model: {MODEL}   success criterion: correct chunk within top-{TOP_N}\n")
 
     rescued: list[str] = []
     displaced: list[str] = []
@@ -82,9 +85,7 @@ def main() -> None:
         bm25_positions = [i for i, c in enumerate(cands) if is_hit(e, c)]
         bm25_top3 = any(i < TOP_N for i in bm25_positions)
 
-        texts = [
-            (c["heading_path"] + "\n" + c["text"])[:MAX_CHARS] for c in cands
-        ]
+        texts = [(c["heading_path"] + "\n" + c["text"])[:MAX_CHARS] for c in cands]
         qv = model.encode([e["query"]], normalize_embeddings=True)
         cv = model.encode(texts, normalize_embeddings=True, batch_size=32)
         scores = cos_sim(qv, cv)[0].tolist()
@@ -105,26 +106,30 @@ def main() -> None:
             unchanged_miss += 1
             verdict = "still missing"
 
-        rows.append((e["id"], e["category"], verdict,
-                     (bm25_positions[0] + 1) if bm25_positions else None,
-                     (rerank_positions[0] + 1) if rerank_positions else None,
-                     e["query"]))
+        rows.append(
+            (
+                e["id"],
+                e["category"],
+                verdict,
+                (bm25_positions[0] + 1) if bm25_positions else None,
+                (rerank_positions[0] + 1) if rerank_positions else None,
+                e["query"],
+            )
+        )
 
     print(f"{'ID':<5} {'CATEGORY':<18} {'VERDICT':<14} {'BM25':>5} {'RERANK':>7}  QUERY")
     for qid, cat, verdict, bp, rp, q in rows:
-        print(f"{qid:<5} {cat:<18} {verdict:<14} {str(bp or '-'):>5} "
-              f"{str(rp or '-'):>7}  {q[:44]}")
+        print(f"{qid:<5} {cat:<18} {verdict:<14} {bp or '-'!s:>5} {rp or '-'!s:>7}  {q[:44]}")
 
     by_cat: dict[str, list[str]] = {}
-    for qid, cat, verdict, *_ in rows:
+    for _qid, cat, verdict, *_ in rows:
         by_cat.setdefault(cat, []).append(verdict)
 
     print("\n--- verdict by category ---")
     for cat, verdicts in sorted(by_cat.items()):
         r = verdicts.count("RESCUED")
         d = verdicts.count("DISPLACED")
-        print(f"  {cat:<18} n={len(verdicts):<3} rescued={r:<3} displaced={d:<3} "
-              f"net={r - d:+d}")
+        print(f"  {cat:<18} n={len(verdicts):<3} rescued={r:<3} displaced={d:<3} net={r - d:+d}")
 
     print(f"\nRESCUED   {len(rescued):>3}  {rescued}")
     print(f"DISPLACED {len(displaced):>3}  {displaced}")

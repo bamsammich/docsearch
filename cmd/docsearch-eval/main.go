@@ -13,6 +13,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -81,17 +82,28 @@ func main() {
 		q      query
 		top1   bool
 		top3   bool
+		top8   bool
+		top20  bool
 		hits   []store.SearchResult
 		hitPos int
 	}
 	var results []outcome
 
+	// Fetch a deep pool once. Reporting recall at several depths from one
+	// ranked list is what distinguishes a ranking failure (the answer is
+	// present but placed low) from a retrieval failure (it is not there at
+	// all), and those have opposite remedies.
+	const poolDepth = 20
+
 	for _, q := range f.Queries {
 		if q.Category == "cross-doc" {
+			// Excluded from scoring by construction: it carries expect:null
+			// because it exists to observe cross-document ranking behaviour,
+			// not to assert a correct answer.
 			continue
 		}
 		res, err := st.Search(ctx, store.SearchParams{
-			Query: q.Query, DocID: docIDs[q.Doc], K: 5,
+			Query: q.Query, DocID: docIDs[q.Doc], K: poolDepth,
 		})
 		if err != nil {
 			fmt.Printf("%s ERROR: %v\n", q.ID, err)
@@ -106,6 +118,8 @@ func main() {
 		}
 		o.top1 = o.hitPos == 1
 		o.top3 = o.hitPos >= 1 && o.hitPos <= 3
+		o.top8 = o.hitPos >= 1 && o.hitPos <= 8
+		o.top20 = o.hitPos >= 1 && o.hitPos <= 20
 		results = append(results, o)
 	}
 
@@ -134,7 +148,7 @@ func main() {
 	}
 
 	summarise := func(label string, keep func(outcome) bool) {
-		var n, t1, t3 int
+		var n, t1, t3, t8, t20 int
 		for _, o := range results {
 			if !keep(o) {
 				continue
@@ -146,12 +160,20 @@ func main() {
 			if o.top3 {
 				t3++
 			}
+			if o.top8 {
+				t8++
+			}
+			if o.top20 {
+				t20++
+			}
 		}
 		if n == 0 {
 			return
 		}
-		fmt.Printf("  %-28s n=%-3d top-1 %2d/%-2d (%3.0f%%)   top-3 %2d/%-2d (%3.0f%%)\n",
-			label, n, t1, n, 100*float64(t1)/float64(n), t3, n, 100*float64(t3)/float64(n))
+		pct := func(x int) float64 { return 100 * float64(x) / float64(n) }
+		fmt.Printf("  %-20s n=%-3d @1 %3.0f%%  @3 %3.0f%%  @8 %3.0f%%  @20 %3.0f%%"+
+			"   (%d/%d/%d/%d)\n",
+			label, n, pct(t1), pct(t3), pct(t8), pct(t20), t1, t3, t8, t20)
 	}
 
 	fmt.Println("\n--- hit rates ---")
@@ -177,6 +199,91 @@ func main() {
 	for _, d := range []string{"grandma2", "qlcplus"} {
 		summarise(d, func(o outcome) bool { return o.q.Doc == d })
 	}
+
+	// Queries whose answer is absent from a 20-deep pool cannot be helped by
+	// any reranker: reranking permutes a candidate set, it does not enlarge
+	// it. Whether the correct chunk shares even one term with the query
+	// decides whether the miss is lexically reachable at all.
+	fmt.Println("\n========================================================================")
+	fmt.Println("MISSING AT @20 -- is the correct chunk lexically reachable at all?")
+	fmt.Println("========================================================================")
+	var reachable, unreachable int
+	for _, o := range results {
+		if o.top20 || o.q.Expect == nil {
+			continue
+		}
+		terms := wordsOf(o.q.Query)
+		best, overlap, total := bestTargetOverlap(ctx, st, o.q, terms)
+		verdict := "NO TERM OVERLAP - unreachable lexically"
+		if overlap > 0 {
+			verdict = fmt.Sprintf("%d/%d query terms present", overlap, total)
+			reachable++
+		} else {
+			unreachable++
+		}
+		fmt.Printf("\n%s [%s] %q\n  target %s: %s\n  -> %s\n",
+			o.q.ID, o.q.Category, o.q.Query, derefOr(o.q.Expect, "-"),
+			truncate(best, 66), verdict)
+	}
+	fmt.Printf("\n  of the @20 misses: %d share at least one term with the target, "+
+		"%d share none\n", reachable, unreachable)
+
+	// Every number above is cold single-shot search, which is the hardest
+	// framing and not how the tools are meant to be used. A model orients
+	// first: list_documents, outline, then a scoped search. Measuring only
+	// single-shot understates the index if orientation is what unlocks it.
+	fmt.Println("\n========================================================================")
+	fmt.Println("AGENTIC LOOP -- outline, then scoped search, on the @8 misses")
+	fmt.Println("========================================================================")
+	fmt.Println("Assumption stated plainly: the harness picks the correct top-level")
+	fmt.Println("chapter from the outline, as a model reading it would try to. That is")
+	fmt.Println("the optimistic case for orientation, and it is the thing being measured.")
+
+	var attempted, recovered int
+	for _, o := range results {
+		if o.top8 || o.q.Expect == nil || o.q.Doc != "grandma2" {
+			continue
+		}
+		attempted++
+		outline, err := st.Outline(ctx, docIDs[o.q.Doc], 1)
+		if err != nil {
+			continue
+		}
+		var chapter string
+		for _, e := range outline {
+			if store.SectionCovers(*o.q.Expect, e.Section) || e.Section == *o.q.Expect {
+				chapter = e.Heading
+				break
+			}
+		}
+		if chapter == "" {
+			fmt.Printf("  %-5s no chapter in the depth-1 outline covers %s\n",
+				o.q.ID, *o.q.Expect)
+			continue
+		}
+		scoped, err := st.Search(ctx, store.SearchParams{
+			Query: o.q.Query, DocID: docIDs[o.q.Doc], SectionFilter: chapter, K: 8,
+		})
+		if err != nil {
+			continue
+		}
+		pos := 0
+		for i, r := range scoped {
+			if matches(o.q, r) {
+				pos = i + 1
+				break
+			}
+		}
+		status := "still missing"
+		if pos > 0 {
+			status = fmt.Sprintf("RECOVERED at %d", pos)
+			recovered++
+		}
+		fmt.Printf("  %-5s %-18s cold@%-3s -> section_filter %-28q %s\n",
+			o.q.ID, o.q.Category, posOrDash(o.hitPos), truncate(chapter, 26), status)
+	}
+	fmt.Printf("\n  recovered %d of %d single-shot misses by orienting first (%.0f%%)\n",
+		recovered, attempted, 100*float64(recovered)/float64(max(attempted, 1)))
 
 	crossDoc(ctx, st, []string{
 		"dmx universe addressing",
@@ -312,11 +419,66 @@ func dumpCandidates(ctx context.Context, st *store.Store, queries []query,
 	fmt.Printf("wrote %d queries, up to %d candidates each, to %s\n", len(out), n, path)
 }
 
+var evalWordRe = regexp.MustCompile(`[\p{L}\p{N}_]+`)
+
+// wordsOf returns the content terms of a query, dropping stopwords and very
+// short tokens so overlap reflects topical match rather than function words.
+func wordsOf(q string) []string {
+	stop := map[string]bool{
+		"the": true, "and": true, "for": true, "with": true, "how": true,
+		"what": true, "why": true, "can": true, "not": true, "you": true,
+		"are": true, "his": true, "her": true, "its": true, "from": true,
+		"that": true, "this": true, "into": true, "out": true, "all": true,
+		"does": true, "did": true, "was": true, "were": true, "have": true,
+	}
+	var out []string
+	for _, w := range evalWordRe.FindAllString(strings.ToLower(q), -1) {
+		if len(w) >= 3 && !stop[w] {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// bestTargetOverlap finds the chunk inside the expected target that shares the
+// most query terms, and reports that overlap. It looks the target up directly
+// rather than through search, so it answers "is the answer findable in
+// principle" independently of how the ranker behaved.
+func bestTargetOverlap(ctx context.Context, st *store.Store, q query,
+	terms []string) (string, int, int) {
+	chunks, err := st.ChunksMatchingExpectation(ctx, docIDs[q.Doc],
+		derefOr(q.Expect, ""), q.Doc == "grandma2")
+	if err != nil || len(chunks) == 0 {
+		return "(target not present in the index)", 0, len(terms)
+	}
+	bestPath, bestOverlap := chunks[0].HeadingPath, -1
+	for _, c := range chunks {
+		body := strings.ToLower(c.HeadingPath + " " + c.Text)
+		n := 0
+		for _, t := range terms {
+			if strings.Contains(body, t) {
+				n++
+			}
+		}
+		if n > bestOverlap {
+			bestOverlap, bestPath = n, c.HeadingPath
+		}
+	}
+	return bestPath, bestOverlap, len(terms)
+}
+
 func derefOr(s *string, alt string) string {
 	if s == nil {
 		return alt
 	}
 	return *s
+}
+
+func posOrDash(p int) string {
+	if p <= 0 {
+		return "-"
+	}
+	return fmt.Sprintf("%d", p)
 }
 
 func orDash(s string) string {

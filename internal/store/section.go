@@ -1,6 +1,10 @@
 package store
 
-import "strings"
+import (
+	"context"
+	"database/sql"
+	"strings"
+)
 
 // SectionMatchSQL resolves an index-term section reference to the chunks it
 // covers. It is the Go half of one rule that exists in two languages; the
@@ -28,6 +32,52 @@ func SectionCovers(ref, section string) bool {
 		return true
 	}
 	return strings.HasPrefix(section, ref+".")
+}
+
+// TargetChunk is a chunk looked up by expectation rather than by search. Used
+// by the evaluation harness to ask whether an answer exists in the index at
+// all, independently of how the ranker placed it.
+type TargetChunk struct {
+	HeadingPath string
+	Text        string
+}
+
+// ChunksMatchingExpectation returns the chunks a query's expected answer
+// covers: a section subtree for a numbered document, a heading substring
+// otherwise. Diagnostics only -- no tool calls this.
+func (s *Store) ChunksMatchingExpectation(ctx context.Context, docID, expect string,
+	bySection bool) ([]TargetChunk, error) {
+	if docID == "" || expect == "" {
+		return nil, nil
+	}
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	if bySection {
+		rows, err = s.db.QueryContext(ctx,
+			`SELECT heading_path, text FROM chunks
+			  WHERE doc_id = ? AND `+SectionMatchSQL+` ORDER BY ordinal`,
+			docID, expect, expect)
+	} else {
+		rows, err = s.db.QueryContext(ctx,
+			`SELECT heading_path, text FROM chunks
+			  WHERE doc_id = ? AND lower(heading_path) LIKE '%' || lower(?) || '%'
+			  ORDER BY ordinal`, docID, expect)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []TargetChunk
+	for rows.Next() {
+		var c TargetChunk
+		if err := rows.Scan(&c.HeadingPath, &c.Text); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 // AnySectionCovers reports whether any ref in refs covers section.

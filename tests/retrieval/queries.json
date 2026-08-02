@@ -13,7 +13,8 @@
       "cross-doc": "run unscoped to observe cross-document IDF behaviour"
     },
     "expansion": "2026-08-02, second authoring pass, before any remedy was implemented. Cohorts conceptual-slang, figure-dominated and spans-boundary were n=6/1/1 and underpowered; an n=1 cell is not evidence. Expanded to 20/6/6. Queries q01-q30 are preserved verbatim including their misses. The kind filter and the cross-document ranking fix are deliberately NOT yet built: if the remedy were implemented first it would shape the test set and the result would be unfalsifiable.",
-    "expectation_contamination": "grandMA2 'expect' values are chapter numbers taken from the outline observed in Phase 0 and Phase 3. That is contamination of the EXPECTATIONS, not of the queries: every query below is phrased in operator vocabulary without consulting the index. Knowing that chapter 31 is Effects lets me state a falsifiable prediction; it does not tell me how the ranker will behave."
+    "expectation_contamination": "grandMA2 'expect' values are chapter numbers taken from the outline observed in Phase 0 and Phase 3. That is contamination of the EXPECTATIONS, not of the queries: every query below is phrased in operator vocabulary without consulting the index. Knowing that chapter 31 is Effects lets me state a falsifiable prediction; it does not tell me how the ranker will behave.",
+    "counting": "54 queries are committed; 53 are scored. q30 is excluded by construction: it carries expect:null and category 'cross-doc' because it exists to observe cross-document ranking behaviour, not to assert a correct answer. The harness skips cross-doc entries when computing hit rates and runs them separately."
   },
   "queries": [
     {
