@@ -12,6 +12,25 @@ from pathlib import Path
 
 BUSY_TIMEOUT_MS = 5000
 
+#: Bumped whenever the schema changes in a way a reader must know about.
+#:
+#: Column presence is not sufficient. Adding a column is visible by inspection,
+#: but changing what an existing column *means* -- index_terms.section holding
+#: section numbers rather than page numbers, chunks.section becoming the
+#: authoritative chunk key -- is invisible to any structural check while
+#: silently changing what queries return. The Go server asserts this value at
+#: readiness and refuses to serve a database it was not built against.
+SCHEMA_VERSION = 3
+
+#: Human-readable history, so a version mismatch can be diagnosed without
+#: reading the git log.
+SCHEMA_HISTORY = {
+    1: "initial: documents, ingest_jobs, chunks + FTS5, pages, index_terms",
+    2: "index_terms.section replaces page; chunks gains section, printed_page_start, image_count",
+    3: "documents.warnings and ingest_jobs.warnings (JSON StructureReport); "
+    "ingest_jobs.permanent distinguishes deterministic failure from exhaustion",
+}
+
 #: Tables ``/readyz`` and the CLI check for to decide the schema is present.
 REQUIRED_TABLES = (
     "documents",
@@ -112,6 +131,11 @@ CREATE TABLE IF NOT EXISTS index_terms (
   section TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_index_terms ON index_terms(doc_id, term);
+
+CREATE TABLE IF NOT EXISTS schema_version (
+  version     INTEGER NOT NULL,
+  applied_at  TEXT NOT NULL
+);
 """
 
 
@@ -149,6 +173,20 @@ def _migrate(conn: sqlite3.Connection) -> None:
         existing = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
         if column not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+    conn.execute("DELETE FROM schema_version")
+    conn.execute(
+        "INSERT INTO schema_version (version, applied_at) VALUES (?, datetime('now'))",
+        (SCHEMA_VERSION,),
+    )
+
+
+def schema_version(conn: sqlite3.Connection) -> int | None:
+    """The schema version recorded in the database, or None if unrecorded."""
+    try:
+        row = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
+    except sqlite3.OperationalError:
+        return None
+    return int(row["version"]) if row else None
 
 
 def schema_present(conn: sqlite3.Connection) -> bool:

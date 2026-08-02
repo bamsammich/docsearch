@@ -97,7 +97,10 @@ func run() error {
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
 		if err := st.Ready(ctx); err != nil {
-			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			// Names schema versions and table names only -- never document
+			// titles, paths or counts. This endpoint has no auth.
+			log.Error("readiness check failed", "error", err)
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			return
 		}
 		w.WriteHeader(http.StatusOK)

@@ -50,20 +50,37 @@ func Open(path string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
-// requiredColumns are the columns the server actually reads. The ingester owns
-// the schema and adds columns over time; checking only that tables exist lets a
-// database that predates a column pass readiness and then fail inside a tool
-// call, which reads to the caller as a broken tool rather than a stale deploy.
-var requiredColumns = map[string][]string{
-	"documents":   {"doc_id", "title", "format", "status", "page_count", "chunk_count", "warnings"},
-	"ingest_jobs": {"id", "source_path", "status", "phase", "attempts", "permanent", "warnings", "lease_until"},
-	"chunks":      {"id", "doc_id", "ordinal", "section", "page_start", "printed_page_start", "image_count", "heading_path", "text"},
-	"pages":       {"doc_id", "page", "text"},
-	"index_terms": {"doc_id", "term", "section"},
+// RequiredSchemaVersion is the schema this binary was built against. It must
+// track docsearch.db.SCHEMA_VERSION on the Python side.
+//
+// A version is checked rather than a set of columns because the two catch
+// different faults. Column presence catches an *added* column. It cannot catch
+// changed semantics on an existing one -- index_terms.section holding section
+// numbers where it once held page numbers passes every structural check while
+// silently changing what the index-term boost resolves to. Only a version
+// number, bumped deliberately, catches that.
+const RequiredSchemaVersion = 3
+
+// ErrSchemaVersion reports a database written by a different schema revision.
+type ErrSchemaVersion struct {
+	Found    int
+	Required int
 }
 
-// Ready reports whether the database is openable and the schema is current.
-// It must not disclose document titles, paths or counts.
+func (e *ErrSchemaVersion) Error() string {
+	found := fmt.Sprintf("%d", e.Found)
+	if e.Found == 0 {
+		found = "unversioned (predates schema versioning)"
+	}
+	return fmt.Sprintf(
+		"schema version mismatch: database is at version %s, this server requires "+
+			"version %d. Run the ingester against this database to migrate it, or "+
+			"deploy the server build matching the database.", found, e.Required)
+}
+
+// Ready reports whether the database is openable and at the expected schema
+// version. It must not disclose document titles, paths or counts -- it is
+// reachable without a token.
 func (s *Store) Ready(ctx context.Context) error {
 	for _, name := range []string{
 		"documents", "ingest_jobs", "chunks", "chunks_fts", "pages", "index_terms",
@@ -73,42 +90,26 @@ func (s *Store) Ready(ctx context.Context) error {
 			`SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name = ?`,
 			name).Scan(&found)
 		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("schema incomplete")
+			return fmt.Errorf("schema incomplete: %s is missing", name)
 		}
 		if err != nil {
 			return fmt.Errorf("schema check failed")
 		}
 	}
-	for table, columns := range requiredColumns {
-		present, err := s.columns(ctx, table)
-		if err != nil {
-			return fmt.Errorf("schema check failed")
-		}
-		for _, c := range columns {
-			if !present[c] {
-				// Names a column, not any document content.
-				return fmt.Errorf("schema out of date: %s.%s is missing", table, c)
-			}
-		}
+
+	var version int
+	err := s.db.QueryRowContext(ctx, `SELECT version FROM schema_version LIMIT 1`).Scan(&version)
+	if errors.Is(err, sql.ErrNoRows) {
+		return &ErrSchemaVersion{Found: 0, Required: RequiredSchemaVersion}
+	}
+	if err != nil {
+		// No schema_version table at all: a database from before versioning.
+		return &ErrSchemaVersion{Found: 0, Required: RequiredSchemaVersion}
+	}
+	if version != RequiredSchemaVersion {
+		return &ErrSchemaVersion{Found: version, Required: RequiredSchemaVersion}
 	}
 	return nil
-}
-
-func (s *Store) columns(ctx context.Context, table string) (map[string]bool, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT name FROM pragma_table_info(?)`, table)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	out := map[string]bool{}
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, err
-		}
-		out[name] = true
-	}
-	return out, rows.Err()
 }
 
 // -- documents ------------------------------------------------------------

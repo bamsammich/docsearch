@@ -10,19 +10,48 @@ import (
 )
 
 // SearchResult is one hit returned by the search tool.
+//
+// Rank and Relevance are what callers see. The raw BM25 value is deliberately
+// not exposed: SQLite's bm25() is negative and more-negative means better, so
+// a reader comparing -10.2 against -8.2 concludes the wrong thing. It is kept
+// unexported for ordering and logging only.
 type SearchResult struct {
 	DocID       string  `json:"doc_id"`
 	Title       string  `json:"title"`
 	HeadingPath string  `json:"heading_path"`
 	Section     string  `json:"section,omitempty"`
 	ChunkID     int64   `json:"chunk_id"`
+	Rank        int     `json:"rank"`
+	Relevance   float64 `json:"relevance"`
 	PageStart   *int    `json:"page_start,omitempty"`
 	PageEnd     *int    `json:"page_end,omitempty"`
 	PrintedPage *int    `json:"printed_page_start,omitempty"`
 	ImageCount  int     `json:"image_count"`
-	Score       float64 `json:"score"`
 	IndexBoost  bool    `json:"matched_book_index,omitempty"`
 	Text        string  `json:"text"`
+
+	bm25 float64 // raw, negative, lower is better
+}
+
+// BM25 exposes the raw score for test harnesses and diagnostics.
+func (r SearchResult) BM25() float64 { return r.bm25 }
+
+// relevanceScale controls how quickly relevance saturates toward 1.
+const relevanceScale = 10.0
+
+// relevance maps a raw BM25 score to a monotonically increasing 0..1 value
+// where higher is better.
+//
+// This is a presentation transform, not a probability. It exists because the
+// raw sign convention is a trap for any reader, human or model. It is strictly
+// order-preserving, so it never changes ranking -- and like the raw score it
+// is only meaningful *within* one result set.
+func relevance(bm25 float64) float64 {
+	strength := -bm25
+	if strength < 0 {
+		strength = 0
+	}
+	return strength / (strength + relevanceScale)
 }
 
 // SearchParams are the inputs to Search.
@@ -100,7 +129,7 @@ func (s *Store) Search(ctx context.Context, p SearchParams) ([]SearchResult, err
 		var r SearchResult
 		var section sql.NullString
 		if err := rows.Scan(&r.DocID, &r.Title, &r.HeadingPath, &section, &r.ChunkID,
-			&r.PageStart, &r.PageEnd, &r.PrintedPage, &r.ImageCount, &r.Score,
+			&r.PageStart, &r.PageEnd, &r.PrintedPage, &r.ImageCount, &r.bm25,
 			&r.Text); err != nil {
 			return nil, err
 		}
@@ -109,7 +138,7 @@ func (s *Store) Search(ctx context.Context, p SearchParams) ([]SearchResult, err
 		}
 		if AnySectionCovers(boostSections, r.Section) {
 			r.IndexBoost = true
-			r.Score -= indexBoost
+			r.bm25 -= indexBoost
 		}
 		out = append(out, r)
 	}
@@ -119,12 +148,16 @@ func (s *Store) Search(ctx context.Context, p SearchParams) ([]SearchResult, err
 
 	// Re-sort: the boost changed the ordering the SQL produced.
 	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && out[j].Score < out[j-1].Score; j-- {
+		for j := i; j > 0 && out[j].bm25 < out[j-1].bm25; j-- {
 			out[j], out[j-1] = out[j-1], out[j]
 		}
 	}
 	if len(out) > p.K {
 		out = out[:p.K]
+	}
+	for i := range out {
+		out[i].Rank = i + 1
+		out[i].Relevance = relevance(out[i].bm25)
 	}
 	return out, nil
 }
