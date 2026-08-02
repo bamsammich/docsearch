@@ -75,10 +75,26 @@ func run() error {
 		Log:         log,
 	})
 
-	// The SDK owns session handling; we do not invent our own scheme.
+	// Stateless, deliberately.
+	//
+	// In session mode the SDK holds session state in memory, so any restart of
+	// this process orphans every connected client: their next request carries
+	// an Mcp-Session-Id the new process has never seen and gets a 404. Clients
+	// are supposed to reinitialise on a 404, but not all do -- observed in
+	// practice as a client reporting the server "not responding" indefinitely
+	// after a restart it never noticed.
+	//
+	// Nothing here needs a session. Every tool is request/response; long ingest
+	// reports progress by polling ingest_status, not by server-initiated
+	// notifications. Giving up sessions costs nothing and makes a restart
+	// invisible to callers, which matters because this runs as a supervised
+	// service that is expected to be restarted.
+	//
+	// GET and DELETE return 405 in this mode; that is the SDK's contract, not
+	// a limitation we impose.
 	mcpHandler := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return srv },
-		&mcp.StreamableHTTPOptions{Logger: log},
+		&mcp.StreamableHTTPOptions{Logger: log, Stateless: true},
 	)
 
 	mux := http.NewServeMux()
