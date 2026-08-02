@@ -25,6 +25,13 @@ MAX_TOKENS = 1200
 MIN_TOKENS = 100
 PATH_SEP = " > "
 
+#: A parent section whose own text is under this and whose next unit is its own
+#: child is a chapter stub -- a title plus a sentence of preamble. It folds into
+#: that child rather than standing as a chunk. BM25 length normalization scores
+#: short documents generously, so an 18-token chapter title would otherwise
+#: outrank the subsection that actually answers the query.
+STUB_MAX_TOKENS = 30
+
 
 @dataclass(slots=True)
 class Chunk:
@@ -217,8 +224,38 @@ def _emit(ordinal: int, path: list[str], blks: list[Block], section: str | None)
     )
 
 
+def _is_descendant(child: str | None, parent: str | None) -> bool:
+    return bool(child and parent and child.startswith(parent + "."))
+
+
+def _fold_chapter_stubs(units: list[_Unit]) -> list[_Unit]:
+    """Fold a parent section's thin preamble into its first child."""
+    out: list[_Unit] = []
+    i = 0
+    while i < len(units):
+        cur = units[i]
+        nxt = units[i + 1] if i + 1 < len(units) else None
+        if (
+            nxt is not None
+            and cur.authoritative
+            and _is_descendant(nxt.section, cur.section)
+            and cur.tokens < STUB_MAX_TOKENS
+        ):
+            units[i + 1] = _Unit(
+                key=nxt.key,
+                section=nxt.section,
+                heading_path=nxt.heading_path,
+                blocks=cur.blocks + nxt.blocks,
+            )
+            i += 1
+            continue
+        out.append(cur)
+        i += 1
+    return out
+
+
 def chunk(extraction: Extraction) -> list[Chunk]:
-    units = _merge_small(_group(extraction.blocks))
+    units = _fold_chapter_stubs(_merge_small(_group(extraction.blocks)))
     chunks: list[Chunk] = []
     for unit in units:
         if not unit.text:

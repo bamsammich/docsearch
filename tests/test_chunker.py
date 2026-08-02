@@ -149,3 +149,46 @@ def test_many_short_lines_still_split_at_the_cap() -> None:
     assert estimate_tokens(body) > MAX_TOKENS
     assert len(chunks) > 1
     assert all(estimate_tokens(c.text) <= MAX_TOKENS for c in chunks)
+
+
+def test_chapter_stub_folds_into_its_first_child() -> None:
+    """A thin chapter preamble must not compete with the subsection below it."""
+    blocks = [
+        Block(
+            heading_path=["4. Devices"], locator={"page": 1}, text="A short lead-in.", section="4"
+        ),
+        Block(
+            heading_path=["4. Devices", "4.1. Console"],
+            locator={"page": 1},
+            text=_para(120),
+            section="4.1",
+        ),
+    ]
+    chunks = chunk(_extraction(blocks))
+    assert len(chunks) == 1
+    assert chunks[0].section == "4.1"
+    assert "A short lead-in." in chunks[0].text
+
+
+def test_substantial_parent_section_keeps_its_own_chunk() -> None:
+    blocks = [
+        Block(heading_path=["4. Devices"], locator={"page": 1}, text=_para(200), section="4"),
+        Block(
+            heading_path=["4. Devices", "4.1. Console"],
+            locator={"page": 1},
+            text=_para(120),
+            section="4.1",
+        ),
+    ]
+    chunks = chunk(_extraction(blocks))
+    assert [c.section for c in chunks] == ["4", "4.1"]
+
+
+def test_stub_does_not_fold_into_a_non_descendant() -> None:
+    """A short section followed by a sibling is not a stub -- it stays put."""
+    blocks = [
+        Block(heading_path=["4. Devices"], locator={"page": 1}, text="Short.", section="4"),
+        Block(heading_path=["5. Network"], locator={"page": 2}, text=_para(120), section="5"),
+    ]
+    chunks = chunk(_extraction(blocks))
+    assert [c.section for c in chunks] == ["4", "5"]

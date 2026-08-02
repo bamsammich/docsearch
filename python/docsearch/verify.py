@@ -36,6 +36,7 @@ class VerifyReport:
     shortest: list[tuple[int, int, str]] = field(default_factory=list)
     index_terms: int = 0
     unjoinable_index_sections: list[str] = field(default_factory=list)
+    scattered_sections: list[str] = field(default_factory=list)
     chunks_with_images: int = 0
     problems: list[str] = field(default_factory=list)
 
@@ -104,16 +105,34 @@ def verify_document(conn: sqlite3.Connection, doc_id: str) -> VerifyReport:
     ordinals = [r["ordinal"] for r in rows]
     rep.ordinal_gaps = [a + 1 for a, b in itertools.pairwise(ordinals) if b != a + 1]
 
+    # A section split across non-adjacent ordinals was never subdivided -- a
+    # boundary misfired and scattered one section key across the document,
+    # which silently breaks the index_terms section -> chunk join.
+    by_section: dict[str, list[int]] = {}
+    for r in rows:
+        if r["section"]:
+            by_section.setdefault(r["section"], []).append(r["ordinal"])
+    rep.scattered_sections = sorted(
+        s
+        for s, ords in by_section.items()
+        if len(ords) > 1 and ords != list(range(ords[0], ords[0] + len(ords)))
+    )
+
     rep.index_terms = conn.execute(
         "SELECT COUNT(*) c FROM index_terms WHERE doc_id = ?", (doc_id,)
     ).fetchone()["c"]
     if rep.index_terms:
+        # Prefix semantics, not equality: an index entry pointing at chapter 4
+        # refers to the whole chapter, and a chapter whose preamble folded into
+        # its first child has no chunk of its own to match exactly. Phase 3's
+        # index-term boost must resolve sections the same way.
         rep.unjoinable_index_sections = [
             r["section"]
             for r in conn.execute(
                 "SELECT DISTINCT it.section FROM index_terms it"
                 " WHERE it.doc_id = ? AND NOT EXISTS ("
-                "   SELECT 1 FROM chunks c WHERE c.doc_id = it.doc_id AND c.section = it.section)"
+                "   SELECT 1 FROM chunks c WHERE c.doc_id = it.doc_id"
+                "     AND (c.section = it.section OR c.section LIKE it.section || '.%'))"
                 " ORDER BY it.section",
                 (doc_id,),
             )
@@ -131,6 +150,11 @@ def verify_document(conn: sqlite3.Connection, doc_id: str) -> VerifyReport:
         rep.problems.append(f"{rep.missing_locator} chunks have no page locator")
     if rep.unjoinable_index_sections:
         rep.problems.append(f"{len(rep.unjoinable_index_sections)} index sections join to no chunk")
+    if rep.scattered_sections:
+        rep.problems.append(
+            f"{len(rep.scattered_sections)} sections span non-adjacent chunks "
+            f"(boundary misfire): {', '.join(rep.scattered_sections[:8])}"
+        )
     fts = conn.execute("SELECT COUNT(*) c FROM chunks_fts WHERE doc_id = ?", (doc_id,)).fetchone()[
         "c"
     ]

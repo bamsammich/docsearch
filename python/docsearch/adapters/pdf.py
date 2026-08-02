@@ -32,12 +32,24 @@ ProgressFn = Callable[[str, int, int], None]
 #: fraction of pages. Running furniture hits ~100%; real prose never does.
 BOILERPLATE_PAGE_FRACTION = 0.25
 
+#: Below this page count, repetition is not evidence of furniture and the
+#: false-positive risk dominates.
+BOILERPLATE_MIN_PAGES = 8
+
 #: A heading candidate size must exceed body size by this factor.
 HEADING_SIZE_RATIO = 1.10
 
 #: Blocks at or below this token count on a page bearing images are treated as
 #: figure callouts: attached to their section, never a chunk or split point.
 FIGURE_CAPTION_MAX_TOKENS = 25
+
+#: An image xref placed on more than this fraction of pages is page furniture
+#: (a corner logo), not a figure.
+FIGURE_FURNITURE_PAGE_FRACTION = 0.5
+
+#: Minimum placed area, in pt^2, for an image to count as a figure. Below this
+#: it is an inline icon or a bullet glyph. 400pt^2 is roughly 20x20.
+MIN_FIGURE_AREA = 400.0
 
 _SECTION_LINE = re.compile(r"^(\d+(?:\.\d+)*)\.\s*(.*)$")
 _SECTION_ONLY = re.compile(r"^(\d+(?:\.\d+)*)\.$")
@@ -82,16 +94,27 @@ def _normalize(text: str) -> str:
     return _DIGITS.sub("#", text)
 
 
-def detect_boilerplate(pages: list[list[_Line]]) -> set[str]:
+def detect_boilerplate(pages: list[list[_Line]], heading_sizes: set[float]) -> set[str]:
     """Running headers and footers, found by repetition frequency.
 
     Deliberately not positional: in this corpus the copyright and phone lines
     are emitted *first* in extraction order despite sitting visually at the
     page bottom, so a top/bottom band test misses them entirely.
+
+    Heading-sized lines are excluded from consideration. Digits normalize to
+    '#' so every bare chapter number collapses to the same key -- "1.", "2."
+    and "3." are one string here -- and on a document with few pages that
+    collision alone clears the repetition threshold, classifying every chapter
+    heading as furniture and erasing the structure. Running furniture is set in
+    small type; a line at a heading size is never it.
     """
+    if len(pages) < BOILERPLATE_MIN_PAGES:
+        return set()
     seen: defaultdict[str, set[int]] = defaultdict(set)
     for i, lines in enumerate(pages):
         for ln in lines:
+            if ln.size in heading_sizes:
+                continue
             seen[_normalize(ln.text)].add(i)
     threshold = max(3, int(len(pages) * BOILERPLATE_PAGE_FRACTION))
     return {norm for norm, pgs in seen.items() if len(pgs) >= threshold}
@@ -173,16 +196,27 @@ def _find_body_headings(
     heading_sizes: list[float],
     boiler: set[str],
     toc_page_max: int,
-) -> tuple[list[tuple[int, str, str]], set[tuple[int, float]]]:
+) -> tuple[list[tuple[int, str, str]], set[tuple[int, float]], list[str]]:
     """Locate numbered section headings in the body.
 
-    Returns ``(headings, subdivision_points)`` where headings is
-    ``(page_index, section, title)`` and subdivision_points holds
-    ``(page_index, y0)`` for heading-sized lines carrying no section number.
+    Returns ``(headings, subdivision_points, rejected)`` where headings is
+    ``(page_index, section, title)``, subdivision_points holds
+    ``(page_index, y0)`` for heading-sized lines carrying no section number,
+    and rejected lists candidates refused by the ordering rule.
+
+    A numbered procedure step ("1. Tap the title bar") set at a heading size is
+    indistinguishable from a chapter heading by font and regex alone. Document
+    order is the discriminator: section numbering only ever advances, so a
+    candidate that does not sort strictly after the last accepted heading is a
+    list item, not a section. Without this a stray "1." resets the current
+    section mid-book and scatters one section key across the whole document,
+    which silently breaks the index_terms section -> chunk join.
     """
     headings: list[tuple[int, str, str]] = []
     subdivisions: set[tuple[int, float]] = set()
+    rejected: list[str] = []
     head_set = set(heading_sizes)
+    last_key: tuple[int, ...] = ()
 
     for pno, lines in enumerate(pages):
         if pno <= toc_page_max:
@@ -199,6 +233,11 @@ def _find_body_headings(
                 i += 1
                 continue
             section, title = m.group(1), m.group(2).strip()
+            key = tuple(int(part) for part in section.split("."))
+            if key <= last_key:
+                rejected.append(f"p{pno + 1}:{section}")
+                i += 1
+                continue
             if not title:
                 # Chapter headings emit the number and the title as separate
                 # lines at the same size; join them.
@@ -208,9 +247,10 @@ def _find_body_headings(
                 if j < len(lines) and lines[j].size == ln.size:
                     title = lines[j].text.strip()
                     i = j
+            last_key = key
             headings.append((pno, section, title))
             i += 1
-    return headings, subdivisions
+    return headings, subdivisions, rejected
 
 
 def parse_index(
@@ -246,6 +286,60 @@ def _ancestors(section: str) -> list[str]:
     return [".".join(parts[: i + 1]) for i in range(len(parts))]
 
 
+def _filter_figures(
+    raw: list[list[tuple[float, int, float]]], page_count: int
+) -> tuple[list[list[tuple[float, int]]], dict[str, Any]]:
+    """Reduce placed images to actual figures.
+
+    A raw image count is not a figure count. Page furniture -- a corner logo
+    drawn on every page -- is an image placement like any other, and counting
+    it makes image_count a constant rather than a signal. Three filters:
+    repeated xrefs are furniture, tiny placements are icons and bullets, and
+    one xref placed twice on a page is one figure.
+    """
+    xref_pages: defaultdict[int, set[int]] = defaultdict(set)
+    for pno, images in enumerate(raw):
+        for _y, xref, _area in images:
+            xref_pages[xref].add(pno)
+
+    furniture = {
+        xref
+        for xref, pgs in xref_pages.items()
+        if len(pgs) > page_count * FIGURE_FURNITURE_PAGE_FRACTION
+    }
+
+    kept: list[list[tuple[float, int]]] = []
+    dropped_furniture = dropped_small = dropped_dupe = 0
+    for images in raw:
+        seen: set[int] = set()
+        page_kept: list[tuple[float, int]] = []
+        for y, xref, area in images:
+            if xref in furniture:
+                dropped_furniture += 1
+                continue
+            if area < MIN_FIGURE_AREA:
+                dropped_small += 1
+                continue
+            if xref in seen:
+                dropped_dupe += 1
+                continue
+            seen.add(xref)
+            page_kept.append((y, 1))
+        kept.append(page_kept)
+
+    stats: dict[str, Any] = {
+        "distinct_xrefs": len(xref_pages),
+        "furniture_xrefs": sorted(furniture),
+        "placements_total": sum(len(x) for x in raw),
+        "dropped_as_furniture": dropped_furniture,
+        "dropped_as_too_small": dropped_small,
+        "dropped_as_duplicate_on_page": dropped_dupe,
+        "figures_kept": sum(len(x) for x in kept),
+        "pages_with_no_figure": sum(1 for x in kept if not x),
+    }
+    return kept, stats
+
+
 def extract(path: Path, progress: ProgressFn | None = None) -> Extraction:
     doc = fitz.open(path)
     n = doc.page_count
@@ -256,27 +350,37 @@ def extract(path: Path, progress: ProgressFn | None = None) -> Extraction:
 
     pages: list[list[_Line]] = []
     page_text: dict[int, str] = {}
-    page_images: list[list[tuple[float, int]]] = []
+    raw_images: list[list[tuple[float, int, float]]] = []
     for i in range(n):
         page = doc[i]
         pages.append(_page_lines(page))
         page_text[i + 1] = page.get_text("text")
         try:
-            infos = page.get_image_info()
+            infos = page.get_image_info(xrefs=True)
         except Exception:
             infos = []
-        page_images.append(sorted((float(im["bbox"][1]), 1) for im in infos))
+        placed: list[tuple[float, int, float]] = []
+        for im in infos:
+            bbox = im["bbox"]
+            area = abs(bbox[2] - bbox[0]) * abs(bbox[3] - bbox[1])
+            placed.append((float(bbox[1]), int(im.get("xref", 0)), area))
+        raw_images.append(sorted(placed))
         if i % 50 == 0:
             tick("extract", i)
     tick("extract", n)
 
-    boiler = detect_boilerplate(pages)
+    page_images, image_stats = _filter_figures(raw_images, n)
+
+    # Font analysis first: boilerplate detection needs to know which sizes are
+    # headings so it can leave them alone.
     body_size, heading_sizes = analyze_fonts(pages)
+    boiler = detect_boilerplate(pages, set(heading_sizes))
 
     diagnostics: dict[str, Any] = {
         "body_font_size": body_size,
         "heading_font_sizes": heading_sizes,
         "boilerplate_lines_stripped": len(boiler),
+        "figures": image_stats,
     }
 
     # --- structure source ----------------------------------------------------
@@ -310,8 +414,11 @@ def extract(path: Path, progress: ProgressFn | None = None) -> Extraction:
     diagnostics["toc_entries"] = len(toc_entries)
     toc_titles = {sec: title for sec, title, _ in toc_entries}
 
-    headings, subdivisions = _find_body_headings(pages, heading_sizes, boiler, toc_page_max)
+    headings, subdivisions, rejected = _find_body_headings(
+        pages, heading_sizes, boiler, toc_page_max
+    )
     diagnostics["body_headings_found"] = len(headings)
+    diagnostics["candidates_rejected_by_ordering"] = rejected
 
     # --- cross-validation: every TOC section must exist in the body ----------
     body_sections = {sec for _p, sec, _t in headings}
@@ -323,11 +430,20 @@ def extract(path: Path, progress: ProgressFn | None = None) -> Extraction:
         (s for s in body_sections if toc_titles and s not in toc_titles),
         key=lambda s: [int(p) for p in s.split(".")],
     )
+    # Set difference alone cannot see a section detected twice: the duplicate
+    # carries a number that is legitimately in the TOC, so both differences stay
+    # empty while the boundaries are wrong. Count detections explicitly.
+    detected = Counter(sec for _p, sec, _t in headings)
+    duplicates = sorted(
+        (s for s, c in detected.items() if c > 1),
+        key=lambda s: [int(p) for p in s.split(".")],
+    )
     diagnostics["cross_validation"] = {
         "toc_sections": len(toc_titles),
         "body_sections": len(body_sections),
         "in_toc_not_in_body": missing,
         "in_body_not_in_toc": extra,
+        "detected_more_than_once": duplicates,
     }
 
     section_titles = dict(toc_titles)
