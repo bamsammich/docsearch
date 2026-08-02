@@ -1,0 +1,70 @@
+========================================================================
+RETRIEVAL EVALUATION
+========================================================================
+ID    HIT@   CATEGORY           BLIND QUERY
+q01   1      heading-term       NO    assign a sequence to an executor
+q02   1      heading-term       yes   patch a fixture and set its DMX address
+q03   3      heading-term       yes   how do I store a cue
+q04   1      heading-term       yes   create a group of fixtures
+q05   5      heading-term       yes   build an effect with a sine wave
+q06   1      heading-term       yes   timecode show recording
+q07   1      body-term          yes   configure Art-Net output universes
+q08   MISS   heading-term       yes   join a session with another console
+q09   2      heading-term       yes   record a macro
+q10   1      heading-term       yes   MAtricks interleave selection
+q11   1      heading-term       yes   what is a world and how do I use filters
+q12   1      body-term          yes   save the show file to a USB stick
+q13   1      heading-term       yes   clone one fixture to another
+q14   1      heading-term       yes   RDM device discovery
+q15   1      body-term          yes   command line syntax rules for keywords
+q16   4      figure-dominated   NO    what connectors are on the rear panel of the console
+q17   5      spans-boundary     yes   step by step assign a fader to control a group master
+q18   2      conceptual-slang   yes   bump button to flash a light
+q19   3      conceptual-slang   yes   submaster fader to hold a look
+q20   MISS   conceptual-slang   yes   make the lights chase around in a circle
+q21   2      conceptual-slang   yes   kill all the lights instantly panic button
+q22   MISS   conceptual-slang   yes   why is my light stuck at a value I cannot change
+q23   MISS   body-term          yes   error message meaning and what to do about it
+q24   2      heading-term       yes   countdown timer
+q25   3      heading-term       yes   create a chaser from several scenes
+q26   3      heading-term       yes   trigger a function from audio input level
+q27   2      heading-term       yes   add a button to the virtual console
+q28   MISS   body-term          yes   art-net plugin output configuration
+q29   5      conceptual-slang   yes   my moving head is not in the list of lights I can add
+q31   MISS   conceptual-slang   yes   record a snapshot of the current look on stage
+q32   MISS   conceptual-slang   yes   cue stack on a fader
+q33   MISS   conceptual-slang   yes   solo a light so I can see which one it is
+q34   MISS   conceptual-slang   yes   strike the lamps on my moving lights
+q35   2      conceptual-slang   yes   two fixtures fighting over the same address
+q36   MISS   conceptual-slang   yes   how long it takes to crossfade between looks
+q37   MISS   conceptual-slang   yes   make the lights flash fast like a strobe
+q38   MISS   conceptual-slang   yes   undo the last thing I did
+q39   MISS   conceptual-slang   yes   save my work before I lose it
+q40   MISS   conceptual-slang   yes   busking a show live without pre-programming
+q41   MISS   conceptual-slang   yes   trigger lights from the sound desk
+q42   MISS   conceptual-slang   yes   turn everything off except the worklight
+q43   1      conceptual-slang   yes   the screen layout is a mess, put it back to normal
+q44   1      conceptual-slang   yes   a big red panic button on screen
+q45   MISS   figure-dominated   yes   which socket do I plug the DMX cable into
+q46   1      figure-dominated   yes   what are the buttons along the top of the screen
+q47   MISS   figure-dominated   yes   what do the encoder wheels at the bottom do
+q48   1      figure-dominated   yes   what the stage view looks like when fixtures are placed
+q49   MISS   figure-dominated   yes   what colour means what in the cue list
+q50   5      spans-boundary     yes   full procedure to patch a moving light from scratch and check it responds
+q51   1      spans-boundary     yes   record a timecode show from start to finish and play it back
+q52   1      spans-boundary     yes   set up a multi user session between two consoles step by step
+q53   3      spans-boundary     yes   create an effect, assign it to an executor and adjust its speed
+q54   MISS   spans-boundary     yes   build a scene then chain it into a chaser and run it
+
+--- hit rates ---
+  ALL                          n=53  top-1 17/53 ( 32%)   top-3 28/53 ( 53%)
+  blind only                   n=51  top-1 16/51 ( 31%)   top-3 27/51 ( 53%)
+  informed by this session     n=2   top-1  1/2  ( 50%)   top-3  1/2  ( 50%)
+
+--- by category ---
+  body-term                    n=5   top-1  3/5  ( 60%)   top-3  3/5  ( 60%)
+  conceptual-slang             n=20  top-1  2/20 ( 10%)   top-3  6/20 ( 30%)
+  figure-dominated             n=6   top-1  2/6  ( 33%)   top-3  2/6  ( 33%)
+  heading-term                 n=16  top-1  8/16 ( 50%)   top-3 14/16 ( 88%)
+  spans-boundary               n=6   top-1  2/6  ( 33%)   top-3  3/6  ( 50%)
+
