@@ -16,19 +16,21 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import db
+from . import db, structure
 from .adapters import for_path
 from .chunker import chunk as chunk_extraction
+from .errors import IngestCancelled, StructureValidationError
+from .structure import StructureReport
 
 #: ``(phase, current, total)``; phase is 'extract' | 'chunk' | 'index'.
 ProgressFn = Callable[[str, int, int], None]
 CancelFn = Callable[[], bool]
+#: Runs inside the final transaction, alongside the document becoming visible.
+FinalizeFn = Callable[[sqlite3.Connection, "IngestResult"], None]
 
 CHUNK_INSERT_BATCH = 200
 
-
-class IngestCancelled(Exception):
-    """Raised at a checkpoint when cancellation was requested."""
+__all__ = ["IngestCancelled", "IngestResult", "ingest_file", "slugify", "unique_doc_id"]
 
 
 @dataclass(slots=True)
@@ -40,6 +42,7 @@ class IngestResult:
     outcome: str
     note: str = ""
     diagnostics: dict[str, object] | None = None
+    report: StructureReport | None = None
 
 
 def slugify(value: str) -> str:
@@ -84,6 +87,7 @@ def ingest_file(
     progress: ProgressFn | None = None,
     should_cancel: CancelFn | None = None,
     on_doc_id: Callable[[str], None] | None = None,
+    on_finalize: FinalizeFn | None = None,
 ) -> IngestResult:
     """Extract, chunk and index one file.
 
@@ -129,6 +133,11 @@ def ingest_file(
     extraction = adapter(path, progress)
     checkpoint()
 
+    report = structure.from_diagnostics(extraction.diagnostics)
+    if report.fatal:
+        # Refused before any row is written, so there is nothing to roll back.
+        raise StructureValidationError(report.failure_message())
+
     doc_title = (title or extraction.title or path.stem).strip()
     doc_id = unique_doc_id(conn, doc_title, reuse=replacing)
     if on_doc_id:
@@ -137,6 +146,18 @@ def ingest_file(
     if progress:
         progress("chunk", 0, 1)
     chunks = chunk_extraction(extraction)
+    if not chunks:
+        # A document that indexes to nothing is not an empty success. It holds
+        # a doc_id, reports 'ready', and can never be returned by any query --
+        # extraction found structure but no text survived, which is a defect
+        # worth surfacing rather than recording as a valid ingest.
+        raise StructureValidationError(
+            f"{path.name}: extraction produced no chunks. "
+            f"Structure source was '{report.structure_source}' and "
+            f"{report.body_sections} section heading(s) were found, but no body text "
+            "survived boilerplate stripping. The document was not indexed."
+        )
+    report.scattered_sections = structure.scattered_sections(chunks)
     checkpoint()
 
     conn.execute("BEGIN IMMEDIATE")
@@ -196,12 +217,26 @@ def ingest_file(
             )
         conn.execute("COMMIT")
 
-        # The moment the document becomes visible to search.
+        result = IngestResult(
+            doc_id=doc_id,
+            title=doc_title,
+            chunk_count=len(chunks),
+            outcome="replaced" if replacing else "ingested",
+            diagnostics=extraction.diagnostics,
+            report=report,
+        )
+
+        # The moment the document becomes visible to search. The job row is
+        # completed in this same transaction so a document can never be
+        # searchable while its job still reads as running.
         conn.execute("BEGIN IMMEDIATE")
         conn.execute(
-            "UPDATE documents SET status='ready', chunk_count=?, ingested_at=? WHERE doc_id=?",
-            (len(chunks), _now(), doc_id),
+            "UPDATE documents SET status='ready', chunk_count=?, ingested_at=?, warnings=?"
+            " WHERE doc_id=?",
+            (len(chunks), _now(), report.to_json(), doc_id),
         )
+        if on_finalize:
+            on_finalize(conn, result)
         conn.execute("COMMIT")
     except Exception:
         with contextlib.suppress(sqlite3.OperationalError):
@@ -211,10 +246,4 @@ def ingest_file(
         conn.execute("COMMIT")
         raise
 
-    return IngestResult(
-        doc_id=doc_id,
-        title=doc_title,
-        chunk_count=len(chunks),
-        outcome="replaced" if replacing else "ingested",
-        diagnostics=extraction.diagnostics,
-    )
+    return result

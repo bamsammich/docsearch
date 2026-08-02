@@ -12,6 +12,7 @@ import itertools
 import sqlite3
 from dataclasses import dataclass, field
 
+from .db import chunks_in_section
 from .tokens import estimate_tokens
 
 
@@ -122,20 +123,19 @@ def verify_document(conn: sqlite3.Connection, doc_id: str) -> VerifyReport:
         "SELECT COUNT(*) c FROM index_terms WHERE doc_id = ?", (doc_id,)
     ).fetchone()["c"]
     if rep.index_terms:
-        # Prefix semantics, not equality: an index entry pointing at chapter 4
-        # refers to the whole chapter, and a chapter whose preamble folded into
-        # its first child has no chunk of its own to match exactly. Phase 3's
-        # index-term boost must resolve sections the same way.
-        rep.unjoinable_index_sections = [
+        # Subtree semantics via the shared rule in db.SECTION_MATCH_SQL: an
+        # index entry pointing at chapter 4 refers to the whole chapter, and a
+        # chapter whose preamble folded into its first child has no chunk of
+        # its own to match exactly.
+        sections = [
             r["section"]
             for r in conn.execute(
-                "SELECT DISTINCT it.section FROM index_terms it"
-                " WHERE it.doc_id = ? AND NOT EXISTS ("
-                "   SELECT 1 FROM chunks c WHERE c.doc_id = it.doc_id"
-                "     AND (c.section = it.section OR c.section LIKE it.section || '.%'))"
-                " ORDER BY it.section",
+                "SELECT DISTINCT section FROM index_terms WHERE doc_id = ? ORDER BY section",
                 (doc_id,),
             )
+        ]
+        rep.unjoinable_index_sections = [
+            s for s in sections if not chunks_in_section(conn, doc_id, s)
         ]
 
     if doc["status"] != "ready":

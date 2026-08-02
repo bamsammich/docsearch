@@ -24,6 +24,7 @@ from typing import Any
 import fitz
 
 from ..blocks import Block, Extraction
+from ..errors import StructureValidationError
 from ..tokens import estimate_tokens
 
 ProgressFn = Callable[[str, int, int], None]
@@ -405,7 +406,7 @@ def extract(path: Path, progress: ProgressFn | None = None) -> Extraction:
         elif heading_sizes:
             diagnostics["structure_source"] = "font_heuristic"
         else:
-            raise ValueError(
+            raise StructureValidationError(
                 f"{path.name}: no outline tree, no printed table of contents, and no "
                 "usable font hierarchy -- cannot derive chunk boundaries. Refusing to "
                 "fall back to fixed token windows."

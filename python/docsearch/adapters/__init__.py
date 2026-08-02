@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Protocol
 
 from ..blocks import Extraction
+from ..errors import UnsupportedFormatError
 from . import docx as docx_adapter
 from . import html as html_adapter
 from . import markdown as markdown_adapter
@@ -35,8 +36,7 @@ _BY_SUFFIX: dict[str, Callable[..., Extraction]] = {
 SUPPORTED_SUFFIXES = frozenset(_BY_SUFFIX)
 
 
-class UnsupportedFormatError(ValueError):
-    """Raised for a suffix with no adapter. Deterministic -- never retried."""
+__all__ = ["SUPPORTED_SUFFIXES", "Adapter", "UnsupportedFormatError", "for_path", "is_supported"]
 
 
 def for_path(path: Path) -> Callable[..., Extraction]:

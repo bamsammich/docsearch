@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS documents (
   page_count   INTEGER,
   chunk_count  INTEGER,
   status       TEXT NOT NULL,
-  ingested_at  TEXT
+  ingested_at  TEXT,
+  warnings     TEXT              -- JSON StructureReport; NULL until ingest completes
 );
 CREATE INDEX IF NOT EXISTS idx_documents_source ON documents(source_path);
 CREATE INDEX IF NOT EXISTS idx_documents_sha    ON documents(sha256);
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS ingest_jobs (
   attempts      INTEGER NOT NULL DEFAULT 0,
   cancel_req    INTEGER NOT NULL DEFAULT 0,
   error         TEXT,
+  warnings      TEXT,
   lease_until   TEXT,
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL
@@ -128,7 +130,23 @@ def connect(db_path: str | Path, *, create: bool = True) -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous=NORMAL")
     if create:
         conn.executescript(SCHEMA)
+        _migrate(conn)
     return conn
+
+
+#: Columns added after the initial schema. CREATE TABLE IF NOT EXISTS leaves an
+#: existing table untouched, so new columns need an explicit backfill.
+_ADDED_COLUMNS = (
+    ("documents", "warnings", "TEXT"),
+    ("ingest_jobs", "warnings", "TEXT"),
+)
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    for table, column, decl in _ADDED_COLUMNS:
+        existing = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
 
 def schema_present(conn: sqlite3.Connection) -> bool:
@@ -136,6 +154,28 @@ def schema_present(conn: sqlite3.Connection) -> bool:
     rows = conn.execute("SELECT name FROM sqlite_master WHERE type IN ('table','view')").fetchall()
     have = {r["name"] for r in rows}
     return all(t in have for t in REQUIRED_TABLES)
+
+
+#: Resolve an index-term section reference to the chunks it covers.
+#:
+#: The match is component-wise, never a bare string prefix. A reference to
+#: chapter "4" covers "4" and "4.1", and must not touch "41" or "43.6.1" --
+#: LIKE '4%' would sweep in both. The trailing dot is what makes it a boundary.
+#:
+#: Coverage metrics are structurally blind to getting this wrong: over-matching
+#: *raises* the number of resolved joins, so an "unjoinable = 0" check moves in
+#: the reassuring direction while the results get worse. Precision needs its own
+#: test. Phase 3's index-term boost must resolve sections through this same rule.
+SECTION_MATCH_SQL = "(chunks.section = ? OR chunks.section LIKE ? || '.%')"
+
+
+def chunks_in_section(conn: sqlite3.Connection, doc_id: str, section: str) -> list[int]:
+    """Chunk ids covered by ``section``, including its descendants."""
+    rows = conn.execute(
+        f"SELECT id FROM chunks WHERE doc_id = ? AND {SECTION_MATCH_SQL} ORDER BY ordinal",
+        (doc_id, section, section),
+    ).fetchall()
+    return [r["id"] for r in rows]
 
 
 def delete_document_rows(conn: sqlite3.Connection, doc_id: str) -> None:

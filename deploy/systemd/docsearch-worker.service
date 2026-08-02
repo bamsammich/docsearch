@@ -1,0 +1,30 @@
+[Unit]
+Description=docsearch ingest worker
+Documentation=https://github.com/bamsammich/docsearch
+After=network.target
+
+[Service]
+Type=simple
+Environment=DOCSEARCH_DB=%h/.local/share/docsearch/docsearch.db
+Environment=DOCSEARCH_ROOT=%h/Documents/library
+Environment=DOCSEARCH_LOG_LEVEL=INFO
+ExecStart=%h/.local/bin/docsearch worker --db ${DOCSEARCH_DB} --root ${DOCSEARCH_ROOT}
+
+Restart=on-failure
+RestartSec=5
+
+# An in-flight job must reach a checkpoint and roll back its partial rows
+# rather than be killed mid-write. Extraction of a large scanned PDF can sit
+# inside one unit of work for minutes.
+KillSignal=SIGTERM
+TimeoutStopSec=900
+
+# The worker reads the library and writes exactly one database.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/docsearch
+
+[Install]
+WantedBy=default.target
