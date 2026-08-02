@@ -238,15 +238,20 @@ class Worker:
             ).fetchone()
             attempts = int(row["attempts"]) if row else self.config.max_attempts
             exhausted = permanent or attempts >= self.config.max_attempts
+            # attempts is left at its true value. A status of 'failed' is
+            # already unclaimable -- the claim query only ever considers
+            # 'queued' and lease-expired 'running' -- so inflating the counter
+            # to block reclaim would buy nothing and would make a job that
+            # failed deterministically on attempt one indistinguishable from
+            # one that genuinely exhausted three. The distinction is carried by
+            # the permanent flag instead, and reported as such.
             self.conn.execute(
-                "UPDATE ingest_jobs SET status=?, phase=NULL, error=?,"
-                " attempts=?, lease_until=NULL, updated_at=datetime('now') WHERE id=?",
+                "UPDATE ingest_jobs SET status=?, phase=NULL, error=?, permanent=?,"
+                " lease_until=NULL, updated_at=datetime('now') WHERE id=?",
                 (
                     "failed" if exhausted else "queued",
                     message,
-                    # A permanent failure consumes the whole budget: retrying a
-                    # corrupt file or an unsupported format cannot change it.
-                    self.config.max_attempts if permanent else attempts,
+                    1 if permanent else 0,
                     job_id,
                 ),
             )

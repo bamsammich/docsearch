@@ -146,5 +146,6 @@ def test_worker_fails_the_job_permanently_on_structure_mismatch(
     assert row["status"] == "failed"
     assert "StructureValidationError" in row["error"]
     assert "not indexed" in row["error"]
-    assert row["attempts"] == 3, "a permanent failure consumes the retry budget"
+    assert row["permanent"] == 1
+    assert row["attempts"] == 1, "a permanent failure is not retried, and says so as a flag"
     assert conn.execute("SELECT COUNT(*) c FROM documents").fetchone()["c"] == 0

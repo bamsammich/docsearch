@@ -106,6 +106,10 @@ def test_unsupported_format_fails_permanently_without_burning_retries(
     row = _job(conn, job_id)
     assert row["status"] == "failed"
     assert "UnsupportedFormatError" in row["error"]
+    assert row["permanent"] == 1
+    # The true attempt count is preserved: this failed deterministically on the
+    # first try and did not exhaust a budget.
+    assert row["attempts"] == 1
 
     # A permanently failed job must not be picked up again.
     assert _worker(db_path).claim() is None
@@ -119,6 +123,7 @@ def test_missing_file_fails_and_is_retried_then_exhausted(db_path: str, tmp_path
     row = _job(conn, job_id)
     assert row["status"] == "failed"
     assert row["attempts"] == 3
+    assert row["permanent"] == 0, "a missing file is transient; it exhausted its budget"
     assert _worker(db_path).claim() is None
 
 

@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS ingest_jobs (
   progress_cur  INTEGER,
   progress_tot  INTEGER,
   attempts      INTEGER NOT NULL DEFAULT 0,
+  permanent     INTEGER NOT NULL DEFAULT 0,  -- failed deterministically; never retried
   cancel_req    INTEGER NOT NULL DEFAULT 0,
   error         TEXT,
   warnings      TEXT,
@@ -139,6 +140,7 @@ def connect(db_path: str | Path, *, create: bool = True) -> sqlite3.Connection:
 _ADDED_COLUMNS = (
     ("documents", "warnings", "TEXT"),
     ("ingest_jobs", "warnings", "TEXT"),
+    ("ingest_jobs", "permanent", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 

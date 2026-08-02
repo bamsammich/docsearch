@@ -1,0 +1,233 @@
+package store
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"regexp"
+	"strings"
+)
+
+// SearchResult is one hit returned by the search tool.
+type SearchResult struct {
+	DocID       string  `json:"doc_id"`
+	Title       string  `json:"title"`
+	HeadingPath string  `json:"heading_path"`
+	Section     string  `json:"section,omitempty"`
+	ChunkID     int64   `json:"chunk_id"`
+	PageStart   *int    `json:"page_start,omitempty"`
+	PageEnd     *int    `json:"page_end,omitempty"`
+	PrintedPage *int    `json:"printed_page_start,omitempty"`
+	ImageCount  int     `json:"image_count"`
+	Score       float64 `json:"score"`
+	IndexBoost  bool    `json:"matched_book_index,omitempty"`
+	Text        string  `json:"text"`
+}
+
+// SearchParams are the inputs to Search.
+type SearchParams struct {
+	Query         string
+	DocID         string
+	SectionFilter string
+	K             int
+}
+
+// indexBoost is subtracted from a BM25 score when the chunk's section was
+// named by a matching back-of-book index entry. SQLite's bm25() returns
+// negative values where lower is better, so subtracting improves rank.
+const indexBoost = 2.0
+
+const maxK = 25
+
+// Search runs BM25 over chunks_fts, weighting heading_path above text.
+//
+// bm25() weights are positional over the FTS columns (text, heading_path).
+// heading_path is weighted higher because a query term appearing in a section
+// title is far stronger evidence than the same term in body prose.
+func (s *Store) Search(ctx context.Context, p SearchParams) ([]SearchResult, error) {
+	if p.K <= 0 {
+		p.K = 8
+	}
+	if p.K > maxK {
+		p.K = maxK
+	}
+	match, err := ftsQuery(p.Query)
+	if err != nil {
+		return nil, err
+	}
+
+	var boostSections []string
+	if p.DocID != "" {
+		boostSections, err = s.matchingIndexSections(ctx, p.DocID, p.Query)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	args := []any{match}
+	sb := strings.Builder{}
+	sb.WriteString(`
+		SELECT chunks.doc_id, documents.title, chunks.heading_path, chunks.section,
+		       chunks.id, chunks.page_start, chunks.page_end, chunks.printed_page_start,
+		       chunks.image_count, bm25(chunks_fts, 1.0, 2.0) AS score, chunks.text
+		  FROM chunks_fts
+		  JOIN chunks ON chunks.id = chunks_fts.rowid
+		  JOIN documents ON documents.doc_id = chunks.doc_id
+		 WHERE chunks_fts MATCH ?
+		   AND documents.status = 'ready'`)
+	if p.DocID != "" {
+		sb.WriteString(" AND chunks.doc_id = ?")
+		args = append(args, p.DocID)
+	}
+	if p.SectionFilter != "" {
+		sb.WriteString(" AND (chunks.heading_path = ? OR chunks.heading_path LIKE ? || ' > %')")
+		args = append(args, p.SectionFilter, p.SectionFilter)
+	}
+	// Over-fetch so the index boost can reorder within a meaningful pool
+	// rather than only permuting an already-truncated top k.
+	sb.WriteString(" ORDER BY score LIMIT ?")
+	args = append(args, p.K*4)
+
+	rows, err := s.db.QueryContext(ctx, sb.String(), args...)
+	if err != nil {
+		return nil, fmt.Errorf("search failed: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []SearchResult
+	for rows.Next() {
+		var r SearchResult
+		var section sql.NullString
+		if err := rows.Scan(&r.DocID, &r.Title, &r.HeadingPath, &section, &r.ChunkID,
+			&r.PageStart, &r.PageEnd, &r.PrintedPage, &r.ImageCount, &r.Score,
+			&r.Text); err != nil {
+			return nil, err
+		}
+		if section.Valid {
+			r.Section = section.String
+		}
+		if AnySectionCovers(boostSections, r.Section) {
+			r.IndexBoost = true
+			r.Score -= indexBoost
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Re-sort: the boost changed the ordering the SQL produced.
+	for i := 1; i < len(out); i++ {
+		for j := i; j > 0 && out[j].Score < out[j-1].Score; j-- {
+			out[j], out[j-1] = out[j-1], out[j]
+		}
+	}
+	if len(out) > p.K {
+		out = out[:p.K]
+	}
+	return out, nil
+}
+
+// matchingIndexSections finds back-of-book index entries matching the query
+// and returns the sections they point at.
+//
+// Section references are resolved through SectionCovers by the caller, not by
+// an ad hoc string comparison, so this shares one rule with the Python side.
+func (s *Store) matchingIndexSections(ctx context.Context, docID, query string) ([]string, error) {
+	words := wordRe.FindAllString(strings.ToLower(query), -1)
+	if len(words) == 0 {
+		return nil, nil
+	}
+	conds := make([]string, 0, len(words))
+	args := []any{docID}
+	for _, w := range words {
+		if len(w) < 3 {
+			continue
+		}
+		conds = append(conds, "instr(lower(term), ?) > 0")
+		args = append(args, w)
+	}
+	if len(conds) == 0 {
+		return nil, nil
+	}
+	q := `SELECT DISTINCT section FROM index_terms WHERE doc_id = ? AND (` +
+		strings.Join(conds, " OR ") + `)`
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var sec string
+		if err := rows.Scan(&sec); err != nil {
+			return nil, err
+		}
+		out = append(out, sec)
+	}
+	return out, rows.Err()
+}
+
+var wordRe = regexp.MustCompile(`[\p{L}\p{N}_]+`)
+
+// ftsQuery converts free text into an FTS5 MATCH expression.
+//
+// Every token is quoted. Unquoted user input reaches the FTS5 query parser,
+// where characters like '"', '*', ':', '^', 'NEAR' and 'OR' are operators --
+// a stray quote is a syntax error surfaced to the caller, and the rest change
+// the query's meaning in ways the caller did not ask for.
+func ftsQuery(raw string) (string, error) {
+	words := wordRe.FindAllString(raw, -1)
+	if len(words) == 0 {
+		return "", fmt.Errorf("query contains no searchable terms")
+	}
+	quoted := make([]string, len(words))
+	for i, w := range words {
+		quoted[i] = `"` + w + `"`
+	}
+	return strings.Join(quoted, " OR "), nil
+}
+
+// summarizeWarnings turns a persisted StructureReport into a quality flag and
+// human-readable findings. The worker is headless, so these were captured as
+// data at ingest time; this is where a caller finally sees them.
+func summarizeWarnings(raw sql.NullString) (string, []string) {
+	if !raw.Valid || raw.String == "" {
+		return "unknown", nil
+	}
+	var payload struct {
+		Quality             string   `json:"quality"`
+		InTOCNotInBody      []string `json:"in_toc_not_in_body"`
+		InBodyNotInTOC      []string `json:"in_body_not_in_toc"`
+		DetectedMoreThanOne []string `json:"detected_more_than_once"`
+		Scattered           []string `json:"scattered_sections"`
+	}
+	if err := json.Unmarshal([]byte(raw.String), &payload); err != nil {
+		return "unknown", nil
+	}
+	quality := payload.Quality
+	if quality == "" {
+		quality = "unknown"
+	}
+	var notes []string
+	add := func(items []string, label string) {
+		if len(items) == 0 {
+			return
+		}
+		shown := items
+		if len(shown) > 10 {
+			shown = shown[:10]
+		}
+		note := fmt.Sprintf("%d %s: %s", len(items), label, strings.Join(shown, ", "))
+		if len(items) > len(shown) {
+			note += fmt.Sprintf(" (+%d more)", len(items)-len(shown))
+		}
+		notes = append(notes, note)
+	}
+	add(payload.InTOCNotInBody, "sections in the table of contents but not the body")
+	add(payload.InBodyNotInTOC, "headings in the body but not the table of contents")
+	add(payload.DetectedMoreThanOne, "sections detected more than once")
+	add(payload.Scattered, "sections spanning non-adjacent chunks")
+	return quality, notes
+}
