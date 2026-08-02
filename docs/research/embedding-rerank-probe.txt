@@ -1,0 +1,68 @@
+model: sentence-transformers/all-MiniLM-L6-v2
+
+ID    CATEGORY           VERDICT         BM25  RERANK  QUERY
+q01   heading-term       kept               1       2  assign a sequence to an executor
+q02   heading-term       kept               1       1  patch a fixture and set its DMX address
+q03   heading-term       kept               3       1  how do I store a cue
+q04   heading-term       kept               1       1  create a group of fixtures
+q05   heading-term       RESCUED            5       2  build an effect with a sine wave
+q06   heading-term       kept               1       1  timecode show recording
+q07   body-term          kept               1       1  configure Art-Net output universes
+q08   heading-term       still missing     33      25  join a session with another console
+q09   heading-term       kept               1       1  record a macro
+q10   heading-term       kept               1       1  MAtricks interleave selection
+q11   heading-term       kept               1       1  what is a world and how do I use filters
+q12   body-term          kept               1       1  save the show file to a USB stick
+q13   heading-term       kept               1       1  clone one fixture to another
+q14   heading-term       kept               1       1  RDM device discovery
+q15   body-term          kept               1       1  command line syntax rules for keywords
+q16   figure-dominated   RESCUED            4       1  what connectors are on the rear panel of the
+q17   spans-boundary     DISPLACED          1       9  step by step assign a fader to control a gro
+q18   conceptual-slang   kept               1       2  bump button to flash a light
+q19   conceptual-slang   still missing      4      12  submaster fader to hold a look
+q20   conceptual-slang   still missing     27      14  make the lights chase around in a circle
+q21   conceptual-slang   kept               1       1  kill all the lights instantly panic button
+q22   conceptual-slang   still missing      -       -  why is my light stuck at a value I cannot ch
+q23   body-term          RESCUED            5       1  error message meaning and what to do about i
+q24   heading-term       kept               1       1  countdown timer
+q25   heading-term       kept               3       3  create a chaser from several scenes
+q26   heading-term       kept               3       2  trigger a function from audio input level
+q27   heading-term       kept               2       2  add a button to the virtual console
+q28   body-term          still missing      -       -  art-net plugin output configuration
+q29   conceptual-slang   still missing      5       4  my moving head is not in the list of lights 
+q31   conceptual-slang   still missing     13      33  record a snapshot of the current look on sta
+q32   conceptual-slang   still missing      6      22  cue stack on a fader
+q33   conceptual-slang   still missing     34      14  solo a light so I can see which one it is
+q34   conceptual-slang   still missing      -       -  strike the lamps on my moving lights
+q35   conceptual-slang   DISPLACED          2       5  two fixtures fighting over the same address
+q36   conceptual-slang   RESCUED            5       2  how long it takes to crossfade between looks
+q37   conceptual-slang   still missing      -       -  make the lights flash fast like a strobe
+q38   conceptual-slang   still missing      -       -  undo the last thing I did
+q39   conceptual-slang   RESCUED            9       1  save my work before I lose it
+q40   conceptual-slang   still missing      -       -  busking a show live without pre-programming
+q41   conceptual-slang   still missing     14      15  trigger lights from the sound desk
+q42   conceptual-slang   still missing     18       8  turn everything off except the worklight
+q43   conceptual-slang   DISPLACED          1       9  the screen layout is a mess, put it back to 
+q44   conceptual-slang   kept               1       1  a big red panic button on screen
+q45   figure-dominated   still missing      -       -  which socket do I plug the DMX cable into
+q46   figure-dominated   kept               1       1  what are the buttons along the top of the sc
+q47   figure-dominated   still missing     11      10  what do the encoder wheels at the bottom do
+q48   figure-dominated   kept               1       1  what the stage view looks like when fixtures
+q49   figure-dominated   still missing     42      35  what colour means what in the cue list
+q50   spans-boundary     RESCUED            5       1  full procedure to patch a moving light from 
+q51   spans-boundary     kept               1       1  record a timecode show from start to finish 
+q52   spans-boundary     kept               1       1  set up a multi user session between two cons
+q53   spans-boundary     kept               2       1  create an effect, assign it to an executor a
+q54   spans-boundary     still missing     10      13  build a scene then chain it into a chaser an
+
+--- verdict by category ---
+  body-term          n=5   rescued=1   displaced=0   net=+1
+  conceptual-slang   n=20  rescued=2   displaced=2   net=+0
+  figure-dominated   n=6   rescued=1   displaced=0   net=+1
+  heading-term       n=16  rescued=1   displaced=0   net=+1
+  spans-boundary     n=6   rescued=1   displaced=1   net=+0
+
+RESCUED     6  ['q05', 'q16', 'q23', 'q36', 'q39', 'q50']
+DISPLACED   3  ['q17', 'q35', 'q43']
+net change in top-3 hits: +3
+(kept 25, still missing 19)

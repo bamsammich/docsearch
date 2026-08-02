@@ -55,6 +55,8 @@ func matches(q query, r store.SearchResult) bool {
 func main() {
 	dbPath := flag.String("db", "var/docsearch.db", "index to evaluate")
 	qPath := flag.String("queries", "tests/retrieval/queries.json", "committed query set")
+	dump := flag.String("dump-candidates", "", "write top-N BM25 candidates as JSON here")
+	dumpN := flag.Int("dump-n", 50, "candidates per query when dumping")
 	flag.Parse()
 
 	raw, err := os.ReadFile(*qPath)
@@ -105,6 +107,14 @@ func main() {
 		o.top1 = o.hitPos == 1
 		o.top3 = o.hitPos >= 1 && o.hitPos <= 3
 		results = append(results, o)
+	}
+
+	if *dump != "" {
+		// Emitted from the same Search path the server uses, so a reranking
+		// experiment operates on exactly what production retrieves rather than
+		// on a reimplementation that could quietly diverge.
+		dumpCandidates(ctx, st, f.Queries, *dump, *dumpN)
+		return
 	}
 
 	fmt.Println("========================================================================")
@@ -242,6 +252,64 @@ func shortDoc(id string) string {
 		return "QLC+"
 	}
 	return "grandMA2"
+}
+
+type candidate struct {
+	ChunkID     int64   `json:"chunk_id"`
+	Section     string  `json:"section"`
+	HeadingPath string  `json:"heading_path"`
+	Kind        string  `json:"kind"`
+	ImageCount  int     `json:"image_count"`
+	Relevance   float64 `json:"relevance"`
+	Text        string  `json:"text"`
+}
+
+type dumpEntry struct {
+	ID         string      `json:"id"`
+	Query      string      `json:"query"`
+	Doc        string      `json:"doc"`
+	Expect     *string     `json:"expect"`
+	Category   string      `json:"category"`
+	BM25Hit    int         `json:"bm25_hit_position"`
+	Candidates []candidate `json:"candidates"`
+}
+
+func dumpCandidates(ctx context.Context, st *store.Store, queries []query,
+	path string, n int) {
+	var out []dumpEntry
+	for _, q := range queries {
+		if q.Category == "cross-doc" {
+			continue
+		}
+		res, err := st.Search(ctx, store.SearchParams{
+			Query: q.Query, DocID: docIDs[q.Doc], K: n,
+		})
+		if err != nil {
+			continue
+		}
+		e := dumpEntry{ID: q.ID, Query: q.Query, Doc: q.Doc, Expect: q.Expect,
+			Category: q.Category, BM25Hit: -1}
+		for i, r := range res {
+			if matches(q, r) && e.BM25Hit < 0 {
+				e.BM25Hit = i + 1
+			}
+			e.Candidates = append(e.Candidates, candidate{
+				ChunkID: r.ChunkID, Section: r.Section, HeadingPath: r.HeadingPath,
+				Kind: r.Kind, ImageCount: r.ImageCount, Relevance: r.Relevance, Text: r.Text,
+			})
+		}
+		out = append(out, e)
+	}
+	b, err := json.MarshalIndent(out, "", " ")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Printf("wrote %d queries, up to %d candidates each, to %s\n", len(out), n, path)
 }
 
 func derefOr(s *string, alt string) string {

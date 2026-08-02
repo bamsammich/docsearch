@@ -81,7 +81,11 @@ const indexBoost = 2.0
 // of the index into every result set.
 const keywordReferencePenalty = 6.0
 
-const maxK = 25
+// maxK is a safety net on result-set size, not the tool contract. The search
+// tool's documented maximum of 25 is enforced in the MCP layer where it is
+// declared; the store allows a deeper pool so diagnostics and reranking
+// experiments can fetch candidates without changing what callers can ask for.
+const maxK = 200
 
 // Search runs BM25 over chunks_fts, weighting heading_path above text.
 //

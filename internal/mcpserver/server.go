@@ -23,6 +23,9 @@ type Deps struct {
 	Log         *slog.Logger
 }
 
+// toolMaxK is the search tool's documented result cap.
+const toolMaxK = 25
+
 var supportedSuffixes = map[string]bool{
 	".pdf": true, ".md": true, ".markdown": true, ".html": true,
 	".htm": true, ".docx": true, ".txt": true, ".text": true,
@@ -175,6 +178,10 @@ func (d Deps) search(ctx context.Context, _ *mcp.CallToolRequest,
 	in searchInput) (*mcp.CallToolResult, searchOutput, error) {
 	if strings.TrimSpace(in.Query) == "" {
 		return nil, searchOutput{}, errors.New("query is required")
+	}
+	// The documented maximum is enforced here, where it is declared to callers.
+	if in.K > toolMaxK {
+		in.K = toolMaxK
 	}
 	results, err := d.Store.Search(ctx, store.SearchParams{
 		Query:                   in.Query,
