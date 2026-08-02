@@ -106,6 +106,8 @@ service rather than answering wrongly.
 
 ## Registering the server with a client
 
+For a client with native HTTP MCP support:
+
 ```json
 {
   "mcpServers": {
@@ -117,6 +119,56 @@ service rather than answering wrongly.
   }
 }
 ```
+
+### Claude Desktop
+
+**Claude Desktop (tested on 1.24012.9) does not accept HTTP entries in
+`claude_desktop_config.json`.** It logs
+`Skipped invalid MCP server config entries: { invalidServers: ['docsearch'] }`
+and then `[localMcpBridge] no stdio servers connected`. That file takes stdio
+servers only, so the HTTP service is reached through a bridge.
+
+Install `deploy/client/docsearch-mcp-bridge` to `~/.local/bin/`, then:
+
+```json
+{
+  "mcpServers": {
+    "docsearch": {
+      "command": "/Users/YOU/.local/bin/docsearch-mcp-bridge",
+      "args": []
+    }
+  }
+}
+```
+
+The bridge reads the token from `~/.config/docsearch/token.env` at launch
+rather than taking it from the config file. `claude_desktop_config.json` is the
+file most likely to end up in a screenshot or a bug report; the token should
+not be in it.
+
+Confirm with `[LocalMcpServerManager] Connected to docsearch (7 tools)` in
+`~/Library/Logs/Claude/main.log`.
+
+## Running as a service
+
+**Linux:** `deploy/systemd/` — two user units.
+
+**macOS:** `deploy/launchd/` — two user agents. Install with:
+
+```bash
+for f in mcp worker; do
+  sed "s|__HOME__|$HOME|g" deploy/launchd/com.bamsammich.docsearch-$f.plist \
+    > ~/Library/LaunchAgents/com.bamsammich.docsearch-$f.plist
+  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.bamsammich.docsearch-$f.plist
+done
+```
+
+Both set `RunAtLoad` and `KeepAlive`, so they start at login and respawn if
+killed. Logs go to `~/Library/Logs/docsearch/`.
+
+launchd has no `EnvironmentFile`, so the server agent sources the token from
+its 0600 file in a shell wrapper — it stays out of the plist and out of
+`launchctl print` output.
 
 ## Deployment
 

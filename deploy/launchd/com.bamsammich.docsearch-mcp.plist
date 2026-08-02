@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS user agent for the MCP server. The repo also ships systemd units for
+  Linux; the code does not know which it is running under.
+
+  Install:
+    sed "s|__HOME__|$HOME|g" deploy/launchd/com.bamsammich.docsearch-mcp.plist \
+      > ~/Library/LaunchAgents/com.bamsammich.docsearch-mcp.plist
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.bamsammich.docsearch-mcp.plist
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.bamsammich.docsearch-mcp</string>
+
+  <!-- launchd does not read EnvironmentFile the way systemd does, so the
+       token is sourced from its 0600 file by a shell wrapper. It stays out of
+       this world-readable plist and out of `launchctl print` output. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>set -a; . "$HOME/.config/docsearch/token.env"; set +a; exec "$HOME/.local/bin/docsearch-mcp" --db "$HOME/.local/share/docsearch/docsearch.db" --root "$HOME/Documents/docsearch-library" --addr 127.0.0.1:8765 --allowed-origins https://claude.ai,https://app.claude.ai</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/docsearch/mcp.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/docsearch/mcp.log</string>
+
+  <key>ProcessType</key>
+  <string>Interactive</string>
+</dict>
+</plist>

@@ -1,0 +1,17 @@
+#!/bin/sh
+# stdio -> HTTP bridge for Claude Desktop.
+#
+# Claude Desktop 1.24012.9 rejects {"type":"http"} entries in
+# claude_desktop_config.json ("Skipped invalid MCP server config entries"), so
+# the local HTTP service is reached through mcp-remote over stdio.
+#
+# The bearer token is read here from its 0600 file rather than written into
+# claude_desktop_config.json, which keeps it out of the file most likely to be
+# shared when debugging.
+set -e
+. "$HOME/.config/docsearch/token.env"
+AUTH_HEADER="Bearer $DOCSEARCH_TOKEN"
+export AUTH_HEADER
+exec npx -y mcp-remote http://127.0.0.1:8765/mcp \
+  --header 'Authorization:${AUTH_HEADER}' \
+  --transport http-only

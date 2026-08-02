@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS user agent for the ingest worker.
+
+  Install:
+    sed "s|__HOME__|$HOME|g" deploy/launchd/com.bamsammich.docsearch-worker.plist \
+      > ~/Library/LaunchAgents/com.bamsammich.docsearch-worker.plist
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.bamsammich.docsearch-worker.plist
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.bamsammich.docsearch-worker</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/.local/bin/docsearch</string>
+    <string>worker</string>
+    <string>--db</string>
+    <string>__HOME__/.local/share/docsearch/docsearch.db</string>
+    <string>--root</string>
+    <string>__HOME__/Documents/docsearch-library</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/docsearch/worker.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/docsearch/worker.log</string>
+
+  <!-- Extraction is CPU-heavy for minutes at a time. Background priority keeps
+       it from competing with interactive work; the queue is not latency
+       sensitive and a job taking somewhat longer is invisible to the caller. -->
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>Nice</key>
+  <integer>5</integer>
+
+  <!-- launchd sends SIGTERM then SIGKILL after this. The worker checkpoints or
+       rolls back its partial rows on SIGTERM; give it room to finish rather
+       than being killed mid-write. -->
+  <key>ExitTimeOut</key>
+  <integer>900</integer>
+</dict>
+</plist>
