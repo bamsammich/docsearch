@@ -46,6 +46,12 @@ explicit_package_bases = true
 module = ["fitz", "docx", "docx.*"]
 ignore_missing_imports = true
 
+# click's command decorators are untyped upstream; every CLI entry point would
+# otherwise be reported as untyped purely because it carries one.
+[[tool.mypy.overrides]]
+module = ["docsearch.cli"]
+disallow_untyped_decorators = false
+
 [tool.pytest.ini_options]
 pythonpath = ["python"]
 testpaths = ["tests"]

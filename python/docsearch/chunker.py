@@ -1,0 +1,232 @@
+"""Format-agnostic chunking.
+
+The chunk unit is the deepest *numbered* section a document declares. When a
+format supplies no numbering (Markdown, HTML, DOCX, plain text) the unit falls
+back to the deepest heading path. The chunker reads only the normalized
+intermediate -- it never learns which adapter produced the blocks.
+
+Two rules do the shaping:
+
+* A unit over ``MAX_TOKENS`` subdivides, first at unnumbered subheadings and
+  then at block boundaries.
+* A unit under ``MIN_TOKENS`` merges forward into its next sibling -- but only
+  when the unit is *not* an authoritative numbered section. A numbered section
+  is a boundary the document itself declared; small sections stay small.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field, replace
+
+from .blocks import Block, Extraction
+from .tokens import estimate_tokens
+
+MAX_TOKENS = 1200
+MIN_TOKENS = 100
+PATH_SEP = " > "
+
+
+@dataclass(slots=True)
+class Chunk:
+    ordinal: int
+    heading_path: str
+    text: str
+    section: str | None = None
+    page_start: int | None = None
+    page_end: int | None = None
+    printed_page_start: int | None = None
+    image_count: int = 0
+
+
+@dataclass(slots=True)
+class _Unit:
+    """Consecutive blocks sharing one chunk key."""
+
+    key: tuple[str, ...] | str
+    section: str | None
+    heading_path: list[str]
+    blocks: list[Block] = field(default_factory=list)
+
+    @property
+    def authoritative(self) -> bool:
+        """True when the document declared this boundary via a section number."""
+        return self.section is not None
+
+    @property
+    def text(self) -> str:
+        return "\n\n".join(b.text for b in self.blocks).strip()
+
+    @property
+    def tokens(self) -> int:
+        return estimate_tokens(self.text)
+
+
+def _group(blocks: list[Block]) -> list[_Unit]:
+    units: list[_Unit] = []
+    for b in blocks:
+        key: tuple[str, ...] | str = b.section if b.section is not None else tuple(b.heading_path)
+        if units and units[-1].key == key:
+            units[-1].blocks.append(b)
+            continue
+        units.append(
+            _Unit(key=key, section=b.section, heading_path=list(b.heading_path), blocks=[b])
+        )
+    return units
+
+
+def _same_parent(a: _Unit, b: _Unit) -> bool:
+    return a.heading_path[:-1] == b.heading_path[:-1]
+
+
+def _merge_small(units: list[_Unit]) -> list[_Unit]:
+    """Merge sub-``MIN_TOKENS`` units forward, never across a declared boundary."""
+    out: list[_Unit] = []
+    i = 0
+    while i < len(units):
+        cur = units[i]
+        if cur.authoritative or cur.tokens >= MIN_TOKENS:
+            out.append(cur)
+            i += 1
+            continue
+        j = i + 1
+        while (
+            j < len(units)
+            and cur.tokens < MIN_TOKENS
+            and not units[j].authoritative
+            and _same_parent(cur, units[j])
+        ):
+            cur = _Unit(
+                key=cur.key,
+                section=None,
+                heading_path=cur.heading_path[:-1] or cur.heading_path,
+                blocks=cur.blocks + units[j].blocks,
+            )
+            j += 1
+        out.append(cur)
+        i = max(j, i + 1)
+    return out
+
+
+def _split_oversized(unit: _Unit) -> list[tuple[list[str], list[Block]]]:
+    """Subdivide at unnumbered subheadings, then at block boundaries."""
+    parts: list[tuple[list[str], list[Block]]] = []
+
+    # Pass 1: unnumbered subheadings the adapter marked.
+    runs: list[tuple[str | None, list[Block]]] = []
+    for b in unit.blocks:
+        if b.subdivision and not b.figure_only:
+            label = b.text.splitlines()[0].strip() if b.text else None
+            runs.append((label, [b]))
+        elif runs:
+            runs[-1][1].append(b)
+        else:
+            runs.append((None, [b]))
+
+    if len(runs) > 1:
+        # Pack consecutive runs up to the cap. Splitting once per subheading
+        # would shatter a 1300-token section into eight 160-token fragments;
+        # the rule is "subdivide when over MAX_TOKENS", not "subdivide at every
+        # subheading of a section that happens to be over it".
+        packed: list[tuple[list[str | None], list[Block]]] = []
+        cur_labels: list[str | None] = []
+        cur_blocks: list[Block] = []
+        cur_tokens = 0
+        for label, blks in runs:
+            run_tokens = sum(estimate_tokens(b.text) for b in blks)
+            if cur_blocks and cur_tokens + run_tokens > MAX_TOKENS:
+                packed.append((cur_labels, cur_blocks))
+                cur_labels, cur_blocks, cur_tokens = [], [], 0
+            cur_labels.append(label)
+            cur_blocks.extend(blks)
+            cur_tokens += run_tokens
+        if cur_blocks:
+            packed.append((cur_labels, cur_blocks))
+
+        for labels, blks in packed:
+            named = [x for x in labels if x]
+            # Only claim a subheading in the path when the part is exactly that
+            # subheading; a part spanning several must not misattribute itself.
+            path = unit.heading_path + (named if len(named) == 1 else [])
+            parts.append((path, blks))
+    else:
+        parts.append((unit.heading_path, list(unit.blocks)))
+
+    # Pass 2: anything still oversized splits greedily at block boundaries, and
+    # any single block that is itself oversized splits at paragraph boundaries.
+    final: list[tuple[list[str], list[Block]]] = []
+    for path, blks in parts:
+        if estimate_tokens("\n\n".join(b.text for b in blks)) <= MAX_TOKENS:
+            final.append((path, blks))
+            continue
+        expanded = [sb for b in blks for sb in _split_block(b)]
+        cur: list[Block] = []
+        cur_tokens = 0
+        for b in expanded:
+            bt = estimate_tokens(b.text)
+            if cur and cur_tokens + bt > MAX_TOKENS:
+                final.append((path, cur))
+                cur, cur_tokens = [], 0
+            cur.append(b)
+            cur_tokens += bt
+        if cur:
+            final.append((path, cur))
+    return final
+
+
+def _split_block(block: Block) -> list[Block]:
+    """Split one oversized block at paragraph, then line, boundaries.
+
+    Without this a section holding a single enormous block -- a densely packed
+    reference table, a back-of-book index -- has no interior boundary to cut on
+    and escapes MAX_TOKENS entirely.
+    """
+    if estimate_tokens(block.text) <= MAX_TOKENS:
+        return [block]
+    units = block.text.split("\n\n")
+    if len(units) == 1:
+        units = block.text.splitlines()
+    out: list[Block] = []
+    cur: list[str] = []
+    cur_tokens = 0
+    for unit in units:
+        ut = estimate_tokens(unit)
+        if cur and cur_tokens + ut > MAX_TOKENS:
+            out.append(replace(block, text="\n".join(cur)))
+            cur, cur_tokens = [], 0
+        cur.append(unit)
+        cur_tokens += ut
+    if cur:
+        out.append(replace(block, text="\n".join(cur)))
+    return out
+
+
+def _emit(ordinal: int, path: list[str], blks: list[Block], section: str | None) -> Chunk:
+    pages = [b.locator["page"] for b in blks if "page" in b.locator]
+    page_ends = [b.locator.get("page_end", b.locator["page"]) for b in blks if "page" in b.locator]
+    printed = [b.printed_page for b in blks if b.printed_page is not None]
+    text = "\n\n".join(b.text for b in blks).strip()
+    return Chunk(
+        ordinal=ordinal,
+        heading_path=PATH_SEP.join(p for p in path if p),
+        text=text,
+        section=section,
+        page_start=min(pages) if pages else None,
+        page_end=max(page_ends) if page_ends else None,
+        printed_page_start=min(printed) if printed else None,
+        image_count=sum(b.image_count for b in blks),
+    )
+
+
+def chunk(extraction: Extraction) -> list[Chunk]:
+    units = _merge_small(_group(extraction.blocks))
+    chunks: list[Chunk] = []
+    for unit in units:
+        if not unit.text:
+            continue
+        if unit.tokens <= MAX_TOKENS:
+            chunks.append(_emit(len(chunks), unit.heading_path, unit.blocks, unit.section))
+            continue
+        for path, blks in _split_oversized(unit):
+            if any(b.text.strip() for b in blks):
+                chunks.append(_emit(len(chunks), path, blks, unit.section))
+    return chunks
