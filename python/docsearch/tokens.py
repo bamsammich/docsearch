@@ -17,6 +17,23 @@ _ATOM = re.compile(r"\w+|[^\w\s]")
 SUBWORD_FACTOR = 1.3
 
 
+def count_atoms(text: str) -> int:
+    """Raw word/punctuation atoms in ``text``, before the subword factor.
+
+    Accumulate these -- never summed :func:`estimate_tokens` results -- when
+    measuring a sequence of pieces against a budget. ``estimate_tokens``
+    truncates to int, so summing it over hundreds of short pieces compounds
+    the rounding loss into hundreds of missing tokens and a budget check that
+    silently never trips.
+    """
+    return len(_ATOM.findall(text))
+
+
+def tokens_from_atoms(atoms: int) -> int:
+    """Convert an accumulated atom count to an estimated token count."""
+    return int(atoms * SUBWORD_FACTOR)
+
+
 def estimate_tokens(text: str) -> int:
     """Approximate the BPE token count of ``text``."""
-    return int(len(_ATOM.findall(text)) * SUBWORD_FACTOR)
+    return tokens_from_atoms(count_atoms(text))

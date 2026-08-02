@@ -19,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 
 from .blocks import Block, Extraction
-from .tokens import estimate_tokens
+from .tokens import count_atoms, estimate_tokens, tokens_from_atoms
 
 MAX_TOKENS = 1200
 MIN_TOKENS = 100
@@ -130,15 +130,15 @@ def _split_oversized(unit: _Unit) -> list[tuple[list[str], list[Block]]]:
         packed: list[tuple[list[str | None], list[Block]]] = []
         cur_labels: list[str | None] = []
         cur_blocks: list[Block] = []
-        cur_tokens = 0
+        cur_atoms = 0
         for label, blks in runs:
-            run_tokens = sum(estimate_tokens(b.text) for b in blks)
-            if cur_blocks and cur_tokens + run_tokens > MAX_TOKENS:
+            run_atoms = sum(count_atoms(b.text) for b in blks)
+            if cur_blocks and tokens_from_atoms(cur_atoms + run_atoms) > MAX_TOKENS:
                 packed.append((cur_labels, cur_blocks))
-                cur_labels, cur_blocks, cur_tokens = [], [], 0
+                cur_labels, cur_blocks, cur_atoms = [], [], 0
             cur_labels.append(label)
             cur_blocks.extend(blks)
-            cur_tokens += run_tokens
+            cur_atoms += run_atoms
         if cur_blocks:
             packed.append((cur_labels, cur_blocks))
 
@@ -160,14 +160,14 @@ def _split_oversized(unit: _Unit) -> list[tuple[list[str], list[Block]]]:
             continue
         expanded = [sb for b in blks for sb in _split_block(b)]
         cur: list[Block] = []
-        cur_tokens = 0
+        cur_atoms = 0
         for b in expanded:
-            bt = estimate_tokens(b.text)
-            if cur and cur_tokens + bt > MAX_TOKENS:
+            b_atoms = count_atoms(b.text)
+            if cur and tokens_from_atoms(cur_atoms + b_atoms) > MAX_TOKENS:
                 final.append((path, cur))
-                cur, cur_tokens = [], 0
+                cur, cur_atoms = [], 0
             cur.append(b)
-            cur_tokens += bt
+            cur_atoms += b_atoms
         if cur:
             final.append((path, cur))
     return final
@@ -187,14 +187,14 @@ def _split_block(block: Block) -> list[Block]:
         units = block.text.splitlines()
     out: list[Block] = []
     cur: list[str] = []
-    cur_tokens = 0
+    cur_atoms = 0
     for unit in units:
-        ut = estimate_tokens(unit)
-        if cur and cur_tokens + ut > MAX_TOKENS:
+        unit_atoms = count_atoms(unit)
+        if cur and tokens_from_atoms(cur_atoms + unit_atoms) > MAX_TOKENS:
             out.append(replace(block, text="\n".join(cur)))
-            cur, cur_tokens = [], 0
+            cur, cur_atoms = [], 0
         cur.append(unit)
-        cur_tokens += ut
+        cur_atoms += unit_atoms
     if cur:
         out.append(replace(block, text="\n".join(cur)))
     return out

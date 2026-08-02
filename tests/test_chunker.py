@@ -134,3 +134,18 @@ def test_locator_and_image_count_survive_into_the_chunk() -> None:
     assert (c.page_start, c.page_end) == (10, 12)
     assert c.printed_page_start == 9
     assert c.image_count == 5
+
+
+def test_many_short_lines_still_split_at_the_cap() -> None:
+    """Budgeting must accumulate atoms, not summed token estimates.
+
+    estimate_tokens truncates to int. Summing it over hundreds of short lines
+    compounds the rounding loss -- a 1530-token block measured line-by-line
+    sums to 1200 and the cap check never trips, so the block never splits.
+    """
+    body = "\n".join("Decimal 255 equals hex FF and octal 377" for _ in range(800))
+    blocks = [Block(heading_path=["1. Table"], locator={"page": 1}, text=body, section="1")]
+    chunks = chunk(_extraction(blocks))
+    assert estimate_tokens(body) > MAX_TOKENS
+    assert len(chunks) > 1
+    assert all(estimate_tokens(c.text) <= MAX_TOKENS for c in chunks)
