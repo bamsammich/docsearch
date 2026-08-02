@@ -11,108 +11,467 @@
       "figure-dominated": "the answer is in a screenshot or diagram, not in the extracted text",
       "spans-boundary": "the answer plainly continues past a chunk boundary",
       "cross-doc": "run unscoped to observe cross-document IDF behaviour"
-    }
+    },
+    "expansion": "2026-08-02, second authoring pass, before any remedy was implemented. Cohorts conceptual-slang, figure-dominated and spans-boundary were n=6/1/1 and underpowered; an n=1 cell is not evidence. Expanded to 20/6/6. Queries q01-q30 are preserved verbatim including their misses. The kind filter and the cross-document ranking fix are deliberately NOT yet built: if the remedy were implemented first it would shape the test set and the result would be unfalsifiable.",
+    "expectation_contamination": "grandMA2 'expect' values are chapter numbers taken from the outline observed in Phase 0 and Phase 3. That is contamination of the EXPECTATIONS, not of the queries: every query below is phrased in operator vocabulary without consulting the index. Knowing that chapter 31 is Effects lets me state a falsifiable prediction; it does not tell me how the ranker will behave."
   },
-
   "queries": [
-    { "id": "q01", "doc": "grandma2", "expect": "21", "category": "heading-term", "blind": false,
+    {
+      "id": "q01",
+      "doc": "grandma2",
+      "expect": "21",
+      "category": "heading-term",
+      "blind": false,
       "query": "assign a sequence to an executor",
-      "note": "seen in phase 3 smoke test; reported separately" },
-
-    { "id": "q02", "doc": "grandma2", "expect": "14", "category": "heading-term", "blind": true,
-      "query": "patch a fixture and set its DMX address" },
-
-    { "id": "q03", "doc": "grandma2", "expect": "20", "category": "heading-term", "blind": true,
-      "query": "how do I store a cue" },
-
-    { "id": "q04", "doc": "grandma2", "expect": "18", "category": "heading-term", "blind": true,
-      "query": "create a group of fixtures" },
-
-    { "id": "q05", "doc": "grandma2", "expect": "31", "category": "heading-term", "blind": true,
-      "query": "build an effect with a sine wave" },
-
-    { "id": "q06", "doc": "grandma2", "expect": "35", "category": "heading-term", "blind": true,
-      "query": "timecode show recording" },
-
-    { "id": "q07", "doc": "grandma2", "expect": "13", "category": "body-term", "blind": true,
-      "query": "configure Art-Net output universes" },
-
-    { "id": "q08", "doc": "grandma2", "expect": "12", "category": "heading-term", "blind": true,
-      "query": "join a session with another console" },
-
-    { "id": "q09", "doc": "grandma2", "expect": "38", "category": "heading-term", "blind": true,
-      "query": "record a macro" },
-
-    { "id": "q10", "doc": "grandma2", "expect": "29", "category": "heading-term", "blind": true,
-      "query": "MAtricks interleave selection" },
-
-    { "id": "q11", "doc": "grandma2", "expect": "28", "category": "heading-term", "blind": true,
-      "query": "what is a world and how do I use filters" },
-
-    { "id": "q12", "doc": "grandma2", "expect": "11", "category": "body-term", "blind": true,
-      "query": "save the show file to a USB stick" },
-
-    { "id": "q13", "doc": "grandma2", "expect": "24", "category": "heading-term", "blind": true,
-      "query": "clone one fixture to another" },
-
-    { "id": "q14", "doc": "grandma2", "expect": "41", "category": "heading-term", "blind": true,
-      "query": "RDM device discovery" },
-
-    { "id": "q15", "doc": "grandma2", "expect": "10", "category": "body-term", "blind": true,
-      "query": "command line syntax rules for keywords" },
-
-    { "id": "q16", "doc": "grandma2", "expect": "4", "category": "figure-dominated", "blind": false,
+      "note": "seen in phase 3 smoke test; reported separately"
+    },
+    {
+      "id": "q02",
+      "doc": "grandma2",
+      "expect": "14",
+      "category": "heading-term",
+      "blind": true,
+      "query": "patch a fixture and set its DMX address"
+    },
+    {
+      "id": "q03",
+      "doc": "grandma2",
+      "expect": "20",
+      "category": "heading-term",
+      "blind": true,
+      "query": "how do I store a cue"
+    },
+    {
+      "id": "q04",
+      "doc": "grandma2",
+      "expect": "18",
+      "category": "heading-term",
+      "blind": true,
+      "query": "create a group of fixtures"
+    },
+    {
+      "id": "q05",
+      "doc": "grandma2",
+      "expect": "31",
+      "category": "heading-term",
+      "blind": true,
+      "query": "build an effect with a sine wave"
+    },
+    {
+      "id": "q06",
+      "doc": "grandma2",
+      "expect": "35",
+      "category": "heading-term",
+      "blind": true,
+      "query": "timecode show recording"
+    },
+    {
+      "id": "q07",
+      "doc": "grandma2",
+      "expect": "13",
+      "category": "body-term",
+      "blind": true,
+      "query": "configure Art-Net output universes"
+    },
+    {
+      "id": "q08",
+      "doc": "grandma2",
+      "expect": "12",
+      "category": "heading-term",
+      "blind": true,
+      "query": "join a session with another console"
+    },
+    {
+      "id": "q09",
+      "doc": "grandma2",
+      "expect": "38",
+      "category": "heading-term",
+      "blind": true,
+      "query": "record a macro"
+    },
+    {
+      "id": "q10",
+      "doc": "grandma2",
+      "expect": "29",
+      "category": "heading-term",
+      "blind": true,
+      "query": "MAtricks interleave selection"
+    },
+    {
+      "id": "q11",
+      "doc": "grandma2",
+      "expect": "28",
+      "category": "heading-term",
+      "blind": true,
+      "query": "what is a world and how do I use filters"
+    },
+    {
+      "id": "q12",
+      "doc": "grandma2",
+      "expect": "11",
+      "category": "body-term",
+      "blind": true,
+      "query": "save the show file to a USB stick"
+    },
+    {
+      "id": "q13",
+      "doc": "grandma2",
+      "expect": "24",
+      "category": "heading-term",
+      "blind": true,
+      "query": "clone one fixture to another"
+    },
+    {
+      "id": "q14",
+      "doc": "grandma2",
+      "expect": "41",
+      "category": "heading-term",
+      "blind": true,
+      "query": "RDM device discovery"
+    },
+    {
+      "id": "q15",
+      "doc": "grandma2",
+      "expect": "10",
+      "category": "body-term",
+      "blind": true,
+      "query": "command line syntax rules for keywords"
+    },
+    {
+      "id": "q16",
+      "doc": "grandma2",
+      "expect": "4",
+      "category": "figure-dominated",
+      "blind": false,
       "query": "what connectors are on the rear panel of the console",
-      "note": "chosen to hit a figure-dominated chunk, per the Phase 4 brief; the RPU rear-panel section was seen in phase 3" },
-
-    { "id": "q17", "doc": "grandma2", "expect": "21", "category": "spans-boundary", "blind": true,
+      "note": "chosen to hit a figure-dominated chunk, per the Phase 4 brief; the RPU rear-panel section was seen in phase 3"
+    },
+    {
+      "id": "q17",
+      "doc": "grandma2",
+      "expect": "21",
+      "category": "spans-boundary",
+      "blind": true,
       "query": "step by step assign a fader to control a group master",
-      "note": "a numbered procedure; the answer should continue past a chunk boundary" },
-
-    { "id": "q18", "doc": "grandma2", "expect": "7", "category": "conceptual-slang", "blind": true,
+      "note": "a numbered procedure; the answer should continue past a chunk boundary"
+    },
+    {
+      "id": "q18",
+      "doc": "grandma2",
+      "expect": "7",
+      "category": "conceptual-slang",
+      "blind": true,
       "query": "bump button to flash a light",
-      "note": "theatre slang; grandMA2 calls these Flash and Temp keys" },
-
-    { "id": "q19", "doc": "grandma2", "expect": "21", "category": "conceptual-slang", "blind": true,
+      "note": "theatre slang; grandMA2 calls these Flash and Temp keys"
+    },
+    {
+      "id": "q19",
+      "doc": "grandma2",
+      "expect": "21",
+      "category": "conceptual-slang",
+      "blind": true,
       "query": "submaster fader to hold a look",
-      "note": "vocabulary from other consoles; grandMA2 says executor" },
-
-    { "id": "q20", "doc": "grandma2", "expect": "31", "category": "conceptual-slang", "blind": true,
+      "note": "vocabulary from other consoles; grandMA2 says executor"
+    },
+    {
+      "id": "q20",
+      "doc": "grandma2",
+      "expect": "31",
+      "category": "conceptual-slang",
+      "blind": true,
       "query": "make the lights chase around in a circle",
-      "note": "plain-language phrasing that avoids the manual's own words" },
-
-    { "id": "q21", "doc": "grandma2", "expect": "7", "category": "conceptual-slang", "blind": true,
+      "note": "plain-language phrasing that avoids the manual's own words"
+    },
+    {
+      "id": "q21",
+      "doc": "grandma2",
+      "expect": "7",
+      "category": "conceptual-slang",
+      "blind": true,
       "query": "kill all the lights instantly panic button",
-      "note": "operator slang for blackout / B.O." },
-
-    { "id": "q22", "doc": "grandma2", "expect": "16", "category": "conceptual-slang", "blind": true,
+      "note": "operator slang for blackout / B.O."
+    },
+    {
+      "id": "q22",
+      "doc": "grandma2",
+      "expect": "16",
+      "category": "conceptual-slang",
+      "blind": true,
       "query": "why is my light stuck at a value I cannot change",
-      "note": "describes a symptom, not a feature; the answer is about Park or priority" },
-
-    { "id": "q23", "doc": "grandma2", "expect": "53", "category": "body-term", "blind": true,
-      "query": "error message meaning and what to do about it" },
-
-    { "id": "q24", "doc": "grandma2", "expect": "36", "category": "heading-term", "blind": true,
-      "query": "countdown timer" },
-
-    { "id": "q25", "doc": "qlcplus", "expect": "chaser", "category": "heading-term", "blind": true,
-      "query": "create a chaser from several scenes" },
-
-    { "id": "q26", "doc": "qlcplus", "expect": "audio", "category": "heading-term", "blind": true,
-      "query": "trigger a function from audio input level" },
-
-    { "id": "q27", "doc": "qlcplus", "expect": "virtual console", "category": "heading-term", "blind": true,
-      "query": "add a button to the virtual console" },
-
-    { "id": "q28", "doc": "qlcplus", "expect": "art-net", "category": "body-term", "blind": true,
-      "query": "art-net plugin output configuration" },
-
-    { "id": "q29", "doc": "qlcplus", "expect": "fixture", "category": "conceptual-slang", "blind": true,
+      "note": "describes a symptom, not a feature; the answer is about Park or priority"
+    },
+    {
+      "id": "q23",
+      "doc": "grandma2",
+      "expect": "53",
+      "category": "body-term",
+      "blind": true,
+      "query": "error message meaning and what to do about it"
+    },
+    {
+      "id": "q24",
+      "doc": "grandma2",
+      "expect": "36",
+      "category": "heading-term",
+      "blind": true,
+      "query": "countdown timer"
+    },
+    {
+      "id": "q25",
+      "doc": "qlcplus",
+      "expect": "chaser",
+      "category": "heading-term",
+      "blind": true,
+      "query": "create a chaser from several scenes"
+    },
+    {
+      "id": "q26",
+      "doc": "qlcplus",
+      "expect": "audio",
+      "category": "heading-term",
+      "blind": true,
+      "query": "trigger a function from audio input level"
+    },
+    {
+      "id": "q27",
+      "doc": "qlcplus",
+      "expect": "virtual console",
+      "category": "heading-term",
+      "blind": true,
+      "query": "add a button to the virtual console"
+    },
+    {
+      "id": "q28",
+      "doc": "qlcplus",
+      "expect": "art-net",
+      "category": "body-term",
+      "blind": true,
+      "query": "art-net plugin output configuration"
+    },
+    {
+      "id": "q29",
+      "doc": "qlcplus",
+      "expect": "fixture",
+      "category": "conceptual-slang",
+      "blind": true,
       "query": "my moving head is not in the list of lights I can add",
-      "note": "symptom phrasing; the answer is the fixture definition editor" },
-
-    { "id": "q30", "doc": "any", "expect": null, "category": "cross-doc", "blind": true,
+      "note": "symptom phrasing; the answer is the fixture definition editor"
+    },
+    {
+      "id": "q30",
+      "doc": "any",
+      "expect": null,
+      "category": "cross-doc",
+      "blind": true,
       "query": "dmx universe addressing",
-      "note": "run scoped and unscoped to measure the cross-document IDF effect the spec flags" }
+      "note": "run scoped and unscoped to measure the cross-document IDF effect the spec flags"
+    },
+    {
+      "id": "q31",
+      "doc": "grandma2",
+      "expect": "19",
+      "category": "conceptual-slang",
+      "blind": true,
+      "query": "record a snapshot of the current look on stage",
+      "note": "'look' and 'snapshot' are operator words; grandMA2 says cue and store"
+    },
+    {
+      "id": "q32",
+      "doc": "grandma2",
+      "expect": "21",
+      "category": "conceptual-slang",
+      "blind": true,
+      "query": "cue stack on a fader",
+      "note": "ETC/Strand vocabulary; grandMA2 says sequence on an executor"
+    },
+    {
+      "id": "q33",
+      "doc": "grandma2",
+      "expect": "16",
+      "category": "conceptual-slang",
+      "blind": true,
+      "query": "solo a light so I can see which one it is",
+      "note": "'solo' is operator slang; the feature is Highlight"
+    },
+    {
+      "id": "q34",
+      "doc": "grandma2",
+      "expect": "16",
+      "category": "conceptual-slang",
+      "blind": true,
+      "query": "strike the lamps on my moving lights",
+      "note": "'strike' is industry slang for Lamp On"
+    },
+    {
+      "id": "q35",
+      "doc": "grandma2",
+      "expect": "13",
+      "category": "conceptual-slang",
+      "blind": true,
+      "query": "two fixtures fighting over the same address",
+      "note": "describes a symptom of a DMX address clash"
+    },
+    {
+      "id": "q36",
+      "doc": "grandma2",
+      "expect": "20",
+      "category": "conceptual-slang",
+      "blind": true,
+      "query": "how long it takes to crossfade between looks",
+      "note": "plain language for fade time"
+    },
+    {
+      "id": "q37",
+      "doc": "grandma2",
+      "expect": "31",
+      "category": "conceptual-slang",
+      "blind": true,
+      "query": "make the lights flash fast like a strobe"
+    },
+    {
+      "id": "q38",
+      "doc": "grandma2",
+      "expect": "16",
+      "category": "conceptual-slang",
+      "blind": true,
+      "query": "undo the last thing I did"
+    },
+    {
+      "id": "q39",
+      "doc": "grandma2",
+      "expect": "11",
+      "category": "conceptual-slang",
+      "blind": true,
+      "query": "save my work before I lose it"
+    },
+    {
+      "id": "q40",
+      "doc": "grandma2",
+      "expect": "21",
+      "category": "conceptual-slang",
+      "blind": true,
+      "query": "busking a show live without pre-programming",
+      "note": "'busking' is operator jargon for improvised live operation"
+    },
+    {
+      "id": "q41",
+      "doc": "grandma2",
+      "expect": "34",
+      "category": "conceptual-slang",
+      "blind": true,
+      "query": "trigger lights from the sound desk",
+      "note": "the answer is MIDI or timecode remote control"
+    },
+    {
+      "id": "q42",
+      "doc": "grandma2",
+      "expect": "16",
+      "category": "conceptual-slang",
+      "blind": true,
+      "query": "turn everything off except the worklight",
+      "note": "operator phrasing for blackout with an exception"
+    },
+    {
+      "id": "q43",
+      "doc": "grandma2",
+      "expect": "8",
+      "category": "conceptual-slang",
+      "blind": true,
+      "query": "the screen layout is a mess, put it back to normal",
+      "note": "plain-language request for restoring default view settings"
+    },
+    {
+      "id": "q44",
+      "doc": "qlcplus",
+      "expect": "virtual console",
+      "category": "conceptual-slang",
+      "blind": true,
+      "query": "a big red panic button on screen",
+      "note": "operator phrasing; the answer is a Virtual Console button"
+    },
+    {
+      "id": "q45",
+      "doc": "grandma2",
+      "expect": "4",
+      "category": "figure-dominated",
+      "blind": true,
+      "query": "which socket do I plug the DMX cable into",
+      "note": "physical connector identification is a labelled photograph"
+    },
+    {
+      "id": "q46",
+      "doc": "grandma2",
+      "expect": "8",
+      "category": "figure-dominated",
+      "blind": true,
+      "query": "what are the buttons along the top of the screen",
+      "note": "toolbar identification is a labelled screenshot"
+    },
+    {
+      "id": "q47",
+      "doc": "grandma2",
+      "expect": "16",
+      "category": "figure-dominated",
+      "blind": true,
+      "query": "what do the encoder wheels at the bottom do",
+      "note": "the encoder toolbar is documented visually"
+    },
+    {
+      "id": "q48",
+      "doc": "grandma2",
+      "expect": "14",
+      "category": "figure-dominated",
+      "blind": true,
+      "query": "what the stage view looks like when fixtures are placed"
+    },
+    {
+      "id": "q49",
+      "doc": "grandma2",
+      "expect": "8",
+      "category": "figure-dominated",
+      "blind": true,
+      "query": "what colour means what in the cue list",
+      "note": "colour coding is conveyed by a screenshot, not by prose"
+    },
+    {
+      "id": "q50",
+      "doc": "grandma2",
+      "expect": "14",
+      "category": "spans-boundary",
+      "blind": true,
+      "query": "full procedure to patch a moving light from scratch and check it responds"
+    },
+    {
+      "id": "q51",
+      "doc": "grandma2",
+      "expect": "35",
+      "category": "spans-boundary",
+      "blind": true,
+      "query": "record a timecode show from start to finish and play it back"
+    },
+    {
+      "id": "q52",
+      "doc": "grandma2",
+      "expect": "12",
+      "category": "spans-boundary",
+      "blind": true,
+      "query": "set up a multi user session between two consoles step by step"
+    },
+    {
+      "id": "q53",
+      "doc": "grandma2",
+      "expect": "31",
+      "category": "spans-boundary",
+      "blind": true,
+      "query": "create an effect, assign it to an executor and adjust its speed"
+    },
+    {
+      "id": "q54",
+      "doc": "qlcplus",
+      "expect": "scene",
+      "category": "spans-boundary",
+      "blind": true,
+      "query": "build a scene then chain it into a chaser and run it"
+    }
   ]
 }
