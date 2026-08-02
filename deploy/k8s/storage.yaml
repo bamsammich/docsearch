@@ -1,0 +1,37 @@
+# The database must live on a real block device with a local filesystem.
+#
+# SQLite's locking is unreliable over NFS and CephFS, and WAL mode specifically
+# needs shared-memory support that network filesystems do not provide
+# correctly. Getting this wrong does not fail loudly -- it corrupts under
+# concurrency, which is exactly the condition this deployment runs in.
+#
+# volumeMode is Filesystem, not Block, deliberately. The requirement is a
+# block-BACKED volume (Ceph RBD) carrying a local filesystem. Raw `Block` mode
+# would hand the container an unformatted device it would have to format
+# itself; Filesystem on an RBD StorageClass is what the constraint actually
+# asks for.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: docsearch-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  volumeMode: Filesystem
+  storageClassName: ceph-rbd
+  resources:
+    requests:
+      storage: 20Gi
+---
+# The document library. Also RWO so it attaches to the same node as the
+# database, keeping both containers co-located in one Pod.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: docsearch-library
+spec:
+  accessModes: ["ReadWriteOnce"]
+  volumeMode: Filesystem
+  storageClassName: ceph-rbd
+  resources:
+    requests:
+      storage: 50Gi

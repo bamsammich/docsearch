@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docsearch
+  labels: { app.kubernetes.io/name: docsearch }
+spec:
+  # SQLite permits a single writer and the server writes ingest_jobs.
+  # Horizontal scaling is not available here; this is a hard constraint, not a
+  # starting point.
+  replicas: 1
+  strategy:
+    # Recreate, never RollingUpdate: a rolling update briefly runs two Pods,
+    # and two writers against one SQLite file corrupts it.
+    type: Recreate
+  selector:
+    matchLabels: { app.kubernetes.io/name: docsearch }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: docsearch }
+    spec:
+      # Long enough for an in-flight ingest to reach a checkpoint and roll back
+      # its partial rows rather than being killed mid-write.
+      terminationGracePeriodSeconds: 900
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+
+      containers:
+        # Both containers are in ONE Pod because they share the database
+        # volume. An RWO volume attaches to a single node, so they must be
+        # co-located; separate Deployments could not both mount it.
+        - name: server
+          image: ghcr.io/bamsammich/docsearch-server:latest
+          args:
+            - --db=/data/docsearch.db
+            - --root=/library
+            - --addr=$(DOCSEARCH_ADDR)
+            - --allowed-origins=$(DOCSEARCH_ALLOWED_ORIGINS)
+          env:
+            - name: DOCSEARCH_ADDR
+              valueFrom: { configMapKeyRef: { name: docsearch-config, key: addr } }
+            - name: DOCSEARCH_ALLOWED_ORIGINS
+              valueFrom: { configMapKeyRef: { name: docsearch-config, key: allowedOrigins } }
+            - name: DOCSEARCH_TOKEN
+              valueFrom: { secretKeyRef: { name: docsearch-token, key: token } }
+          ports:
+            - { name: mcp, containerPort: 8765 }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            # The server only validates paths; it never reads document bytes.
+            - { name: library, mountPath: /library, readOnly: true }
+          livenessProbe:
+            httpGet: { path: /healthz, port: mcp }
+            periodSeconds: 20
+          readinessProbe:
+            # Fails on a schema-version mismatch, so a server deployed against
+            # a database it was not built for is pulled from service instead of
+            # answering wrongly.
+            httpGet: { path: /readyz, port: mcp }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+
+        - name: worker
+          image: ghcr.io/bamsammich/docsearch-worker:latest
+          args: ["--db=/data/docsearch.db", "--root=/library"]
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            # Read-write: the worker is what actually opens the documents.
+            - { name: library, mountPath: /library }
+            - { name: tmp, mountPath: /tmp }
+          resources:
+            # Extraction saturates a core for minutes at a time. No CPU limit:
+            # throttling an OCR pass turns a ten-minute job into an hour.
+            requests: { cpu: 500m, memory: 512Mi }
+            limits: { memory: 4Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: docsearch-data }
+        - name: library
+          persistentVolumeClaim: { claimName: docsearch-library }
+        - name: tmp
+          emptyDir: {}

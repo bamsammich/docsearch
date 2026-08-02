@@ -1,0 +1,35 @@
+[Unit]
+Description=docsearch MCP server
+Documentation=https://github.com/bamsammich/docsearch
+After=network.target
+# Not a hard dependency: the server serves reads whether or not the worker is
+# up, and /readyz reflects the database rather than the worker.
+Wants=docsearch-worker.service
+
+[Service]
+Type=simple
+Environment=DOCSEARCH_DB=%h/.local/share/docsearch/docsearch.db
+Environment=DOCSEARCH_ROOT=%h/Documents/library
+Environment=DOCSEARCH_ADDR=127.0.0.1:8765
+Environment=DOCSEARCH_ALLOWED_ORIGINS=https://claude.ai
+# The token lives in a mode-0600 file, not in this unit, so it stays out of
+# `systemctl cat` and out of the process environment listing.
+EnvironmentFile=%h/.config/docsearch/token.env
+
+ExecStart=%h/.local/bin/docsearch-mcp \
+  --db ${DOCSEARCH_DB} \
+  --root ${DOCSEARCH_ROOT} \
+  --addr ${DOCSEARCH_ADDR} \
+  --allowed-origins ${DOCSEARCH_ALLOWED_ORIGINS}
+
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/docsearch
+
+[Install]
+WantedBy=default.target

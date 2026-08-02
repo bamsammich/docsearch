@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: docsearch-config
+data:
+  # 0.0.0.0 inside the Pod is reachable only via the Tailscale Service below;
+  # there is no Ingress and no public listener. The server logs a warning for a
+  # non-loopback bind, which is correct and expected here.
+  #
+  # NOTE: this requires --allow-public-bind on the server args. If you would
+  # rather not grant that, set addr to 127.0.0.1:8765 and run the Tailscale
+  # proxy as a sidecar in this same Pod so it can reach loopback.
+  addr: "0.0.0.0:8765"
+
+  # Origin allowlist. Native MCP clients send no Origin and are allowed
+  # deliberately; this list constrains browsers only, and exists as a
+  # DNS-rebinding defence that applies even on a private network.
+  allowedOrigins: "https://claude.ai,https://app.claude.ai"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: docsearch-token
+type: Opaque
+stringData:
+  # Replace before applying. Generate with:  openssl rand -base64 48
+  token: "CHANGE-ME-generate-a-real-token"
+---
+# Exposed over Tailscale, never an Ingress. The tool surface includes a
+# filesystem path parameter; it must not have a public listener.
+apiVersion: v1
+kind: Service
+metadata:
+  name: docsearch
+  annotations:
+    tailscale.com/expose: "true"
+    tailscale.com/hostname: "docsearch"
+spec:
+  type: ClusterIP
+  selector: { app.kubernetes.io/name: docsearch }
+  ports:
+    - { name: mcp, port: 8765, targetPort: mcp }

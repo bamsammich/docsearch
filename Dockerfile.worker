@@ -1,0 +1,31 @@
+# The ingest worker. Separate image from the server: the extraction stack is
+# Python and OCR saturates a core for tens of minutes, which is exactly why it
+# does not share a process with request handling.
+FROM python:3.13-slim AS build
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# Built at its final path, not at /src: a virtualenv bakes absolute paths into
+# its console-script shebangs, so building elsewhere and copying yields
+# "no such file or directory" on every entry point.
+WORKDIR /app
+COPY pyproject.toml uv.lock README.md ./
+COPY python ./python
+RUN uv sync --frozen --no-dev
+
+FROM python:3.13-slim
+# ocrmypdf and its tesseract/ghostscript chain are needed only for scanned
+# PDFs with no text layer. qpdf and poppler-utils cover inspection.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ocrmypdf tesseract-ocr ghostscript qpdf poppler-utils \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --uid 65532 docsearch
+COPY --from=build --chown=docsearch:docsearch /app /app
+ENV PATH="/app/.venv/bin:$PATH"
+WORKDIR /app
+USER docsearch
+
+# The worker checkpoints or rolls back on SIGTERM; give it room in the Pod
+# spec via terminationGracePeriodSeconds.
+STOPSIGNAL SIGTERM
+ENTRYPOINT ["docsearch", "worker"]
