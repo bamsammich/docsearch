@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -29,14 +30,29 @@ func main() {
 	}
 }
 
+// rootList collects a repeated --root flag. DOCSEARCH_ROOT carries the same
+// list separated the way the platform separates path lists.
+type rootList []string
+
+func (r *rootList) String() string { return strings.Join(*r, string(filepath.ListSeparator)) }
+
+func (r *rootList) Set(v string) error {
+	if v = strings.TrimSpace(v); v != "" {
+		*r = append(*r, v)
+	}
+	return nil
+}
+
 func run() error {
 	var (
 		cfg     config.Config
 		origins string
+		roots   rootList
 	)
 	flag.StringVar(&cfg.Addr, "addr", "", "listen address (default 127.0.0.1:8765)")
 	flag.StringVar(&cfg.DBPath, "db", "", "path to the SQLite database")
-	flag.StringVar(&cfg.LibraryRoot, "root", "", "library root; the only paths add_document accepts")
+	flag.Var(&roots, "root",
+		"library root; the only paths add_document accepts. Repeat for more than one.")
 	flag.StringVar(&origins, "allowed-origins", "", "comma-separated Origin allowlist")
 	flag.BoolVar(&cfg.AllowPublicBind, "allow-public-bind", false,
 		"permit binding a non-loopback address")
@@ -49,6 +65,7 @@ func run() error {
 			}
 		}
 	}
+	cfg.LibraryRoots = roots
 	cfg.FromEnv()
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -70,9 +87,9 @@ func run() error {
 	defer func() { _ = st.Close() }()
 
 	srv := mcpserver.New(mcpserver.Deps{
-		Store:       st,
-		LibraryRoot: cfg.LibraryRoot,
-		Log:         log,
+		Store:        st,
+		LibraryRoots: cfg.LibraryRoots,
+		Log:          log,
 	})
 
 	// Stateless, deliberately.
@@ -140,7 +157,7 @@ func run() error {
 	}()
 
 	log.Info("docsearch-mcp listening",
-		"addr", cfg.Addr, "db", cfg.DBPath, "root", cfg.LibraryRoot,
+		"addr", cfg.Addr, "db", cfg.DBPath, "roots", cfg.LibraryRoots,
 		"allowed_origins", cfg.AllowedOrigins)
 	if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err

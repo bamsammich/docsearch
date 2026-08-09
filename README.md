@@ -139,18 +139,29 @@ an in-flight job can checkpoint or roll back instead of being killed mid-write.
 |---|---|---|
 | bind address | `--addr` | `DOCSEARCH_ADDR` |
 | database | `--db` | `DOCSEARCH_DB` |
-| library root | `--root` | `DOCSEARCH_ROOT` |
+| library roots | `--root` (repeatable) | `DOCSEARCH_ROOT` (`:`-separated) |
 | bearer token | — | `DOCSEARCH_TOKEN` |
 | Origin allowlist | `--allowed-origins` | `DOCSEARCH_ALLOWED_ORIGINS` |
 | permit public bind | `--allow-public-bind` | — |
 
-**The library root is a security boundary.** `add_document` accepts a path that
-arrives in a tool call, over a network endpoint, and may have been suggested by
-the content of a document rather than typed by a person. Paths are resolved
-through symlinks and confirmed inside the root; every rejection returns the
-same error, so the tool cannot be used to probe for files.
+**The library roots are a security boundary.** `add_document` accepts a path
+that arrives in a tool call, over a network endpoint, and may have been
+suggested by the content of a document rather than typed by a person. Paths are
+resolved through symlinks and confirmed inside one of the roots; every
+rejection returns the same error, so the tool cannot be used to probe for
+files.
 
-The root comes from server configuration only. No tool parameter can widen it.
+The roots come from server configuration only. No tool parameter can widen
+them. More than one may be configured — `--root A --root B`, or
+`DOCSEARCH_ROOT=A:B` — and one unusable root fails startup rather than being
+dropped, because a server quietly serving three of four configured directories
+surfaces the fourth only as an unexplained rejection much later.
+
+**The configured roots are named in `add_document`'s description.** A caller
+that can see neither the roots nor why a path was refused cannot act on the
+rejection, which left the tool usable only on files a person had already
+staged. Which directories an operator chose to expose is not what the uniform
+error protects; the caller's path is.
 
 **The server refuses to bind a non-loopback address** without
 `--allow-public-bind`, and logs a warning when you pass it.
