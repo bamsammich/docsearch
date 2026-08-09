@@ -161,3 +161,38 @@ func TestNoRootsIsRejected(t *testing.T) {
 		t.Error("Validate() = nil, want an error when no library root is configured")
 	}
 }
+
+// A file passes EvalSymlinks and Abs, and libroot treats a path equal to the
+// root as inside it -- so a file named as a root would quietly make exactly
+// that file ingestable.
+func TestAFileIsNotAValidLibraryRoot(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "notes.txt")
+	if err := os.WriteFile(f, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := validCfg(t)
+	c.LibraryRoots = []string{f}
+	if err := c.Validate(); err == nil {
+		t.Error("Validate() = nil, want an error for a file named as a library root")
+	}
+}
+
+func TestDuplicateRootsCollapseToOne(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(dir, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	c := validCfg(t)
+	// The same directory three ways: itself, again, and through a symlink.
+	c.LibraryRoots = []string{dir, dir, link}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if len(c.LibraryRoots) != 1 {
+		t.Errorf("LibraryRoots = %v, want one entry", c.LibraryRoots)
+	}
+}

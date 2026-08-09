@@ -58,6 +58,7 @@ func (c *Config) Validate() error {
 	// quietly serves three of the four directories an operator configured is
 	// worse than one that will not start, because the missing one only
 	// surfaces as an unexplained rejection much later.
+	seen := make(map[string]bool, len(c.LibraryRoots))
 	resolved := make([]string, 0, len(c.LibraryRoots))
 	for _, root := range c.LibraryRoots {
 		real, err := filepath.EvalSymlinks(root)
@@ -68,6 +69,23 @@ func (c *Config) Validate() error {
 		if err != nil {
 			return fmt.Errorf("library root %q: %w", root, err)
 		}
+		// A root must be a directory. A file passes both calls above, and
+		// `within` treats a path equal to the root as inside it -- so naming
+		// a file as a root quietly makes that one file ingestable, and
+		// add_document then advertises "the path must be inside" it.
+		info, err := os.Stat(abs)
+		if err != nil {
+			return fmt.Errorf("library root %q is not usable: %w", root, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("library root %q is not a directory", root)
+		}
+		// Two spellings of one directory are one root. Left in, they appear
+		// twice in the tool description without meaning anything.
+		if seen[abs] {
+			continue
+		}
+		seen[abs] = true
 		resolved = append(resolved, abs)
 	}
 	c.LibraryRoots = resolved
