@@ -28,6 +28,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["python/docsearch"]
+# db.py reads schema.sql at import, so an installed wheel without it cannot
+# open a database at all.
+artifacts = ["python/docsearch/schema.sql"]
 
 [tool.ruff]
 line-length = 100

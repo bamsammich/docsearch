@@ -51,7 +51,8 @@ func Open(path string) (*Store, error) {
 func (s *Store) Close() error { return s.db.Close() }
 
 // RequiredSchemaVersion is the schema this binary was built against. It must
-// track docsearch.db.SCHEMA_VERSION on the Python side.
+// equal docsearch.db.SCHEMA_VERSION, which is where the number is chosen;
+// tests/test_schema_version_agreement.py fails when they diverge.
 //
 // A version is checked rather than a set of columns because the two catch
 // different faults. Column presence catches an *added* column. It cannot catch

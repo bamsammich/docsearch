@@ -19,9 +19,13 @@ func buildIndex(t *testing.T) *Store {
 	if err != nil {
 		t.Fatal(err)
 	}
-	schema, err := os.ReadFile("testdata/schema.sql")
+	// The schema itself, the same file docsearch.db creates databases from
+	// and sqlc types its queries against. Read rather than copied, and fatal
+	// rather than skipped: skipping would leave the whole store suite green
+	// without having exercised anything.
+	schema, err := os.ReadFile("../../python/docsearch/schema.sql")
 	if err != nil {
-		t.Skipf("schema fixture unavailable: %v", err)
+		t.Fatalf("read schema: %v", err)
 	}
 	if _, err := raw.Exec(string(schema)); err != nil {
 		t.Fatal(err)
