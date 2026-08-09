@@ -10,15 +10,19 @@ SELECT id, section, page_start, heading_path
 -- name: ChunkOrdinal :one
 SELECT ordinal FROM chunks WHERE id = ? AND doc_id = ?;
 
+-- Written as two comparisons rather than BETWEEN ? AND ?: sqlc's SQLite engine
+-- keeps the placeholders in the emitted SQL but does not count them as
+-- parameters, so the generated call passes the doc_id alone and the driver
+-- rejects it at runtime for the wrong argument count.
 -- name: ContextChunks :many
 SELECT id, ordinal, heading_path, section, page_start, image_count, url, fragment, text
   FROM chunks
- WHERE doc_id = ? AND ordinal BETWEEN ? AND ?
+ WHERE doc_id = ? AND ordinal >= ? AND ordinal <= ?
  ORDER BY ordinal;
 
 -- name: PagesInRange :many
 SELECT page, text FROM pages
- WHERE doc_id = ? AND page BETWEEN ? AND ?
+ WHERE doc_id = ? AND page >= ? AND page <= ?
  ORDER BY page;
 
 -- Section references resolve component-wise, never by bare string prefix: a

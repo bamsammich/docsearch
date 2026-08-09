@@ -146,9 +146,15 @@ func (q *Queries) ChunksMatchingHeading(ctx context.Context, arg ChunksMatchingH
 const contextChunks = `-- name: ContextChunks :many
 SELECT id, ordinal, heading_path, section, page_start, image_count, url, fragment, text
   FROM chunks
- WHERE doc_id = ? AND ordinal BETWEEN ? AND ?
+ WHERE doc_id = ? AND ordinal >= ? AND ordinal <= ?
  ORDER BY ordinal
 `
+
+type ContextChunksParams struct {
+	DocID     string
+	Ordinal   int64
+	Ordinal_2 int64
+}
 
 type ContextChunksRow struct {
 	ID          int64
@@ -162,8 +168,12 @@ type ContextChunksRow struct {
 	Text        string
 }
 
-func (q *Queries) ContextChunks(ctx context.Context, docID string) ([]ContextChunksRow, error) {
-	rows, err := q.db.QueryContext(ctx, contextChunks, docID)
+// Written as two comparisons rather than BETWEEN ? AND ?: sqlc's SQLite engine
+// keeps the placeholders in the emitted SQL but does not count them as
+// parameters, so the generated call passes the doc_id alone and the driver
+// rejects it at runtime for the wrong argument count.
+func (q *Queries) ContextChunks(ctx context.Context, arg ContextChunksParams) ([]ContextChunksRow, error) {
+	rows, err := q.db.QueryContext(ctx, contextChunks, arg.DocID, arg.Ordinal, arg.Ordinal_2)
 	if err != nil {
 		return nil, err
 	}
@@ -237,17 +247,23 @@ func (q *Queries) OutlineRows(ctx context.Context, docID string) ([]OutlineRowsR
 
 const pagesInRange = `-- name: PagesInRange :many
 SELECT page, text FROM pages
- WHERE doc_id = ? AND page BETWEEN ? AND ?
+ WHERE doc_id = ? AND page >= ? AND page <= ?
  ORDER BY page
 `
+
+type PagesInRangeParams struct {
+	DocID  string
+	Page   int64
+	Page_2 int64
+}
 
 type PagesInRangeRow struct {
 	Page int64
 	Text string
 }
 
-func (q *Queries) PagesInRange(ctx context.Context, docID string) ([]PagesInRangeRow, error) {
-	rows, err := q.db.QueryContext(ctx, pagesInRange, docID)
+func (q *Queries) PagesInRange(ctx context.Context, arg PagesInRangeParams) ([]PagesInRangeRow, error) {
+	rows, err := q.db.QueryContext(ctx, pagesInRange, arg.DocID, arg.Page, arg.Page_2)
 	if err != nil {
 		return nil, err
 	}
