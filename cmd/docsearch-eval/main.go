@@ -127,7 +127,22 @@ func main() {
 	qPath := flag.String("queries", "tests/retrieval/queries.json", "committed query set")
 	dump := flag.String("dump-candidates", "", "write top-N BM25 candidates as JSON here")
 	dumpN := flag.Int("dump-n", 50, "candidates per query when dumping")
+	selfLabel := flag.Bool("self-label", false,
+		"probe retrieval using queries generated from the index itself, needing no committed query set")
 	flag.Parse()
+
+	// Runs against any index without an authored query set, so it is resolved
+	// before the committed one is read.
+	if *selfLabel {
+		st, err := store.Open(*dbPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		defer func() { _ = st.Close() }()
+		runSelfLabel(context.Background(), st)
+		return
+	}
 
 	raw, err := os.ReadFile(*qPath)
 	if err != nil {

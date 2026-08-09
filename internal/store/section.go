@@ -89,3 +89,42 @@ func AnySectionCovers(refs []string, section string) bool {
 	}
 	return false
 }
+
+// SampledChunk is one chunk drawn for a self-labelled retrieval probe.
+type SampledChunk struct {
+	ChunkID     int64
+	HeadingPath string
+	Text        string
+}
+
+// SampleChunks draws every stride-th chunk of a document in ordinal order.
+//
+// Deliberately a fixed stride rather than a random sample: the probe is a
+// regression check, and a result that moves because the sample moved cannot be
+// compared against the run before it. Stride also spreads the draw across the
+// whole document, where taking the first N would characterise only the front
+// matter.
+func (s *Store) SampleChunks(ctx context.Context, docID string, stride int) ([]SampledChunk, error) {
+	if stride < 1 {
+		stride = 1
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, heading_path, text FROM chunks
+		  WHERE doc_id = ? ORDER BY ordinal`, docID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []SampledChunk
+	for i := 0; rows.Next(); i++ {
+		var c SampledChunk
+		if err := rows.Scan(&c.ChunkID, &c.HeadingPath, &c.Text); err != nil {
+			return nil, err
+		}
+		if i%stride == 0 {
+			out = append(out, c)
+		}
+	}
+	return out, rows.Err()
+}
