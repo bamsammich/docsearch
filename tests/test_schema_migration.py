@@ -146,9 +146,7 @@ def test_a_version_is_not_recorded_when_the_schema_does_not_match(tmp_path: Path
 
     raw = sqlite3.connect(path)
     raw.execute("DROP TABLE index_terms")
-    raw.execute(
-        "CREATE TABLE index_terms (doc_id TEXT NOT NULL, term TEXT NOT NULL, page INTEGER)"
-    )
+    raw.execute("CREATE TABLE index_terms (doc_id TEXT NOT NULL, term TEXT NOT NULL, page INTEGER)")
     raw.execute("DELETE FROM schema_version")
     raw.execute("INSERT INTO schema_version (version, applied_at) VALUES (1, datetime('now'))")
     raw.commit()
