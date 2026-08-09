@@ -44,11 +44,24 @@ docsearch verify  <doc_id> [--db PATH]
 
 `ingest` and the worker call the same function; only the driver differs.
 
-**Run `verify` after every ingest.** It reports chunk count, token
-distribution, locator gaps, and the ten longest and shortest chunks with their
-heading paths. Structural extraction failures are obvious there and invisible
-elsewhere — a collapsed heading source shows up as a handful of enormous
-chunks, a shattered one as hundreds of near-empty ones.
+**Run `verify` after every ingest.** It answers two separate questions.
+
+*Is the database consistent* — chunk counts, ordinal gaps, locator coverage,
+FTS row parity. Reported under `PROBLEMS`.
+
+*Did the document chunk well enough to be searchable* — reported as a verdict
+of `good`, `degraded` or `unusable`, with a finding for each defect stating its
+evidence and what it costs the caller. Every defect it grades is compatible
+with a clean ingest: a document can be perfectly consistent, reach
+`status='ready'`, and still be shaped so retrieval cannot work on it.
+
+The one that matters most is `unaddressable`. When structure cannot be derived,
+chunks are cut on the token budget alone — so every chunk is legally sized, no
+size check fires, and consecutive slices inherit a single heading. A 70-page
+manual can arrive as 35 well-formed chunks sharing 10 headings between them,
+four of them headless. `section_filter` cannot separate those and `outline`
+describes the whole document in ten entries. That is silent degradation to
+fixed windows, and it is the failure this command exists to make loud.
 
 A document is invisible to search until its ingest completes. Every read path
 filters `documents.status='ready'`.
