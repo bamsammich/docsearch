@@ -133,6 +133,57 @@ def test_a_missing_column_is_added_by_migration(tmp_path: Path) -> None:
     assert "kind" in cols
 
 
+def test_v4_data_survives_the_upgrade_to_v5(tmp_path: Path) -> None:
+    """A populated v4 database keeps its rows and gains the new columns.
+
+    The v5 columns are additive and nullable, and source_kind defaults to
+    'file' -- every document that predates the site model was one.
+    """
+    path = tmp_path / "v4.db"
+    conn = db.connect(path)
+    conn.close()
+
+    raw = sqlite3.connect(path)
+    raw.row_factory = sqlite3.Row
+    for table, column in (
+        ("documents", "source_kind"),
+        ("chunks", "url"),
+        ("chunks", "fragment"),
+    ):
+        raw.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
+    raw.execute(
+        "INSERT INTO documents (doc_id, title, format, source_path, sha256, status,"
+        " chunk_count) VALUES ('m','Manual','pdf','/lib/m.pdf','abc','ready',1)"
+    )
+    raw.execute(
+        "INSERT INTO chunks (doc_id, ordinal, heading_path, text)"
+        " VALUES ('m', 0, 'Manual > Intro', 'the body text')"
+    )
+    raw.execute("DELETE FROM schema_version")
+    raw.execute("INSERT INTO schema_version (version, applied_at) VALUES (4, datetime('now'))")
+    raw.commit()
+    raw.close()
+
+    conn = db.connect(path, allow_outdated=True)
+    result = db.migrate(conn)
+
+    assert result.from_version == 4
+    assert db.schema_version(conn) == 5
+    assert set(result.columns_added) == {"documents.source_kind", "chunks.url", "chunks.fragment"}
+
+    doc = conn.execute("SELECT * FROM documents WHERE doc_id='m'").fetchone()
+    assert doc["title"] == "Manual"
+    assert doc["source_kind"] == "file"
+
+    chunk = conn.execute("SELECT * FROM chunks WHERE doc_id='m'").fetchone()
+    assert chunk["text"] == "the body text"
+    assert chunk["url"] is None
+    assert chunk["fragment"] is None
+
+    hit = conn.execute("SELECT doc_id FROM chunks_fts WHERE chunks_fts MATCH 'body'").fetchone()
+    assert hit["doc_id"] == "m"
+
+
 def test_a_version_is_not_recorded_when_the_schema_does_not_match(tmp_path: Path) -> None:
     """A stamp written without checking makes the claim unfalsifiable.
 

@@ -30,7 +30,11 @@ type SearchResult struct {
 	ImageCount  int     `json:"image_count"`
 	Kind        string  `json:"kind,omitempty"`
 	IndexBoost  bool    `json:"matched_book_index,omitempty"`
-	Text        string  `json:"text"`
+	// URL and Fragment address the page this chunk was read from. Both are
+	// empty for a document ingested from a local file.
+	URL      string `json:"url,omitempty"`
+	Fragment string `json:"fragment,omitempty"`
+	Text     string `json:"text"`
 
 	bm25 float64 // raw, negative, lower is better
 }
@@ -199,7 +203,7 @@ func (s *Store) searchOneDocument(ctx context.Context, p SearchParams) ([]Search
 	sb.WriteString(`
 		SELECT chunks.doc_id, documents.title, chunks.heading_path, chunks.section,
 		       chunks.id, chunks.page_start, chunks.page_end, chunks.printed_page_start,
-		       chunks.image_count, chunks.kind,
+		       chunks.image_count, chunks.kind, chunks.url, chunks.fragment,
 		       bm25(chunks_fts, 1.0, 2.0) AS score, chunks.text
 		  FROM chunks_fts
 		  JOIN chunks ON chunks.id = chunks_fts.rowid
@@ -228,15 +232,16 @@ func (s *Store) searchOneDocument(ctx context.Context, p SearchParams) ([]Search
 	var out []SearchResult
 	for rows.Next() {
 		var r SearchResult
-		var section sql.NullString
+		var section, url, fragment sql.NullString
 		if err := rows.Scan(&r.DocID, &r.Title, &r.HeadingPath, &section, &r.ChunkID,
-			&r.PageStart, &r.PageEnd, &r.PrintedPage, &r.ImageCount, &r.Kind, &r.bm25,
-			&r.Text); err != nil {
+			&r.PageStart, &r.PageEnd, &r.PrintedPage, &r.ImageCount, &r.Kind, &url, &fragment,
+			&r.bm25, &r.Text); err != nil {
 			return nil, err
 		}
 		if section.Valid {
 			r.Section = section.String
 		}
+		r.URL, r.Fragment = url.String, fragment.String
 		if AnySectionCovers(boostSections, r.Section) {
 			r.IndexBoost = true
 			r.bm25 -= indexBoost

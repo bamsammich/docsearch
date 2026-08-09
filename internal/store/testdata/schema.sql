@@ -3,7 +3,8 @@ CREATE TABLE IF NOT EXISTS documents (
   doc_id       TEXT PRIMARY KEY,
   title        TEXT NOT NULL,
   format       TEXT NOT NULL,
-  source_path  TEXT NOT NULL,
+  source_path  TEXT NOT NULL,   -- absolute path, or the canonical base URL of a site
+  source_kind  TEXT NOT NULL DEFAULT 'file',  -- 'file' | 'site'
   sha256       TEXT NOT NULL,
   page_count   INTEGER,
   chunk_count  INTEGER,
@@ -44,6 +45,8 @@ CREATE TABLE IF NOT EXISTS chunks (
   printed_page_start INTEGER,
   image_count        INTEGER NOT NULL DEFAULT 0,
   kind               TEXT NOT NULL DEFAULT 'prose',
+  url                TEXT,             -- page this chunk was read from; NULL for local files
+  fragment           TEXT,             -- in-page anchor, without the leading '#'
   heading_path       TEXT NOT NULL,
   text               TEXT NOT NULL
 );

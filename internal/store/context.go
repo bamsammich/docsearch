@@ -15,8 +15,13 @@ type ContextChunk struct {
 	Section     string `json:"section,omitempty"`
 	PageStart   *int   `json:"page_start,omitempty"`
 	ImageCount  int    `json:"image_count"`
-	Text        string `json:"text"`
-	IsAnchor    bool   `json:"is_anchor,omitempty"`
+	// URL and Fragment address the page this chunk was read from. Both are
+	// empty for a document ingested from a local file.
+	URL      string `json:"url,omitempty"`
+	Fragment string `json:"fragment,omitempty"`
+	Text     string `json:"text"`
+	// IsAnchor marks the chunk the caller asked for, not a URL fragment.
+	IsAnchor bool `json:"is_anchor,omitempty"`
 }
 
 // PageText is a page returned by the page-addressed form of get_context.
@@ -54,7 +59,7 @@ func (s *Store) GetContext(ctx context.Context, docID string, chunkID int64,
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, ordinal, heading_path, section, page_start, image_count, text
+		SELECT id, ordinal, heading_path, section, page_start, image_count, url, fragment, text
 		  FROM chunks
 		 WHERE doc_id = ? AND ordinal BETWEEN ? AND ?
 		 ORDER BY ordinal`, docID, anchor-before, anchor+after)
@@ -66,14 +71,15 @@ func (s *Store) GetContext(ctx context.Context, docID string, chunkID int64,
 	var out []ContextChunk
 	for rows.Next() {
 		var c ContextChunk
-		var section sql.NullString
+		var section, url, fragment sql.NullString
 		if err := rows.Scan(&c.ChunkID, &c.Ordinal, &c.HeadingPath, &section, &c.PageStart,
-			&c.ImageCount, &c.Text); err != nil {
+			&c.ImageCount, &url, &fragment, &c.Text); err != nil {
 			return nil, false, err
 		}
 		if section.Valid {
 			c.Section = section.String
 		}
+		c.URL, c.Fragment = url.String, fragment.String
 		c.IsAnchor = c.Ordinal == anchor
 		out = append(out, c)
 	}
