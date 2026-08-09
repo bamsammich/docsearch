@@ -33,14 +33,30 @@ the mise registry — install it from your package manager.
 ## Ingesting
 
 ```bash
+docsearch inspect <path>                           # what structure does it offer?
 docsearch ingest  <path> [--title T] [--db PATH]   # synchronous, file or directory
 docsearch enqueue <path> [--title T] [--db PATH]   # queue for the worker
 docsearch worker  [--db PATH] [--root PATH]        # run the daemon
 docsearch jobs    [--db PATH]                      # queue state
 docsearch list    [--db PATH]
 docsearch remove  <doc_id> [--db PATH]
-docsearch verify  <doc_id> [--db PATH]
+docsearch verify  <doc_id> [--db PATH]             # did it chunk well enough?
 ```
+
+Three commands answer three different questions, and a document can pass one
+while failing another:
+
+| | question |
+|---|---|
+| `inspect` | before ingest — what structure can be derived, and will this work at all? |
+| `verify` | after ingest — did chunking produce something searchable? |
+| `docsearch-eval --self-label` | does retrieval function on this index at all? |
+
+**`inspect` first on anything unfamiliar.** It reports the text layer, the
+embedded outline, whether a printed contents page can be reconstructed, the
+font hierarchy and the share of the document that is running furniture — then
+names the structure source that would be selected. A scanned PDF is told to run
+OCR rather than described as structureless.
 
 `ingest` and the worker call the same function; only the driver differs.
 
@@ -364,7 +380,17 @@ only irreplaceable data. `docsearch-data` can be treated as a cache.
 uv run pytest                                    # ingest, chunker, worker, policy
 go test ./...                                    # store, transport, path validation
 go run ./cmd/docsearch-eval --db var/docsearch.db  # retrieval evaluation
+go run ./cmd/docsearch-eval --db PATH --self-label # measure any corpus, no query set
 ```
+
+`--self-label` builds each query from a chunk's own heading and body and asks
+whether that chunk comes back, so it runs on any index the moment it is
+ingested. Its limits are severe and it prints them: a self-labelled query
+shares terms with its answer by construction, so it cannot see the vocabulary
+gap, and a document cut into fixed windows scores 100% because every slice
+still holds distinctive words. It catches the failures that leave an index
+where nothing is findable — collapsed structure, boilerplate dominating the
+term mass, chunk sizes in the wrong unit. Use `verify` to judge structure.
 
 `tests/retrieval/queries.json` is a committed query set with expected sections
 recorded before the queries were ever run. **A query that misses stays in the
