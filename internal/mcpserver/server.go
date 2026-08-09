@@ -51,12 +51,11 @@ func New(d Deps) *mcp.Server {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "outline",
 		Description: "Return a document's heading tree to the given depth.\n\n" +
-			"CALL THIS BEFORE SEARCHING. Measured on this index, 14 of 15 queries that " +
-			"a cold search failed to answer were recovered at rank 1 by first reading " +
-			"the outline, choosing the chapter that plainly covers the question, and " +
-			"searching again with section_filter set to that chapter heading. Cold " +
-			"keyword search is the weakest way to use these tools, especially when your " +
-			"phrasing is everyday language rather than the document's own terminology.",
+			"CALL THIS BEFORE SEARCHING. Cold keyword search is the weakest way to use " +
+			"these tools, especially when your phrasing is everyday language rather than " +
+			"the document's own terminology. Read the outline, choose the chapter that " +
+			"plainly covers the question, then search again with section_filter set to " +
+			"that chapter heading.",
 	}, d.outline)
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -65,9 +64,8 @@ func New(d Deps) *mcp.Server {
 			"above body text. Returns the full chunk text, not a snippet.\n\n" +
 			"This is lexical search: it matches words, not meaning. If your phrasing is " +
 			"everyday language rather than the document's own vocabulary, a cold search " +
-			"will often miss. Read `outline` first and pass section_filter — on this " +
-			"index that recovered 14 of 15 otherwise-failed queries to rank 1. If a " +
-			"search disappoints, do not rephrase and retry blindly; orient, then scope.\n\n" +
+			"will often miss. Read `outline` first and pass section_filter. If a search " +
+			"disappoints, do not rephrase and retry blindly; orient, then scope.\n\n" +
 			"'relevance' is 0..1, higher is better. It is comparable WITHIN one scoped " +
 			"result set and not across documents: BM25's IDF is computed over the whole " +
 			"index, so the same relevance figure means different things in a large and a " +

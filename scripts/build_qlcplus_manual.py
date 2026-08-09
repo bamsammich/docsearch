@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Assemble the QLC+ HTML documentation into one Markdown manual.
 
-Phase 4 needs a second corpus that is non-paginated AND structurally
-unnumbered. The grandMA2 manual is neither: every one of its 827 sections
-carries a number, so the chunker's merge-forward rule -- which only applies to
-units the document did not number -- has never executed against real data, and
-offset locators, a NULL page_count and the no-pages path of get_context have
-never been exercised outside unit tests. A second PDF manual would exercise
-none of it.
+Retrieval evaluation needs a corpus that is non-paginated AND structurally
+unnumbered, because a numbered PDF manual exercises none of that machinery:
+the chunker's merge-forward rule applies only to units the document did not
+number, and offset locators, a NULL page_count and the no-pages path of
+get_context are all unreachable when every section carries a number and every
+locator carries a page. QLC+ is that corpus. A second PDF manual would not be.
 
 This is a mechanical transform of real upstream content, not authored prose.
 Each source page becomes one `##` section under a single `#` title, with the

@@ -68,8 +68,8 @@ caller reading five results would have found it.
 ## Decision
 
 Question closed, alongside the index-term boost finding. Both were plausible
-retrieval improvements; both measured out as noise on this corpus. Phase 6 is
-**not** justified on this evidence.
+retrieval improvements; both measured out as noise on this corpus. A dense
+retrieval phase is **not** justified on this evidence.
 
 Reopen only if the corpus changes character — many small documents rather than
 two large manuals — or if a domain-adapted embedding model becomes available.

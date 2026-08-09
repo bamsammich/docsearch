@@ -209,7 +209,7 @@ def schema_present(conn: sqlite3.Connection) -> bool:
 #: Coverage metrics are structurally blind to getting this wrong: over-matching
 #: *raises* the number of resolved joins, so an "unjoinable = 0" check moves in
 #: the reassuring direction while the results get worse. Precision needs its own
-#: test. Phase 3's index-term boost must resolve sections through this same rule.
+#: test. The index-term boost must resolve sections through this same rule.
 SECTION_MATCH_SQL = "(chunks.section = ? OR chunks.section LIKE ? || '.%')"
 
 
