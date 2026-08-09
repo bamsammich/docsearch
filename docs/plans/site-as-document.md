@@ -202,7 +202,7 @@ parallel.
 
 | # | scope | touches | after |
 |---|---|---|---|
-| 1 | Preserve newlines in `<pre>`; exempt it from the parent-tag dedup that drops a `<pre>` inside an `<li>` | `adapters/html.py` | — |
+| 1 | Read `<pre>` verbatim so highlighted code keeps its lines; emit it as its own block when nested, so an ancestor no longer flattens it | `adapters/html.py` | — |
 | 2 | `documents.source_kind`, `chunks.url`, `chunks.anchor`; schema 4→5 both sides | `db.py`, `store/*.go`, `mcpserver` | — |
 | 3 | Library roots become a list; roots disclosed in tool metadata | `config`, `libroot`, `mcpserver` | 2 |
 | 4 | `urlguard`: scheme, host, resolution, redirect re-validation, uniform error | new, Go + Python | — |
