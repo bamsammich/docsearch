@@ -196,6 +196,50 @@ def _normalize_title(text: str) -> str:
     return re.sub(r"\W+", " ", text.lower()).strip()
 
 
+#: A page needs at least this many lines before the share of them that are
+#: section titles means anything.
+CONTENTS_PAGE_MIN_LINES = 5
+
+#: Share of a page's lines that must name a known section for the page to be a
+#: printed contents listing rather than prose that happens to mention sections.
+CONTENTS_PAGE_MATCH_FRACTION = 0.5
+
+#: ``Introduction .......... 11`` -- leader dots and a trailing page number.
+_CONTENTS_LEADER = re.compile(r"[\s.·•\-—_]*\d*\s*$")
+
+
+def _contents_pages(
+    pages: list[list[_Line]],
+    toc_entries: list[tuple[str, str, int]],
+    boiler: set[str],
+) -> set[int]:
+    """Pages whose content is a printed listing of the document's own sections.
+
+    An embedded outline names the printed contents as a section like any other,
+    so its pages become chunks: text duplicating the heading structure already
+    available through `outline`, matching broadly and answering nothing.
+
+    Detected by content rather than by heading title. A page most of whose
+    lines name known sections is a listing whatever the document calls it,
+    where matching the words "Table of Contents" would not survive a document
+    written in another language.
+    """
+    titles = {_normalize_title(title) for _sec, title, _pg in toc_entries if title.strip()}
+    if not titles:
+        return set()
+    found: set[int] = set()
+    for pno, lines in enumerate(pages):
+        body = [ln for ln in lines if ln.text.strip() and not _is_boilerplate(ln.text, boiler)]
+        if len(body) < CONTENTS_PAGE_MIN_LINES:
+            continue
+        matched = sum(
+            1 for ln in body if _normalize_title(_CONTENTS_LEADER.sub("", ln.text)) in titles
+        )
+        if matched / len(body) >= CONTENTS_PAGE_MATCH_FRACTION:
+            found.add(pno)
+    return found
+
+
 def _locate_outline_headings(
     pages: list[list[_Line]],
     toc_entries: list[tuple[str, str, int]],
@@ -397,6 +441,7 @@ def _emit_outline_blocks(
     section_titles: dict[str, str],
     boiler: set[str],
     page_images: list[list[tuple[float, int]]],
+    skip_pages: set[int],
 ) -> list[Block]:
     """Emit blocks with boundaries taken from the embedded outline.
 
@@ -446,6 +491,14 @@ def _emit_outline_blocks(
 
     for pno, lines in enumerate(pages):
         pending = sorted(by_page.get(pno, []), key=lambda h: h[0])
+        if pno in skip_pages:
+            # Headings on a contents page still apply: the outline entry for
+            # the section a listing sits under is real, and dropping it would
+            # annex that section's later pages to whatever preceded it.
+            for _y, section, _title, _matched in pending:
+                flush()
+                cur_section = section
+            continue
         imgs = page_images[pno]
         img_i = 0
         for ln in lines:
@@ -559,13 +612,17 @@ def extract(path: Path, progress: ProgressFn | None = None) -> Extraction:
     # because nothing about the structure is inferred.
     if diagnostics["structure_source"] == "outline":
         placements, located = _locate_outline_headings(pages, toc_entries, boiler)
+        contents = _contents_pages(pages, toc_entries, boiler)
         diagnostics["outline_placement"] = {
             "entries": len(toc_entries),
             "located_by_title": located,
             "placed_at_page_top": len(placements) - located,
+            "contents_pages_skipped": len(contents),
         }
         diagnostics["printed_page_offset"] = 0
-        outline_blocks = _emit_outline_blocks(pages, placements, toc_titles, boiler, page_images)
+        outline_blocks = _emit_outline_blocks(
+            pages, placements, toc_titles, boiler, page_images, contents
+        )
         for b in outline_blocks:
             if b.image_count > 0 and estimate_tokens(b.text) <= FIGURE_CAPTION_MAX_TOKENS:
                 b.figure_only = True
