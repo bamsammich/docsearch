@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from docsearch.blocks import Block, Extraction
-from docsearch.chunker import MAX_TOKENS, MIN_TOKENS, chunk
+from docsearch.chunker import (
+    MAX_TOKENS,
+    MIN_TOKENS,
+    PATH_SEP,
+    Chunk,
+    chunk,
+    classify_kinds,
+)
 from docsearch.tokens import estimate_tokens
 
 
@@ -192,3 +199,81 @@ def test_stub_does_not_fold_into_a_non_descendant() -> None:
     ]
     chunks = chunk(_extraction(blocks))
     assert [c.section for c in chunks] == ["4", "5"]
+
+
+def _reference_family(parent: str, n: int, leaf: str = "Entry") -> list[Chunk]:
+    return [
+        Chunk(
+            ordinal=i,
+            heading_path=PATH_SEP.join(["Manual", parent, f"{leaf} {i}"]),
+            text=f"Definition of term {i}. " * 8,
+        )
+        for i in range(n)
+    ]
+
+
+def test_a_glossary_in_an_unnumbered_document_is_classified() -> None:
+    """The mechanism was unreachable for any document without section numbers.
+
+    Families were keyed on the section number, so Markdown, HTML, DOCX and any
+    PDF structured from an outline could never be classified however plainly
+    the document declared a reference listing.
+    """
+    chunks = _reference_family("Glossary", 40)
+    for c in chunks:
+        assert c.section is None
+    classify_kinds(chunks)
+    assert all(c.kind == "keyword-reference" for c in chunks)
+
+
+def test_subdivided_entries_stay_with_their_family() -> None:
+    """A long entry split into parts sits a level deeper than its siblings.
+
+    Keyed on the immediate parent it would form its own family of two, below
+    any size threshold -- dropping exactly the entries long enough to split.
+    """
+    chunks = _reference_family("All keywords", 40)
+    chunks += [
+        Chunk(
+            ordinal=100 + i,
+            heading_path=PATH_SEP.join(["Manual", "All keywords", "Clone keyword", part]),
+            text="Detail. " * 20,
+        )
+        for i, part in enumerate(["Syntax", "Options", "Examples"])
+    ]
+    classify_kinds(chunks)
+    assert all(c.kind == "keyword-reference" for c in chunks)
+
+
+def test_a_topic_chapter_of_uniform_siblings_is_left_alone() -> None:
+    """Measured: the two are separable on no structural axis.
+
+    A chapter of 84 sibling pages about physical keys looks exactly like a
+    reference index by size, leaf length and term density. Only the parent
+    heading distinguishes a listing from a topic, so only it decides.
+    """
+    chunks = _reference_family("Keys & Buttons on the Console", 84, leaf="Key")
+    classify_kinds(chunks)
+    assert all(c.kind == "prose" for c in chunks)
+
+
+def test_a_small_declared_family_is_left_alone() -> None:
+    chunks = _reference_family("Glossary", 12)
+    classify_kinds(chunks)
+    assert all(c.kind == "prose" for c in chunks)
+
+
+def test_entries_described_in_sentences_are_not_a_reference_listing() -> None:
+    """Leaf headings in a listing are named entries, not descriptions."""
+    chunks = [
+        Chunk(
+            ordinal=i,
+            heading_path=PATH_SEP.join(
+                ["Manual", "Glossary", f"How to configure the {i} subsystem correctly"]
+            ),
+            text="Prose. " * 20,
+        )
+        for i in range(40)
+    ]
+    classify_kinds(chunks)
+    assert all(c.kind == "prose" for c in chunks)
