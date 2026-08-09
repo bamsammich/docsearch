@@ -33,6 +33,7 @@ the mise registry — install it from your package manager.
 ## Ingesting
 
 ```bash
+docsearch migrate [--check] [--db PATH]            # bring the schema up to date
 docsearch inspect <path>                           # what structure does it offer?
 docsearch ingest  <path> [--title T] [--db PATH]   # synchronous, file or directory
 docsearch enqueue <path> [--title T] [--db PATH]   # queue for the worker
@@ -81,6 +82,40 @@ fixed windows, and it is the failure this command exists to make loud.
 
 A document is invisible to search until its ingest completes. Every read path
 filters `documents.status='ready'`.
+
+## Schema migrations
+
+`docsearch migrate` is idempotent and is the only thing that writes the schema
+version. Everything else refuses a database it does not match and says what to
+run — opening is not upgrading, because every read path opens the database and
+one of them running an older build would otherwise stamp a newer database
+backwards.
+
+A database *newer* than the build is refused outright rather than downgraded.
+An older build cannot know what a newer one changed, so writing through it
+risks corrupting data it does not understand.
+
+The version is recorded only after the schema it describes is confirmed
+present. A stamp written without that check is a claim that cannot be false,
+and the readiness gate would then pass a database whose queries fail.
+
+Run it as a startup precondition of the **worker**, which is the sole writer:
+
+| | |
+|---|---|
+| systemd | `ExecStartPre=` in `deploy/systemd/docsearch-worker.service` |
+| Kubernetes | an `initContainer` in `deploy/k8s/deployment.yaml` |
+
+Same command in both, because there is nothing to orchestrate: SQLite is one
+file with one writer, and `replicas: 1` with `strategy: Recreate` already
+guarantees no second writer exists. A migration that cannot be applied exits
+nonzero and the worker does not start — a worker writing through a schema it
+does not match is worse than a worker that is down.
+
+Not every schema change can be applied in place. The change from page
+references to section references in `index_terms` is not recoverable without
+the source documents, so migration refuses it and says to re-ingest. **The
+index is fully regenerable**, which is what makes refusing the right answer.
 
 ## Running the worker
 

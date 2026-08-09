@@ -8,6 +8,17 @@ Type=simple
 Environment=DOCSEARCH_DB=%h/.local/share/docsearch/docsearch.db
 Environment=DOCSEARCH_ROOT=%h/Documents/library
 Environment=DOCSEARCH_LOG_LEVEL=INFO
+# Migration runs here and nowhere else. The worker is the only writer, so
+# this is the one place a schema change can be applied without racing anything
+# -- and it must succeed before the worker opens the database, because every
+# other command now refuses an out-of-date schema rather than upgrading it as
+# a side effect of being run.
+#
+# Idempotent, so it costs nothing on the restarts that do not need it. A
+# migration that cannot be applied exits nonzero and the unit does not start,
+# which is the intended outcome: a worker writing through a schema it does not
+# match is worse than a worker that is down.
+ExecStartPre=%h/.local/bin/docsearch migrate --db ${DOCSEARCH_DB}
 ExecStart=%h/.local/bin/docsearch worker --db ${DOCSEARCH_DB} --root ${DOCSEARCH_ROOT}
 
 Restart=on-failure
