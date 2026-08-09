@@ -111,7 +111,16 @@ def ingest(path: Path, title: str | None, db_path: str) -> None:
                     + (" ..." if len(extra) > 15 else "")
                 )
             if not missing and not extra:
-                click.echo("      both structure sources agree exactly")
+                # Two empty sets agree, which says nothing at all. Only claim
+                # agreement when there was something on both sides to compare.
+                if xv.get("toc_sections") and xv.get("body_sections"):
+                    click.echo("      both structure sources agree exactly")
+                else:
+                    click.echo(
+                        "      NOT cross-validated: nothing to compare on both sides"
+                    )
+        for note in result.report.notes() if result.report else []:
+            click.echo(f"    finding: {note}")
         idx = diag.get("index")
         if isinstance(idx, dict):
             click.echo(

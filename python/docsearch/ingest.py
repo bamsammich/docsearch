@@ -158,6 +158,12 @@ def ingest_file(
             "survived boilerplate stripping. The document was not indexed."
         )
     report.scattered_sections = structure.scattered_sections(chunks)
+    # Assessed on the chunks rather than on the derived section list: a source
+    # can declare plenty of sections and still leave consecutive chunks sharing
+    # one heading, and it is the chunks a caller actually filters and reads.
+    report.chunks = len(chunks)
+    report.distinct_heading_paths = len({c.heading_path for c in chunks})
+    report.headless_chunks = sum(1 for c in chunks if not c.heading_path.strip())
     checkpoint()
 
     conn.execute("BEGIN IMMEDIATE")
