@@ -1,0 +1,92 @@
+# Address verdicts both language implementations must agree on.
+#
+# The guard is enforced in Go (the MCP tool boundary) and in Python (the
+# worker, because a job row is not proof of validation). Two implementations
+# of one rule drift, and a drift here means one process fetches what the other
+# refuses -- so both test suites read this file and must produce the same
+# verdict for every line.
+#
+# Format: <address> <allow|block> <why>
+
+# -- ordinary public addresses --------------------------------------------
+8.8.8.8                 allow  public v4
+1.1.1.1                 allow  public v4
+93.184.216.34           allow  public v4
+2606:4700:4700::1111    allow  public v6
+2a00:1450:4001:81a::200e allow  public v6
+
+# -- loopback --------------------------------------------------------------
+127.0.0.1               block  loopback
+127.1.2.3               block  loopback is the whole /8
+0.0.0.0                 block  unspecified
+::1                     block  loopback v6
+::                      block  unspecified v6
+
+# -- RFC1918 and IPv6 unique-local -----------------------------------------
+10.0.0.1                block  private
+10.255.255.255          block  private
+172.16.0.1              block  private
+172.31.255.254          block  private
+192.168.1.1             block  private
+fd00::1                 block  unique-local v6
+fc00::1                 block  unique-local v6
+
+# 172.32/12 is outside RFC1918 and must stay reachable.
+172.32.0.1              allow  just past the private range
+172.15.255.255          allow  just before the private range
+
+# -- link-local ------------------------------------------------------------
+169.254.169.254         block  cloud metadata service
+169.254.0.1             block  link-local
+fe80::1                 block  link-local v6
+
+# -- carrier-grade NAT, where tailnets live --------------------------------
+100.64.0.1              block  CGNAT
+100.100.100.100         block  CGNAT
+100.127.255.255         block  CGNAT
+100.63.255.255          allow  just before CGNAT
+100.128.0.1             allow  just past CGNAT
+
+# -- IPv4-mapped IPv6: an IPv4 address wearing a hat -----------------------
+::ffff:127.0.0.1        block  mapped loopback
+::ffff:10.0.0.1         block  mapped private
+::ffff:169.254.169.254  block  mapped metadata service
+::ffff:8.8.8.8          allow  mapped public
+
+# -- tunnels and translations that reach IPv4 space ------------------------
+64:ff9b::7f00:1         block  NAT64
+64:ff9b:1::1            block  NAT64 local-use
+2002:7f00:1::1          block  6to4 encodes an IPv4 address
+2001::1                 block  Teredo
+
+# -- IPv6 outside global unicast -------------------------------------------
+# Only 2000::/3 carries allocated routable addresses. Everything else is
+# special-purpose or unallocated, and the two languages' "reserved" predicates
+# disagree about it, so the rule is an allow-list rather than an enumeration.
+100::1                  block  discard-only
+4000::1                 block  unallocated
+6000::1                 block  unallocated
+8000::1                 block  unallocated
+c000::1                 block  unallocated
+fec0::1                 block  deprecated site-local
+0100::1                 block  outside global unicast
+1fff::1                 block  just before global unicast
+2000::1                 allow  first global unicast address
+3fff:ffff::1            allow  last global unicast address
+
+# -- reserved, documentation, benchmarking ---------------------------------
+192.0.0.1               block  IETF protocol assignments
+192.0.2.1               block  TEST-NET-1
+198.51.100.1            block  TEST-NET-2
+203.0.113.1             block  TEST-NET-3
+198.18.0.1              block  benchmarking
+192.88.99.1             block  6to4 relay anycast
+240.0.0.1               block  reserved
+255.255.255.255         block  broadcast
+2001:db8::1             block  documentation
+
+# -- multicast -------------------------------------------------------------
+224.0.0.1               block  multicast
+239.255.255.250         block  SSDP multicast
+ff02::1                 block  link-local multicast v6
+ff01::1                 block  interface-local multicast v6
