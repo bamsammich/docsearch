@@ -61,7 +61,7 @@ class SchemaMigrationError(SchemaError):
 #: authoritative chunk key -- is invisible to any structural check while
 #: silently changing what queries return. The Go server asserts this value at
 #: readiness and refuses to serve a database it was not built against.
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 #: Human-readable history, so a version mismatch can be diagnosed without
 #: reading the git log.
@@ -72,6 +72,8 @@ SCHEMA_HISTORY = {
     "ingest_jobs.permanent distinguishes deterministic failure from exhaustion",
     4: "chunks.kind marks self-declared keyword-reference families so search "
     "can deprioritise them without deleting them",
+    5: "documents.source_kind names what a source is; chunks.url and chunks.fragment "
+    "carry the address a chunk was read from, so a result can be cited",
 }
 
 #: Tables ``/readyz`` and the CLI check for to decide the schema is present.
@@ -89,7 +91,8 @@ CREATE TABLE IF NOT EXISTS documents (
   doc_id       TEXT PRIMARY KEY,
   title        TEXT NOT NULL,
   format       TEXT NOT NULL,
-  source_path  TEXT NOT NULL,
+  source_path  TEXT NOT NULL,   -- absolute path, or the canonical base URL of a site
+  source_kind  TEXT NOT NULL DEFAULT 'file',  -- 'file' | 'site'
   sha256       TEXT NOT NULL,
   page_count   INTEGER,
   chunk_count  INTEGER,
@@ -130,6 +133,8 @@ CREATE TABLE IF NOT EXISTS chunks (
   printed_page_start INTEGER,
   image_count        INTEGER NOT NULL DEFAULT 0,
   kind               TEXT NOT NULL DEFAULT 'prose',
+  url                TEXT,             -- page this chunk was read from; NULL for local files
+  fragment           TEXT,             -- in-page anchor, without the leading '#'
   heading_path       TEXT NOT NULL,
   text               TEXT NOT NULL
 );
@@ -233,6 +238,9 @@ _ADDED_COLUMNS = (
     ("ingest_jobs", "warnings", "TEXT"),
     ("ingest_jobs", "permanent", "INTEGER NOT NULL DEFAULT 0"),
     ("chunks", "kind", "TEXT NOT NULL DEFAULT 'prose'"),
+    ("documents", "source_kind", "TEXT NOT NULL DEFAULT 'file'"),
+    ("chunks", "url", "TEXT"),
+    ("chunks", "fragment", "TEXT"),
 )
 
 

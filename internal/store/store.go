@@ -59,7 +59,7 @@ func (s *Store) Close() error { return s.db.Close() }
 // numbers where it once held page numbers passes every structural check while
 // silently changing what the index-term boost resolves to. Only a version
 // number, bumped deliberately, catches that.
-const RequiredSchemaVersion = 4
+const RequiredSchemaVersion = 5
 
 // ErrSchemaVersion reports a database written by a different schema revision.
 type ErrSchemaVersion struct {
@@ -116,9 +116,12 @@ func (s *Store) Ready(ctx context.Context) error {
 
 // Document is a ready document as reported by list_documents.
 type Document struct {
-	DocID      string   `json:"doc_id"`
-	Title      string   `json:"title"`
+	DocID string `json:"doc_id"`
+	Title string `json:"title"`
+	// Format is the extraction format; SourceKind is where it came from.
+	// A site is 'site' whatever its pages were parsed as.
 	Format     string   `json:"format"`
+	SourceKind string   `json:"source_kind"`
 	PageCount  *int     `json:"page_count,omitempty"`
 	ChunkCount *int     `json:"chunk_count,omitempty"`
 	Quality    string   `json:"quality"`
@@ -131,7 +134,7 @@ const maxTopHeadings = 15
 // ListDocuments returns every ready document with its top-level headings.
 func (s *Store) ListDocuments(ctx context.Context) ([]Document, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT doc_id, title, format, page_count, chunk_count, warnings
+		SELECT doc_id, title, format, source_kind, page_count, chunk_count, warnings
 		  FROM documents
 		 WHERE status = 'ready'
 		 ORDER BY doc_id`)
@@ -144,8 +147,8 @@ func (s *Store) ListDocuments(ctx context.Context) ([]Document, error) {
 	for rows.Next() {
 		var d Document
 		var warnings sql.NullString
-		if err := rows.Scan(&d.DocID, &d.Title, &d.Format, &d.PageCount, &d.ChunkCount,
-			&warnings); err != nil {
+		if err := rows.Scan(&d.DocID, &d.Title, &d.Format, &d.SourceKind, &d.PageCount,
+			&d.ChunkCount, &warnings); err != nil {
 			return nil, err
 		}
 		d.Quality, d.Warnings = summarizeWarnings(warnings)
