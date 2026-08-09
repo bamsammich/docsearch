@@ -30,27 +30,96 @@ type query struct {
 	Note     string  `json:"note"`
 }
 
+// document is a corpus entry declared by the query set. Binding alias, doc_id
+// and expectation semantics here keeps the harness independent of which corpus
+// it is pointed at: a different query set names different documents and needs
+// no change in this file.
+//
+// match selects how an `expect` value is tested, per _method.expect_semantics:
+// "section" reads it as a section prefix covering its subtree, which a document
+// can only support if it declares its own numbering; "heading" reads it as a
+// case-insensitive substring of the heading path.
+type document struct {
+	DocID string `json:"doc_id"`
+	Label string `json:"label"`
+	Match string `json:"match"`
+}
+
+const (
+	matchSection = "section"
+	matchHeading = "heading"
+)
+
 type file struct {
-	Queries []query `json:"queries"`
+	Documents map[string]document `json:"documents"`
+	Queries   []query             `json:"queries"`
 }
 
-var docIDs = map[string]string{
-	"grandma2": "manual-of-ma-lighting-international-gmbh",
-	"qlcplus":  "q-light-controller-plus-user-documentation",
+// docID resolves a query's document alias. An unknown alias yields the empty
+// string, which store.Search treats as unscoped — the cross-doc queries rely
+// on that and carry an alias no document declares.
+func (f file) docID(alias string) string { return f.Documents[alias].DocID }
+
+// label names a document for display, falling back to the doc_id so an
+// undeclared document is still identifiable in output.
+func (f file) label(docID string) string {
+	for _, d := range f.Documents {
+		if d.DocID == docID {
+			return d.Label
+		}
+	}
+	return docID
 }
 
-// matches applies the expectation semantics declared in queries.json: a
-// section subtree for the numbered corpus, a heading substring for the
-// unnumbered one.
-func matches(q query, r store.SearchResult) bool {
+// matches applies the expectation semantics the query set declared for the
+// document the query targets.
+func (f file) matches(q query, r store.SearchResult) bool {
 	if q.Expect == nil {
 		return false
 	}
 	want := *q.Expect
-	if q.Doc == "grandma2" {
+	if f.Documents[q.Doc].Match == matchSection {
 		return store.SectionCovers(want, r.Section)
 	}
 	return strings.Contains(strings.ToLower(r.HeadingPath), strings.ToLower(want))
+}
+
+// validate rejects a query set whose document declaration cannot support
+// scoring, rather than letting the run fall through to defaults.
+func (f file) validate() error {
+	if len(f.Documents) == 0 {
+		return fmt.Errorf("no \"documents\" declared: every query would be scored unscoped")
+	}
+	for alias, d := range f.Documents {
+		if d.DocID == "" {
+			return fmt.Errorf("document %q declares no doc_id", alias)
+		}
+		if d.Match != matchSection && d.Match != matchHeading {
+			return fmt.Errorf("document %q declares match %q, want %q or %q",
+				alias, d.Match, matchSection, matchHeading)
+		}
+	}
+	for _, q := range f.Queries {
+		if q.Expect == nil {
+			continue
+		}
+		if _, ok := f.Documents[q.Doc]; !ok {
+			return fmt.Errorf("query %s expects a result from undeclared document %q",
+				q.ID, q.Doc)
+		}
+	}
+	return nil
+}
+
+// aliases lists declared document aliases in a stable order, so report
+// sections do not reshuffle between runs on map iteration order.
+func (f file) aliases() []string {
+	out := make([]string, 0, len(f.Documents))
+	for a := range f.Documents {
+		out = append(out, a)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func main() {
@@ -58,7 +127,22 @@ func main() {
 	qPath := flag.String("queries", "tests/retrieval/queries.json", "committed query set")
 	dump := flag.String("dump-candidates", "", "write top-N BM25 candidates as JSON here")
 	dumpN := flag.Int("dump-n", 50, "candidates per query when dumping")
+	selfLabel := flag.Bool("self-label", false,
+		"probe retrieval using queries generated from the index itself, needing no committed query set")
 	flag.Parse()
+
+	// Runs against any index without an authored query set, so it is resolved
+	// before the committed one is read.
+	if *selfLabel {
+		st, err := store.Open(*dbPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		defer func() { _ = st.Close() }()
+		runSelfLabel(context.Background(), st)
+		return
+	}
 
 	raw, err := os.ReadFile(*qPath)
 	if err != nil {
@@ -68,6 +152,13 @@ func main() {
 	var f file
 	if err := json.Unmarshal(raw, &f); err != nil {
 		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	// A missing or malformed declaration would not fail loudly: every query
+	// would resolve to an empty doc_id and be scored by heading substring,
+	// producing a plausible-looking report built on the wrong semantics.
+	if err := f.validate(); err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %v\n", *qPath, err)
 		os.Exit(1)
 	}
 	st, err := store.Open(*dbPath)
@@ -103,7 +194,7 @@ func main() {
 			continue
 		}
 		res, err := st.Search(ctx, store.SearchParams{
-			Query: q.Query, DocID: docIDs[q.Doc], K: poolDepth,
+			Query: q.Query, DocID: f.docID(q.Doc), K: poolDepth,
 		})
 		if err != nil {
 			fmt.Printf("%s ERROR: %v\n", q.ID, err)
@@ -111,7 +202,7 @@ func main() {
 		}
 		o := outcome{q: q, hits: res, hitPos: -1}
 		for i, r := range res {
-			if matches(q, r) {
+			if f.matches(q, r) {
 				o.hitPos = i + 1
 				break
 			}
@@ -127,7 +218,7 @@ func main() {
 		// Emitted from the same Search path the server uses, so a reranking
 		// experiment operates on exactly what production retrieves rather than
 		// on a reimplementation that could quietly diverge.
-		dumpCandidates(ctx, st, f.Queries, *dump, *dumpN)
+		dumpCandidates(ctx, st, f, *dump, *dumpN)
 		return
 	}
 
@@ -179,7 +270,7 @@ func main() {
 	fmt.Println("\n--- hit rates ---")
 	summarise("ALL", func(outcome) bool { return true })
 	summarise("blind only", func(o outcome) bool { return o.q.Blind })
-	summarise("informed by this session", func(o outcome) bool { return !o.q.Blind })
+	summarise("expectation-informed", func(o outcome) bool { return !o.q.Blind })
 
 	fmt.Println("\n--- by category ---")
 	cats := map[string]bool{}
@@ -196,7 +287,7 @@ func main() {
 	}
 
 	fmt.Println("\n--- by document ---")
-	for _, d := range []string{"grandma2", "qlcplus"} {
+	for _, d := range f.aliases() {
 		summarise(d, func(o outcome) bool { return o.q.Doc == d })
 	}
 
@@ -213,7 +304,7 @@ func main() {
 			continue
 		}
 		terms := wordsOf(o.q.Query)
-		best, overlap, total := bestTargetOverlap(ctx, st, o.q, terms)
+		best, overlap, total := bestTargetOverlap(ctx, st, f, o.q, terms)
 		verdict := "NO TERM OVERLAP - unreachable lexically"
 		if overlap > 0 {
 			verdict = fmt.Sprintf("%d/%d query terms present", overlap, total)
@@ -239,13 +330,18 @@ func main() {
 	fmt.Println("chapter from the outline, as a model reading it would try to. That is")
 	fmt.Println("the optimistic case for orientation, and it is the thing being measured.")
 
+	// Restricted to section-matched documents: picking the chapter requires
+	// testing the expectation against an outline entry's section number, which
+	// a document without its own numbering does not carry. Widening this to
+	// heading-matched documents would change what the recovery rate is measured
+	// over and invalidate the committed baselines, so it is a separate change.
 	var attempted, recovered int
 	for _, o := range results {
-		if o.top8 || o.q.Expect == nil || o.q.Doc != "grandma2" {
+		if o.top8 || o.q.Expect == nil || f.Documents[o.q.Doc].Match != matchSection {
 			continue
 		}
 		attempted++
-		outline, err := st.Outline(ctx, docIDs[o.q.Doc], 1)
+		outline, err := st.Outline(ctx, f.docID(o.q.Doc), 1)
 		if err != nil {
 			continue
 		}
@@ -262,14 +358,14 @@ func main() {
 			continue
 		}
 		scoped, err := st.Search(ctx, store.SearchParams{
-			Query: o.q.Query, DocID: docIDs[o.q.Doc], SectionFilter: chapter, K: 8,
+			Query: o.q.Query, DocID: f.docID(o.q.Doc), SectionFilter: chapter, K: 8,
 		})
 		if err != nil {
 			continue
 		}
 		pos := 0
 		for i, r := range scoped {
-			if matches(o.q, r) {
+			if f.matches(o.q, r) {
 				pos = i + 1
 				break
 			}
@@ -285,7 +381,7 @@ func main() {
 	fmt.Printf("\n  recovered %d of %d single-shot misses by orienting first (%.0f%%)\n",
 		recovered, attempted, 100*float64(recovered)/float64(max(attempted, 1)))
 
-	crossDoc(ctx, st, []string{
+	crossDoc(ctx, st, f, []string{
 		"dmx universe addressing",
 		"chaser",
 		"fixture",
@@ -317,11 +413,35 @@ func main() {
 // spec flags: IDF is computed over the whole table, so a term that is rare
 // globally but common inside a small document can lift that document's chunks
 // above better answers in a large one.
-func crossDoc(ctx context.Context, st *store.Store, queries []string) {
+func crossDoc(ctx context.Context, st *store.Store, f file, queries []string) {
 	fmt.Println("\n========================================================================")
 	fmt.Println("CROSS-DOCUMENT IDF EFFECT")
 	fmt.Println("========================================================================")
-	fmt.Println("Corpus sizes are deliberately lopsided: grandMA2 944 chunks, QLC+ 265.")
+
+	// The effect this exposes needs documents of unequal size, so report the
+	// actual split rather than asserting one: a corpus of evenly sized
+	// documents will show little here, and that is a fact about the corpus
+	// worth seeing rather than a broken measurement.
+	sizes, total := chunkCounts(ctx, st)
+	var sizeParts []string
+	for _, a := range f.aliases() {
+		id := f.Documents[a].DocID
+		sizeParts = append(sizeParts, fmt.Sprintf("%s %d chunks", f.label(id), sizes[id]))
+	}
+	if len(sizeParts) > 0 {
+		fmt.Printf("Corpus sizes: %s.\n", strings.Join(sizeParts, ", "))
+	}
+
+	// The smallest declared document is where an inflated IDF advantage is
+	// most visible, because a term that is globally rare can be locally common
+	// in it.
+	var smallest string
+	for _, a := range f.aliases() {
+		id := f.Documents[a].DocID
+		if smallest == "" || sizes[id] < sizes[smallest] {
+			smallest = id
+		}
+	}
 
 	for _, q := range queries {
 		fmt.Printf("\n--- %q ---\n", q)
@@ -335,30 +455,46 @@ func crossDoc(ctx context.Context, st *store.Store, queries []string) {
 		for _, r := range unscoped {
 			counts[r.DocID]++
 			fmt.Printf("    %d. rel=%.2f [%-9s] %s\n", r.Rank, r.Relevance,
-				shortDoc(r.DocID), truncate(r.HeadingPath, 62))
+				f.label(r.DocID), truncate(r.HeadingPath, 62))
 		}
-		small := counts["q-light-controller-plus-user-documentation"]
-		share := 100 * float64(small) / float64(len(unscoped))
-		fmt.Printf("  -> QLC+ holds %d/%d unscoped slots (%.0f%%) while being %.0f%% of the index\n",
-			small, len(unscoped), share, 100*265.0/(944.0+265.0))
+		if smallest != "" && len(unscoped) > 0 && total > 0 {
+			small := counts[smallest]
+			fmt.Printf("  -> %s holds %d/%d unscoped slots (%.0f%%) while being %.0f%% of the index\n",
+				f.label(smallest), small, len(unscoped),
+				100*float64(small)/float64(len(unscoped)),
+				100*float64(sizes[smallest])/float64(total))
+		}
 
-		for _, d := range []string{"manual-of-ma-lighting-international-gmbh",
-			"q-light-controller-plus-user-documentation"} {
+		for _, a := range f.aliases() {
+			d := f.Documents[a].DocID
 			scoped, err := st.Search(ctx, store.SearchParams{Query: q, DocID: d, K: 2})
 			if err != nil || len(scoped) == 0 {
 				continue
 			}
-			fmt.Printf("  SCOPED %-9s top: rel=%.2f %s\n", shortDoc(d), scoped[0].Relevance,
+			fmt.Printf("  SCOPED %-9s top: rel=%.2f %s\n", f.label(d), scoped[0].Relevance,
 				truncate(scoped[0].HeadingPath, 60))
 		}
 	}
 }
 
-func shortDoc(id string) string {
-	if strings.HasPrefix(id, "q-light") {
-		return "QLC+"
+// chunkCounts reads each ready document's chunk count from the index, so the
+// reported corpus split describes the database being evaluated rather than
+// figures pasted in from an earlier run.
+func chunkCounts(ctx context.Context, st *store.Store) (map[string]int, int) {
+	sizes := map[string]int{}
+	total := 0
+	docs, err := st.ListDocuments(ctx)
+	if err != nil {
+		return sizes, 0
 	}
-	return "grandMA2"
+	for _, d := range docs {
+		if d.ChunkCount == nil {
+			continue
+		}
+		sizes[d.DocID] = *d.ChunkCount
+		total += *d.ChunkCount
+	}
+	return sizes, total
 }
 
 type candidate struct {
@@ -381,15 +517,15 @@ type dumpEntry struct {
 	Candidates []candidate `json:"candidates"`
 }
 
-func dumpCandidates(ctx context.Context, st *store.Store, queries []query,
+func dumpCandidates(ctx context.Context, st *store.Store, f file,
 	path string, n int) {
 	var out []dumpEntry
-	for _, q := range queries {
+	for _, q := range f.Queries {
 		if q.Category == "cross-doc" {
 			continue
 		}
 		res, err := st.Search(ctx, store.SearchParams{
-			Query: q.Query, DocID: docIDs[q.Doc], K: n,
+			Query: q.Query, DocID: f.docID(q.Doc), K: n,
 		})
 		if err != nil {
 			continue
@@ -397,7 +533,7 @@ func dumpCandidates(ctx context.Context, st *store.Store, queries []query,
 		e := dumpEntry{ID: q.ID, Query: q.Query, Doc: q.Doc, Expect: q.Expect,
 			Category: q.Category, BM25Hit: -1}
 		for i, r := range res {
-			if matches(q, r) && e.BM25Hit < 0 {
+			if f.matches(q, r) && e.BM25Hit < 0 {
 				e.BM25Hit = i + 1
 			}
 			e.Candidates = append(e.Candidates, candidate{
@@ -444,10 +580,10 @@ func wordsOf(q string) []string {
 // most query terms, and reports that overlap. It looks the target up directly
 // rather than through search, so it answers "is the answer findable in
 // principle" independently of how the ranker behaved.
-func bestTargetOverlap(ctx context.Context, st *store.Store, q query,
+func bestTargetOverlap(ctx context.Context, st *store.Store, f file, q query,
 	terms []string) (string, int, int) {
-	chunks, err := st.ChunksMatchingExpectation(ctx, docIDs[q.Doc],
-		derefOr(q.Expect, ""), q.Doc == "grandma2")
+	chunks, err := st.ChunksMatchingExpectation(ctx, f.docID(q.Doc),
+		derefOr(q.Expect, ""), f.Documents[q.Doc].Match == matchSection)
 	if err != nil || len(chunks) == 0 {
 		return "(target not present in the index)", 0, len(terms)
 	}

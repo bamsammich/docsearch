@@ -46,11 +46,33 @@ REFERENCE_FAMILY_MIN = 30
 #: syntax reference the document names as such -- is the reference index.
 #: Classifying on shape alone would bury real prose, which is worse than the
 #: problem being solved.
-_REFERENCE_PARENT = re.compile(r"(?i)\bkeywords?\b")
+#:
+#: Measured, not assumed. Across two corpora the two families are separable on
+#: no structural axis: the reference index has a *higher* stopword rate than
+#: the prose chapter (0.33 against 0.30) and *longer* entries (122 tokens
+#: against 65), their leaf headings are both a 2-word median with 99% of each
+#: leaf's terms echoed in its body, and the same command appears in both --
+#: "[GoFastForward] Key" as prose, "[GoFastForward] keyword" as reference.
+#: Sibling count is the only feature with any gap, and thresholding on it
+#: would fit one corpus. The document's own declaration is the whole signal.
+#:
+#: So the vocabulary is broadened rather than replaced. Each alternative names
+#: a listing of entries, not a topic: a document with a "Glossary" or an "Error
+#: Codes" chapter of this size is declaring the same thing "All keywords" does.
+#: False positives bury real prose, so the list stays conservative and a term
+#: that merely *could* head a topic chapter -- "Reference", "Appendix",
+#: "Commands" -- is deliberately absent.
+_REFERENCE_PARENT = re.compile(
+    r"(?i)\b(keywords?|glossary|error\s+(codes?|messages?)"
+    r"|(command|api|syntax|function)\s+(reference|index|listing))\b"
+)
 
-#: Most members of a reference family look like entries.
-_REFERENCE_LEAF = re.compile(r"(?i)\b(keyword|key)\s*$")
+#: Members of a reference family are named entries rather than described ones.
+#: A leaf heading is a term, a command or a code -- not a sentence. Counted in
+#: alphabetic words so that a section number in the heading does not register.
+_REFERENCE_LEAF_MAX_WORDS = 4
 _REFERENCE_LEAF_RATE = 0.6
+_LEAF_WORD = re.compile(r"[^\W\d_]+")
 
 
 @dataclass(slots=True)
@@ -287,22 +309,32 @@ def classify_kinds(chunks: list[Chunk]) -> None:
     They are marked, never dropped: a keyword lookup is a legitimate query and
     these are its correct answers.
     """
+    # Grouped by heading-path parent rather than by section number. Grouping by
+    # number made the whole mechanism unreachable for any document that does
+    # not number its sections -- Markdown, HTML, DOCX and every PDF whose
+    # structure comes from an outline -- so a glossary in one of those was
+    # never classified however plainly the document declared it.
+    # Keyed on the shallowest ancestor the document declares as a reference
+    # listing, not on the immediate parent. A long entry that subdivision split
+    # into "Syntax" and "Options" sits one level deeper than its siblings and
+    # would otherwise form its own family of two, below any size threshold --
+    # dropping exactly the entries whose length made them worth splitting.
     families: defaultdict[str, list[Chunk]] = defaultdict(list)
     for c in chunks:
-        if not c.section or "." not in c.section:
-            continue
-        families[c.section.rsplit(".", 1)[0]].append(c)
+        parts = c.heading_path.split(PATH_SEP)
+        for depth in range(1, len(parts)):
+            if _REFERENCE_PARENT.search(parts[depth - 1]):
+                families[PATH_SEP.join(parts[:depth])].append(c)
+                break
 
     for members in families.values():
         if len(members) < REFERENCE_FAMILY_MIN:
             continue
-        parts = members[0].heading_path.split(PATH_SEP)
-        parent_heading = parts[-2] if len(parts) >= 2 else ""
-        if not _REFERENCE_PARENT.search(parent_heading):
-            continue
         leaves = [m.heading_path.split(PATH_SEP)[-1] for m in members]
-        matched = sum(1 for leaf in leaves if _REFERENCE_LEAF.search(leaf))
-        if matched / len(members) < _REFERENCE_LEAF_RATE:
+        named = sum(
+            1 for leaf in leaves if len(_LEAF_WORD.findall(leaf)) <= _REFERENCE_LEAF_MAX_WORDS
+        )
+        if named / len(members) < _REFERENCE_LEAF_RATE:
             continue
         for m in members:
             m.kind = "keyword-reference"

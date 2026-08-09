@@ -33,25 +33,90 @@ the mise registry — install it from your package manager.
 ## Ingesting
 
 ```bash
+docsearch migrate [--check] [--db PATH]            # bring the schema up to date
+docsearch inspect <path>                           # what structure does it offer?
 docsearch ingest  <path> [--title T] [--db PATH]   # synchronous, file or directory
 docsearch enqueue <path> [--title T] [--db PATH]   # queue for the worker
 docsearch worker  [--db PATH] [--root PATH]        # run the daemon
 docsearch jobs    [--db PATH]                      # queue state
 docsearch list    [--db PATH]
 docsearch remove  <doc_id> [--db PATH]
-docsearch verify  <doc_id> [--db PATH]
+docsearch verify  <doc_id> [--db PATH]             # did it chunk well enough?
 ```
+
+Three commands answer three different questions, and a document can pass one
+while failing another:
+
+| | question |
+|---|---|
+| `inspect` | before ingest — what structure can be derived, and will this work at all? |
+| `verify` | after ingest — did chunking produce something searchable? |
+| `docsearch-eval --self-label` | does retrieval function on this index at all? |
+
+**`inspect` first on anything unfamiliar.** It reports the text layer, the
+embedded outline, whether a printed contents page can be reconstructed, the
+font hierarchy and the share of the document that is running furniture — then
+names the structure source that would be selected. A scanned PDF is told to run
+OCR rather than described as structureless.
 
 `ingest` and the worker call the same function; only the driver differs.
 
-**Run `verify` after every ingest.** It reports chunk count, token
-distribution, locator gaps, and the ten longest and shortest chunks with their
-heading paths. Structural extraction failures are obvious there and invisible
-elsewhere — a collapsed heading source shows up as a handful of enormous
-chunks, a shattered one as hundreds of near-empty ones.
+**Run `verify` after every ingest.** It answers two separate questions.
+
+*Is the database consistent* — chunk counts, ordinal gaps, locator coverage,
+FTS row parity. Reported under `PROBLEMS`.
+
+*Did the document chunk well enough to be searchable* — reported as a verdict
+of `good`, `degraded` or `unusable`, with a finding for each defect stating its
+evidence and what it costs the caller. Every defect it grades is compatible
+with a clean ingest: a document can be perfectly consistent, reach
+`status='ready'`, and still be shaped so retrieval cannot work on it.
+
+The one that matters most is `unaddressable`. When structure cannot be derived,
+chunks are cut on the token budget alone — so every chunk is legally sized, no
+size check fires, and consecutive slices inherit a single heading. A 70-page
+manual can arrive as 35 well-formed chunks sharing 10 headings between them,
+four of them headless. `section_filter` cannot separate those and `outline`
+describes the whole document in ten entries. That is silent degradation to
+fixed windows, and it is the failure this command exists to make loud.
 
 A document is invisible to search until its ingest completes. Every read path
 filters `documents.status='ready'`.
+
+## Schema migrations
+
+`docsearch migrate` is idempotent and is the only thing that writes the schema
+version. Everything else refuses a database it does not match and says what to
+run — opening is not upgrading, because every read path opens the database and
+one of them running an older build would otherwise stamp a newer database
+backwards.
+
+A database *newer* than the build is refused outright rather than downgraded.
+An older build cannot know what a newer one changed, so writing through it
+risks corrupting data it does not understand.
+
+The version is recorded only after the schema it describes is confirmed
+present. A stamp written without that check is a claim that cannot be false,
+and the readiness gate would then pass a database whose queries fail.
+
+Run it as a startup precondition of the **worker**, which is the sole writer:
+
+| | |
+|---|---|
+| systemd | `ExecStartPre=` in `deploy/systemd/docsearch-worker.service` |
+| launchd | `migrate && exec worker` in the agent's shell wrapper — launchd has no `ExecStartPre` |
+| Kubernetes | an `initContainer` in `deploy/k8s/deployment.yaml` |
+
+Same command in both, because there is nothing to orchestrate: SQLite is one
+file with one writer, and `replicas: 1` with `strategy: Recreate` already
+guarantees no second writer exists. A migration that cannot be applied exits
+nonzero and the worker does not start — a worker writing through a schema it
+does not match is worse than a worker that is down.
+
+Not every schema change can be applied in place. The change from page
+references to section references in `index_terms` is not recoverable without
+the source documents, so migration refuses it and says to re-ingest. **The
+index is fully regenerable**, which is what makes refusing the right answer.
 
 ## Running the worker
 
@@ -188,6 +253,33 @@ under concurrency, not by erroring.
 `deploy/systemd/` has units for running both processes on a single host. The
 code does not know which deployment shape it is in.
 
+## Where structure comes from
+
+Chunk boundaries are only as trustworthy as the source they came from, so
+sources are ranked by how much of what they assert is declared by the document
+rather than inferred from it. A PDF is tried in this order:
+
+| | source | supplies | corroboration |
+|---|---|---|---|
+| 1 | embedded outline (`get_toc`) | sections, nesting, and the page each begins on | none — nothing it asserts is inferred |
+| 2 | printed table of contents | sections and nesting | body headings must agree exactly, or ingest fails |
+| 3 | font-size hierarchy | sections, nesting, position | no independent source exists to check it against |
+| 4 | none of the above | — | refuse, rather than fall back to fixed windows |
+
+Tier 1 needs no corroboration because there is nothing more reliable to check
+it against — the author wrote the bookmarks. Tier 2 is equally author-declared
+but recovered by parsing a printed page, so the parse is verified against the
+body and a disagreement fails the ingest. Tier 3 is inference all the way down.
+
+**A source that wins also supplies positions.** An outline's page numbers place
+its sections directly, with the entry title matched against that page to find
+the offset within it. This matters for documents that style headings by weight
+or colour rather than size: there is no font hierarchy to detect, and requiring
+one would reject a document whose structure is fully declared.
+
+Non-PDF formats sit at tier 1 by construction — a Markdown `##`, an HTML `<h2>`
+and a DOCX heading style are all declarations, not inferences.
+
 ## Adding a format adapter
 
 One module plus one registry entry. The chunker is untouched.
@@ -210,14 +302,31 @@ numbering. Units over ~1200 tokens subdivide; units under ~100 tokens merge
 forward, but only when the document did not number them. A numbered boundary is
 one the document declared, and small numbered sections stay small.
 
+## Where the measured figures come from
+
+Every number in this README was measured on one corpus against one committed
+query set. They describe BM25 over that corpus; they are not properties of the
+software and not a forecast for your documents.
+
+| | |
+|---|---|
+| reference corpus | two technical manuals — one paginated and section-numbered (944 chunks), one non-paginated and unnumbered (265) |
+| query set | `tests/retrieval/queries.json` — 54 committed, 53 scored |
+| baselines | `tests/retrieval/baseline-{A,B,C}*.txt` |
+| full detail | [docs/research/retrieval-quality.md](docs/research/retrieval-quality.md) |
+
+A corpus with different vocabulary, structure or size will produce different
+numbers. What transfers between corpora is the mechanism behind each result,
+not the figure — so each result below states its mechanism first.
+
 ## Use the tools in the right order
 
-Cold keyword search is the weakest way to use this index, and every headline
-number below is measured that way because it is the hardest framing.
+Cold keyword search is the weakest way to use the index, and every figure here
+is measured that way because it is the hardest framing.
 
 **Orient first.** `list_documents` → `outline` → `search` with `section_filter`
-set to the chapter that plainly covers the question. Measured on the 15
-single-shot misses at k=8, **14 came back at rank 1**.
+set to the chapter that plainly covers the question. Of the 15 queries that
+single-shot search missed at k=8, **14 came back at rank 1** once scoped.
 
 **That 14/15 is an upper bound, not a cold-start figure.** The harness chose
 each `section_filter` using the query's expected section — an oracle it had and
@@ -225,15 +334,18 @@ a real caller does not. A model picking the chapter from the outline alone will
 sometimes pick wrong, and the true figure is lower by however often that
 happens. It has not been measured.
 
-The conclusion survives the caveat comfortably: these 15 queries score **0/15**
+The conclusion survives the caveat comfortably: those 15 queries score **0/15**
 single-shot, so even a substantially degraded real-world recovery rate is a
 large gain. What is established is that the answers are present and reachable
 once the search is scoped; what is not established is how reliably a model
 scopes it correctly.
 
-That is why `outline`'s tool description says to call it before searching.
+The mechanism generalizes even where the number does not: scoping a lexical
+search to a section shrinks the candidate pool to one where the document's own
+vocabulary dominates. That is why `outline`'s tool description says to call it
+before searching.
 
-## What we tried that didn't work
+## Measured and rejected
 
 Two plausible retrieval improvements were built, measured, and rejected. Both
 are recorded here rather than only in `docs/research/` because these are the
@@ -242,14 +354,16 @@ numbers.
 
 ### Back-of-book index-term boost — too diffuse to discriminate
 
-The grandMA2 index parses cleanly: 1,841 references, 100% resolving to known
-sections. Boosting chunks whose section a matching index term names sounded
-free. On precise queries it works. On the conceptual queries it was supposed to
-rescue, it matched **25, 46 and 21 sections** respectively.
+Boosting chunks whose section a matching back-of-book index term names sounds
+free, and on precise lookups it works. It fails on exactly the conceptual
+queries it was meant to rescue, because a back-of-book term routinely names
+dozens of sections at once.
 
-A boost applied to 46 of 827 sections is a constant, not a signal. It is still
-in the code because it costs nothing and helps precise lookups, but it does not
-do the job it was added for.
+On the reference corpus the index parsed cleanly — 1,841 references, 100%
+resolving to known sections — and the conceptual queries under test matched
+**25, 46 and 21 sections** respectively. A boost applied to 46 of 827 sections
+is a constant, not a signal. It is still in the code because it costs nothing
+and helps precise lookups, but it does not do the job it was added for.
 
 ### Dense reranking — actively harmful at the k that matters
 
@@ -258,9 +372,13 @@ net +3 across 53 queries. Scored into **top-8 — the k a model actually reads �
 it is net −2** (2 rescued, 4 displaced), and the conceptual-slang category it
 existed to fix nets −1.
 
-**The corpus vocabulary is the problem.** This manual uses "fader", "look",
-"cue stack", "executor" and "programmer" as terms of art that mean something
-else in general English. Every query built on them got *worse*:
+**A specialist register defeats a general-purpose embedder.** The model's
+priors come from general English, so a corpus whose terms of art collide with
+ordinary words gets ranked confidently wrong — and any corpus with a specialist
+register (legal, medical, industrial, in-house jargon) should expect the same.
+On the reference corpus the collisions are lighting-console terms: "fader",
+"look", "cue stack", "executor" and "programmer" all mean something else in
+general English, and every query built on them got *worse*:
 
 | query | BM25 rank | reranked |
 |---|---|---|
@@ -269,13 +387,13 @@ else in general English. Every query built on them got *worse*:
 | **cue stack** on a **fader** | 6 | **22** |
 
 BM25's ignorance is neutral. The embedder's confidence is wrong, and it is
-wrong precisely on operator slang — the queries a semantic model was supposed
-to help with.
+wrong precisely on the vernacular a semantic model was supposed to help with.
 
-**And it undoes a cheaper fix.** q17, "step by step assign a fader to control a
-group master", was the query that motivated classifying keyword-reference
-chunks. That structural change moved it to **rank 1**. Reranking pushes it back
-to **rank 9**.
+**And it undoes a cheaper fix.** The query that motivated classifying
+keyword-reference chunks — q17, "step by step assign a fader to control a group
+master" — moved to **rank 1** on that structural change. Reranking pushes it
+back to **rank 9**. A cheap, explainable, structural change beat the dense
+model on the very case that prompted the investigation.
 
 Verdict: no vector index, no embedding step in ingest, no second recall path.
 Reopen only if the corpus changes character or a domain-adapted model appears;
@@ -298,7 +416,17 @@ only irreplaceable data. `docsearch-data` can be treated as a cache.
 uv run pytest                                    # ingest, chunker, worker, policy
 go test ./...                                    # store, transport, path validation
 go run ./cmd/docsearch-eval --db var/docsearch.db  # retrieval evaluation
+go run ./cmd/docsearch-eval --db PATH --self-label # measure any corpus, no query set
 ```
+
+`--self-label` builds each query from a chunk's own heading and body and asks
+whether that chunk comes back, so it runs on any index the moment it is
+ingested. Its limits are severe and it prints them: a self-labelled query
+shares terms with its answer by construction, so it cannot see the vocabulary
+gap, and a document cut into fixed windows scores 100% because every slice
+still holds distinctive words. It catches the failures that leave an index
+where nothing is findable — collapsed structure, boilerplate dominating the
+term mass, chunk sizes in the wrong unit. Use `verify` to judge structure.
 
 `tests/retrieval/queries.json` is a committed query set with expected sections
 recorded before the queries were ever run. **A query that misses stays in the
@@ -308,6 +436,8 @@ measurable.
 
 **recall@8 is the headline metric**, not top-3. The consumer is a model reading
 k=8 full chunks, not a person scanning three results.
+
+Cold single-shot search on the reference corpus, by query cohort:
 
 | cohort | @1 | @3 | **@8** | @20 |
 |---|---|---|---|---|
@@ -325,10 +455,3 @@ see above.
 Of the 11 queries missing even at @20, 9 share at least one term with their
 target section and 2 share none — so most are reachable in principle and the
 failure is ranking depth, not absence.
-
-## Outstanding checks
-
-- `kubectl apply --dry-run=server -f deploy/k8s/` from the tailnet. The
-  manifests were validated structurally (parse plus constraint assertions);
-  client dry-run needs live API discovery and the cluster was not reachable
-  from the build host.

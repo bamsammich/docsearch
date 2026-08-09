@@ -26,6 +26,35 @@ spec:
         fsGroup: 65532
         seccompProfile: { type: RuntimeDefault }
 
+      # Migration runs to completion before either container starts. There is
+      # nothing to orchestrate: SQLite is one file with one writer, and
+      # replicas:1 with strategy Recreate already guarantees no second writer
+      # exists anywhere. So this is the same idempotent command the systemd
+      # unit runs from ExecStartPre, at the equivalent point in the lifecycle.
+      #
+      # Running it here rather than inside the worker also removes the startup
+      # race: the server's readiness probe asserts the schema version, and
+      # without this it can assert against a database the worker has not
+      # migrated yet, flapping the Pod until the worker happens to win.
+      #
+      # A migration that cannot be applied exits nonzero, the init container
+      # backs off and retries, and the Pod never reaches Ready. That is the
+      # intended outcome: serving through a schema the code does not match is
+      # worse than not serving.
+      initContainers:
+        - name: migrate
+          image: ghcr.io/bamsammich/docsearch-worker:latest
+          command: ["docsearch", "migrate", "--db=/data/docsearch.db"]
+          volumeMounts:
+            - { name: data, mountPath: /data }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
+
       containers:
         # Both containers are in ONE Pod because they share the database
         # volume. An RWO volume attaches to a single node, so they must be

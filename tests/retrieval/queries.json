@@ -16,6 +16,18 @@
     "expectation_contamination": "grandMA2 'expect' values are chapter numbers taken from the outline observed in Phase 0 and Phase 3. That is contamination of the EXPECTATIONS, not of the queries: every query below is phrased in operator vocabulary without consulting the index. Knowing that chapter 31 is Effects lets me state a falsifiable prediction; it does not tell me how the ranker will behave.",
     "counting": "54 queries are committed; 53 are scored. q30 is excluded by construction: it carries expect:null and category 'cross-doc' because it exists to observe cross-document ranking behaviour, not to assert a correct answer. The harness skips cross-doc entries when computing hit rates and runs them separately."
   },
+  "documents": {
+    "grandma2": {
+      "doc_id": "manual-of-ma-lighting-international-gmbh",
+      "label": "grandMA2",
+      "match": "section"
+    },
+    "qlcplus": {
+      "doc_id": "q-light-controller-plus-user-documentation",
+      "label": "QLC+",
+      "match": "heading"
+    }
+  },
   "queries": [
     {
       "id": "q01",

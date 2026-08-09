@@ -8,9 +8,50 @@ them against each other.
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import dataclass
 from pathlib import Path
 
 BUSY_TIMEOUT_MS = 5000
+
+
+class SchemaError(Exception):
+    """The database schema is not one this build can operate on."""
+
+
+class SchemaOutdatedError(SchemaError):
+    def __init__(self, found: int | None, required: int) -> None:
+        self.found = found
+        self.required = required
+        seen = "unversioned" if found is None else f"version {found}"
+        super().__init__(
+            f"database is at {seen}, this build requires version {required}. "
+            f"Run `docsearch migrate` to upgrade it."
+        )
+
+
+class SchemaTooNewError(SchemaError):
+    def __init__(self, found: int, required: int) -> None:
+        self.found = found
+        self.required = required
+        super().__init__(
+            f"database is at version {found}, newer than the version {required} this build "
+            f"understands. Upgrade docsearch rather than downgrading the database: an older "
+            f"build cannot know what a newer one changed, and writing to it risks corrupting "
+            f"data it does not understand."
+        )
+
+
+class SchemaMigrationError(SchemaError):
+    def __init__(self, found: int | None, target: int, problems: list[str]) -> None:
+        self.found = found
+        self.target = target
+        self.problems = problems
+        seen = "unversioned" if found is None else f"version {found}"
+        super().__init__(
+            f"cannot migrate from {seen} to version {target}; the version was NOT recorded. "
+            + " ".join(problems)
+        )
+
 
 #: Bumped whenever the schema changes in a way a reader must know about.
 #:
@@ -142,12 +183,23 @@ CREATE TABLE IF NOT EXISTS schema_version (
 """
 
 
-def connect(db_path: str | Path, *, create: bool = True) -> sqlite3.Connection:
-    """Open ``db_path`` with the pragmas both processes must agree on."""
+def connect(
+    db_path: str | Path, *, create: bool = True, allow_outdated: bool = False
+) -> sqlite3.Connection:
+    """Open ``db_path`` with the pragmas both processes must agree on.
+
+    ``create`` initialises a database that does not exist yet. It never
+    migrates one that does. Opening used to imply migrating, and because every
+    read path opens the database, `list`, `verify` and `jobs` all rewrote the
+    recorded version -- so running an older build against a newer database
+    stamped it backwards, and the newer server then refused to serve a
+    database that was perfectly sound. Migration is `docsearch migrate`.
+    """
     path = Path(db_path)
+    fresh = not path.exists()
     if create:
         path.parent.mkdir(parents=True, exist_ok=True)
-    elif not path.exists():
+    elif fresh:
         raise FileNotFoundError(f"database does not exist: {path}")
 
     conn = sqlite3.connect(path, isolation_level=None, timeout=BUSY_TIMEOUT_MS / 1000)
@@ -156,9 +208,21 @@ def connect(db_path: str | Path, *, create: bool = True) -> sqlite3.Connection:
     conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA synchronous=NORMAL")
-    if create:
+
+    if create and fresh:
+        # Initialising an empty file is not a migration: there is no existing
+        # data whose meaning could be misread.
         conn.executescript(SCHEMA)
-        _migrate(conn)
+        _stamp(conn, SCHEMA_VERSION)
+        return conn
+
+    found = schema_version(conn)
+    if found is not None and found > SCHEMA_VERSION:
+        conn.close()
+        raise SchemaTooNewError(found, SCHEMA_VERSION)
+    if not allow_outdated and found != SCHEMA_VERSION:
+        conn.close()
+        raise SchemaOutdatedError(found, SCHEMA_VERSION)
     return conn
 
 
@@ -172,16 +236,82 @@ _ADDED_COLUMNS = (
 )
 
 
-def _migrate(conn: sqlite3.Connection) -> None:
+@dataclass(slots=True)
+class MigrationResult:
+    from_version: int | None
+    to_version: int
+    columns_added: list[str]
+
+
+def _stamp(conn: sqlite3.Connection, version: int) -> None:
+    conn.execute("DELETE FROM schema_version")
+    conn.execute(
+        "INSERT INTO schema_version (version, applied_at) VALUES (?, datetime('now'))",
+        (version,),
+    )
+
+
+def _postconditions(conn: sqlite3.Connection) -> list[str]:
+    """What must actually hold before a version may be recorded.
+
+    A stamp is a claim that the database matches the code. Writing it without
+    checking makes the claim unfalsifiable: the readiness gate then passes on a
+    database that only says it migrated, and the failure surfaces later as a
+    query error instead of at the gate.
+    """
+    problems: list[str] = []
+    have = {
+        r["name"]
+        for r in conn.execute("SELECT name FROM sqlite_master WHERE type IN ('table','view')")
+    }
+    for table in REQUIRED_TABLES:
+        if table not in have:
+            problems.append(f"table {table} is missing")
+    for table, column, _decl in _ADDED_COLUMNS:
+        if table not in have:
+            continue
+        cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in cols:
+            problems.append(f"column {table}.{column} is missing")
+    if "index_terms" in have:
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(index_terms)")}
+        if "section" not in cols:
+            # The v2 change was semantic, not additive: the column held printed
+            # page numbers and now holds section numbers. Nothing recovers one
+            # from the other without the source document, so this cannot be
+            # migrated in place -- and the index is regenerable, so it need not
+            # be. Refusing beats stamping a version the data does not match.
+            problems.append(
+                "index_terms has no 'section' column, so this database predates the change "
+                "from page references to section references. No transformation recovers "
+                "section numbers from page numbers without the source documents. The index "
+                "is fully regenerable: delete it and re-ingest the library."
+            )
+    return problems
+
+
+def migrate(conn: sqlite3.Connection) -> MigrationResult:
+    """Bring an existing database up to ``SCHEMA_VERSION``.
+
+    Idempotent, and the only thing in the system that writes the version.
+    """
+    before = schema_version(conn)
+    if before is not None and before > SCHEMA_VERSION:
+        raise SchemaTooNewError(before, SCHEMA_VERSION)
+
+    conn.executescript(SCHEMA)
+    added: list[str] = []
     for table, column, decl in _ADDED_COLUMNS:
         existing = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
         if column not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
-    conn.execute("DELETE FROM schema_version")
-    conn.execute(
-        "INSERT INTO schema_version (version, applied_at) VALUES (?, datetime('now'))",
-        (SCHEMA_VERSION,),
-    )
+            added.append(f"{table}.{column}")
+
+    problems = _postconditions(conn)
+    if problems:
+        raise SchemaMigrationError(before, SCHEMA_VERSION, problems)
+    _stamp(conn, SCHEMA_VERSION)
+    return MigrationResult(before, SCHEMA_VERSION, added)
 
 
 def schema_version(conn: sqlite3.Connection) -> int | None:
@@ -209,7 +339,7 @@ def schema_present(conn: sqlite3.Connection) -> bool:
 #: Coverage metrics are structurally blind to getting this wrong: over-matching
 #: *raises* the number of resolved joins, so an "unjoinable = 0" check moves in
 #: the reassuring direction while the results get worse. Precision needs its own
-#: test. Phase 3's index-term boost must resolve sections through this same rule.
+#: test. The index-term boost must resolve sections through this same rule.
 SECTION_MATCH_SQL = "(chunks.section = ? OR chunks.section LIKE ? || '.%')"
 
 

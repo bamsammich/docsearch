@@ -9,11 +9,96 @@ near-empty chunks. Run it after every ingest.
 from __future__ import annotations
 
 import itertools
+import re
 import sqlite3
+from collections import defaultdict
 from dataclasses import dataclass, field
 
+from .chunker import MAX_TOKENS, MIN_TOKENS, PATH_SEP
 from .db import chunks_in_section
 from .tokens import estimate_tokens
+
+VERDICT_GOOD = "good"
+VERDICT_DEGRADED = "degraded"
+VERDICT_UNUSABLE = "unusable"
+
+#: Grading a distribution needs a distribution. Below this, rate-based checks
+#: are noise: one short chunk in a four-chunk document is not fragmentation.
+GRADE_MIN_CHUNKS = 25
+
+#: Size thresholds are expressed against the chunker's own declared bounds so
+#: the two notions of a well-sized chunk cannot drift apart. A chunk above
+#: MAX_TOKENS survived a subdivision pass, meaning it offered no internal
+#: boundary to split on.
+OVERSIZED_DEGRADED_RATE = 0.10
+OVERSIZED_UNUSABLE_RATE = 0.35
+
+#: Merge-forward already absorbs short unnumbered units, so what is left below
+#: MIN_TOKENS is what merging could not fix.
+FRAGMENTED_DEGRADED_RATE = 0.30
+FRAGMENTED_UNUSABLE_RATE = 0.60
+
+#: Orientation is the largest measured retrieval lever and a document with no
+#: hierarchy has none to offer. It costs nothing until there are enough chunks
+#: for a cold search to get lost in.
+FLAT_MIN_CHUNKS = 50
+
+#: Distinct heading paths per chunk. When boundaries come from the token budget
+#: rather than from the document, consecutive slices inherit one heading, and
+#: `section_filter` can no longer address them apart. Well-structured corpora
+#: measure 0.84 and 0.93; a manual whose structure was not derived at all, and
+#: which was therefore sliced into fixed windows, measures 0.29.
+ADDRESSABLE_DEGRADED_RATIO = 0.50
+ADDRESSABLE_UNUSABLE_RATIO = 0.35
+
+#: A chunk carrying images and almost no text holds its content in the picture,
+#: where no amount of retrieval will reach it.
+FIGURE_MAX_TOKENS = 40
+FIGURE_DEGRADED_RATE = 0.25
+
+#: Mirrors the PDF adapter's own rule: a line repeated across this fraction of
+#: the document is furniture. Running headers and footers are short, so a long
+#: repeated passage is duplicated content -- a different defect, not this one.
+BOILERPLATE_CHUNK_FRACTION = 0.25
+BOILERPLATE_MIN_CHUNKS = 8
+BOILERPLATE_MAX_LINE_CHARS = 120
+
+#: Page furniture is a sentence-like line -- a copyright, a running title, a
+#: contact line. Measured across four corpora, genuine unstripped furniture ran
+#: 66 to 88 characters, while every repeated line below this bound was content:
+#: stray single glyphs, a "NOTE" callout label, a recurring UI control name.
+#: Length is what separates them, so short repeats are not candidates.
+BOILERPLATE_MIN_LINE_CHARS = 20
+
+_DIGITS = re.compile(r"\d+")
+_SPACE = re.compile(r"\s+")
+_HAS_LETTER = re.compile(r"[^\W\d_]")
+
+
+@dataclass(frozen=True, slots=True)
+class Finding:
+    """One graded defect, its evidence, and what it costs the caller."""
+
+    code: str
+    severity: str
+    detail: str
+
+
+@dataclass(frozen=True, slots=True)
+class ChunkStat:
+    """The per-chunk facts grading reads. Decoupled from the row shape so the
+    grader can be exercised on constructed distributions."""
+
+    tokens: int
+    numbered: bool
+    depth: int
+    image_count: int
+    text: str
+    heading_path: str = ""
+
+    @property
+    def figure_dominated(self) -> bool:
+        return self.image_count > 0 and self.tokens < FIGURE_MAX_TOKENS
 
 
 @dataclass(slots=True)
@@ -40,6 +125,188 @@ class VerifyReport:
     scattered_sections: list[str] = field(default_factory=list)
     chunks_with_images: int = 0
     problems: list[str] = field(default_factory=list)
+    findings: list[Finding] = field(default_factory=list)
+
+    @property
+    def verdict(self) -> str:
+        """Chunk quality only. Database integrity is reported in `problems`:
+        the two answer different questions and a document can fail either."""
+        if any(f.severity == VERDICT_UNUSABLE for f in self.findings):
+            return VERDICT_UNUSABLE
+        return VERDICT_DEGRADED if self.findings else VERDICT_GOOD
+
+
+def _boilerplate_candidate(line: str) -> bool:
+    """Whether a line could be page furniture.
+
+    Digits are normalized so one footer counts once rather than once per page,
+    which means every bare number in the document collapses to the same key. A
+    line with no letters is therefore excluded: numbered procedure steps are
+    lines like "1" and "2" repeated throughout a manual, and pooling them
+    reports the document's own instructions as furniture.
+
+    A page number standing alone is furniture and is missed by this rule, as is
+    a short recurring word. That is the right trade: both carry almost no BM25
+    term mass, while the content they would be confused with -- procedure step
+    numbers, callout labels, UI control names -- carries the answer to every
+    "how do I" query in the document. Reporting a document's own instructions
+    as furniture costs more than missing a page number.
+    """
+    return (
+        BOILERPLATE_MIN_LINE_CHARS <= len(line) <= BOILERPLATE_MAX_LINE_CHARS
+        and _HAS_LETTER.search(line) is not None
+    )
+
+
+def _repeated_lines(stats: list[ChunkStat]) -> list[tuple[int, str]]:
+    """Short lines occurring in many chunks, with a verbatim example of each.
+
+    Digits are normalized so that a page footer counts as one line rather than
+    as one distinct line per page.
+    """
+    counts: defaultdict[str, int] = defaultdict(int)
+    example: dict[str, str] = {}
+    for s in stats:
+        for norm, raw in {
+            _DIGITS.sub("#", _SPACE.sub(" ", ln.strip())): ln.strip()
+            for ln in s.text.splitlines()
+            if _boilerplate_candidate(ln.strip())
+        }.items():
+            counts[norm] += 1
+            example.setdefault(norm, raw)
+    floor = max(BOILERPLATE_MIN_CHUNKS, int(len(stats) * BOILERPLATE_CHUNK_FRACTION))
+    return sorted(((n, example[k]) for k, n in counts.items() if n >= floor), key=lambda p: -p[0])
+
+
+def grade(stats: list[ChunkStat]) -> list[Finding]:
+    """Assess whether chunking produced a searchable document.
+
+    Separate from the integrity checks: every defect here is compatible with a
+    clean ingest that reaches status 'ready'. A document can be perfectly
+    consistent and still be shaped so that retrieval cannot work on it.
+    """
+    total = len(stats)
+    if total < GRADE_MIN_CHUNKS:
+        return []
+    out: list[Finding] = []
+
+    oversized = [s for s in stats if s.tokens > MAX_TOKENS]
+    if oversized:
+        rate = len(oversized) / total
+        biggest = max(s.tokens for s in oversized)
+        if rate >= OVERSIZED_DEGRADED_RATE:
+            out.append(
+                Finding(
+                    code="oversized",
+                    severity=(
+                        VERDICT_UNUSABLE if rate >= OVERSIZED_UNUSABLE_RATE else VERDICT_DEGRADED
+                    ),
+                    detail=(
+                        f"{len(oversized)} of {total} chunks ({rate:.0%}) exceed the "
+                        f"{MAX_TOKENS}-token chunk cap, the largest at {biggest:,}. Subdivision "
+                        f"found no boundary inside them, which means the heading structure was "
+                        f"too coarse or was not derived at all. Search returns whole chapters."
+                    ),
+                )
+            )
+
+    # The mergeable population needs to be large enough to carry a rate in its
+    # own right. A document that numbers nearly everything leaves a handful of
+    # mergeable chunks, and one short chunk out of one is not a distribution.
+    mergeable = [s for s in stats if not s.numbered and not s.figure_dominated]
+    fragments = [s for s in mergeable if s.tokens < MIN_TOKENS]
+    if len(mergeable) >= GRADE_MIN_CHUNKS and fragments:
+        rate = len(fragments) / len(mergeable)
+        if rate >= FRAGMENTED_DEGRADED_RATE:
+            out.append(
+                Finding(
+                    code="fragmented",
+                    severity=(
+                        VERDICT_UNUSABLE if rate >= FRAGMENTED_UNUSABLE_RATE else VERDICT_DEGRADED
+                    ),
+                    detail=(
+                        f"{len(fragments)} of {len(mergeable)} mergeable chunks ({rate:.0%}) are "
+                        f"under {MIN_TOKENS} tokens after merge-forward. A heading level was "
+                        f"detected too eagerly and split prose into fragments, so no single "
+                        f"chunk carries enough context to answer a question."
+                    ),
+                )
+            )
+
+    if total >= FLAT_MIN_CHUNKS and max(s.depth for s in stats) <= 1:
+        out.append(
+            Finding(
+                code="flat_hierarchy",
+                severity=VERDICT_DEGRADED,
+                detail=(
+                    f"All {total} chunks sit at heading depth 1, so the document has no "
+                    f"hierarchy. `outline` cannot orient a caller and `section_filter` cannot "
+                    f"narrow a search -- the largest measured retrieval lever is unavailable "
+                    f"and every query falls back to cold keyword search."
+                ),
+            )
+        )
+
+    figures = [s for s in stats if s.figure_dominated]
+    if figures and len(figures) / total >= FIGURE_DEGRADED_RATE:
+        rate = len(figures) / total
+        out.append(
+            Finding(
+                code="figure_dominated",
+                severity=VERDICT_DEGRADED,
+                detail=(
+                    f"{len(figures)} of {total} chunks ({rate:.0%}) carry an image and under "
+                    f"{FIGURE_MAX_TOKENS} tokens of text. Their content is in the picture, which "
+                    f"no retrieval reaches; a caller receives the caption and must be told to "
+                    f"look at the page."
+                ),
+            )
+        )
+
+    distinct = len({s.heading_path for s in stats})
+    ratio = distinct / total
+    if ratio < ADDRESSABLE_DEGRADED_RATIO:
+        headless = sum(1 for s in stats if not s.heading_path.strip())
+        extra = (
+            f" {headless} chunks carry no heading at all and cannot be reached by "
+            f"heading, filtered, or described in an outline."
+            if headless
+            else ""
+        )
+        out.append(
+            Finding(
+                code="unaddressable",
+                severity=(
+                    VERDICT_UNUSABLE if ratio < ADDRESSABLE_UNUSABLE_RATIO else VERDICT_DEGRADED
+                ),
+                detail=(
+                    f"{total} chunks share only {distinct} distinct heading paths "
+                    f"({ratio:.2f} per chunk). Consecutive chunks inherit one heading, which "
+                    f"happens when boundaries came from the token budget rather than from the "
+                    f"document -- structure was not derived and the text was cut into fixed "
+                    f"windows. `section_filter` cannot separate them and `outline` describes "
+                    f"the document in {distinct} entries.{extra}"
+                ),
+            )
+        )
+
+    repeated = _repeated_lines(stats)
+    if repeated:
+        worst, line = repeated[0]
+        out.append(
+            Finding(
+                code="boilerplate",
+                severity=VERDICT_DEGRADED,
+                detail=(
+                    f"{len(repeated)} line(s) repeat across a quarter or more of the document, "
+                    f"the most frequent in {worst} of {total} chunks: {line[:80]!r}. Running "
+                    f"headers and footers were not stripped, so a share of the BM25 term mass "
+                    f"is furniture and every chunk matches it equally."
+                ),
+            )
+        )
+
+    return out
 
 
 def _pct(values: list[int], q: float) -> int:
@@ -89,6 +356,20 @@ def verify_document(conn: sqlite3.Connection, doc_id: str) -> VerifyReport:
     by_size = sorted(sized, key=lambda x: x[0])
     rep.shortest = [(r["id"], t, r["heading_path"]) for t, r in by_size[:10]]
     rep.longest = [(r["id"], t, r["heading_path"]) for t, r in reversed(by_size[-10:])]
+
+    rep.findings = grade(
+        [
+            ChunkStat(
+                tokens=t,
+                numbered=bool(r["section"]),
+                depth=len(r["heading_path"].split(PATH_SEP)),
+                image_count=r["image_count"] or 0,
+                text=r["text"],
+                heading_path=r["heading_path"],
+            )
+            for t, r in sized
+        ]
+    )
 
     rep.missing_locator = sum(
         1 for r in rows if r["page_start"] is None and doc["page_count"] is not None
@@ -197,6 +478,24 @@ def format_report(rep: VerifyReport) -> str:
         a(f"  {tok:>6} tok  #{cid:<7} {path[:88]}")
 
     a("")
+    summary = {
+        VERDICT_GOOD: "chunking looks healthy",
+        VERDICT_DEGRADED: "searchable, with findings that cap retrieval quality",
+        VERDICT_UNUSABLE: "structure extraction effectively failed",
+    }[rep.verdict]
+    a(f"VERDICT     {rep.verdict} - {summary}")
+    if rep.chunk_count < GRADE_MIN_CHUNKS:
+        a(
+            f"            (only {rep.chunk_count} chunks; below {GRADE_MIN_CHUNKS} the "
+            f"distribution is too small to grade)"
+        )
+    for f in rep.findings:
+        a("")
+        a(f"  [{f.severity}] {f.code}")
+        for line in _wrap(f.detail, 76):
+            a(f"      {line}")
+
+    a("")
     if rep.problems:
         a("PROBLEMS:")
         for p in rep.problems:
@@ -204,3 +503,17 @@ def format_report(rep: VerifyReport) -> str:
     else:
         a("No structural problems detected.")
     return "\n".join(out)
+
+
+def _wrap(text: str, width: int) -> list[str]:
+    lines: list[str] = []
+    current = ""
+    for word in text.split():
+        if current and len(current) + 1 + len(word) > width:
+            lines.append(current)
+            current = word
+        else:
+            current = f"{current} {word}".strip()
+    if current:
+        lines.append(current)
+    return lines

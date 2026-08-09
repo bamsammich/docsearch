@@ -42,9 +42,15 @@ strict = true
 mypy_path = "python"
 explicit_package_bases = true
 
+# PyMuPDF ships partial type information: the classes are annotated but many
+# methods are not, so every call into it trips disallow_untyped_calls. Skipping
+# the import treats the package as Any, which is what the old `fitz` alias got
+# by having no stubs at all -- the strictness applies to this project's code,
+# not to how well a third-party package is annotated.
 [[tool.mypy.overrides]]
-module = ["fitz", "docx", "docx.*"]
+module = ["pymupdf", "pymupdf.*", "docx", "docx.*"]
 ignore_missing_imports = true
+follow_imports = "skip"
 
 # click's command decorators are untyped upstream; every CLI entry point would
 # otherwise be reported as untyped purely because it carries one.

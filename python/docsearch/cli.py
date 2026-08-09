@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -12,6 +13,8 @@ import click
 from . import db
 from .adapters import UnsupportedFormatError, is_supported
 from .ingest import ProgressFn, ingest_file
+from .inspect import format_report as format_inspect
+from .inspect import inspect_document
 from .verify import format_report, verify_document
 from .worker import (
     DEFAULT_LEASE_SECONDS,
@@ -34,6 +37,19 @@ def _db_option(f):  # type: ignore[no-untyped-def]
     )(f)
 
 
+def _open(db_path: str) -> sqlite3.Connection:
+    """Open the database, turning a schema mismatch into an instruction.
+
+    Every command routes through this so an out-of-date database reports what
+    to run rather than a traceback from wherever the first query happened to
+    land.
+    """
+    try:
+        return db.connect(db_path)
+    except db.SchemaError as exc:
+        raise click.ClickException(str(exc)) from None
+
+
 def _collect(path: Path) -> list[Path]:
     if path.is_dir():
         return sorted(p for p in path.rglob("*") if p.is_file() and is_supported(p))
@@ -52,7 +68,7 @@ def main() -> None:
 @_db_option
 def ingest(path: Path, title: str | None, db_path: str) -> None:
     """Ingest a file or directory synchronously."""
-    conn = db.connect(db_path)
+    conn = _open(db_path)
     targets = _collect(path)
     if not targets:
         raise click.ClickException(f"no supported files under {path}")
@@ -111,7 +127,14 @@ def ingest(path: Path, title: str | None, db_path: str) -> None:
                     + (" ..." if len(extra) > 15 else "")
                 )
             if not missing and not extra:
-                click.echo("      both structure sources agree exactly")
+                # Two empty sets agree, which says nothing at all. Only claim
+                # agreement when there was something on both sides to compare.
+                if xv.get("toc_sections") and xv.get("body_sections"):
+                    click.echo("      both structure sources agree exactly")
+                else:
+                    click.echo("      NOT cross-validated: nothing to compare on both sides")
+        for note in result.report.notes() if result.report else []:
+            click.echo(f"    finding: {note}")
         idx = diag.get("index")
         if isinstance(idx, dict):
             click.echo(
@@ -123,12 +146,66 @@ def ingest(path: Path, title: str | None, db_path: str) -> None:
 
 
 @main.command()
+@_db_option
+@click.option("--check", is_flag=True, help="Report status, change nothing, exit 1 if not current.")
+def migrate(db_path: str, check: bool) -> None:
+    """Bring the database schema up to the version this build requires.
+
+    Idempotent, and the only command that writes the schema version. Run it as
+    a startup precondition of the worker, which is the sole writer.
+    """
+    try:
+        conn = db.connect(db_path, allow_outdated=True)
+    except db.SchemaError as exc:
+        raise click.ClickException(str(exc)) from None
+
+    found = db.schema_version(conn)
+    seen = "unversioned" if found is None else str(found)
+    if check:
+        click.echo(f"database {db_path}: schema {seen}, build requires {db.SCHEMA_VERSION}")
+        if found != db.SCHEMA_VERSION:
+            click.echo("migration needed: run `docsearch migrate`", err=True)
+            sys.exit(1)
+        click.echo("up to date")
+        return
+
+    if found == db.SCHEMA_VERSION:
+        click.echo(f"already at version {found}; nothing to do")
+        return
+    try:
+        result = db.migrate(conn)
+    except db.SchemaError as exc:
+        raise click.ClickException(str(exc)) from None
+    click.echo(f"migrated {seen} -> {result.to_version}")
+    for column in result.columns_added:
+        click.echo(f"  added column {column}")
+    for version in sorted(db.SCHEMA_HISTORY):
+        if found is None or version > found:
+            click.echo(f"  v{version}: {db.SCHEMA_HISTORY[version]}")
+
+
+@main.command(name="inspect")
+@click.argument("path", type=click.Path(exists=True, path_type=Path))
+def inspect_cmd(path: Path) -> None:
+    """Report what structure a document offers, without ingesting it."""
+    reports = [inspect_document(p) for p in _collect(path)]
+    if not reports:
+        raise click.ClickException(f"no supported files under {path}")
+    for i, rep in enumerate(reports):
+        if i:
+            click.echo("")
+        click.echo(format_inspect(rep))
+    if any(r.blocked for r in reports):
+        sys.exit(1)
+
+
+@main.command()
 @click.argument("path", type=click.Path(exists=True, path_type=Path))
 @click.option("--title", default=None, help="Override the derived document title.")
 @_db_option
 def enqueue(path: Path, title: str | None, db_path: str) -> None:
     """Queue a file or directory for the worker."""
-    conn = db.connect(db_path)
+    conn = _open(db_path)
     targets = _collect(path)
     if not targets:
         raise click.ClickException(f"no supported files under {path}")
@@ -157,7 +234,7 @@ def worker(
     once: bool,
 ) -> None:
     """Run the ingest daemon."""
-    db.connect(db_path).close()
+    _open(db_path).close()
     run_worker(
         WorkerConfig(
             db_path=db_path,
@@ -206,7 +283,7 @@ def _quality(warnings_json: str | None) -> str:
 @_db_option
 def list_docs(db_path: str) -> None:
     """List ingested documents."""
-    conn = db.connect(db_path)
+    conn = _open(db_path)
     rows = conn.execute(
         "SELECT doc_id, title, format, status, page_count, chunk_count, warnings"
         " FROM documents ORDER BY doc_id"
@@ -229,7 +306,7 @@ def list_docs(db_path: str) -> None:
 @_db_option
 def jobs(db_path: str) -> None:
     """Show the ingest queue."""
-    conn = db.connect(db_path)
+    conn = _open(db_path)
     rows = conn.execute(
         "SELECT id, source_path, status, phase, progress_cur, progress_tot, attempts,"
         " doc_id, error, warnings, updated_at FROM ingest_jobs"
@@ -262,7 +339,7 @@ def jobs(db_path: str) -> None:
 @_db_option
 def remove(doc_id: str, db_path: str) -> None:
     """Delete a document and all of its rows."""
-    conn = db.connect(db_path)
+    conn = _open(db_path)
     exists = conn.execute("SELECT 1 FROM documents WHERE doc_id = ?", (doc_id,)).fetchone()
     if not exists:
         raise click.ClickException(f"no such document: {doc_id}")
@@ -277,7 +354,7 @@ def remove(doc_id: str, db_path: str) -> None:
 @_db_option
 def verify(doc_id: str, db_path: str) -> None:
     """Print structural checks for an ingested document."""
-    conn = db.connect(db_path)
+    conn = _open(db_path)
     try:
         report = verify_document(conn, doc_id)
     except KeyError as exc:

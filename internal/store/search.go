@@ -339,6 +339,7 @@ func summarizeWarnings(raw sql.NullString) (string, []string) {
 		InBodyNotInTOC      []string `json:"in_body_not_in_toc"`
 		DetectedMoreThanOne []string `json:"detected_more_than_once"`
 		Scattered           []string `json:"scattered_sections"`
+		Notes               []string `json:"notes"`
 	}
 	if err := json.Unmarshal([]byte(raw.String), &payload); err != nil {
 		return "unknown", nil
@@ -366,5 +367,8 @@ func summarizeWarnings(raw sql.NullString) (string, []string) {
 	add(payload.InBodyNotInTOC, "headings in the body but not the table of contents")
 	add(payload.DetectedMoreThanOne, "sections detected more than once")
 	add(payload.Scattered, "sections spanning non-adjacent chunks")
+	// Already phrased for a caller, so they pass through whole rather than
+	// being summarised into a count of opaque identifiers.
+	notes = append(notes, payload.Notes...)
 	return quality, notes
 }

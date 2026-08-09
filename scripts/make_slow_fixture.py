@@ -16,7 +16,7 @@ import argparse
 import random
 from pathlib import Path
 
-import fitz
+import pymupdf
 
 BODY_SIZE = 10.0
 HEAD_SIZE = 17.0
@@ -70,7 +70,7 @@ def sentence(rng: random.Random) -> str:
 
 
 def build(out: Path, pages: int, sections_per_chapter: int = 12) -> None:
-    doc = fitz.open()
+    doc = pymupdf.open()
     rng = random.Random(20260802)
 
     # Front table of contents, so the adapter takes the reconstruction path and
