@@ -23,6 +23,11 @@ from docsearch.verify import (
 
 PROSE = "The console stores each cue in a sequence and plays it back on an executor. "
 
+#: Distinct non-numeric tokens. Digit normalization deliberately collapses
+#: "page 4" and "page 91" to one key, so varying a fixture only by number does
+#: not vary it at all.
+WORDS = [f"{a}{b}" for a in "abcdefgh" for b in "ijklmnop"]
+
 _uid = itertools.count()
 
 
@@ -182,6 +187,51 @@ def test_unstripped_boilerplate_is_flagged_with_the_offending_line() -> None:
     findings = grade(stats)
     assert "boilerplate" in codes(findings)
     assert footer[:30] in next(f for f in findings if f.code == "boilerplate").detail
+
+
+def test_numbered_procedure_steps_are_not_boilerplate() -> None:
+    """Digit normalization pools every bare number in a document.
+
+    A manual written as numbered steps has lines "1", "2", "3" throughout. They
+    normalize to one key and would otherwise be reported as the most repeated
+    line in the document -- naming its own instructions as furniture.
+    """
+    stats = [
+        ChunkStat(
+            tokens=300,
+            numbered=False,
+            depth=2,
+            image_count=0,
+            text=(
+                f"Task {WORDS[i]}\n1\nPress the {WORDS[i]} button on the menu bar.\n"
+                f"2\nOpen the {WORDS[i]} setup screen.\n3\nSelect the {WORDS[i]} bank."
+            ),
+            heading_path=f"Manual > Task {i}",
+        )
+        for i in range(60)
+    ]
+    assert "boilerplate" not in codes(grade(stats))
+
+
+def test_short_recurring_labels_are_not_boilerplate() -> None:
+    """Repetition alone does not make a line furniture.
+
+    A callout label, a stray glyph and a recurring control name all repeat
+    across a manual and are all content. Page furniture is a sentence-like
+    line; these are not.
+    """
+    stats = [
+        ChunkStat(
+            tokens=300,
+            numbered=False,
+            depth=2,
+            image_count=0,
+            text=f"NOTE\ne\nTrigger Clip\nThe {WORDS[i]} control sets the {WORDS[i]} level.",
+            heading_path=f"Manual > {WORDS[i]}",
+        )
+        for i in range(60)
+    ]
+    assert "boilerplate" not in codes(grade(stats))
 
 
 def test_every_finding_states_its_evidence_and_consequence() -> None:

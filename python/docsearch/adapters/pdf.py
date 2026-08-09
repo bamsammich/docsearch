@@ -192,6 +192,56 @@ def reconstruct_front_toc(
     return entries, toc_pages
 
 
+def _normalize_title(text: str) -> str:
+    return re.sub(r"\W+", " ", text.lower()).strip()
+
+
+def _locate_outline_headings(
+    pages: list[list[_Line]],
+    toc_entries: list[tuple[str, str, int]],
+    boiler: set[str],
+) -> tuple[list[tuple[int, str, str, float, bool]], int]:
+    """Place each embedded-outline entry at a position on the page it names.
+
+    An embedded outline is authoritative about which sections exist, how they
+    nest, and the page each begins on -- the author declared all three, and
+    none of it is inferred. What it does not carry is the position within that
+    page, so the entry title is matched against the page's own lines to recover
+    it.
+
+    An entry whose title does not appear on its page is placed at the top of
+    that page. The outline still declared the page; only the offset inside it
+    is unknown, and page granularity is the honest resolution for that entry
+    rather than grounds to reject the document.
+
+    Returns ``(placements, located)`` where a placement is
+    ``(page_index, section, title, y, matched_a_line)``.
+    """
+    placements: list[tuple[int, str, str, float, bool]] = []
+    located = 0
+    for section, title, page in toc_entries:
+        pno = page - 1
+        if pno < 0 or pno >= len(pages):
+            continue
+        want = _normalize_title(title)
+        y: float | None = None
+        if want:
+            for ln in pages[pno]:
+                if _is_boilerplate(ln.text, boiler):
+                    continue
+                got = _normalize_title(ln.text)
+                if got and (got == want or got.startswith(want)):
+                    y = ln.y0
+                    break
+        if y is None:
+            placements.append((pno, section, title, -1.0, False))
+        else:
+            located += 1
+            placements.append((pno, section, title, y, True))
+    placements.sort(key=lambda p: (p[0], p[3]))
+    return placements, located
+
+
 def _find_body_headings(
     pages: list[list[_Line]],
     heading_sizes: list[float],
@@ -341,6 +391,92 @@ def _filter_figures(
     return kept, stats
 
 
+def _emit_outline_blocks(
+    pages: list[list[_Line]],
+    placements: list[tuple[int, str, str, float, bool]],
+    section_titles: dict[str, str],
+    boiler: set[str],
+    page_images: list[list[tuple[float, int]]],
+) -> list[Block]:
+    """Emit blocks with boundaries taken from the embedded outline.
+
+    Kept separate from the font-located path rather than generalised into it.
+    That path is pinned by committed retrieval baselines on two corpora, and
+    the boundary rule here is different in kind: a heading applies from its
+    position onward, instead of being recognised by an exact coordinate match.
+
+    Section numbers are synthesised from outline nesting and appear nowhere in
+    the document, so the heading path carries titles alone. Numbering that the
+    document itself prints is a different thing and is rendered as such.
+    """
+    by_page: defaultdict[int, list[tuple[float, str, str, bool]]] = defaultdict(list)
+    for pno, section, title, y, matched in placements:
+        by_page[pno].append((y, section, title, matched))
+
+    blocks: list[Block] = []
+    cur_section: str | None = None
+    buf: list[str] = []
+    buf_page: int | None = None
+    buf_page_end: int | None = None
+    buf_images = 0
+
+    def flush() -> None:
+        nonlocal buf, buf_page, buf_page_end, buf_images
+        text = "\n".join(x for x in buf if x.strip()).strip()
+        if text and buf_page is not None:
+            path_parts = (
+                [t for a in _ancestors(cur_section) if (t := section_titles.get(a, "").strip())]
+                if cur_section
+                else []
+            )
+            blocks.append(
+                Block(
+                    heading_path=path_parts,
+                    locator={"page": buf_page, "page_end": buf_page_end or buf_page},
+                    text=text,
+                    section=cur_section,
+                    printed_page=buf_page,
+                    image_count=buf_images,
+                )
+            )
+        buf = []
+        buf_page = None
+        buf_page_end = None
+        buf_images = 0
+
+    for pno, lines in enumerate(pages):
+        pending = sorted(by_page.get(pno, []), key=lambda h: h[0])
+        imgs = page_images[pno]
+        img_i = 0
+        for ln in lines:
+            # Headings placed at the top of a page (no title match) carry y=-1
+            # and so apply before the page's first line, which is what the
+            # outline claimed.
+            consumed = False
+            while pending and pending[0][0] <= ln.y0:
+                _y, section, _title, matched = pending.pop(0)
+                flush()
+                cur_section = section
+                consumed = consumed or matched
+            if consumed:
+                continue
+            if _is_boilerplate(ln.text, boiler):
+                continue
+            while img_i < len(imgs) and imgs[img_i][0] <= ln.y0:
+                buf_images += 1
+                img_i += 1
+            buf.append(ln.text)
+            if buf_page is None:
+                buf_page = pno + 1
+            buf_page_end = pno + 1
+        for _y, section, _title, _matched in pending:
+            flush()
+            cur_section = section
+        buf_images += max(0, len(imgs) - img_i)
+    flush()
+    return blocks
+
+
 def extract(path: Path, progress: ProgressFn | None = None) -> Extraction:
     doc = fitz.open(path)
     n = doc.page_count
@@ -414,6 +550,35 @@ def extract(path: Path, progress: ProgressFn | None = None) -> Extraction:
 
     diagnostics["toc_entries"] = len(toc_entries)
     toc_titles = {sec: title for sec, title, _ in toc_entries}
+
+    # An embedded outline carries positions as well as names, so it does not
+    # need font-detected body headings to place its sections and is not
+    # validated against them. Requiring that corroboration refuses documents
+    # whose headings are distinguished by weight or colour rather than size --
+    # a shape this pipeline would otherwise handle better than any other,
+    # because nothing about the structure is inferred.
+    if diagnostics["structure_source"] == "outline":
+        placements, located = _locate_outline_headings(pages, toc_entries, boiler)
+        diagnostics["outline_placement"] = {
+            "entries": len(toc_entries),
+            "located_by_title": located,
+            "placed_at_page_top": len(placements) - located,
+        }
+        diagnostics["printed_page_offset"] = 0
+        outline_blocks = _emit_outline_blocks(pages, placements, toc_titles, boiler, page_images)
+        for b in outline_blocks:
+            if b.image_count > 0 and estimate_tokens(b.text) <= FIGURE_CAPTION_MAX_TOKENS:
+                b.figure_only = True
+        title = (doc.metadata or {}).get("title") or path.stem
+        return Extraction(
+            title=title.strip() or path.stem,
+            format="pdf",
+            blocks=outline_blocks,
+            page_count=n,
+            index_terms=[],
+            pages=page_text,
+            diagnostics=diagnostics,
+        )
 
     headings, subdivisions, rejected = _find_body_headings(
         pages, heading_sizes, boiler, toc_page_max

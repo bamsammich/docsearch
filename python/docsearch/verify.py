@@ -63,8 +63,16 @@ BOILERPLATE_CHUNK_FRACTION = 0.25
 BOILERPLATE_MIN_CHUNKS = 8
 BOILERPLATE_MAX_LINE_CHARS = 120
 
+#: Page furniture is a sentence-like line -- a copyright, a running title, a
+#: contact line. Measured across four corpora, genuine unstripped furniture ran
+#: 66 to 88 characters, while every repeated line below this bound was content:
+#: stray single glyphs, a "NOTE" callout label, a recurring UI control name.
+#: Length is what separates them, so short repeats are not candidates.
+BOILERPLATE_MIN_LINE_CHARS = 20
+
 _DIGITS = re.compile(r"\d+")
 _SPACE = re.compile(r"\s+")
+_HAS_LETTER = re.compile(r"[^\W\d_]")
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,6 +136,28 @@ class VerifyReport:
         return VERDICT_DEGRADED if self.findings else VERDICT_GOOD
 
 
+def _boilerplate_candidate(line: str) -> bool:
+    """Whether a line could be page furniture.
+
+    Digits are normalized so one footer counts once rather than once per page,
+    which means every bare number in the document collapses to the same key. A
+    line with no letters is therefore excluded: numbered procedure steps are
+    lines like "1" and "2" repeated throughout a manual, and pooling them
+    reports the document's own instructions as furniture.
+
+    A page number standing alone is furniture and is missed by this rule, as is
+    a short recurring word. That is the right trade: both carry almost no BM25
+    term mass, while the content they would be confused with -- procedure step
+    numbers, callout labels, UI control names -- carries the answer to every
+    "how do I" query in the document. Reporting a document's own instructions
+    as furniture costs more than missing a page number.
+    """
+    return (
+        BOILERPLATE_MIN_LINE_CHARS <= len(line) <= BOILERPLATE_MAX_LINE_CHARS
+        and _HAS_LETTER.search(line) is not None
+    )
+
+
 def _repeated_lines(stats: list[ChunkStat]) -> list[tuple[int, str]]:
     """Short lines occurring in many chunks, with a verbatim example of each.
 
@@ -140,14 +170,12 @@ def _repeated_lines(stats: list[ChunkStat]) -> list[tuple[int, str]]:
         for norm, raw in {
             _DIGITS.sub("#", _SPACE.sub(" ", ln.strip())): ln.strip()
             for ln in s.text.splitlines()
-            if ln.strip() and len(ln.strip()) <= BOILERPLATE_MAX_LINE_CHARS
+            if _boilerplate_candidate(ln.strip())
         }.items():
             counts[norm] += 1
             example.setdefault(norm, raw)
     floor = max(BOILERPLATE_MIN_CHUNKS, int(len(stats) * BOILERPLATE_CHUNK_FRACTION))
-    return sorted(
-        ((n, example[k]) for k, n in counts.items() if n >= floor), key=lambda p: -p[0]
-    )
+    return sorted(((n, example[k]) for k, n in counts.items() if n >= floor), key=lambda p: -p[0])
 
 
 def grade(stats: list[ChunkStat]) -> list[Finding]:
