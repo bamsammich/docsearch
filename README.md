@@ -104,6 +104,7 @@ Run it as a startup precondition of the **worker**, which is the sole writer:
 | | |
 |---|---|
 | systemd | `ExecStartPre=` in `deploy/systemd/docsearch-worker.service` |
+| launchd | `migrate && exec worker` in the agent's shell wrapper — launchd has no `ExecStartPre` |
 | Kubernetes | an `initContainer` in `deploy/k8s/deployment.yaml` |
 
 Same command in both, because there is nothing to orchestrate: SQLite is one

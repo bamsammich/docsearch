@@ -14,18 +14,29 @@
   <key>Label</key>
   <string>com.bamsammich.docsearch-worker</string>
 
+  <!-- launchd has no ExecStartPre, so the migration runs as the first half of
+       a shell wrapper, the same shape the server agent uses to source its
+       token. `&&` is what makes it a precondition: a migration that cannot be
+       applied exits nonzero and the worker is never exec'd, because a worker
+       writing through a schema it does not match is worse than one that is
+       down. The command is idempotent, so it costs nothing on the restarts
+       that need no migration.
+
+       The worker is the only writer, which is what makes this the one correct
+       place to run it. -->
   <key>ProgramArguments</key>
   <array>
-    <string>__HOME__/.local/bin/docsearch</string>
-    <string>worker</string>
-    <string>--db</string>
-    <string>__HOME__/.local/share/docsearch/docsearch.db</string>
-    <string>--root</string>
-    <string>__HOME__/Documents/docsearch-library</string>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>DB="$HOME/.local/share/docsearch/docsearch.db"; "$HOME/.local/bin/docsearch" migrate --db "$DB" &amp;&amp; exec "$HOME/.local/bin/docsearch" worker --db "$DB" --root "$HOME/Documents/docsearch-library"</string>
   </array>
 
   <key>RunAtLoad</key>
   <true/>
+  <!-- Restart only on unsuccessful exit. A schema the build cannot migrate
+       fails identically every time, so this would otherwise spin: the log
+       records the reason on each attempt, and `docsearch migrate --check`
+       reports it without starting anything. -->
   <key>KeepAlive</key>
   <dict>
     <key>SuccessfulExit</key>
