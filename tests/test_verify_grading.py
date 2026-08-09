@@ -242,9 +242,7 @@ def test_every_finding_states_its_evidence_and_consequence() -> None:
         assert len(f.detail) > 40, f"{f.code} detail is too thin to act on"
 
 
-def test_clean_ingest_verdicts_good_end_to_end(
-    conn: sqlite3.Connection, md_file: Path
-) -> None:
+def test_clean_ingest_verdicts_good_end_to_end(conn: sqlite3.Connection, md_file: Path) -> None:
     result = ingest_file(conn, md_file)
     report = verify_document(conn, result.doc_id)
     assert report.problems == []

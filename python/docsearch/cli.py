@@ -116,9 +116,7 @@ def ingest(path: Path, title: str | None, db_path: str) -> None:
                 if xv.get("toc_sections") and xv.get("body_sections"):
                     click.echo("      both structure sources agree exactly")
                 else:
-                    click.echo(
-                        "      NOT cross-validated: nothing to compare on both sides"
-                    )
+                    click.echo("      NOT cross-validated: nothing to compare on both sides")
         for note in result.report.notes() if result.report else []:
             click.echo(f"    finding: {note}")
         idx = diag.get("index")
