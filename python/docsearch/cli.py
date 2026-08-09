@@ -12,6 +12,8 @@ import click
 from . import db
 from .adapters import UnsupportedFormatError, is_supported
 from .ingest import ProgressFn, ingest_file
+from .inspect import format_report as format_inspect
+from .inspect import inspect_document
 from .verify import format_report, verify_document
 from .worker import (
     DEFAULT_LEASE_SECONDS,
@@ -126,6 +128,21 @@ def ingest(path: Path, title: str | None, db_path: str) -> None:
                 f"{idx.get('refs_resolving_to_known_sections')} resolve to known sections"
             )
     if failures:
+        sys.exit(1)
+
+
+@main.command(name="inspect")
+@click.argument("path", type=click.Path(exists=True, path_type=Path))
+def inspect_cmd(path: Path) -> None:
+    """Report what structure a document offers, without ingesting it."""
+    reports = [inspect_document(p) for p in _collect(path)]
+    if not reports:
+        raise click.ClickException(f"no supported files under {path}")
+    for i, rep in enumerate(reports):
+        if i:
+            click.echo("")
+        click.echo(format_inspect(rep))
+    if any(r.blocked for r in reports):
         sys.exit(1)
 
 
