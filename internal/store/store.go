@@ -17,6 +17,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/bamsammich/docsearch/internal/store/dbgen"
+
 	_ "modernc.org/sqlite" // pure-Go driver; FTS5 is compiled in, no build tag
 )
 
@@ -24,7 +26,15 @@ import (
 var ErrNotFound = errors.New("not found")
 
 // Store wraps the shared SQLite database.
-type Store struct{ db *sql.DB }
+//
+// q holds the queries generated from python/docsearch/schema.sql. The two
+// statements it cannot express -- Search, which composes its WHERE clause from
+// the request and calls bm25(), and matchingIndexSections, which builds one
+// term per query word -- run through db directly.
+type Store struct {
+	db *sql.DB
+	q  *dbgen.Queries
+}
 
 // Open connects to path with the pragmas both processes must agree on.
 //
@@ -45,10 +55,20 @@ func Open(path string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	return &Store{db: db}, nil
+	return &Store{db: db, q: dbgen.New(db)}, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
+
+// nullInt converts a nullable SQLite integer to the *int the tool schemas
+// use, where absent means "not applicable to this document" rather than zero.
+func nullInt(v sql.NullInt64) *int {
+	if !v.Valid {
+		return nil
+	}
+	n := int(v.Int64)
+	return &n
+}
 
 // RequiredSchemaVersion is the schema this binary was built against. It must
 // equal docsearch.db.SCHEMA_VERSION, which is where the number is chosen;
@@ -98,17 +118,14 @@ func (s *Store) Ready(ctx context.Context) error {
 		}
 	}
 
-	var version int
-	err := s.db.QueryRowContext(ctx, `SELECT version FROM schema_version LIMIT 1`).Scan(&version)
-	if errors.Is(err, sql.ErrNoRows) {
-		return &ErrSchemaVersion{Found: 0, Required: RequiredSchemaVersion}
-	}
+	version, err := s.q.SchemaVersion(ctx)
 	if err != nil {
-		// No schema_version table at all: a database from before versioning.
+		// Covers both no row and no schema_version table at all: either way
+		// this is a database from before versioning.
 		return &ErrSchemaVersion{Found: 0, Required: RequiredSchemaVersion}
 	}
-	if version != RequiredSchemaVersion {
-		return &ErrSchemaVersion{Found: version, Required: RequiredSchemaVersion}
+	if int(version) != RequiredSchemaVersion {
+		return &ErrSchemaVersion{Found: int(version), Required: RequiredSchemaVersion}
 	}
 	return nil
 }
@@ -134,29 +151,23 @@ const maxTopHeadings = 15
 
 // ListDocuments returns every ready document with its top-level headings.
 func (s *Store) ListDocuments(ctx context.Context) ([]Document, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT doc_id, title, format, source_kind, page_count, chunk_count, warnings
-		  FROM documents
-		 WHERE status = 'ready'
-		 ORDER BY doc_id`)
+	rows, err := s.q.ListReadyDocuments(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
 
 	var out []Document
-	for rows.Next() {
-		var d Document
-		var warnings sql.NullString
-		if err := rows.Scan(&d.DocID, &d.Title, &d.Format, &d.SourceKind, &d.PageCount,
-			&d.ChunkCount, &warnings); err != nil {
-			return nil, err
+	for _, r := range rows {
+		d := Document{
+			DocID:      r.DocID,
+			Title:      r.Title,
+			Format:     r.Format,
+			SourceKind: r.SourceKind,
+			PageCount:  nullInt(r.PageCount),
+			ChunkCount: nullInt(r.ChunkCount),
 		}
-		d.Quality, d.Warnings = summarizeWarnings(warnings)
+		d.Quality, d.Warnings = summarizeWarnings(r.Warnings)
 		out = append(out, d)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
 	}
 	for i := range out {
 		heads, err := s.topLevelHeadings(ctx, out[i].DocID)
@@ -169,22 +180,14 @@ func (s *Store) ListDocuments(ctx context.Context) ([]Document, error) {
 }
 
 func (s *Store) topLevelHeadings(ctx context.Context, docID string) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT DISTINCT heading_path FROM chunks
-		 WHERE doc_id = ? AND heading_path <> ''
-		 ORDER BY ordinal`, docID)
+	paths, err := s.q.TopLevelHeadings(ctx, docID)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
 
 	seen := map[string]bool{}
 	var out []string
-	for rows.Next() {
-		var path string
-		if err := rows.Scan(&path); err != nil {
-			return nil, err
-		}
+	for _, path := range paths {
 		top := path
 		if i := strings.Index(path, " > "); i >= 0 {
 			top = path[:i]
@@ -197,7 +200,7 @@ func (s *Store) topLevelHeadings(ctx context.Context, docID string) ([]string, e
 			}
 		}
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // -- outline --------------------------------------------------------------
@@ -216,28 +219,18 @@ func (s *Store) Outline(ctx context.Context, docID string, depth int) ([]Outline
 	if err := s.requireReady(ctx, docID); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, section, page_start, heading_path
-		  FROM chunks WHERE doc_id = ? ORDER BY ordinal`, docID)
+	rows, err := s.q.OutlineRows(ctx, docID)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
 
 	seen := map[string]bool{}
 	var out []OutlineEntry
-	for rows.Next() {
-		var id int64
-		var section sql.NullString
-		var pageStart sql.NullInt64
-		var path string
-		if err := rows.Scan(&id, &section, &pageStart, &path); err != nil {
-			return nil, err
-		}
-		if path == "" {
+	for _, r := range rows {
+		if r.HeadingPath == "" {
 			continue
 		}
-		parts := strings.Split(path, " > ")
+		parts := strings.Split(r.HeadingPath, " > ")
 		for d := 1; d <= len(parts) && d <= depth; d++ {
 			key := strings.Join(parts[:d], " > ")
 			if seen[key] {
@@ -246,26 +239,21 @@ func (s *Store) Outline(ctx context.Context, docID string, depth int) ([]Outline
 			seen[key] = true
 			e := OutlineEntry{Heading: parts[d-1], Depth: d}
 			if d == len(parts) {
-				if section.Valid {
-					e.Section = section.String
+				if r.Section.Valid {
+					e.Section = r.Section.String
 				}
-				cid := id
+				cid := r.ID
 				e.ChunkID = &cid
 			}
-			if pageStart.Valid {
-				p := int(pageStart.Int64)
-				e.PageStart = &p
-			}
+			e.PageStart = nullInt(r.PageStart)
 			out = append(out, e)
 		}
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *Store) requireReady(ctx context.Context, docID string) error {
-	var status string
-	err := s.db.QueryRowContext(ctx,
-		`SELECT status FROM documents WHERE doc_id = ?`, docID).Scan(&status)
+	status, err := s.q.DocumentStatus(ctx, docID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("%w: no ready document %q", ErrNotFound, docID)
 	}

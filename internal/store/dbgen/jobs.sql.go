@@ -11,41 +11,20 @@ import (
 )
 
 const activeJobs = `-- name: ActiveJobs :many
-SELECT id, source_path, title, doc_id, status, phase, progress_cur,
-       progress_tot, attempts, permanent, error, warnings, lease_until,
-       created_at, updated_at
-  FROM ingest_jobs
+SELECT id, source_path, title, doc_id, status, phase, progress_cur, progress_tot, attempts, permanent, cancel_req, error, warnings, lease_until, created_at, updated_at FROM ingest_jobs
  WHERE status IN ('queued','running')
  ORDER BY created_at, id
 `
 
-type ActiveJobsRow struct {
-	ID          int64
-	SourcePath  string
-	Title       sql.NullString
-	DocID       sql.NullString
-	Status      string
-	Phase       sql.NullString
-	ProgressCur sql.NullInt64
-	ProgressTot sql.NullInt64
-	Attempts    int64
-	Permanent   int64
-	Error       sql.NullString
-	Warnings    sql.NullString
-	LeaseUntil  sql.NullString
-	CreatedAt   string
-	UpdatedAt   string
-}
-
-func (q *Queries) ActiveJobs(ctx context.Context) ([]ActiveJobsRow, error) {
+func (q *Queries) ActiveJobs(ctx context.Context) ([]IngestJob, error) {
 	rows, err := q.db.QueryContext(ctx, activeJobs)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ActiveJobsRow{}
+	items := []IngestJob{}
 	for rows.Next() {
-		var i ActiveJobsRow
+		var i IngestJob
 		if err := rows.Scan(
 			&i.ID,
 			&i.SourcePath,
@@ -57,6 +36,7 @@ func (q *Queries) ActiveJobs(ctx context.Context) ([]ActiveJobsRow, error) {
 			&i.ProgressTot,
 			&i.Attempts,
 			&i.Permanent,
+			&i.CancelReq,
 			&i.Error,
 			&i.Warnings,
 			&i.LeaseUntil,
@@ -91,33 +71,15 @@ func (q *Queries) EnqueueJob(ctx context.Context, arg EnqueueJobParams) (sql.Res
 }
 
 const jobByID = `-- name: JobByID :one
-SELECT id, source_path, title, doc_id, status, phase, progress_cur,
-       progress_tot, attempts, permanent, error, warnings, lease_until,
-       created_at, updated_at
-  FROM ingest_jobs WHERE id = ?
+SELECT id, source_path, title, doc_id, status, phase, progress_cur, progress_tot, attempts, permanent, cancel_req, error, warnings, lease_until, created_at, updated_at FROM ingest_jobs WHERE id = ?
 `
 
-type JobByIDRow struct {
-	ID          int64
-	SourcePath  string
-	Title       sql.NullString
-	DocID       sql.NullString
-	Status      string
-	Phase       sql.NullString
-	ProgressCur sql.NullInt64
-	ProgressTot sql.NullInt64
-	Attempts    int64
-	Permanent   int64
-	Error       sql.NullString
-	Warnings    sql.NullString
-	LeaseUntil  sql.NullString
-	CreatedAt   string
-	UpdatedAt   string
-}
-
-func (q *Queries) JobByID(ctx context.Context, id int64) (JobByIDRow, error) {
+// The three job reads select * so they share one generated row type and one
+// mapper. Column-order drift, the usual reason to avoid *, is what sqlc
+// removes: the struct and the scan are generated from the schema together.
+func (q *Queries) JobByID(ctx context.Context, id int64) (IngestJob, error) {
 	row := q.db.QueryRowContext(ctx, jobByID, id)
-	var i JobByIDRow
+	var i IngestJob
 	err := row.Scan(
 		&i.ID,
 		&i.SourcePath,
@@ -129,6 +91,7 @@ func (q *Queries) JobByID(ctx context.Context, id int64) (JobByIDRow, error) {
 		&i.ProgressTot,
 		&i.Attempts,
 		&i.Permanent,
+		&i.CancelReq,
 		&i.Error,
 		&i.Warnings,
 		&i.LeaseUntil,
@@ -164,41 +127,20 @@ func (q *Queries) QueuePosition(ctx context.Context, id int64) (int64, error) {
 }
 
 const recentJobs = `-- name: RecentJobs :many
-SELECT id, source_path, title, doc_id, status, phase, progress_cur,
-       progress_tot, attempts, permanent, error, warnings, lease_until,
-       created_at, updated_at
-  FROM ingest_jobs
+SELECT id, source_path, title, doc_id, status, phase, progress_cur, progress_tot, attempts, permanent, cancel_req, error, warnings, lease_until, created_at, updated_at FROM ingest_jobs
  ORDER BY (status IN ('queued','running')) DESC, updated_at DESC
  LIMIT ?
 `
 
-type RecentJobsRow struct {
-	ID          int64
-	SourcePath  string
-	Title       sql.NullString
-	DocID       sql.NullString
-	Status      string
-	Phase       sql.NullString
-	ProgressCur sql.NullInt64
-	ProgressTot sql.NullInt64
-	Attempts    int64
-	Permanent   int64
-	Error       sql.NullString
-	Warnings    sql.NullString
-	LeaseUntil  sql.NullString
-	CreatedAt   string
-	UpdatedAt   string
-}
-
-func (q *Queries) RecentJobs(ctx context.Context, limit int64) ([]RecentJobsRow, error) {
+func (q *Queries) RecentJobs(ctx context.Context, limit int64) ([]IngestJob, error) {
 	rows, err := q.db.QueryContext(ctx, recentJobs, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []RecentJobsRow{}
+	items := []IngestJob{}
 	for rows.Next() {
-		var i RecentJobsRow
+		var i IngestJob
 		if err := rows.Scan(
 			&i.ID,
 			&i.SourcePath,
@@ -210,6 +152,7 @@ func (q *Queries) RecentJobs(ctx context.Context, limit int64) ([]RecentJobsRow,
 			&i.ProgressTot,
 			&i.Attempts,
 			&i.Permanent,
+			&i.CancelReq,
 			&i.Error,
 			&i.Warnings,
 			&i.LeaseUntil,

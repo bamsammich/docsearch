@@ -8,25 +8,19 @@ VALUES (?, ?, 'queued', datetime('now'), datetime('now'));
 SELECT COUNT(*) FROM ingest_jobs
  WHERE status IN ('queued','running') AND id <= ?;
 
+-- The three job reads select * so they share one generated row type and one
+-- mapper. Column-order drift, the usual reason to avoid *, is what sqlc
+-- removes: the struct and the scan are generated from the schema together.
 -- name: JobByID :one
-SELECT id, source_path, title, doc_id, status, phase, progress_cur,
-       progress_tot, attempts, permanent, error, warnings, lease_until,
-       created_at, updated_at
-  FROM ingest_jobs WHERE id = ?;
+SELECT * FROM ingest_jobs WHERE id = ?;
 
 -- name: ActiveJobs :many
-SELECT id, source_path, title, doc_id, status, phase, progress_cur,
-       progress_tot, attempts, permanent, error, warnings, lease_until,
-       created_at, updated_at
-  FROM ingest_jobs
+SELECT * FROM ingest_jobs
  WHERE status IN ('queued','running')
  ORDER BY created_at, id;
 
 -- name: RecentJobs :many
-SELECT id, source_path, title, doc_id, status, phase, progress_cur,
-       progress_tot, attempts, permanent, error, warnings, lease_until,
-       created_at, updated_at
-  FROM ingest_jobs
+SELECT * FROM ingest_jobs
  ORDER BY (status IN ('queued','running')) DESC, updated_at DESC
  LIMIT ?;
 

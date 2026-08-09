@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
+	"github.com/bamsammich/docsearch/internal/store/dbgen"
 )
 
 // ContextChunk is a neighbouring chunk returned by get_context.
@@ -42,15 +44,14 @@ func (s *Store) GetContext(ctx context.Context, docID string, chunkID int64,
 	if err := s.requireReady(ctx, docID); err != nil {
 		return nil, false, err
 	}
-	var anchor int
-	err := s.db.QueryRowContext(ctx,
-		`SELECT ordinal FROM chunks WHERE id = ? AND doc_id = ?`, chunkID, docID).Scan(&anchor)
+	ordinal, err := s.q.ChunkOrdinal(ctx, dbgen.ChunkOrdinalParams{ID: chunkID, DocID: docID})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, fmt.Errorf("%w: chunk %d in %q", ErrNotFound, chunkID, docID)
 	}
 	if err != nil {
 		return nil, false, err
 	}
+	anchor := int(ordinal)
 	if before < 0 {
 		before = 0
 	}
@@ -58,33 +59,30 @@ func (s *Store) GetContext(ctx context.Context, docID string, chunkID int64,
 		after = 0
 	}
 
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, ordinal, heading_path, section, page_start, image_count, url, fragment, text
-		  FROM chunks
-		 WHERE doc_id = ? AND ordinal BETWEEN ? AND ?
-		 ORDER BY ordinal`, docID, anchor-before, anchor+after)
+	rows, err := s.q.ContextChunks(ctx, dbgen.ContextChunksParams{
+		DocID:     docID,
+		Ordinal:   int64(anchor - before),
+		Ordinal_2: int64(anchor + after),
+	})
 	if err != nil {
 		return nil, false, err
 	}
-	defer func() { _ = rows.Close() }()
 
 	var out []ContextChunk
-	for rows.Next() {
-		var c ContextChunk
-		var section, url, fragment sql.NullString
-		if err := rows.Scan(&c.ChunkID, &c.Ordinal, &c.HeadingPath, &section, &c.PageStart,
-			&c.ImageCount, &url, &fragment, &c.Text); err != nil {
-			return nil, false, err
+	for _, r := range rows {
+		c := ContextChunk{
+			ChunkID:     r.ID,
+			Ordinal:     int(r.Ordinal),
+			HeadingPath: r.HeadingPath,
+			Section:     r.Section.String,
+			PageStart:   nullInt(r.PageStart),
+			ImageCount:  int(r.ImageCount),
+			URL:         r.Url.String,
+			Fragment:    r.Fragment.String,
+			Text:        r.Text,
 		}
-		if section.Valid {
-			c.Section = section.String
-		}
-		c.URL, c.Fragment = url.String, fragment.String
 		c.IsAnchor = c.Ordinal == anchor
 		out = append(out, c)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, false, err
 	}
 
 	// Trim outward from the anchor until the span fits, so the requested
@@ -122,20 +120,15 @@ func (s *Store) GetPages(ctx context.Context, docID string, start, end int) ([]P
 		end = start + maxContextPages - 1
 		truncated = true
 	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT page, text FROM pages WHERE doc_id = ? AND page BETWEEN ? AND ? ORDER BY page`,
-		docID, start, end)
+	rows, err := s.q.PagesInRange(ctx, dbgen.PagesInRangeParams{
+		DocID: docID, Page: int64(start), Page_2: int64(end),
+	})
 	if err != nil {
 		return nil, false, err
 	}
-	defer func() { _ = rows.Close() }()
 	var out []PageText
-	for rows.Next() {
-		var p PageText
-		if err := rows.Scan(&p.Page, &p.Text); err != nil {
-			return nil, false, err
-		}
-		out = append(out, p)
+	for _, r := range rows {
+		out = append(out, PageText{Page: int(r.Page), Text: r.Text})
 	}
-	return out, truncated, rows.Err()
+	return out, truncated, nil
 }

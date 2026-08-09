@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+
+	"github.com/bamsammich/docsearch/internal/store/dbgen"
 )
 
-// SectionMatchSQL resolves an index-term section reference to the chunks it
-// covers. It is the Go half of one rule that exists in two languages; the
-// Python half is docsearch.db.SECTION_MATCH_SQL and the two must agree.
+// SectionCovers reports whether ref covers section: the in-memory half of a
+// rule that also exists as SQL, in the ChunksInSection query and in
+// docsearch.db.SECTION_MATCH_SQL. All three must agree.
 //
 // The match is component-wise, never a bare string prefix. A reference to
 // chapter "4" covers "4" and "4.1", and must not touch "41" or "43.6.1" --
@@ -18,12 +20,9 @@ import (
 // raises the number of resolved joins, so a "zero unjoinable" check moves in
 // the reassuring direction while the answers get worse. Precision needs its
 // own tests, and has them in both languages.
-const SectionMatchSQL = `(chunks.section = ? OR chunks.section LIKE ? || '.%')`
-
-// SectionCovers reports whether ref covers section, by the same rule as
-// SectionMatchSQL. Used to apply the index-term boost in memory once
-// candidate chunks have been fetched, so the rule is not reimplemented as an
-// ad hoc string comparison at the call site.
+//
+// Applied once candidate chunks have been fetched, so the rule is not
+// reimplemented as an ad hoc string comparison at the call site.
 func SectionCovers(ref, section string) bool {
 	if ref == "" || section == "" {
 		return false
@@ -50,34 +49,30 @@ func (s *Store) ChunksMatchingExpectation(ctx context.Context, docID, expect str
 	if docID == "" || expect == "" {
 		return nil, nil
 	}
-	var (
-		rows *sql.Rows
-		err  error
-	)
+	var out []TargetChunk
 	if bySection {
-		rows, err = s.db.QueryContext(ctx,
-			`SELECT heading_path, text FROM chunks
-			  WHERE doc_id = ? AND `+SectionMatchSQL+` ORDER BY ordinal`,
-			docID, expect, expect)
-	} else {
-		rows, err = s.db.QueryContext(ctx,
-			`SELECT heading_path, text FROM chunks
-			  WHERE doc_id = ? AND lower(heading_path) LIKE '%' || lower(?) || '%'
-			  ORDER BY ordinal`, docID, expect)
+		ref := sql.NullString{String: expect, Valid: true}
+		rows, err := s.q.ChunksInSection(ctx, dbgen.ChunksInSectionParams{
+			DocID: docID, Section: ref, Column3: ref,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range rows {
+			out = append(out, TargetChunk{HeadingPath: r.HeadingPath, Text: r.Text})
+		}
+		return out, nil
 	}
+	rows, err := s.q.ChunksMatchingHeading(ctx, dbgen.ChunksMatchingHeadingParams{
+		DocID: docID, LOWER: expect,
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
-	var out []TargetChunk
-	for rows.Next() {
-		var c TargetChunk
-		if err := rows.Scan(&c.HeadingPath, &c.Text); err != nil {
-			return nil, err
-		}
-		out = append(out, c)
+	for _, r := range rows {
+		out = append(out, TargetChunk{HeadingPath: r.HeadingPath, Text: r.Text})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // AnySectionCovers reports whether any ref in refs covers section.
@@ -108,23 +103,18 @@ func (s *Store) SampleChunks(ctx context.Context, docID string, stride int) ([]S
 	if stride < 1 {
 		stride = 1
 	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, heading_path, text FROM chunks
-		  WHERE doc_id = ? ORDER BY ordinal`, docID)
+	rows, err := s.q.AllChunksInOrder(ctx, docID)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
 
 	var out []SampledChunk
-	for i := 0; rows.Next(); i++ {
-		var c SampledChunk
-		if err := rows.Scan(&c.ChunkID, &c.HeadingPath, &c.Text); err != nil {
-			return nil, err
-		}
+	for i, r := range rows {
 		if i%stride == 0 {
-			out = append(out, c)
+			out = append(out, SampledChunk{
+				ChunkID: r.ID, HeadingPath: r.HeadingPath, Text: r.Text,
+			})
 		}
 	}
-	return out, rows.Err()
+	return out, nil
 }
