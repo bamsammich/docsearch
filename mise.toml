@@ -3,6 +3,7 @@ python = "3.13"
 uv = "latest"
 go = "1.26"
 golangci-lint = "latest"
+sqlc = "1.31.1"
 
 # uv owns .venv entirely (`uv sync` / `uv run`); mise only supplies the
 # python and uv binaries so the venv is built against a pinned interpreter.
@@ -33,6 +34,10 @@ run = [
   "uv run ruff check --fix .",
   "gofmt -w .",
 ]
+
+[tasks.generate]
+description = "Regenerate the Go query layer from python/docsearch/schema.sql"
+run = "sqlc generate"
 
 [tasks.test]
 description = "Run Python and Go unit tests"

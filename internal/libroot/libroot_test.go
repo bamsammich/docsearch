@@ -23,7 +23,7 @@ func setup(t *testing.T) (root string, inside string) {
 
 func TestFileInsideRootResolves(t *testing.T) {
 	root, inside := setup(t)
-	got, err := Resolve(root, inside)
+	got, err := Resolve([]string{root}, inside)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v, want nil", err)
 	}
@@ -42,14 +42,14 @@ func TestNestedFileResolves(t *testing.T) {
 	if err := os.WriteFile(deep, []byte("# hi"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Resolve(root, deep); err != nil {
+	if _, err := Resolve([]string{root}, deep); err != nil {
 		t.Errorf("Resolve() error = %v, want nil", err)
 	}
 }
 
 func TestAbsolutePathOutsideRootIsRejected(t *testing.T) {
 	root, _ := setup(t)
-	if _, err := Resolve(root, "/etc/passwd"); !errors.Is(err, ErrOutsideRoot) {
+	if _, err := Resolve([]string{root}, "/etc/passwd"); !errors.Is(err, ErrOutsideRoot) {
 		t.Errorf("error = %v, want ErrOutsideRoot", err)
 	}
 }
@@ -61,7 +61,7 @@ func TestDotDotTraversalIsRejected(t *testing.T) {
 		filepath.Join(root, "a", "..", "..", "escape.pdf"),
 		"../../../../etc/passwd",
 	} {
-		if _, err := Resolve(root, p); !errors.Is(err, ErrOutsideRoot) {
+		if _, err := Resolve([]string{root}, p); !errors.Is(err, ErrOutsideRoot) {
 			t.Errorf("Resolve(%q) error = %v, want ErrOutsideRoot", p, err)
 		}
 	}
@@ -80,7 +80,7 @@ func TestSymlinkInsideRootPointingOutsideIsRejected(t *testing.T) {
 	if err := os.Symlink(secret, link); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	if _, err := Resolve(root, link); !errors.Is(err, ErrOutsideRoot) {
+	if _, err := Resolve([]string{root}, link); !errors.Is(err, ErrOutsideRoot) {
 		t.Errorf("error = %v, want ErrOutsideRoot for a symlink escaping the root", err)
 	}
 }
@@ -95,7 +95,7 @@ func TestSymlinkedDirectoryEscapeIsRejected(t *testing.T) {
 	if err := os.Symlink(outsideDir, link); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	if _, err := Resolve(root, filepath.Join(link, "x.pdf")); !errors.Is(err, ErrOutsideRoot) {
+	if _, err := Resolve([]string{root}, filepath.Join(link, "x.pdf")); !errors.Is(err, ErrOutsideRoot) {
 		t.Errorf("error = %v, want ErrOutsideRoot through a symlinked directory", err)
 	}
 }
@@ -118,7 +118,7 @@ func TestSiblingDirectoryWithSharedPrefixIsRejected(t *testing.T) {
 	if err := os.WriteFile(target, []byte("%PDF"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Resolve(root, target); !errors.Is(err, ErrOutsideRoot) {
+	if _, err := Resolve([]string{root}, target); !errors.Is(err, ErrOutsideRoot) {
 		t.Errorf("error = %v, want ErrOutsideRoot: %q is not inside %q", err, sibling, root)
 	}
 }
@@ -136,7 +136,7 @@ func TestRejectionDoesNotDiscloseExistence(t *testing.T) {
 
 	var msgs []string
 	for _, p := range []string{existsOutside, absentOutside, absentInside} {
-		_, err := Resolve(root, p)
+		_, err := Resolve([]string{root}, p)
 		if err == nil {
 			t.Fatalf("Resolve(%q) unexpectedly succeeded", p)
 		}
@@ -151,13 +151,117 @@ func TestRejectionDoesNotDiscloseExistence(t *testing.T) {
 
 func TestEmptyInputsAreRejected(t *testing.T) {
 	root, _ := setup(t)
-	if _, err := Resolve(root, ""); !errors.Is(err, ErrOutsideRoot) {
+	if _, err := Resolve([]string{root}, ""); !errors.Is(err, ErrOutsideRoot) {
 		t.Error("empty candidate should be rejected")
 	}
-	if _, err := Resolve("", "/tmp/x"); !errors.Is(err, ErrOutsideRoot) {
+	if _, err := Resolve(nil, "/tmp/x"); !errors.Is(err, ErrOutsideRoot) {
 		t.Error("empty root should be rejected")
 	}
-	if _, err := Resolve("relative/root", "relative/root/x"); !errors.Is(err, ErrOutsideRoot) {
+	if _, err := Resolve([]string{"relative/root"}, "relative/root/x"); !errors.Is(err, ErrOutsideRoot) {
 		t.Error("relative root should be rejected")
+	}
+}
+
+// -- multiple roots -------------------------------------------------------
+
+func twoRoots(t *testing.T) (a, b string) {
+	t.Helper()
+	for _, p := range []*string{&a, &b} {
+		base, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		*p = base
+	}
+	return a, b
+}
+
+func TestAFileInAnyConfiguredRootResolves(t *testing.T) {
+	a, b := twoRoots(t)
+	for _, root := range []string{a, b} {
+		target := filepath.Join(root, "doc.pdf")
+		if err := os.WriteFile(target, []byte("%PDF"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		got, err := Resolve([]string{a, b}, target)
+		if err != nil {
+			t.Fatalf("Resolve() error = %v, want nil for a file in %q", err, root)
+		}
+		if got != target {
+			t.Errorf("Resolve() = %q, want %q", got, target)
+		}
+	}
+}
+
+func TestAFileInNoConfiguredRootIsRejected(t *testing.T) {
+	a, b := twoRoots(t)
+	outside := filepath.Join(t.TempDir(), "doc.pdf")
+	if err := os.WriteFile(outside, []byte("%PDF"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Resolve([]string{a, b}, outside); !errors.Is(err, ErrOutsideRoot) {
+		t.Errorf("error = %v, want ErrOutsideRoot", err)
+	}
+}
+
+// An unusable entry must not stop a later root from accepting a path, and must
+// not accept anything itself.
+func TestAnUnusableRootIsSkippedNotFatal(t *testing.T) {
+	a, _ := twoRoots(t)
+	target := filepath.Join(a, "doc.pdf")
+	if err := os.WriteFile(target, []byte("%PDF"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	roots := []string{"", "relative/root", a}
+	if _, err := Resolve(roots, target); err != nil {
+		t.Errorf("Resolve() error = %v, want nil; a usable root follows the unusable ones", err)
+	}
+	if _, err := Resolve(roots, "/etc/passwd"); !errors.Is(err, ErrOutsideRoot) {
+		t.Error("an unusable root must not widen what is accepted")
+	}
+}
+
+// A traversal that escapes one root must not be accepted because it lands in
+// another: each root is checked on its own terms.
+func TestTraversalBetweenRootsIsStillRejected(t *testing.T) {
+	a, b := twoRoots(t)
+	target := filepath.Join(b, "doc.pdf")
+	if err := os.WriteFile(target, []byte("%PDF"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Reaches b's file, but written as an escape from a.
+	rel, err := filepath.Rel(a, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Resolve([]string{a}, filepath.Join(a, rel)); !errors.Is(err, ErrOutsideRoot) {
+		t.Error("a path escaping the only configured root must be rejected")
+	}
+}
+
+// Multiple roots must not make rejections distinguishable.
+func TestMultiRootRejectionDoesNotDiscloseExistence(t *testing.T) {
+	a, b := twoRoots(t)
+	existsOutside := filepath.Join(t.TempDir(), "real.pdf")
+	if err := os.WriteFile(existsOutside, []byte("%PDF"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var msgs []string
+	for _, p := range []string{
+		existsOutside,
+		"/nonexistent-path-xyz/absent.pdf",
+		filepath.Join(a, "absent.pdf"),
+		filepath.Join(b, "absent.pdf"),
+	} {
+		_, err := Resolve([]string{a, b}, p)
+		if err == nil {
+			t.Fatalf("Resolve(%q) unexpectedly succeeded", p)
+		}
+		msgs = append(msgs, err.Error())
+	}
+	for i := 1; i < len(msgs); i++ {
+		if msgs[i] != msgs[0] {
+			t.Errorf("error messages differ and leak existence:\n %q\n %q", msgs[0], msgs[i])
+		}
 	}
 }

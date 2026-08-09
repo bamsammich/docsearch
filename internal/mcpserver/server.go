@@ -18,13 +18,44 @@ import (
 
 // Deps are what the tools need to do their work.
 type Deps struct {
-	Store       *store.Store
-	LibraryRoot string
-	Log         *slog.Logger
+	Store *store.Store
+	// LibraryRoots are the directories add_document accepts a path inside.
+	// They are named in that tool's description: a caller that can see
+	// neither the roots nor why a path was refused has no way to recover
+	// from the deliberately uninformative rejection, which is what made the
+	// tool usable only on files a person had already staged.
+	LibraryRoots []string
+	Log          *slog.Logger
 }
 
 // toolMaxK is the search tool's documented result cap.
 const toolMaxK = 25
+
+// describeRoots names the directories add_document accepts, in the tool's own
+// description.
+//
+// Every rejection returns one error that says nothing about the path, which
+// makes the tool impossible to use without knowing where files may live: a
+// caller handed a path outside the roots cannot tell whether the file is
+// missing, unreadable, or merely somewhere else, and has nowhere to move it
+// to. Naming the roots costs nothing -- they are operator configuration, not a
+// property of the caller's path -- and turns that dead end into an action.
+func describeRoots(roots []string) string {
+	switch len(roots) {
+	case 0:
+		// Validate rejects this at startup; a server with no roots cannot
+		// accept any path at all.
+		return "This server has no library root configured, so add_document " +
+			"cannot accept any path."
+	case 1:
+		return "The path must be inside " + roots[0] + ". A file elsewhere has to be " +
+			"copied there first; tell the user rather than guessing at another path."
+	default:
+		return "The path must be inside one of: " + strings.Join(roots, ", ") +
+			". A file elsewhere has to be copied into one of them first; tell the user " +
+			"rather than guessing at another path."
+	}
+}
 
 var supportedSuffixes = map[string]bool{
 	".pdf": true, ".md": true, ".markdown": true, ".html": true,
@@ -98,7 +129,7 @@ func New(d Deps) *mcp.Server {
 			"call only enqueues the job. The document will NOT be searchable when this " +
 			"returns. Tell the user it has been queued, not that it is ready, and poll " +
 			"ingest_status to find out when it completes.\n\n" +
-			"The path must be inside the server's configured library root.",
+			describeRoots(d.LibraryRoots),
 	}, d.addDocument)
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -313,7 +344,7 @@ func (d Deps) addDocument(ctx context.Context, _ *mcp.CallToolRequest,
 	if in.Path == "" {
 		return nil, addDocumentOutput{}, errors.New("path is required")
 	}
-	resolved, err := libroot.Resolve(d.LibraryRoot, in.Path)
+	resolved, err := libroot.Resolve(d.LibraryRoots, in.Path)
 	if err != nil {
 		// One error for every rejection. Distinguishing "outside the root"
 		// from "does not exist" would make this tool a filesystem probe.

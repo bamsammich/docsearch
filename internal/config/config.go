@@ -11,9 +11,12 @@ import (
 
 // Config is the fully resolved server configuration.
 type Config struct {
-	Addr            string
+	Addr string
+	// LibraryRoots are the directories add_document will accept a path
+	// inside. Which directories are ingestable is an operator decision: no
+	// tool parameter widens the set, and a caller cannot add to it.
+	LibraryRoots    []string
 	DBPath          string
-	LibraryRoot     string
 	BearerToken     string
 	AllowedOrigins  []string
 	AllowPublicBind bool
@@ -43,27 +46,67 @@ func (c *Config) Validate() error {
 	if c.DBPath == "" {
 		return errors.New("no database path: set --db or " + EnvDB)
 	}
-	if c.LibraryRoot == "" {
+	if len(c.LibraryRoots) == 0 {
 		return errors.New("no library root: set --root or " + EnvRoot)
 	}
 
-	// The library root is resolved once, at startup, through symlinks. Every
-	// later path check compares against this value, so a symlinked root does
-	// not silently widen what the tool surface will accept.
-	root, err := filepath.EvalSymlinks(c.LibraryRoot)
-	if err != nil {
-		return fmt.Errorf("library root %q is not usable: %w", c.LibraryRoot, err)
+	// Each root is resolved once, at startup, through symlinks. Every later
+	// path check compares against these values, so a symlinked root does not
+	// silently widen what the tool surface will accept.
+	//
+	// One unusable root fails startup rather than being dropped: a server that
+	// quietly serves three of the four directories an operator configured is
+	// worse than one that will not start, because the missing one only
+	// surfaces as an unexplained rejection much later.
+	seen := make(map[string]bool, len(c.LibraryRoots))
+	resolved := make([]string, 0, len(c.LibraryRoots))
+	for _, root := range c.LibraryRoots {
+		real, err := filepath.EvalSymlinks(root)
+		if err != nil {
+			return fmt.Errorf("library root %q is not usable: %w", root, err)
+		}
+		abs, err := filepath.Abs(real)
+		if err != nil {
+			return fmt.Errorf("library root %q: %w", root, err)
+		}
+		// A root must be a directory. A file passes both calls above, and
+		// `within` treats a path equal to the root as inside it -- so naming
+		// a file as a root quietly makes that one file ingestable, and
+		// add_document then advertises "the path must be inside" it.
+		info, err := os.Stat(abs)
+		if err != nil {
+			return fmt.Errorf("library root %q is not usable: %w", root, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("library root %q is not a directory", root)
+		}
+		// Two spellings of one directory are one root. Left in, they appear
+		// twice in the tool description without meaning anything.
+		if seen[abs] {
+			continue
+		}
+		seen[abs] = true
+		resolved = append(resolved, abs)
 	}
-	abs, err := filepath.Abs(root)
-	if err != nil {
-		return fmt.Errorf("library root %q: %w", c.LibraryRoot, err)
-	}
-	c.LibraryRoot = abs
+	c.LibraryRoots = resolved
 
 	if !c.AllowPublicBind && !IsLoopbackAddr(c.Addr) {
 		return ErrPublicBind
 	}
 	return nil
+}
+
+// SplitRoots parses a list of library roots from one environment variable,
+// separated the way the platform separates path lists (":" on Unix). A single
+// path parses to a single root, so an existing DOCSEARCH_ROOT keeps working.
+func SplitRoots(v string) []string {
+	var out []string
+	for _, p := range filepath.SplitList(v) {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // IsLoopbackAddr reports whether addr binds only to a loopback interface.
@@ -94,8 +137,8 @@ func (c *Config) FromEnv() {
 	if c.DBPath == "" {
 		c.DBPath = os.Getenv(EnvDB)
 	}
-	if c.LibraryRoot == "" {
-		c.LibraryRoot = os.Getenv(EnvRoot)
+	if len(c.LibraryRoots) == 0 {
+		c.LibraryRoots = SplitRoots(os.Getenv(EnvRoot))
 	}
 	if c.Addr == "" {
 		if v := os.Getenv(EnvAddr); v != "" {
