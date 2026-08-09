@@ -16,6 +16,19 @@ def report(**kw: object) -> StructureReport:
     return StructureReport(**kw)  # type: ignore[arg-type]
 
 
+def healthy(**overrides: object) -> dict[str, object]:
+    """A report clean on every axis, so a test varies exactly one thing."""
+    base: dict[str, object] = {
+        "structure_source": "front_toc",
+        "toc_sections": 100,
+        "body_sections": 100,
+        "chunks": 100,
+        "distinct_heading_paths": 90,
+    }
+    base.update(overrides)
+    return base
+
+
 def test_empty_agreement_is_not_cross_validation() -> None:
     r = report(structure_source="front_toc", toc_sections=0, body_sections=0)
     assert r.symmetric_difference == []
@@ -99,6 +112,26 @@ def test_well_structured_documents_are_not_degraded() -> None:
 def test_addressability_needs_a_distribution() -> None:
     r = report(structure_source="font_heuristic", chunks=4, distinct_heading_paths=1)
     assert not r.unaddressable
+
+
+def test_an_uncalibrated_script_is_reported_then_downgrades() -> None:
+    """Chunk sizes for such a document are in an unknown unit.
+
+    Nothing looks wrong: the ingest completes and the chunks are well formed.
+    Only the size thresholds applied to them are meaningless.
+    """
+    noted = report(**healthy(uncalibrated_script_share=0.2))
+    assert "unknown unit" in " ".join(noted.notes())
+    assert noted.quality() == "ok"
+
+    downgraded = report(**healthy(uncalibrated_script_share=0.95))
+    assert downgraded.quality() == "degraded"
+
+
+def test_latin_and_cjk_documents_are_calibrated() -> None:
+    r = report(**healthy(uncalibrated_script_share=0.0))
+    assert r.notes() == []
+    assert r.quality() == "ok"
 
 
 def test_notes_and_addressability_reach_the_persisted_payload() -> None:

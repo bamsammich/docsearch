@@ -36,6 +36,13 @@ ADDRESSABILITY_MIN_CHUNKS = 25
 #: property of the document: one in 944 is a blemish, one in nine is a symptom.
 HEADLESS_DEGRADED_RATE = 0.02
 
+#: Share of letters in scripts the token estimator cannot size. Reported from
+#: the first bound, downgraded past the second: chunk size thresholds are then
+#: being applied in an unknown unit, so the document may be chunked far coarser
+#: than intended without anything appearing wrong.
+UNCALIBRATED_SCRIPT_NOTE_SHARE = 0.10
+UNCALIBRATED_SCRIPT_DEGRADED_SHARE = 0.50
+
 
 @dataclass(slots=True)
 class StructureReport:
@@ -52,6 +59,7 @@ class StructureReport:
     chunks: int = 0
     distinct_heading_paths: int = 0
     headless_chunks: int = 0
+    uncalibrated_script_share: float = 0.0
 
     @property
     def validatable(self) -> bool:
@@ -103,6 +111,12 @@ class StructureReport:
                 f"{self.headless_chunks} chunk(s) carry no heading path and cannot be "
                 f"reached by heading, filtered, or described in an outline"
             )
+        if self.uncalibrated_script_share >= UNCALIBRATED_SCRIPT_NOTE_SHARE:
+            out.append(
+                f"{self.uncalibrated_script_share:.0%} of letters are in a script the token "
+                f"estimator has no calibration for, so chunk sizes for this document are in "
+                f"an unknown unit and it may be chunked coarser than intended"
+            )
         if self.validatable and not self.cross_validated:
             out.append(
                 f"structure source '{self.structure_source}' was not cross-validated: "
@@ -135,6 +149,7 @@ class StructureReport:
             or self.scattered_sections
             or self.unaddressable
             or self.mostly_headless
+            or self.uncalibrated_script_share >= UNCALIBRATED_SCRIPT_DEGRADED_SHARE
         )
 
     @property

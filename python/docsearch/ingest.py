@@ -21,6 +21,7 @@ from .adapters import for_path
 from .chunker import chunk as chunk_extraction
 from .errors import IngestCancelled, StructureValidationError
 from .structure import StructureReport
+from .tokens import uncalibrated_letter_share
 
 #: ``(phase, current, total)``; phase is 'extract' | 'chunk' | 'index'.
 ProgressFn = Callable[[str, int, int], None]
@@ -164,6 +165,13 @@ def ingest_file(
     report.chunks = len(chunks)
     report.distinct_heading_paths = len({c.heading_path for c in chunks})
     report.headless_chunks = sum(1 for c in chunks if not c.heading_path.strip())
+    # Sampled evenly rather than from the front: front matter is often in a
+    # different script from the body, and a title page proves nothing about
+    # the manual behind it.
+    sample = chunks[:: max(1, len(chunks) // 200)]
+    report.uncalibrated_script_share = round(
+        uncalibrated_letter_share("\n".join(c.text for c in sample)), 3
+    )
     checkpoint()
 
     conn.execute("BEGIN IMMEDIATE")
