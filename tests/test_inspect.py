@@ -9,14 +9,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import fitz
+import pymupdf
 import pytest
 
 from docsearch.inspect import format_report, inspect_document
 
 
 def _pdf(path: Path, pages: list[list[tuple[str, float]]], outline: list | None = None) -> Path:
-    doc = fitz.open()
+    doc = pymupdf.open()
     for lines in pages:
         page = doc.new_page()
         y = 72.0

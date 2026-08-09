@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import fitz
+import pymupdf
 import pytest
 
 from docsearch.adapters.pdf import extract
@@ -15,7 +15,7 @@ HEAD = 17.0
 
 def _build(path: Path, pages: list[list[tuple[float, str]]]) -> Path:
     """Write a PDF where each page is a list of ``(font_size, text)`` lines."""
-    doc = fitz.open()
+    doc = pymupdf.open()
     for lines in pages:
         page = doc.new_page()
         y = 90.0
@@ -80,13 +80,13 @@ def test_text_after_a_rejected_candidate_stays_in_its_real_section(
 def test_repeated_image_is_treated_as_furniture_not_a_figure(tmp_path: Path) -> None:
     """A logo drawn on every page must not register as a figure."""
     pdf = tmp_path / "logos.pdf"
-    doc = fitz.open()
-    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 64, 64))
+    doc = pymupdf.open()
+    pix = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 64, 64))
     pix.set_rect(pix.irect, (200, 30, 30))
     png = pix.tobytes("png")
     for i in range(8):
         page = doc.new_page()
-        page.insert_image(fitz.Rect(20, 20, 80, 80), stream=png)  # same logo everywhere
+        page.insert_image(pymupdf.Rect(20, 20, 80, 80), stream=png)  # same logo everywhere
         page.insert_text((72, 120), f"{i + 1}.", fontsize=HEAD)
         page.insert_text((72, 150), f"Chapter {i + 1}", fontsize=HEAD)
         for j, (s, t) in enumerate(_body_lines(5, f"topic{i}")):

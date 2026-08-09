@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import fitz
+import pymupdf
 
 from ..blocks import Block, Extraction
 from ..errors import StructureValidationError
@@ -69,7 +69,7 @@ class _Line:
     text: str
 
 
-def _page_lines(page: fitz.Page) -> list[_Line]:
+def _page_lines(page: pymupdf.Page) -> list[_Line]:
     out: list[_Line] = []
     for blk in page.get_text("dict")["blocks"]:
         if blk["type"] != 0:
@@ -531,7 +531,7 @@ def _emit_outline_blocks(
 
 
 def extract(path: Path, progress: ProgressFn | None = None) -> Extraction:
-    doc = fitz.open(path)
+    doc = pymupdf.open(path)
     n = doc.page_count
 
     def tick(phase: str, cur: int) -> None:

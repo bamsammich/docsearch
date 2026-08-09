@@ -51,7 +51,7 @@ class InspectReport:
 
 
 def _pdf_report(path: Path, rep: InspectReport) -> None:
-    import fitz
+    import pymupdf
 
     from .adapters.pdf import (
         _is_boilerplate,
@@ -61,7 +61,7 @@ def _pdf_report(path: Path, rep: InspectReport) -> None:
         reconstruct_front_toc,
     )
 
-    doc = fitz.open(path)
+    doc = pymupdf.open(path)
     n = doc.page_count
     rep.page_count = n
     add = rep.findings.append
