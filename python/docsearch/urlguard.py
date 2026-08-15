@@ -124,9 +124,30 @@ def addr_allowed(addr: IPAddress | str) -> bool:
 
 
 def host_allowed(host: str) -> bool:
-    """Whether a hostname may be looked up at all."""
+    """Whether a hostname may be looked up at all.
+
+    Non-ASCII is refused outright, and that is the whole of the fix for a real
+    bypass: this rule was comparing the raw string while ``getaddrinfo``
+    resolved a different one. Its IDNA path treats U+3002, U+FF0E and U+FF61 as
+    label separators and NFKC-folds fullwidth letters, so ``wiki．internal``
+    failed an ``endswith('.internal')`` test and then resolved as
+    ``wiki.internal``; ``ｌｏｃａｌｈｏｓｔ`` folded to ``localhost``.
+
+    Refusing rather than normalizing, because normalizing means reimplementing
+    nameprep in two languages and keeping them identical -- the exact failure
+    this boundary already has one file to prevent. Go's resolver does no IDNA
+    folding at all, so an internationalized name has to arrive already encoded
+    for either process to reach it. Punycode is ASCII and passes, and it is
+    what both resolvers use on the wire regardless.
+
+    Trailing dots are stripped in full. Go's TrimRight does the same; its
+    TrimSuffix removed only one, so ``wiki.internal..`` passed there and failed
+    here.
+    """
     h = host.strip().rstrip(".").lower()
-    if not h or h == "localhost":
+    if not h or not h.isascii():
+        return False
+    if h == "localhost":
         return False
     return not any(h.endswith(s) for s in _BLOCKED_SUFFIXES)
 

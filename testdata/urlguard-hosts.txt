@@ -1,0 +1,58 @@
+# Hostname verdicts both language implementations must agree on.
+#
+# The companion to urlguard-addresses.txt, and it exists because that file
+# covers addresses only. Host normalization drifted between the two
+# implementations precisely where nothing compared them: Python's rstrip
+# removed every trailing dot where Go's TrimSuffix removed one, and Python
+# compared a raw Unicode string against a rule the resolver then evaluated on
+# an IDNA-folded name. Both suites read this file and must produce the same
+# verdict for every line.
+#
+# Format: <host> <allow|block> <why>
+
+# -- ordinary public names -------------------------------------------------
+example.com             allow  ordinary public name
+docs.example.com        allow  ordinary public name
+EXAMPLE.COM             allow  case is normalized, not meaningful
+example.com.            allow  one trailing dot is a rooted name, still public
+
+# A suffix must match a label boundary, not a substring. local.dev is an
+# ordinary public zone and has nothing to do with .local.
+docs.local.dev          allow  .local is not a suffix of this name
+internal.example.com    allow  'internal' as a label, not the .internal zone
+mylocal                 allow  no dot, not the .local zone
+
+# -- local-only name spaces ------------------------------------------------
+localhost               block  the loopback name itself
+app.localhost           block  the .localhost zone
+printer.local           block  mDNS
+wiki.internal           block  the .internal zone
+nas.home.arpa           block  RFC 8375 home network zone
+PRINTER.LOCAL           block  case must not evade the rule
+
+# -- trailing dots ---------------------------------------------------------
+# A rooted name is the same name. Go trimmed one dot and Python trimmed all,
+# so these three disagreed between the two processes.
+localhost.              block  rooted loopback name
+printer.local.          block  rooted mDNS name
+printer.local..         block  two trailing dots is still the same name
+wiki.internal..         block  two trailing dots is still the same name
+
+# -- non-ASCII -------------------------------------------------------------
+# Refused outright rather than normalized. getaddrinfo treats U+3002, U+FF0E
+# and U+FF61 as label separators and NFKC-folds fullwidth letters, so each of
+# these resolves as its ASCII spelling while reading as something else. Go's
+# resolver folds none of it. An internationalized name must arrive as
+# punycode, which is ASCII and which both resolvers use on the wire anyway.
+wiki．internal           block  U+FF0E fullwidth stop folds to wiki.internal
+printer．local           block  U+FF0E fullwidth stop folds to printer.local
+nas．home．arpa           block  U+FF0E fullwidth stop folds to nas.home.arpa
+wiki。internal           block  U+3002 ideographic stop folds to wiki.internal
+wiki｡internal           block  U+FF61 halfwidth stop folds to wiki.internal
+ｌｏｃａｌｈｏｓｔ               block  fullwidth letters NFKC-fold to localhost
+éxample.com             block  non-ASCII; supply the punycode form instead
+
+# Punycode is ASCII and is what the wire carries, so it is accepted and the
+# suffix rule reads the real labels.
+xn--80ak6aa92e.com      allow  punycode for a public internationalized name
+xn--p1ai.internal       block  punycode label under the .internal zone

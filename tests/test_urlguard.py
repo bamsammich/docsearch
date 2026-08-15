@@ -10,6 +10,7 @@ import pytest
 from docsearch.urlguard import BlockedURLError, addr_allowed, check, host_allowed
 
 VECTORS = Path(__file__).resolve().parents[1] / "testdata/urlguard-addresses.txt"
+HOST_VECTORS = Path(__file__).resolve().parents[1] / "testdata/urlguard-hosts.txt"
 
 
 def _vectors() -> list[tuple[str, bool, str]]:
@@ -35,6 +36,50 @@ def test_addr_verdicts_match_the_shared_table() -> None:
     assert len(vectors) >= 40, f"only {len(vectors)} vectors; the table should hold far more"
     for raw, want, why in vectors:
         assert addr_allowed(raw) is want, f"addr_allowed({raw}) should be {want}: {why}"
+
+
+def _host_vectors() -> list[tuple[str, bool, str]]:
+    out: list[tuple[str, bool, str]] = []
+    for line in HOST_VECTORS.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split(maxsplit=2)
+        assert len(fields) >= 2, f"malformed vector line: {line!r}"
+        out.append((fields[0], fields[1] == "allow", fields[2] if len(fields) > 2 else ""))
+    return out
+
+
+def test_host_verdicts_match_the_shared_table() -> None:
+    """The host half of the contract with ``internal/urlguard``.
+
+    Address parity had a file and host parity did not, which is exactly where
+    the two implementations drifted -- a trailing-dot difference, and a Unicode
+    separator that walked past this side's suffix rule while ``getaddrinfo``
+    resolved the ASCII name it folds to.
+    """
+    vectors = _host_vectors()
+    assert len(vectors) >= 25, f"only {len(vectors)} host vectors; the table should hold more"
+    for host, want, why in vectors:
+        assert host_allowed(host) is want, f"host_allowed({host!r}) should be {want}: {why}"
+
+
+def test_a_unicode_separator_cannot_walk_past_the_suffix_rule() -> None:
+    """The bypass this rule was fixed for, stated as its own case.
+
+    Each of these resolves as its ASCII spelling, so a rule that compares the
+    raw string is evaluating a different name than the one dialled.
+    """
+    for host in ("wiki．internal", "printer．local", "wiki。internal", "wiki｡internal"):
+        assert host_allowed(host) is False
+        # The name it would actually have resolved to is blocked, which is what
+        # makes the raw-string comparison a bypass rather than a curiosity.
+        assert host_allowed(host.encode("idna").decode("ascii")) is False
+
+
+def test_punycode_is_accepted_so_internationalized_names_remain_reachable() -> None:
+    assert host_allowed("xn--80ak6aa92e.com") is True
+    assert host_allowed("xn--p1ai.internal") is False
 
 
 def _resolver(**mapping: list[str]):

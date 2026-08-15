@@ -55,6 +55,45 @@ func TestAddrVerdictsMatchTheSharedTable(t *testing.T) {
 	}
 }
 
+const hostVectorFile = "../../testdata/urlguard-hosts.txt"
+
+// The host half of the shared contract. Address parity had a file and host
+// parity did not, which is exactly where the two implementations drifted: a
+// trailing-dot difference, and a Unicode-separator bypass that let
+// "wiki．internal" past the suffix rule on the Python side.
+func TestHostVerdictsMatchTheSharedTable(t *testing.T) {
+	f, err := os.Open(hostVectorFile)
+	if err != nil {
+		t.Fatalf("read shared host vectors: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	seen := 0
+	scan := bufio.NewScanner(f)
+	for scan.Scan() {
+		line := strings.TrimSpace(scan.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			t.Fatalf("malformed vector line: %q", line)
+		}
+		host, want := fields[0], fields[1]
+		if got := HostAllowed(host); got != (want == "allow") {
+			t.Errorf("HostAllowed(%q) = %v, want %s (%s)",
+				host, got, want, strings.Join(fields[2:], " "))
+		}
+		seen++
+	}
+	if err := scan.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if seen < 25 {
+		t.Fatalf("only %d host vectors exercised; the shared table should hold more", seen)
+	}
+}
+
 type fixedResolver map[string][]netip.Addr
 
 func (r fixedResolver) LookupNetIP(_ context.Context, _, host string) ([]netip.Addr, error) {

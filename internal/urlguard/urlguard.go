@@ -30,6 +30,7 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 )
 
 // ErrBlocked is returned for every rejected URL, whatever the reason.
@@ -119,13 +120,37 @@ func AddrAllowed(addr netip.Addr) bool {
 }
 
 // HostAllowed reports whether a hostname is one that may be looked up at all.
+//
+// Non-ASCII is refused, matching the Python half. There the raw string was
+// compared while getaddrinfo resolved an IDNA-folded one -- U+3002, U+FF0E and
+// U+FF61 are label separators to it, so "wiki．internal" passed an
+// endswith(".internal") test and then resolved as wiki.internal. This resolver
+// does no such folding, so it already failed closed; refusing here keeps both
+// predicates answering the same thing, which is what testdata/urlguard-*.txt
+// exists to hold them to. An internationalized name must arrive as punycode,
+// which is ASCII and which both resolvers use on the wire anyway.
+//
+// TrimRight, not TrimSuffix: the latter removes one trailing dot, so
+// "wiki.internal.." reached the resolver here while Python refused it.
 func HostAllowed(host string) bool {
-	h := strings.ToLower(strings.TrimSuffix(host, "."))
-	if h == "" || h == "localhost" {
+	h := strings.ToLower(strings.TrimRight(host, "."))
+	if h == "" || !isASCII(h) {
+		return false
+	}
+	if h == "localhost" {
 		return false
 	}
 	for _, s := range blockedSuffixes {
 		if strings.HasSuffix(h, s) {
+			return false
+		}
+	}
+	return true
+}
+
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= utf8.RuneSelf {
 			return false
 		}
 	}
