@@ -26,6 +26,7 @@ import re
 from typing import Any
 from urllib.parse import urlsplit
 
+from .adapters.html import HtmlItem
 from .adapters.html import parse as parse_html
 from .blocks import Block, Extraction
 from .crawl import CrawlResult
@@ -33,6 +34,24 @@ from .crawl import CrawlResult
 __all__ = ["build_extraction", "site_title"]
 
 _WS = re.compile(r"\s+")
+
+#: Share of a site's pages a block must appear on to be chrome rather than
+#: content. A rendered navigation hits ~100%; the same sentence appearing on
+#: half a manual's pages is furniture whatever it says.
+#:
+#: The HTML parse already drops <nav> and <footer>, which catches sites that
+#: use them. Plenty do not -- a sidebar is routinely a <div class="sidebar">
+#: full of <li> links -- and those survive as a block on every single page.
+CHROME_PAGE_FRACTION = 0.5
+
+#: Below this, repetition is not evidence and the false-positive risk
+#: dominates: three pages of a five-page site sharing a sentence is ordinary.
+CHROME_MIN_PAGES = 5
+
+#: Only short blocks are candidates. Chrome is a link label, a breadcrumb, a
+#: cookie notice; a long passage repeated across a site is duplicated content,
+#: which is a different defect and not one to fix by deletion.
+CHROME_MAX_CHARS = 200
 
 
 def _norm(text: str) -> str:
@@ -78,6 +97,30 @@ def _page_path(base: list[str], item_path: list[str], page_title: str) -> list[s
     return base + inner
 
 
+def _chrome_texts(parsed: list[tuple[str, list[HtmlItem]]]) -> set[str]:
+    """Blocks repeated across enough of the site to be furniture.
+
+    The same reasoning as the PDF adapter's running headers, and the same
+    trade: detected by repetition frequency rather than by position, because
+    where a generator puts its navigation in the DOM says nothing about
+    whether it is content.
+
+    Counted per page rather than per occurrence, so a sidebar listing the same
+    label twice on one page does not count twice toward being furniture.
+    """
+    if len(parsed) < CHROME_MIN_PAGES:
+        return set()
+    seen: dict[str, set[str]] = {}
+    for url, items in parsed:
+        for item in items:
+            text = item.text.strip()
+            if not text or len(text) > CHROME_MAX_CHARS:
+                continue
+            seen.setdefault(_norm(text), set()).add(url)
+    threshold = max(CHROME_MIN_PAGES, int(len(parsed) * CHROME_PAGE_FRACTION))
+    return {norm for norm, pages in seen.items() if len(pages) >= threshold}
+
+
 def build_extraction(
     result: CrawlResult,
     *,
@@ -98,6 +141,10 @@ def build_extraction(
     offset = 0
     unplaced: list[str] = []
 
+    # Parsed up front, because whether a block is chrome is a fact about the
+    # whole site and cannot be decided while looking at one page.
+    parsed: list[tuple[str, list[HtmlItem]]] = []
+    titles: dict[str, str] = {}
     for page in ordered:
         placement = placements.get(page.url)
         if placement is None:
@@ -105,16 +152,24 @@ def build_extraction(
             # it, so this is a defect rather than an ordinary outcome.
             unplaced.append(page.url)
             continue
-
-        page_title = placement.title or page.declared_title
         html_title, items = parse_html(page.body)
-        if not page_title:
-            page_title = html_title or page.url
+        titles[page.url] = placement.title or page.declared_title or html_title or page.url
+        parsed.append((page.url, items))
+
+    chrome = _chrome_texts(parsed)
+    chrome_dropped = 0
+
+    for page_url, items in parsed:
+        placement = placements[page_url]
+        page_title = titles[page_url]
         base = [*placement.ancestry, page_title]
 
         for item in items:
             text = item.text.strip()
             if not text:
+                continue
+            if _norm(text) in chrome:
+                chrome_dropped += 1
                 continue
             blocks.append(
                 Block(
@@ -122,7 +177,7 @@ def build_extraction(
                     locator={"offset": offset},
                     text=text,
                     section=placement.section,
-                    url=page.url,
+                    url=page_url,
                     fragment=item.fragment,
                 )
             )
@@ -141,6 +196,8 @@ def build_extraction(
             "hierarchy_inferred": result.hierarchy.inferred,
             "canonical_merges": len(result.canonical_merges),
             "unplaced_pages": unplaced,
+            "chrome_blocks_dropped": chrome_dropped,
+            "chrome_distinct_blocks": len(chrome),
         },
         "notes": list(result.notes),
     }

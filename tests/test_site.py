@@ -296,3 +296,80 @@ def test_the_site_is_searchable_by_its_own_words(
     ).fetchall()
     assert hits
     assert all(h["url"] for h in hits), "a result must carry an address to cite"
+
+
+# -- cross-page chrome -----------------------------------------------------
+
+
+def test_a_sidebar_repeated_on_every_page_is_stripped(
+    conn: sqlite3.Connection, server: str, tmp_path: Path
+) -> None:
+    """The parse drops <nav> and <footer>; plenty of generators use neither.
+
+    A sidebar rendered as a div full of links survives as a block on every
+    single page, and left in it is a share of the term mass that every chunk
+    matches equally.
+    """
+    names = [f"p{i}" for i in range(8)]
+    sidebar = (
+        '<div class="sidebar"><ul>'
+        "<li>Getting Started</li><li>API Reference</li><li>Changelog</li>"
+        "</ul></div>"
+    )
+    _build_site(server, names)
+    for n in names:
+        ROUTES[f"/docs/{n}"] = (
+            200,
+            {"Content-Type": "text/html"},
+            _page(n.title(), sidebar + PROSE),
+        )
+
+    result = ingest_source(conn, _source(f"{server}/docs", tmp_path))
+    body = " ".join(
+        r["text"] for r in conn.execute("SELECT text FROM chunks WHERE doc_id=?", (result.doc_id,))
+    )
+    assert "Getting Started" not in body
+    assert "API Reference" not in body
+    assert "console stores each cue" in body, "real content must survive"
+    site = (result.diagnostics or {}).get("site")
+    assert isinstance(site, dict) and site["chrome_blocks_dropped"] > 0
+
+
+def test_content_appearing_on_a_couple_of_pages_is_not_chrome(
+    conn: sqlite3.Connection, server: str, tmp_path: Path
+) -> None:
+    """Repetition alone is not furniture; it has to be site-wide."""
+    names = [f"p{i}" for i in range(8)]
+    _build_site(server, names)
+    for n in names[:2]:
+        ROUTES[f"/docs/{n}"] = (
+            200,
+            {"Content-Type": "text/html"},
+            _page(n.title(), "<p>This feature is deprecated since version 4.</p>" + PROSE),
+        )
+
+    result = ingest_source(conn, _source(f"{server}/docs", tmp_path))
+    body = " ".join(
+        r["text"] for r in conn.execute("SELECT text FROM chunks WHERE doc_id=?", (result.doc_id,))
+    )
+    assert "deprecated since version 4" in body
+
+
+def test_a_small_site_is_never_chrome_stripped(
+    conn: sqlite3.Connection, server: str, tmp_path: Path
+) -> None:
+    """Below the floor, repetition is not evidence and the risk dominates."""
+    names = ["a", "b", "c"]
+    _build_site(server, names)
+    for n in names:
+        ROUTES[f"/docs/{n}"] = (
+            200,
+            {"Content-Type": "text/html"},
+            _page(n.title(), "<p>Shared note on every page here.</p>" + PROSE),
+        )
+
+    result = ingest_source(conn, _source(f"{server}/docs", tmp_path))
+    body = " ".join(
+        r["text"] for r in conn.execute("SELECT text FROM chunks WHERE doc_id=?", (result.doc_id,))
+    )
+    assert "Shared note on every page" in body
