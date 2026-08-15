@@ -150,7 +150,9 @@ def page_text(body: bytes) -> str:
     return (soup.body or soup).get_text(" ", strip=True)
 
 
-def not_found_signature(fetcher: Fetcher, origin: str) -> Counter[str] | None:
+def not_found_signature(
+    fetcher: Fetcher, origin: str, *, revalidate: bool = True
+) -> Counter[str] | None:
     """What this site's not-found page looks like, if it answers 200 for one.
 
     Two improbable paths are probed rather than one. A site that soft-404s
@@ -168,7 +170,7 @@ def not_found_signature(fetcher: Fetcher, origin: str) -> Counter[str] | None:
     # mistaken for part of the template.
     for name in ("zqxvj7-nonexistent", "kwmbp3-missingpage"):
         try:
-            res = fetcher.fetch(f"{origin}/{name}")
+            res = fetcher.fetch(f"{origin}/{name}", revalidate=revalidate)
         except FetchError:
             return None
         if res.status != 200:
@@ -220,7 +222,9 @@ def _sitemap_locs(body: bytes) -> tuple[list[str], list[str]]:
     return pages, nested
 
 
-def sitemap_candidates(fetcher: Fetcher, seed: str) -> tuple[list[str], list[str]]:
+def sitemap_candidates(
+    fetcher: Fetcher, seed: str, *, revalidate: bool = True
+) -> tuple[list[str], list[str]]:
     """Every URL the site's sitemaps declare, and notes about getting them."""
     origin = _origin(seed)
     notes: list[str] = []
@@ -242,7 +246,7 @@ def sitemap_candidates(fetcher: Fetcher, seed: str) -> tuple[list[str], list[str
             continue
         seen.add(url)
         try:
-            res = fetcher.fetch(url)
+            res = fetcher.fetch(url, revalidate=revalidate)
         except FetchError as exc:
             notes.append(f"sitemap {url}: {exc}")
             continue
@@ -272,10 +276,12 @@ def _sitemaps_from_robots(fetcher: Fetcher, origin: str) -> list[str]:
     return out
 
 
-def llms_txt_candidates(fetcher: Fetcher, seed: str) -> tuple[list[tuple[str, str]], list[str]]:
+def llms_txt_candidates(
+    fetcher: Fetcher, seed: str, *, revalidate: bool = True
+) -> tuple[list[tuple[str, str]], list[str]]:
     """``(title, url)`` pairs from ``llms.txt``, in the order it lists them."""
     try:
-        res = fetcher.fetch(f"{_origin(seed)}/llms.txt")
+        res = fetcher.fetch(f"{_origin(seed)}/llms.txt", revalidate=revalidate)
     except FetchError as exc:
         return [], [f"llms.txt: {exc}"]
     if res.status != 200:
@@ -311,12 +317,24 @@ def index_page_candidates(html: bytes, base: str) -> list[str]:
 # -- the union -------------------------------------------------------------
 
 
-def discover(fetcher: Fetcher, seed: str, *, seed_page: Fetched | None = None) -> Coverage:
-    """Assemble the page set for ``seed`` from every source that answers."""
+def discover(
+    fetcher: Fetcher,
+    seed: str,
+    *,
+    seed_page: Fetched | None = None,
+    revalidate: bool = True,
+) -> Coverage:
+    """Assemble the page set for ``seed`` from every source that answers.
+
+    ``revalidate=False`` answers entirely from the fetch cache. Re-chunking an
+    already-crawled site must cost nothing, and discovery is as much a part of
+    that as the pages are -- a re-crawl that still refetches the sitemap, the
+    llms.txt and both soft-404 probes is not served from the cache.
+    """
     seed = normalize(seed)
     cov = Coverage()
 
-    sitemap, notes = sitemap_candidates(fetcher, seed)
+    sitemap, notes = sitemap_candidates(fetcher, seed, revalidate=revalidate)
     cov.notes.extend(notes)
     scoped = [normalize(u) for u in sitemap if in_prefix_scope(normalize(u), seed)]
     cov.from_sitemap = set(scoped)
@@ -327,7 +345,7 @@ def discover(fetcher: Fetcher, seed: str, *, seed_page: Fetched | None = None) -
 
     if seed_page is None:
         try:
-            seed_page = fetcher.fetch(seed)
+            seed_page = fetcher.fetch(seed, revalidate=revalidate)
         except FetchError as exc:
             cov.notes.append(f"seed page: {exc}")
             seed_page = None
@@ -335,7 +353,7 @@ def discover(fetcher: Fetcher, seed: str, *, seed_page: Fetched | None = None) -
         # Declared by the seed, so in scope by declaration rather than prefix.
         cov.from_index_page = [u for u in index_page_candidates(seed_page.body, seed)]
 
-    pairs, notes = llms_txt_candidates(fetcher, seed)
+    pairs, notes = llms_txt_candidates(fetcher, seed, revalidate=revalidate)
     cov.notes.extend(notes)
     for title, url in pairs:
         n = normalize(url)
