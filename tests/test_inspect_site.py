@@ -56,7 +56,9 @@ def _inspect(seed: str, tmp_path: Path):
 
 
 def _page(title: str, body: str) -> bytes:
-    return f"<html><head><title>{title}</title></head><body><h1>{title}</h1>{body}</body></html>".encode()
+    return (
+        f"<html><head><title>{title}</title></head><body><h1>{title}</h1>{body}</body></html>"
+    ).encode()
 
 
 PROSE = "<p>" + ("The console stores each cue in a sequence and plays it back. " * 20) + "</p>"
