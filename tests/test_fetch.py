@@ -336,9 +336,11 @@ def test_robots_is_peer_checked_too(server: str, tmp_path: Path) -> None:
     ROUTES["/robots.txt"] = (200, {}, b"User-agent: *\nDisallow:\n")
     ROUTES["/a"] = (200, {}, b"ok")
     cache = fetchcache.connect(tmp_path / "c.db")
-    with Fetcher(cache, guard=lambda u: None, addr_guard=lambda a: False, interval=0.0) as f:
-        # robots is refused rather than trusted, so it records no permissions;
-        # the page fetch then fails its own peer check.
-        with pytest.raises(FetchError):
-            f.fetch(f"{server}/a")
+    # robots is refused rather than trusted, so it records no permissions; the
+    # page fetch then fails its own peer check.
+    with (
+        Fetcher(cache, guard=lambda u: None, addr_guard=lambda a: False, interval=0.0) as f,
+        pytest.raises(FetchError),
+    ):
+        f.fetch(f"{server}/a")
     assert fetchcache.get_robots(cache, "127.0.0.1") == "", "a refused robots must not be trusted"
