@@ -252,15 +252,19 @@ Ordered by blast radius ascending.
 | — | Generate the Go query layer from `python/docsearch/schema.sql` with sqlc |
 | — | Read the store through the generated queries |
 | 3 | Library roots become a list, named in `add_document`'s description |
+| 4 | `urlguard`: scheme, host, resolution, redirect re-validation, uniform error — `internal/urlguard/`, `urlguard.py`, and `testdata/urlguard-addresses.txt` as the shared verdict table |
+| 5 | Fetch cache database and the fetcher: normalization, conditional GET, rate limit, robots, redirects — `fetch.py`, `fetchcache.py` |
+| 6 | Coverage: `sitemap.xml` including index files, `llms.txt`, `robots.txt` directive, index-page link sets, soft-404 detection — `discover.py` |
+| 7 | Hierarchy: sidebar DOM, hub-page heading grouping, URL path depth, and the placement rule for pages no source mentions — `nav.py` |
+
+None of 4–7 is reachable from the CLI or the worker yet: they are libraries with
+tests, and PR 9 is what wires them in. The v5 columns `documents.source_kind`,
+`chunks.url` and `chunks.fragment` are likewise in place and unwritten.
 
 ### Remaining
 
 | # | scope | touches | after |
 |---|---|---|---|
-| 4 | `urlguard`: scheme, host, resolution, redirect re-validation, uniform error | new, Go + Python | — |
-| 5 | Fetch cache database and the fetcher: normalization, conditional GET, rate limit, robots, redirects | new `fetch.py`, cache schema | 4 |
-| 6 | Coverage: `sitemap.xml` including index files, `llms.txt`, `robots.txt` directive, index-page link sets, soft-404 detection | `discover.py` (new) | 5 |
-| 7 | Hierarchy: sidebar DOM, hub-page heading grouping, URL path depth, and the placement rule for pages no source mentions | `nav.py` (new) | 5 |
 | 8 | Crawl orchestration: frontier, scope, budget, resume, progress, cancellation | `crawl.py` (new) | 6, 7 |
 | 9 | The `Source` abstraction: `ingest_source` replaces `ingest_file`; sections from nav position, three-way cross-validation, completeness gate | `site.py` (new), `ingest.py`, `cli.py`, `worker.py`, `structure.py` | 2, 8 |
 | 10 | Cross-page chrome removal | `site.py` | 9 |
