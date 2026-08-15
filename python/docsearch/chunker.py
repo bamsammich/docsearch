@@ -87,6 +87,9 @@ class Chunk:
     image_count: int = 0
     #: 'prose' | 'keyword-reference'
     kind: str = "prose"
+    #: Address this chunk was read from; both None for a local file.
+    url: str | None = None
+    fragment: str | None = None
 
 
 @dataclass(slots=True)
@@ -265,6 +268,10 @@ def _emit(ordinal: int, path: list[str], blks: list[Block], section: str | None)
         page_end=max(page_ends) if page_ends else None,
         printed_page_start=min(printed) if printed else None,
         image_count=sum(b.image_count for b in blks),
+        # Taken from the block the chunk starts at. A chunk may span several
+        # blocks, and where it begins is where a citation should land.
+        url=blks[0].url,
+        fragment=blks[0].fragment,
     )
 
 

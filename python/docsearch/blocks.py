@@ -34,6 +34,12 @@ class Block:
     #: True when the block is a heading line eligible as a subdivision point
     #: (heading-sized but not carrying a section number).
     subdivision: bool = False
+    #: Page this block was read from, for a source addressed by URL. ``None``
+    #: for a local file, which is addressed by its path on the document.
+    url: str | None = None
+    #: In-page anchor, without the leading ``#``. Carries the nearest heading's
+    #: id, so a citation can land on the section rather than the page top.
+    fragment: str | None = None
 
 
 @dataclass(slots=True)

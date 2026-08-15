@@ -12,7 +12,7 @@ import click
 
 from . import db
 from .adapters import UnsupportedFormatError, is_supported
-from .ingest import ProgressFn, ingest_file
+from .ingest import FileSource, ProgressFn, Source, ingest_source, is_url, source_for
 from .inspect import format_report as format_inspect
 from .inspect import inspect_document
 from .verify import format_report, verify_document
@@ -56,22 +56,51 @@ def _collect(path: Path) -> list[Path]:
     return [path]
 
 
+def _cache_path(db_path: str) -> Path:
+    """Raw HTTP responses live beside the index, never inside it.
+
+    Different lifecycle and different reader: the index is served on every
+    request and is the artifact shipped for offline use, while this is
+    worker-only, disposable, and full of bytes that would bloat it forever.
+    """
+    return Path(db_path).with_name("fetch-cache.db")
+
+
+def _sources(target: str, db_path: str) -> list[Source]:
+    """Every source one command-line target names.
+
+    A URL is one site and therefore one document. A directory is still one
+    document per file -- the site model applies to a crawled site, not to any
+    directory that happens to hold Markdown.
+    """
+    if is_url(target):
+        return [source_for(target, cache_path=_cache_path(db_path))]
+    path = Path(target)
+    if not path.exists():
+        raise click.ClickException(f"no such file or directory: {target}")
+    found = _collect(path)
+    if not found:
+        raise click.ClickException(f"no supported files under {path}")
+    return [FileSource(p) for p in found]
+
+
 @click.group()
 @click.version_option(package_name="docsearch")
 def main() -> None:
     """Structure-aware document ingest for a local SQLite FTS5 index."""
 
 
-@main.command()
-@click.argument("path", type=click.Path(exists=True, path_type=Path))
+@main.command(name="add")
+@click.argument("target")
 @click.option("--title", default=None, help="Override the derived document title.")
 @_db_option
-def ingest(path: Path, title: str | None, db_path: str) -> None:
-    """Ingest a file or directory synchronously."""
+def add(target: str, title: str | None, db_path: str) -> None:
+    """Ingest a file, a directory or a documentation site synchronously.
+
+    TARGET is a path, or an http(s) URL to crawl as one document.
+    """
     conn = _open(db_path)
-    targets = _collect(path)
-    if not targets:
-        raise click.ClickException(f"no supported files under {path}")
+    sources = _sources(target, db_path)
 
     def make_progress() -> ProgressFn:
         last_phase = ""
@@ -87,11 +116,11 @@ def ingest(path: Path, title: str | None, db_path: str) -> None:
         return progress
 
     failures = 0
-    for target in targets:
-        click.echo(f"==> {target}")
+    for source in sources:
+        click.echo(f"==> {source.identity()}")
         progress = make_progress()
         try:
-            result = ingest_file(conn, target, title=title, progress=progress)
+            result = ingest_source(conn, source, title=title, progress=progress)
         except UnsupportedFormatError as exc:
             click.echo(f"    skipped: {exc}", err=True)
             continue
@@ -133,6 +162,19 @@ def ingest(path: Path, title: str | None, db_path: str) -> None:
                     click.echo("      both structure sources agree exactly")
                 else:
                     click.echo("      NOT cross-validated: nothing to compare on both sides")
+        site = diag.get("site")
+        if isinstance(site, dict):
+            click.echo(
+                f"    pages: {site.get('pages_fetched')} fetched of "
+                f"{site.get('pages_declared')} known"
+            )
+            if site.get("hierarchy_inferred"):
+                click.echo(
+                    "      hierarchy was INFERRED from URL paths; no navigation source "
+                    "placed enough of the site to be believed"
+                )
+            for reason in list(site.get("unreachable_reasons") or [])[:10]:
+                click.echo(f"      unreachable: {reason}")
         for note in result.report.notes() if result.report else []:
             click.echo(f"    finding: {note}")
         idx = diag.get("index")
@@ -143,6 +185,12 @@ def ingest(path: Path, title: str | None, db_path: str) -> None:
             )
     if failures:
         sys.exit(1)
+
+
+# `ingest` is what this command was called before it could take a URL. Kept as
+# a second name rather than a deprecation: it is in the README, in two service
+# units and in whatever scripts an operator already wrote.
+main.add_command(add, name="ingest")
 
 
 @main.command()
@@ -200,22 +248,19 @@ def inspect_cmd(path: Path) -> None:
 
 
 @main.command()
-@click.argument("path", type=click.Path(exists=True, path_type=Path))
+@click.argument("target")
 @click.option("--title", default=None, help="Override the derived document title.")
 @_db_option
-def enqueue(path: Path, title: str | None, db_path: str) -> None:
-    """Queue a file or directory for the worker."""
+def enqueue(target: str, title: str | None, db_path: str) -> None:
+    """Queue a file, directory or documentation site for the worker."""
     conn = _open(db_path)
-    targets = _collect(path)
-    if not targets:
-        raise click.ClickException(f"no supported files under {path}")
-    for target in targets:
+    for source in _sources(target, db_path):
         cur = conn.execute(
             "INSERT INTO ingest_jobs (source_path, title, status, created_at, updated_at)"
             " VALUES (?,?, 'queued', datetime('now'), datetime('now'))",
-            (str(target.resolve()), title),
+            (source.identity(), title),
         )
-        click.echo(f"queued job {cur.lastrowid}: {target}")
+        click.echo(f"queued job {cur.lastrowid}: {source.identity()}")
 
 
 @main.command()

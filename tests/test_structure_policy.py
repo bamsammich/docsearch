@@ -11,7 +11,7 @@ import pytest
 from docsearch import db, ingest
 from docsearch.blocks import Block, Extraction
 from docsearch.errors import StructureValidationError
-from docsearch.ingest import ingest_file
+from docsearch.ingest import FileSource, ingest_source
 from docsearch.structure import StructureReport, from_diagnostics, scattered_sections
 from docsearch.worker import Worker, WorkerConfig
 
@@ -123,7 +123,7 @@ def test_structure_mismatch_fails_ingest_and_writes_nothing(
     conn: sqlite3.Connection, md_file: Path, mismatching_adapter: None
 ) -> None:
     with pytest.raises(StructureValidationError) as excinfo:
-        ingest_file(conn, md_file)
+        ingest_source(conn, FileSource(md_file))
     assert "2" in str(excinfo.value)
     assert conn.execute("SELECT COUNT(*) c FROM documents").fetchone()["c"] == 0
     assert conn.execute("SELECT COUNT(*) c FROM chunks").fetchone()["c"] == 0

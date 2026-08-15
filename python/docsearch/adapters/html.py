@@ -1,7 +1,15 @@
-"""HTML adapter: structure from h1-h6 nesting."""
+"""HTML adapter: structure from h1-h6 nesting.
+
+:func:`parse` is the shared half. A local ``.html`` file and a page of a
+crawled site are the same parsing problem, and the parts that are easy to get
+wrong -- reading a ``<pre>`` verbatim, not letting a parent re-flatten a nested
+one -- should not exist twice. :mod:`docsearch.site` calls :func:`parse` and
+supplies its own locators, sections and addresses.
+"""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +19,20 @@ from ..blocks import Block, Extraction
 
 _HEADINGS = {f"h{i}": i for i in range(1, 7)}
 _BLOCK_TAGS = ("p", "li", "pre", "blockquote", "td", "dd", "dt")
+
+#: Stripped before parsing. Chrome is not content, and a navigation repeated on
+#: every page of a site is the single largest source of duplicated term mass.
+_CHROME_TAGS = ("script", "style", "nav", "footer")
+
+
+@dataclass(slots=True)
+class HtmlItem:
+    """One block of text, with the heading ancestry above it."""
+
+    heading_path: list[str]
+    text: str
+    #: id of the nearest heading at or above this item, without the '#'.
+    fragment: str | None = None
 
 
 def _code_text(el: Any) -> str:
@@ -31,18 +53,19 @@ def _code_text(el: Any) -> str:
     return "\n".join(lines)
 
 
-def extract(path: Path, progress: object = None) -> Extraction:
-    soup = BeautifulSoup(path.read_text(encoding="utf-8", errors="replace"), "lxml")
-    for tag in soup(["script", "style", "nav", "footer"]):
+def parse(html: bytes | str) -> tuple[str, list[HtmlItem]]:
+    """Return ``(title, items)`` for one HTML document."""
+    soup = BeautifulSoup(html, "lxml")
+    for tag in soup(list(_CHROME_TAGS)):
         tag.decompose()
 
     stack: list[str] = []
-    blocks: list[Block] = []
-    offset = 0
+    items: list[HtmlItem] = []
+    fragment: str | None = None
     body = soup.body or soup
 
     # Code is read out first and the element emptied. A <pre> inside a list
-    # item or table cell is emitted as its own block, so its ancestor must not
+    # item or table cell is emitted as its own item, so its ancestor must not
     # also contribute a flattened copy of it; emptying rather than removing
     # keeps the element in document order for the walk below. Nested <pre> is
     # invalid and would be destroyed by clearing its parent, so only outermost
@@ -64,8 +87,7 @@ def extract(path: Path, progress: object = None) -> Extraction:
             text = next(code_iter, "")
             if not text:
                 continue
-            blocks.append(Block(heading_path=list(stack), locator={"offset": offset}, text=text))
-            offset += len(text) + 1
+            items.append(HtmlItem(heading_path=list(stack), text=text, fragment=fragment))
             continue
 
         text = el.get_text(" ", strip=True)
@@ -77,16 +99,34 @@ def extract(path: Path, progress: object = None) -> Extraction:
             while len(stack) < level - 1:
                 stack.append("")
             stack.append(text)
+            # An anchor is how a citation lands on the section rather than the
+            # top of the page, so it is tracked from the heading that owns it.
+            anchor = str(el.get("id") or "").strip()
+            if not anchor:
+                inner = el.find(attrs={"id": True})
+                anchor = str(inner.get("id")).strip() if inner is not None else ""
+            fragment = anchor or None
             continue
         # Skip nested block tags whose text a parent already contributed.
         if el.find_parent(_BLOCK_TAGS) is not None:
             continue
-        blocks.append(Block(heading_path=list(stack), locator={"offset": offset}, text=text))
-        offset += len(text) + 1
+        items.append(HtmlItem(heading_path=list(stack), text=text, fragment=fragment))
 
-    title = (soup.title.string.strip() if soup.title and soup.title.string else "") or path.stem
+    title = (soup.title.string.strip() if soup.title and soup.title.string else "") or ""
+    return title, items
+
+
+def extract(path: Path, progress: object = None) -> Extraction:
+    title, items = parse(path.read_text(encoding="utf-8", errors="replace"))
+    blocks: list[Block] = []
+    offset = 0
+    for item in items:
+        blocks.append(
+            Block(heading_path=item.heading_path, locator={"offset": offset}, text=item.text)
+        )
+        offset += len(item.text) + 1
     return Extraction(
-        title=title,
+        title=title or path.stem,
         format="html",
         blocks=blocks,
         diagnostics={"structure_source": "h1_h6_nesting"},
