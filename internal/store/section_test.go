@@ -2,7 +2,7 @@ package store
 
 import "testing"
 
-// The Go half of the precision suite that guards SectionMatchSQL. The Python
+// The Go half of the precision suite that guards SectionCovers. The Python
 // half is tests/test_section_resolution.py; one rule in two languages needs
 // two test suites, and these are deliberately the same five cases.
 //

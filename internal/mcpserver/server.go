@@ -1,4 +1,4 @@
-// Package mcpserver registers the six document tools on an MCP server.
+// Package mcpserver registers the seven document tools on an MCP server.
 package mcpserver
 
 import (

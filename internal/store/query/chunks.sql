@@ -27,8 +27,9 @@ SELECT page, text FROM pages
 
 -- Section references resolve component-wise, never by bare string prefix: a
 -- reference to "4" covers "4" and "4.1" and must not touch "41". The trailing
--- dot is what makes it a boundary. Kept identical to store.SectionMatchSQL,
--- which the in-memory index-term boost applies by the same rule.
+-- dot is what makes it a boundary. Kept identical to store.SectionCovers, which
+-- the in-memory index-term boost applies by the same rule, and to
+-- docsearch.db.SECTION_MATCH_SQL, which is this same clause on the Python side.
 -- name: ChunksInSection :many
 SELECT heading_path, text FROM chunks
  WHERE doc_id = ? AND (chunks.section = ? OR chunks.section LIKE ? || '.%')
