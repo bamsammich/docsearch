@@ -129,9 +129,11 @@ def host_allowed(host: str) -> bool:
     Non-ASCII is refused outright, and that is the whole of the fix for a real
     bypass: this rule was comparing the raw string while ``getaddrinfo``
     resolved a different one. Its IDNA path treats U+3002, U+FF0E and U+FF61 as
-    label separators and NFKC-folds fullwidth letters, so ``wiki．internal``
-    failed an ``endswith('.internal')`` test and then resolved as
-    ``wiki.internal``; ``ｌｏｃａｌｈｏｓｔ`` folded to ``localhost``.
+    label separators and NFKC-folds fullwidth letters, so a host written with
+    U+FF0E where the dot belongs failed an ``endswith('.internal')`` test and
+    then resolved as ``wiki.internal``, and one written in fullwidth letters
+    folded to ``localhost``. The vectors themselves are in
+    ``testdata/urlguard-hosts.txt``, where they can be written literally.
 
     Refusing rather than normalizing, because normalizing means reimplementing
     nameprep in two languages and keeping them identical -- the exact failure

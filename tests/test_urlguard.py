@@ -70,7 +70,10 @@ def test_a_unicode_separator_cannot_walk_past_the_suffix_rule() -> None:
     Each of these resolves as its ASCII spelling, so a rule that compares the
     raw string is evaluating a different name than the one dialled.
     """
-    for host in ("wiki．internal", "printer．local", "wiki。internal", "wiki｡internal"):
+    # The ambiguous characters are the subject of the test, so ruff's warning
+    # about them is exactly backwards here.
+    hosts = ("wiki．internal", "printer．local", "wiki。internal", "wiki｡internal")  # noqa: RUF001
+    for host in hosts:
         assert host_allowed(host) is False
         # The name it would actually have resolved to is blocked, which is what
         # makes the raw-string comparison a bypass rather than a curiosity.
