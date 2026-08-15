@@ -276,3 +276,69 @@ def test_a_cache_from_another_version_is_rebuilt(tmp_path: Path) -> None:
     rebuilt = fetchcache.connect(path)
     assert fetchcache.get(rebuilt, "https://x/1") is None, "a stale cache is bandwidth, not data"
     assert int(rebuilt.execute("PRAGMA user_version").fetchone()[0]) == fetchcache.CACHE_VERSION
+
+
+# -- the peer check fails closed ------------------------------------------
+
+
+def test_a_response_from_a_disallowed_peer_is_refused(server: str, tmp_path: Path) -> None:
+    """The rebinding backstop: the name passed, the address it answered from did not."""
+    ROUTES["/a"] = (200, {}, b"secret")
+    cache = fetchcache.connect(tmp_path / "c.db")
+    with (
+        Fetcher(
+            cache,
+            guard=lambda u: None,
+            addr_guard=lambda a: False,
+            interval=0.0,
+            obey_robots=False,
+        ) as f,
+        pytest.raises(FetchError, match="not permitted"),
+    ):
+        f.fetch(f"{server}/a")
+
+
+def test_an_undeterminable_peer_fails_closed(server: str, tmp_path: Path) -> None:
+    """Returning quietly disabled the check with nothing to show for it.
+
+    A transport exposing no connection is not evidence that the peer was
+    acceptable, and treating it that way is the shape of gap that survives
+    review: nothing errors, the body is read, and the only trace is an absence.
+    """
+    ROUTES["/a"] = (200, {}, b"secret")
+    cache = fetchcache.connect(tmp_path / "c.db")
+    with Fetcher(
+        cache, guard=lambda u: None, addr_guard=lambda a: True, interval=0.0, obey_robots=False
+    ) as f:
+        # Strip the extension the check reads, standing in for a transport
+        # that does not expose one.
+        original = f._client.stream
+
+        class _Blind:
+            def __init__(self, cm):
+                self._cm = cm
+
+            def __enter__(self):
+                res = self._cm.__enter__()
+                res.extensions = {}
+                return res
+
+            def __exit__(self, *a):
+                return self._cm.__exit__(*a)
+
+        f._client.stream = lambda *a, **kw: _Blind(original(*a, **kw))  # type: ignore[method-assign]
+        with pytest.raises(FetchError, match="could not be confirmed"):
+            f.fetch(f"{server}/a")
+
+
+def test_robots_is_peer_checked_too(server: str, tmp_path: Path) -> None:
+    """It was the one request nothing verified the origin of."""
+    ROUTES["/robots.txt"] = (200, {}, b"User-agent: *\nDisallow:\n")
+    ROUTES["/a"] = (200, {}, b"ok")
+    cache = fetchcache.connect(tmp_path / "c.db")
+    with Fetcher(cache, guard=lambda u: None, addr_guard=lambda a: False, interval=0.0) as f:
+        # robots is refused rather than trusted, so it records no permissions;
+        # the page fetch then fails its own peer check.
+        with pytest.raises(FetchError):
+            f.fetch(f"{server}/a")
+    assert fetchcache.get_robots(cache, "127.0.0.1") == "", "a refused robots must not be trusted"

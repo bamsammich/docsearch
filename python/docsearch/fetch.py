@@ -186,13 +186,18 @@ class Fetcher:
             body = ""
             try:
                 # Not routed through fetch(): asking robots.txt whether
-                # robots.txt may be fetched does not terminate.
-                self.guard(urljoin(_origin_of(url), "/robots.txt"))
+                # robots.txt may be fetched does not terminate. It is still
+                # streamed and peer-checked, because this was the one request
+                # the fetcher made that nothing verified had arrived from the
+                # address the guard approved.
+                robots_url = urljoin(_origin_of(url), "/robots.txt")
+                self.guard(robots_url)
                 self._wait(host)
-                res = self._client.get(urljoin(_origin_of(url), "/robots.txt"))
-                if res.status_code == 200:
-                    body = res.text
-            except (BlockedURLError, httpx.HTTPError):
+                with self._client.stream("GET", robots_url) as res:
+                    self._check_peer(res)
+                    if res.status_code == 200:
+                        body = res.read().decode("utf-8", errors="replace")
+            except (BlockedURLError, FetchError, httpx.HTTPError):
                 # A host that will not serve robots.txt has not disallowed
                 # anything. Absent is permission, per the standard.
                 body = ""
@@ -218,13 +223,26 @@ class Fetcher:
         Pinning the connection to the address that was validated would close
         the window entirely, and needs the transport to accept a resolved
         address while still presenting the original name for TLS.
+
+        Fails closed when the peer cannot be determined. Returning quietly
+        meant a transport that exposes no address disabled the check silently,
+        which is the shape of gap that survives review: nothing errors, the
+        body is read, and the only evidence is an absence. Every transport this
+        fetcher uses does expose one, so refusing costs nothing and stops a
+        future one from turning the check off by accident.
         """
         stream = res.extensions.get("network_stream")
         if stream is None:
-            return
+            raise FetchError(
+                "the transport exposed no connection to inspect, so the peer address "
+                "could not be confirmed against the guard"
+            )
         info = stream.get_extra_info("server_addr")
         if not info:
-            return
+            raise FetchError(
+                "the connection reported no peer address, so it could not be confirmed "
+                "against the guard"
+            )
         host = info[0] if isinstance(info, tuple) else str(info)
         if not self.addr_guard(str(host)):
             raise FetchError("response arrived from an address that is not permitted")
