@@ -257,23 +257,37 @@ Ordered by blast radius ascending.
 | 6 | Coverage: `sitemap.xml` including index files, `llms.txt`, `robots.txt` directive, index-page link sets, soft-404 detection — `discover.py` |
 | 7 | Hierarchy: sidebar DOM, hub-page heading grouping, URL path depth, and the placement rule for pages no source mentions — `nav.py` |
 
-None of 4–7 is reachable from the CLI or the worker yet: they are libraries with
-tests, and PR 9 is what wires them in. The v5 columns `documents.source_kind`,
-`chunks.url` and `chunks.fragment` are likewise in place and unwritten.
+| 8 | Crawl orchestration: frontier, scope, budget, resume, progress, cancellation — `crawl.py` |
+| 9 | The `Source` abstraction: `ingest_source` replaces `ingest_file`; sections from nav position, completeness gate — `site.py`, `ingest.py`, `cli.py`, `worker.py`, `structure.py` |
+| 10 | Cross-page chrome removal — `site.py` |
+| 11 | `inspect` site mode: live dry run against a URL — `inspect.py` |
+| 13 | `refresh`: conditional re-crawl, and `--from-cache` for a re-chunk that makes no requests — `cli.py` |
+
+`docsearch add <url>` crawls, chunks and indexes a site; `inspect` dry-runs
+one; `refresh` re-crawls it. `ingest` survives as a second name for `add`.
 
 ### Remaining
 
-| # | scope | touches | after |
+| # | scope | touches | blocked on |
 |---|---|---|---|
-| 8 | Crawl orchestration: frontier, scope, budget, resume, progress, cancellation | `crawl.py` (new) | 6, 7 |
-| 9 | The `Source` abstraction: `ingest_source` replaces `ingest_file`; sections from nav position, three-way cross-validation, completeness gate | `site.py` (new), `ingest.py`, `cli.py`, `worker.py`, `structure.py` | 2, 8 |
-| 10 | Cross-page chrome removal | `site.py` | 9 |
-| 11 | `inspect` site mode: live dry run against a URL | `inspect.py` | 8 |
-| 12 | Threshold recalibration against a doc-site corpus | `structure.py`, `verify.py` | 9 |
-| 13 | `refresh`: conditional re-crawl of an ingested site | `crawl.py`, `cli.py` | 9 |
+| 12 | Threshold recalibration against a doc-site corpus | `structure.py`, `verify.py` | a corpus that does not exist yet |
 
-PR 9 is the only change touching `ingest.py`, `cli.py` and `worker.py`
-together, so everything that would collide with it is sequenced behind it.
+**PR 12 cannot be done from the code.** Every constant it would move was
+measured on four manual corpora, and moving them needs doc-site corpora
+measured the same way — which needs the Sphinx and mdBook targets named under
+*Open* below, at least one of them API-reference-heavy. Picking numbers without
+that measurement is precisely what this project does not do, so the two
+constants shipped in the meantime say so in their own comments:
+
+* `SITE_INCOMPLETE_FATAL_SHARE = 0.20` is deliberately loose. It exists to
+  catch an index built over a fraction of a site, not to adjudicate the handful
+  of broken links every large site has — those are reported either way.
+* `CHROME_PAGE_FRACTION = 0.5` and `CHROME_MIN_PAGES = 5` are the PDF adapter's
+  boilerplate rule restated for pages, and were not measured against doc sites.
+
+Everything else the recalibration would touch — `ADDRESSABLE_MIN`,
+`ADDRESSABILITY_MIN_CHUNKS`, `HEADLESS_DEGRADED_RATE` and the `verify` grading
+rates — is unchanged and still carries its manual-corpus provenance.
 
 New dependency: `httpx`. Parsing reuses the `lxml` and `beautifulsoup4`
 already present.

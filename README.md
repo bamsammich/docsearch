@@ -34,15 +34,18 @@ the mise registry — install it from your package manager.
 
 ```bash
 docsearch migrate [--check] [--db PATH]            # bring the schema up to date
-docsearch inspect <path>                           # what structure does it offer?
-docsearch ingest  <path> [--title T] [--db PATH]   # synchronous, file or directory
-docsearch enqueue <path> [--title T] [--db PATH]   # queue for the worker
+docsearch inspect <target>                         # what structure does it offer?
+docsearch add     <target> [--title T]             # synchronous; file, directory or URL
+docsearch enqueue <target> [--title T]             # queue for the worker
+docsearch refresh <doc_id> [--from-cache]          # re-crawl an ingested site
 docsearch worker  [--db PATH] [--root PATH]        # run the daemon
 docsearch jobs    [--db PATH]                      # queue state
 docsearch list    [--db PATH]
 docsearch remove  <doc_id> [--db PATH]
 docsearch verify  <doc_id> [--db PATH]             # did it chunk well enough?
 ```
+
+A target is a path or an `http(s)` URL. `ingest` is a second name for `add`.
 
 Three commands answer three different questions, and a document can pass one
 while failing another:
@@ -82,6 +85,62 @@ fixed windows, and it is the failure this command exists to make loud.
 
 A document is invisible to search until its ingest completes. Every read path
 filters `documents.status='ready'`.
+
+## Ingesting a documentation site
+
+```bash
+docsearch inspect https://docs.example.com/docs    # dry run: crawl, report, write nothing
+docsearch add     https://docs.example.com/docs    # crawl, chunk, index
+docsearch refresh <doc_id>                         # transfers only what changed
+docsearch refresh <doc_id> --from-cache            # re-chunk, no requests at all
+```
+
+**One site is one document.** Its navigation declares which sections exist and
+how they nest, exactly as a PDF's embedded outline does, so each page becomes
+an authoritative section keyed by its position in the nav tree and the page's
+own `h1`–`h6` nesting subdivides beneath it. The chunker is untouched: a page
+is a `Block.section` it already knows what to do with. Results carry the URL
+and the in-page anchor they were read from, so an answer can be cited.
+
+**Which pages exist and how they nest are different questions**, answered from
+different sources, because neither source answers both. Coverage comes from
+`sitemap.xml`, the seed page's own links and `llms.txt`, unioned — each is
+incomplete in its own way. Hierarchy comes from a rendered sidebar, a hub
+page's heading grouping, or URL path depth.
+
+**A hierarchy source is checked against coverage before it is believed.** One
+probed target renders 19 sidebar links against 210 pages because its generator
+collapses categories in the browser; believing it would index a tenth of the
+site under a confident-looking tree. Below half the page set, the source is
+rejected and pages are nested by URL path instead — reported as inferred, with
+nothing corroborating it.
+
+**Pages no navigation source mentions are placed, never dropped.** On one
+probed target that is 41 of 210 pages including every command reference.
+
+**A crawl that mostly failed is refused rather than indexed.** An index over a
+fraction of a site is legally formed, internally consistent, and answers
+confidently from the part it happens to hold — and nothing a caller can see
+reveals the rest is missing. A handful of broken links is ordinary and is
+reported; past a share of them the ingest fails. That threshold is provisional
+and says so in the code: it wants a doc-site corpus that does not exist yet.
+
+Fetching obeys `robots.txt`, spaces requests to one host, identifies itself,
+and holds raw responses in a **separate, disposable database** beside the
+index — which is what makes `--from-cache` re-chunk a whole site offline, and
+what makes a cancelled crawl resume rather than restart.
+
+**The URL is a security boundary**, held to the standard the library roots are.
+Scheme, host and every resolved address are validated before a request, on
+every redirect hop, and again in the worker — a job row is not proof that
+anything validated it. The rules live in `internal/urlguard` and
+`python/docsearch/urlguard.py` with `testdata/urlguard-addresses.txt` as the
+table both must agree on, because two implementations of one rule drift.
+Every rejection returns the same error, so the fetcher cannot be used to map
+an internal network.
+
+Client-rendered pages are named by `inspect` rather than ingested as empty
+shells. Headless rendering is not implemented.
 
 ## Schema migrations
 
