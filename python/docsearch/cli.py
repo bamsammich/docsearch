@@ -12,7 +12,15 @@ import click
 
 from . import db
 from .adapters import UnsupportedFormatError, is_supported
-from .ingest import FileSource, ProgressFn, Source, ingest_source, is_url, source_for
+from .ingest import (
+    FileSource,
+    ProgressFn,
+    SiteSource,
+    Source,
+    ingest_source,
+    is_url,
+    source_for,
+)
 from .inspect import format_report as format_inspect
 from .inspect import inspect_document, inspect_site
 from .verify import format_report, verify_document
@@ -389,6 +397,66 @@ def jobs(db_path: str) -> None:
             click.echo(f"        error: {r['error']}")
         for line in _warning_lines(r["warnings"]):
             click.echo(f"        warning: {line}")
+
+
+@main.command()
+@click.argument("doc_id")
+@click.option("--title", default=None, help="Override the derived document title.")
+@click.option(
+    "--from-cache",
+    is_flag=True,
+    help="Re-chunk from the fetch cache without making a single request.",
+)
+@_db_option
+def refresh(doc_id: str, title: str | None, from_cache: bool, db_path: str) -> None:
+    """Re-crawl an ingested site, transferring only what changed.
+
+    Conditional requests mean a site whose pages are unchanged costs one round
+    trip each and no bodies at all. With --from-cache nothing is requested:
+    that is what re-indexing after a chunker change wants, and it works with
+    the network disconnected.
+
+    The title is re-derived from the site unless --title is given, so an
+    earlier override is not carried forward silently.
+    """
+    conn = _open(db_path)
+    row = conn.execute(
+        "SELECT source_path, source_kind FROM documents WHERE doc_id = ?", (doc_id,)
+    ).fetchone()
+    if row is None:
+        raise click.ClickException(f"no such document: {doc_id}")
+    if row["source_kind"] != "site":
+        raise click.ClickException(
+            f"{doc_id} was ingested from a file, not a site. Re-run `docsearch add "
+            f"{row['source_path']}` instead; a file has nothing to re-crawl."
+        )
+
+    source = SiteSource(
+        seed=row["source_path"],
+        cache_path=_cache_path(db_path),
+        revalidate=not from_cache,
+    )
+    click.echo(f"==> {row['source_path']}" + ("  (from cache)" if from_cache else ""))
+
+    last = ""
+
+    def progress(phase: str, cur: int, tot: int) -> None:
+        nonlocal last
+        line = f"    {phase:<8} {cur}/{tot}" if tot else f"    {phase}"
+        if line != last:
+            last = line
+            click.echo(line, err=True)
+
+    try:
+        result = ingest_source(conn, source, title=title, progress=progress)
+    except Exception as exc:
+        raise click.ClickException(str(exc)) from None
+
+    click.echo(f"    {result.outcome}: {result.doc_id} ({result.chunk_count} chunks)")
+    if result.outcome == "unchanged":
+        click.echo("    nothing on the site changed; the index is already current")
+    for note in result.report.notes() if result.report else []:
+        click.echo(f"    finding: {note}")
 
 
 @main.command()

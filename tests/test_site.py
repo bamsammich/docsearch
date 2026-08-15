@@ -17,15 +17,18 @@ from pathlib import Path
 import pytest
 
 from docsearch.chunker import MIN_TOKENS
+from docsearch.db import delete_document_rows
 from docsearch.errors import StructureValidationError
 from docsearch.ingest import SiteSource, ingest_source
 from docsearch.tokens import estimate_tokens
 
 ROUTES: dict[str, tuple[int, dict[str, str], bytes]] = {}
+HITS: list[str] = []
 
 
 class _Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
+        HITS.append(self.path)
         status, headers, body = ROUTES.get(self.path, (404, {}, b"<html><body>gone</body></html>"))
         self.send_response(status)
         for k, v in headers.items():
@@ -41,6 +44,7 @@ class _Handler(BaseHTTPRequestHandler):
 @pytest.fixture
 def server() -> Iterator[str]:
     ROUTES.clear()
+    HITS.clear()
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     try:
@@ -373,3 +377,45 @@ def test_a_small_site_is_never_chrome_stripped(
         r["text"] for r in conn.execute("SELECT text FROM chunks WHERE doc_id=?", (result.doc_id,))
     )
     assert "Shared note on every page" in body
+
+
+# -- refresh ---------------------------------------------------------------
+
+
+def test_rechunking_from_the_cache_makes_no_requests(
+    conn: sqlite3.Connection, server: str, tmp_path: Path
+) -> None:
+    """What re-indexing after a chunker change wants, and it works offline.
+
+    A chunker change should re-index a whole site with no requests at all --
+    one of the four things the fetch cache exists to buy.
+    """
+    _build_site(server, ["install", "configure", "commands"])
+    first = ingest_source(conn, _source(f"{server}/docs", tmp_path))
+    # Dropped through the one function that gets the ordering right: the FTS
+    # index is maintained by a trigger on chunks, so they cannot go last.
+    delete_document_rows(conn, first.doc_id)
+    HITS.clear()
+
+    again = ingest_source(conn, _source(f"{server}/docs", tmp_path, revalidate=False))
+    assert HITS == [], "a cached re-chunk must not touch the network"
+    assert again.chunk_count == first.chunk_count
+
+
+def test_a_refreshed_site_picks_up_a_changed_page(
+    conn: sqlite3.Connection, server: str, tmp_path: Path
+) -> None:
+    _build_site(server, ["install", "configure"])
+    ingest_source(conn, _source(f"{server}/docs", tmp_path))
+    ROUTES["/docs/configure"] = (
+        200,
+        {"Content-Type": "text/html"},
+        _page("Configure", "<p>A newly documented calibration procedure.</p>" * 20),
+    )
+    after = ingest_source(conn, _source(f"{server}/docs", tmp_path))
+
+    assert after.outcome == "replaced"
+    hit = conn.execute(
+        "SELECT COUNT(*) c FROM chunks_fts WHERE chunks_fts MATCH 'calibration'"
+    ).fetchone()["c"]
+    assert hit, "the refreshed page is not searchable"
