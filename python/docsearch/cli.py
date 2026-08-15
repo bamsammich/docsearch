@@ -14,7 +14,7 @@ from . import db
 from .adapters import UnsupportedFormatError, is_supported
 from .ingest import FileSource, ProgressFn, Source, ingest_source, is_url, source_for
 from .inspect import format_report as format_inspect
-from .inspect import inspect_document
+from .inspect import inspect_document, inspect_site
 from .verify import format_report, verify_document
 from .worker import (
     DEFAULT_LEASE_SECONDS,
@@ -233,12 +233,24 @@ def migrate(db_path: str, check: bool) -> None:
 
 
 @main.command(name="inspect")
-@click.argument("path", type=click.Path(exists=True, path_type=Path))
-def inspect_cmd(path: Path) -> None:
-    """Report what structure a document offers, without ingesting it."""
-    reports = [inspect_document(p) for p in _collect(path)]
+@click.argument("target")
+@_db_option
+def inspect_cmd(target: str, db_path: str) -> None:
+    """Report what structure a target offers, without ingesting it.
+
+    TARGET is a path, or an http(s) URL. A URL is crawled live -- every
+    question worth asking about a site is a question about what the server
+    actually returns -- but nothing is written to the index.
+    """
+    if is_url(target):
+        reports = [inspect_site(target, cache_path=_cache_path(db_path))]
+    else:
+        path = Path(target)
+        if not path.exists():
+            raise click.ClickException(f"no such file or directory: {target}")
+        reports = [inspect_document(p) for p in _collect(path)]
     if not reports:
-        raise click.ClickException(f"no supported files under {path}")
+        raise click.ClickException(f"no supported files under {target}")
     for i, rep in enumerate(reports):
         if i:
             click.echo("")

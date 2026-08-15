@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .adapters import UnsupportedFormatError, for_path
+from .adapters.html import parse as parse_html
+from .structure import SITE_INCOMPLETE_FATAL_SHARE
 from .tokens import estimate_tokens, uncalibrated_letter_share
 
 #: A document with a text layer on fewer than this share of pages is scanned
@@ -38,7 +40,8 @@ class Finding:
 
 @dataclass(slots=True)
 class InspectReport:
-    path: Path
+    #: A path for a file, a seed URL for a site.
+    target: str
     format: str
     page_count: int | None = None
     predicted_source: str = "unknown"
@@ -48,6 +51,10 @@ class InspectReport:
     @property
     def blocked(self) -> bool:
         return any(f.level == "blocked" for f in self.findings)
+
+    @property
+    def display(self) -> str:
+        return self.target if "://" in self.target else Path(self.target).name
 
 
 def _pdf_report(path: Path, rep: InspectReport) -> None:
@@ -205,17 +212,193 @@ def _pdf_report(path: Path, rep: InspectReport) -> None:
     doc.close()
 
 
+#: A page yielding less extractable text than this, while carrying far more
+#: script than text, is rendered in the browser. Ingesting it stores an empty
+#: shell that looks like a successful page.
+CLIENT_RENDERED_MAX_TEXT_CHARS = 200
+
+#: Script bytes per character of extractable text, above which the page is
+#: mostly application rather than document.
+CLIENT_RENDERED_SCRIPT_RATIO = 4.0
+
+
+def _client_rendered(body: bytes) -> bool:
+    """Whether a page's content arrives only once a browser runs it.
+
+    Named rather than ingested: an empty shell that reached status 'ready' is
+    indistinguishable from a page that genuinely says little, and headless
+    rendering is a follow-up rather than a dependency in the critical path.
+    Both probed targets pre-render, so this reports rather than blocks.
+    """
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(body, "lxml")
+    script_chars = sum(len(s.get_text()) for s in soup.find_all("script"))
+    for tag in soup(["script", "style"]):
+        tag.decompose()
+    text_chars = len((soup.body or soup).get_text(" ", strip=True))
+    if text_chars > CLIENT_RENDERED_MAX_TEXT_CHARS:
+        return False
+    return script_chars >= max(1, text_chars) * CLIENT_RENDERED_SCRIPT_RATIO
+
+
+def inspect_site(
+    seed: str,
+    *,
+    cache_path: Path,
+    max_pages: int = 500,
+    guard: object = None,
+    addr_guard: object = None,
+    interval: float | None = None,
+) -> InspectReport:
+    """Crawl ``seed`` and report what ingest would make of it, writing nothing.
+
+    A live dry run: it fetches, because every question worth asking about a
+    site -- how many pages there are, whether a navigation places them, whether
+    they carry text at all -- is a question about what the server actually
+    returns.
+    """
+    from . import fetchcache
+    from .crawl import crawl
+    from .fetch import DEFAULT_INTERVAL, Fetcher
+    from .site import chrome_texts
+    from .urlguard import BlockedURLError, addr_allowed, check
+
+    rep = InspectReport(target=seed, format="site")
+    add = rep.findings.append
+
+    real_guard = guard or check
+    try:
+        real_guard(seed)  # type: ignore[operator]
+    except BlockedURLError:
+        add(
+            Finding(
+                "blocked",
+                "address",
+                "this URL is not permitted. Only public http(s) addresses are fetched: "
+                "loopback, private ranges, link-local and local-only name suffixes are "
+                "refused, because the server can reach what the caller cannot.",
+            )
+        )
+        return rep
+
+    cache = fetchcache.connect(cache_path)
+    with Fetcher(
+        cache,
+        guard=real_guard,  # type: ignore[arg-type]
+        addr_guard=addr_guard or addr_allowed,  # type: ignore[arg-type]
+        interval=DEFAULT_INTERVAL if interval is None else interval,
+    ) as fetcher:
+        result = crawl(fetcher, seed, max_pages=max_pages)
+
+    rep.page_count = len(result.pages)
+    sources = result.coverage.sources
+    if not result.pages:
+        add(
+            Finding(
+                "blocked",
+                "coverage",
+                "no page of this site could be fetched. "
+                + ("; ".join(result.notes) or "nothing answered at the seed URL."),
+            )
+        )
+        return rep
+
+    add(
+        Finding(
+            "ok" if sources else "warn",
+            "coverage",
+            f"{len(result.pages)} page(s) fetched. Sources that answered: "
+            + (", ".join(sources) if sources else "none; the page set came from following links")
+            + ".",
+        )
+    )
+
+    share = result.unreachable_share
+    if result.unreachable:
+        add(
+            Finding(
+                "blocked" if share >= SITE_INCOMPLETE_FATAL_SHARE else "warn",
+                "reachability",
+                f"{len(result.unreachable)} of {result.declared} known page(s) ({share:.0%}) "
+                f"could not be fetched. At or above {SITE_INCOMPLETE_FATAL_SHARE:.0%} the "
+                f"ingest is refused rather than producing an index over part of a site. "
+                f"First few: " + "; ".join(f"{u} ({why})" for u, why in result.unreachable[:3]),
+            )
+        )
+
+    hierarchy = result.hierarchy
+    rep.predicted_source = hierarchy.source
+    if hierarchy.inferred:
+        rep.predicted_tier = "inferred, no source to check it against"
+        add(
+            Finding(
+                "warn",
+                "hierarchy",
+                "no navigation source placed enough of the page set to be believed, so "
+                "pages will be nested by URL path. That is inference: it keeps a command "
+                "reference together, but nothing corroborates it.",
+            )
+        )
+    else:
+        rep.predicted_tier = "declared, recovered by parsing"
+        add(
+            Finding(
+                "ok",
+                "hierarchy",
+                f"'{hierarchy.source}' places the page set and will supply each page's "
+                f"section number and ancestry.",
+            )
+        )
+    if hierarchy.placed_by_path:
+        add(
+            Finding(
+                "warn",
+                "unplaced pages",
+                f"{len(hierarchy.placed_by_path)} page(s) are named by no navigation source "
+                f"and will be nested by URL path instead. They are placed, never dropped -- "
+                f"dropping them is how a command reference goes missing from an index that "
+                f"reports success.",
+            )
+        )
+
+    shells = [url for url, page in result.pages.items() if _client_rendered(page.body)]
+    if shells:
+        add(
+            Finding(
+                "warn",
+                "client-rendered",
+                f"{len(shells)} page(s) carry far more script than text and are rendered in "
+                f"the browser. Ingesting them stores an empty shell that looks like a "
+                f"successful page. First few: " + ", ".join(shells[:3]),
+            )
+        )
+
+    parsed = [(url, parse_html(page.body)[1]) for url, page in result.pages.items()]
+    chrome = chrome_texts(parsed)
+    if chrome:
+        add(
+            Finding(
+                "ok",
+                "page furniture",
+                f"{len(chrome)} block(s) repeat across at least half the site and will be "
+                f"stripped as navigation before chunking.",
+            )
+        )
+    return rep
+
+
 def inspect_document(path: Path) -> InspectReport:
     """Report what structure could be derived from ``path``, without ingesting."""
     try:
         for_path(path)
     except UnsupportedFormatError as exc:
-        rep = InspectReport(path=path, format="unsupported")
+        rep = InspectReport(target=str(path), format="unsupported")
         rep.findings.append(Finding("blocked", "format", str(exc)))
         return rep
 
     suffix = path.suffix.lower()
-    rep = InspectReport(path=path, format=suffix.lstrip("."))
+    rep = InspectReport(target=str(path), format=suffix.lstrip("."))
     if suffix == ".pdf":
         _pdf_report(path, rep)
     else:
@@ -233,9 +416,11 @@ def inspect_document(path: Path) -> InspectReport:
 
 
 def format_report(rep: InspectReport) -> str:
-    out = [f"file        {rep.path.name}", f"format      {rep.format}"]
+    label = "site" if rep.format == "site" else "file"
+    out = [f"{label:<11} {rep.display}", f"format      {rep.format}"]
     if rep.page_count is not None:
-        out.append(f"pages       {rep.page_count}")
+        unit = "pages" if rep.format != "site" else "pages found"
+        out.append(f"{unit:<11} {rep.page_count}")
     out.append("")
     for f in rep.findings:
         out.append(f"[{f.level.upper():^7}] {f.label}")

@@ -31,7 +31,7 @@ from .adapters.html import parse as parse_html
 from .blocks import Block, Extraction
 from .crawl import CrawlResult
 
-__all__ = ["build_extraction", "site_title"]
+__all__ = ["build_extraction", "chrome_texts", "site_title"]
 
 _WS = re.compile(r"\s+")
 
@@ -97,7 +97,7 @@ def _page_path(base: list[str], item_path: list[str], page_title: str) -> list[s
     return base + inner
 
 
-def _chrome_texts(parsed: list[tuple[str, list[HtmlItem]]]) -> set[str]:
+def chrome_texts(parsed: list[tuple[str, list[HtmlItem]]]) -> set[str]:
     """Blocks repeated across enough of the site to be furniture.
 
     The same reasoning as the PDF adapter's running headers, and the same
@@ -156,7 +156,7 @@ def build_extraction(
         titles[page.url] = placement.title or page.declared_title or html_title or page.url
         parsed.append((page.url, items))
 
-    chrome = _chrome_texts(parsed)
+    chrome = chrome_texts(parsed)
     chrome_dropped = 0
 
     for page_url, items in parsed:
