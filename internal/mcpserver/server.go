@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/bamsammich/docsearch/internal/libroot"
 	"github.com/bamsammich/docsearch/internal/store"
+	"github.com/bamsammich/docsearch/internal/urlguard"
 )
 
 // Deps are what the tools need to do their work.
@@ -26,6 +28,10 @@ type Deps struct {
 	// tool usable only on files a person had already staged.
 	LibraryRoots []string
 	Log          *slog.Logger
+	// Resolver looks up hosts for the address guard. nil takes the system
+	// resolver; tests supply their own, the same way urlguard's own suite
+	// does, because the guard refuses every address a test server can bind.
+	Resolver urlguard.Resolver
 }
 
 // toolMaxK is the search tool's documented result cap.
@@ -55,6 +61,26 @@ func describeRoots(roots []string) string {
 			". A file elsewhere has to be copied into one of them first; tell the user " +
 			"rather than guessing at another path."
 	}
+}
+
+// describeAddDocument is the tool's whole description, assembled where it can
+// be read by a test. A caller holding a URL has no reason to try one unless
+// the description says it is accepted, and a caller holding a path outside the
+// roots has nowhere to go unless it names them.
+func describeAddDocument(roots []string) string {
+	return "Queue a document or a documentation site for ingest and return immediately.\n\n" +
+		"Ingest is ASYNCHRONOUS and slow: a large PDF or a site of any size takes minutes " +
+		"to tens of minutes. This call only enqueues the job. Nothing is searchable when " +
+		"it returns. Tell the user it has been queued, not that it is ready, and poll " +
+		"ingest_status to find out when it completes.\n\n" +
+		"'target' is either a filesystem path or an http(s) URL.\n\n" +
+		"A URL is crawled as ONE document: the site's own navigation supplies the section " +
+		"structure, every page becomes a section of it, and results carry the page URL and " +
+		"anchor so an answer can be cited. Pass the documentation root rather than a " +
+		"single page — https://example.com/docs, not https://example.com/docs/install — " +
+		"because the crawl is scoped from what the seed declares. Only public addresses " +
+		"are fetched; private, loopback and local-only names are refused.\n\n" +
+		describeRoots(roots)
 }
 
 var supportedSuffixes = map[string]bool{
@@ -124,12 +150,7 @@ func New(d Deps) *mcp.Server {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "add_document",
-		Description: "Queue a document for ingest and return immediately.\n\n" +
-			"Ingest is ASYNCHRONOUS and slow: a large PDF can take tens of minutes. This " +
-			"call only enqueues the job. The document will NOT be searchable when this " +
-			"returns. Tell the user it has been queued, not that it is ready, and poll " +
-			"ingest_status to find out when it completes.\n\n" +
-			describeRoots(d.LibraryRoots),
+		Description: describeAddDocument(d.LibraryRoots),
 	}, d.addDocument)
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -323,8 +344,22 @@ func (d Deps) getContext(ctx context.Context, _ *mcp.CallToolRequest,
 // -- add_document ---------------------------------------------------------
 
 type addDocumentInput struct {
-	Path  string `json:"path" jsonschema:"path to a file or directory inside the library root"`
-	Title string `json:"title,omitempty" jsonschema:"override the derived document title"`
+	Target string `json:"target" jsonschema:"a file or directory inside a library root, or an http(s) URL of a documentation site"`
+	Title  string `json:"title,omitempty" jsonschema:"override the derived document title"`
+}
+
+// isURL reports whether a target names something to fetch rather than a path
+// on disk.
+//
+// Any scheme at all counts, not only http and https. A path never carries one,
+// so anything that does was meant as a URL and belongs in front of the address
+// guard -- which refuses file:, gopher: and the rest with the same error it
+// gives everything else. Routing them to the path resolver instead would have
+// it interpret "file:///etc/passwd" as a relative path, which is a strange way
+// to reach the same refusal and a worse one to reason about.
+func isURL(target string) bool {
+	u, err := url.Parse(target)
+	return err == nil && u.Scheme != ""
 }
 
 type queuedJob struct {
@@ -341,10 +376,40 @@ type addDocumentOutput struct {
 
 func (d Deps) addDocument(ctx context.Context, _ *mcp.CallToolRequest,
 	in addDocumentInput) (*mcp.CallToolResult, addDocumentOutput, error) {
-	if in.Path == "" {
-		return nil, addDocumentOutput{}, errors.New("path is required")
+	if in.Target == "" {
+		return nil, addDocumentOutput{}, errors.New("target is required")
 	}
-	resolved, err := libroot.Resolve(d.LibraryRoots, in.Path)
+
+	if isURL(in.Target) {
+		// Validated here as well as in the worker, and again on every redirect
+		// hop inside the fetcher. Three enforcement points, none of which may
+		// assume another ran: a job row is not proof that anything checked it,
+		// and this is the only one that sees the caller.
+		if _, err := urlguard.Check(ctx, in.Target, d.Resolver); err != nil {
+			// One error for every rejection, exactly as the path branch does.
+			// Telling a caller that a host resolved but privately, rather than
+			// not at all, turns this tool into a network scanner.
+			d.Log.Warn("add_document rejected a URL the address guard refused")
+			return nil, addDocumentOutput{}, urlguard.ErrBlocked
+		}
+		// Enqueued as given. Canonicalising a URL is the fetcher's rule and it
+		// lives in one implementation; a second one here is how the two drift.
+		// The worker normalises before it keys replacement on the result.
+		id, pos, err := d.Store.Enqueue(ctx, in.Target, in.Title)
+		if err != nil {
+			return nil, addDocumentOutput{}, err
+		}
+		return nil, addDocumentOutput{
+			Jobs: []queuedJob{
+				{JobID: id, Status: "queued", PositionInQueue: pos, SourcePath: in.Target},
+			},
+			Note: "Queued one site. The whole site is crawled and indexed as a single " +
+				"document, which takes minutes and is not searchable until it finishes. " +
+				"Poll ingest_status for progress.",
+		}, nil
+	}
+
+	resolved, err := libroot.Resolve(d.LibraryRoots, in.Target)
 	if err != nil {
 		// One error for every rejection. Distinguishing "outside the root"
 		// from "does not exist" would make this tool a filesystem probe.
