@@ -149,12 +149,29 @@ def _same_parent(a: _Unit, b: _Unit) -> bool:
 
 
 def _merge_small(units: list[_Unit]) -> list[_Unit]:
-    """Merge sub-``MIN_TOKENS`` units forward, never across a declared boundary."""
+    """Merge sub-``MIN_TOKENS`` units forward, never across a declared boundary.
+
+    What counts as declared is the boundary *between* two units, not the fact
+    that a unit carries a section. Merging is refused when the next unit sits
+    in a different section, because that is the line the document drew; two
+    units inside one section were separated by a heading, which is not.
+
+    The distinction is invisible for a paginated format, where a section holds
+    exactly one unit, so every merge candidate faces a different section and
+    the rule reads the same as "never merge a numbered unit".
+
+    A site is where it matters. The section is the page and every heading on
+    that page shares it, so treating each as declared left them unmergeable:
+    measured across five documentation sites, Resolume's 120 pages came back as
+    4,272 chunks at a median of 16 tokens -- shredded past the point of
+    answering anything, and silent, because grade() excludes numbered chunks
+    from its fragmentation check and every chunk of a site is numbered.
+    """
     out: list[_Unit] = []
     i = 0
     while i < len(units):
         cur = units[i]
-        if cur.authoritative or cur.tokens >= MIN_TOKENS:
+        if cur.tokens >= MIN_TOKENS:
             out.append(cur)
             i += 1
             continue
@@ -162,12 +179,14 @@ def _merge_small(units: list[_Unit]) -> list[_Unit]:
         while (
             j < len(units)
             and cur.tokens < MIN_TOKENS
-            and not units[j].authoritative
+            # Same section: the heading between them is the document's, but the
+            # boundary is not one it declared.
+            and units[j].section == cur.section
             and _same_parent(cur, units[j])
         ):
             cur = _Unit(
                 key=cur.key,
-                section=None,
+                section=cur.section,
                 heading_path=cur.heading_path[:-1] or cur.heading_path,
                 blocks=cur.blocks + units[j].blocks,
             )
