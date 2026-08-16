@@ -55,6 +55,9 @@ type Resolver interface {
 // languages and between versions about what counts as "private", and this
 // boundary is enforced in two languages that have to agree exactly.
 var blockedPrefixes = []netip.Prefix{
+	netip.MustParsePrefix("0.0.0.0/8"),       // "this network"; IsUnspecified covers only 0.0.0.0
+	netip.MustParsePrefix("2001::/23"),       // IETF protocol assignments, incl. Teredo and ORCHID
+	netip.MustParsePrefix("3fff::/20"),       // documentation (RFC 9637)
 	netip.MustParsePrefix("100.64.0.0/10"),   // CGNAT, and where Tailscale lives
 	netip.MustParsePrefix("192.0.0.0/24"),    // IETF protocol assignments
 	netip.MustParsePrefix("192.0.2.0/24"),    // TEST-NET-1
@@ -66,6 +69,28 @@ var blockedPrefixes = []netip.Prefix{
 	netip.MustParsePrefix("2001:db8::/32"),   // documentation
 	netip.MustParsePrefix("2002::/16"),       // 6to4, encodes an IPv4 address
 	netip.MustParsePrefix("2001::/32"),       // Teredo, tunnels to IPv4
+}
+
+// routableWithin are allocations carved back out of a blocked prefix because
+// they are globally routable despite sitting inside it.
+//
+// IANA assigned each of these out of 2001::/23 after that block was set aside
+// for protocol assignments, and CPython's ipaddress carries the same six as
+// exceptions to is_private. Without them Go refuses addresses Python permits,
+// which is the same drift as before pointing the other way.
+//
+// This is the seam to watch. Both sides are tracking one IANA registry through
+// two hand-maintained lists, and a future assignment moves whichever list is
+// updated first. The durable fix is to stop calling is_private/is_reserved on
+// the Python side and drive both languages from one written-out list; until
+// then the shared vector files are what catches the drift.
+var routableWithin = []netip.Prefix{
+	netip.MustParsePrefix("2001:1::1/128"),   // PCP anycast (RFC 7723)
+	netip.MustParsePrefix("2001:1::2/128"),   // NAT64/DNS64 discovery (RFC 8155)
+	netip.MustParsePrefix("2001:3::/32"),     // AMT (RFC 7450)
+	netip.MustParsePrefix("2001:4:112::/48"), // AS112-v6 (RFC 7535)
+	netip.MustParsePrefix("2001:20::/28"),    // ORCHIDv2 (RFC 7343)
+	netip.MustParsePrefix("2001:30::/28"),    // drone remote ID (RFC 9374)
 }
 
 // globalUnicastV6 is the only IPv6 space that carries allocated, routable
@@ -108,6 +133,11 @@ func AddrAllowed(addr netip.Addr) bool {
 	}
 	if a.Is6() && !globalUnicastV6.Contains(a) {
 		return false
+	}
+	for _, p := range routableWithin {
+		if p.Contains(a) {
+			return true
+		}
 	}
 	for _, p := range blockedPrefixes {
 		// A v4 prefix cannot contain a v6 address and vice versa, so the
