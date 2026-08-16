@@ -266,11 +266,23 @@ Ordered by blast radius ascending.
 `docsearch add <url>` crawls, chunks and indexes a site; `inspect` dry-runs
 one; `refresh` re-crawls it. `ingest` survives as a second name for `add`.
 
+| 12 | Threshold recalibration, measured against a five-site corpus — the constants hold unchanged; two chunker defects found instead ([site-corpus-calibration.md](../research/site-corpus-calibration.md)) |
+
+Every PR in the plan is implemented.
+
 ### Remaining
 
-| # | scope | touches | blocked on |
-|---|---|---|---|
-| 12 | Threshold recalibration against a doc-site corpus | `structure.py`, `verify.py` | a corpus that does not exist yet |
+Two defects the corpus measurement surfaced, neither in scope for the PR that
+found them:
+
+| scope | why it matters |
+|---|---|
+| the content digest covers fetched bytes only, so `refresh --from-cache` cannot re-chunk after a code change | re-indexing a site with no requests is a claimed capability of the fetch cache and does not work |
+| `grade()`'s fragmentation check excludes numbered chunks, and every chunk of a site is numbered | a site shredded to a 16-token median produced no finding at all |
+
+And one scoping question, which wants more than one hand-built site to settle:
+a seed's declared links are in scope by declaration, which is what makes the
+hub-page shape work at all and also admits Resolume's product catalogue.
 
 **PR 12 cannot be done from the code.** Every constant it would move was
 measured on four manual corpora, and moving them needs doc-site corpora
