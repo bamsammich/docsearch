@@ -203,12 +203,19 @@ an in-flight job can checkpoint or roll back instead of being killed mid-write.
 | Origin allowlist | `--allowed-origins` | `DOCSEARCH_ALLOWED_ORIGINS` |
 | permit public bind | `--allow-public-bind` | — |
 
-**The library roots are a security boundary.** `add_document` accepts a path
+**The library roots are a security boundary.** `add_document` accepts a target
 that arrives in a tool call, over a network endpoint, and may have been
-suggested by the content of a document rather than typed by a person. Paths are
+suggested by the content of a document rather than typed by a person. A path is
 resolved through symlinks and confirmed inside one of the roots; every
 rejection returns the same error, so the tool cannot be used to probe for
 files.
+
+**A target may also be an `http(s)` URL**, crawled as one document. It is held
+to the same standard: scheme, host and every resolved address are validated at
+the tool boundary before anything is queued, again in the worker — a job row is
+not proof that anything checked it — and again on every redirect hop. Rejections
+are likewise indistinguishable, so the tool cannot be used to map an internal
+network.
 
 The roots come from server configuration only. No tool parameter can widen
 them. More than one may be configured — `--root A --root B`, or
