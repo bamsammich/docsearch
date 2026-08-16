@@ -42,7 +42,8 @@ def _pct(values: list[int], q: float) -> int:
 
 def measure(conn: sqlite3.Connection, doc_id: str) -> dict[str, object]:
     rows = conn.execute(
-        "SELECT section, heading_path, text, image_count FROM chunks WHERE doc_id=? ORDER BY ordinal",
+        "SELECT section, heading_path, text, image_count FROM chunks"
+        " WHERE doc_id=? ORDER BY ordinal",
         (doc_id,),
     ).fetchall()
     doc = conn.execute(
