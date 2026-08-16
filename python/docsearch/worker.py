@@ -22,7 +22,7 @@ from types import FrameType
 
 from . import db
 from .errors import IngestCancelled, PermanentIngestError
-from .ingest import IngestResult, ingest_file
+from .ingest import IngestResult, ingest_source, source_for
 
 log = logging.getLogger("docsearch.worker")
 
@@ -62,6 +62,9 @@ RETURNING *
 class WorkerConfig:
     db_path: str
     root: Path | None = None
+    #: Raw HTTP responses, kept apart from the search index. Defaults beside
+    #: the database, which is where the operator already grants write access.
+    cache_path: Path | None = None
     lease_seconds: int = DEFAULT_LEASE_SECONDS
     poll_seconds: float = DEFAULT_POLL_SECONDS
     max_attempts: int = DEFAULT_MAX_ATTEMPTS
@@ -72,6 +75,7 @@ class Worker:
     def __init__(self, config: WorkerConfig) -> None:
         self.config = config
         self.conn = db.connect(config.db_path)
+        self.cache_path = config.cache_path or Path(config.db_path).with_name("fetch-cache.db")
         self._stopping = False
 
     # -- lifecycle ---------------------------------------------------------
@@ -126,7 +130,6 @@ class Worker:
     # -- execution ---------------------------------------------------------
     def execute(self, job: sqlite3.Row) -> None:
         job_id = int(job["id"])
-        source = Path(job["source_path"])
         last_write = 0.0
 
         def progress(phase: str, cur: int, tot: int) -> None:
@@ -163,9 +166,9 @@ class Worker:
             )
 
         try:
-            result = ingest_file(
+            result = ingest_source(
                 self.conn,
-                source,
+                source_for(job["source_path"], cache_path=self.cache_path),
                 title=job["title"],
                 progress=progress,
                 should_cancel=should_cancel,

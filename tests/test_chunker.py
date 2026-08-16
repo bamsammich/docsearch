@@ -277,3 +277,81 @@ def test_entries_described_in_sentences_are_not_a_reference_listing() -> None:
     ]
     classify_kinds(chunks)
     assert all(c.kind == "prose" for c in chunks)
+
+
+def test_one_section_keeps_its_internal_heading_paths() -> None:
+    """A section held constant across differing headings must not collapse.
+
+    Grouping on the section alone kept only the first block's heading path and
+    discarded the rest. That is invisible for a paginated format, where the
+    path is built from the section's own ancestry and cannot vary within one --
+    and wrong for a site, where the section is the page's position in the
+    navigation and is constant across every heading on the page.
+    """
+    # Each above MIN_TOKENS, so this tests grouping alone -- merging is the
+    # separate rule exercised below.
+    blocks = [
+        Block(heading_path=["Page"], locator={"offset": 0}, text=_para(120), section="3.2"),
+        Block(
+            heading_path=["Page", "Install"], locator={"offset": 1}, text=_para(120), section="3.2"
+        ),
+        Block(
+            heading_path=["Page", "Configure"],
+            locator={"offset": 2},
+            text=_para(120),
+            section="3.2",
+        ),
+    ]
+    chunks = chunk(_extraction(blocks))
+    assert [c.heading_path for c in chunks] == [
+        "Page",
+        "Page > Install",
+        "Page > Configure",
+    ]
+    assert all(c.section == "3.2" for c in chunks), "the declared section is unchanged"
+
+
+def test_small_units_inside_one_section_merge_but_never_across_sections() -> None:
+    """What counts as declared is the boundary, not the section on the unit.
+
+    Two units inside one section were separated by a heading, which the
+    document wrote but did not declare as a boundary. Refusing to merge them
+    shredded doc sites into chunks too small to answer anything, because a
+    site's section is the whole page.
+    """
+    same_page = [
+        Block(
+            heading_path=["Page", h], locator={"offset": i}, text="tiny bit of text", section="3.2"
+        )
+        for i, h in enumerate(["Install", "Configure", "Run"])
+    ]
+    # Fewer chunks than blocks, not necessarily one: the merged unit takes its
+    # parent's path, which then fails _same_parent against the next sibling, so
+    # merging proceeds in pairs. Pre-existing, and pinned by
+    # test_unnumbered_small_blocks_merge_forward_under_shared_parent.
+    merged = chunk(_extraction(same_page))
+    assert len(merged) < len(same_page), "headings inside one section are mergeable"
+    assert all(c.section == "3.2" for c in merged), "merging keeps the declared section"
+
+    across_pages = [
+        Block(heading_path=["Page A"], locator={"offset": 0}, text="tiny", section="3.1"),
+        Block(heading_path=["Page B"], locator={"offset": 1}, text="also tiny", section="3.2"),
+    ]
+    chunks = chunk(_extraction(across_pages))
+    assert [c.section for c in chunks] == ["3.1", "3.2"], "a declared boundary still holds"
+
+
+def test_a_paginated_section_is_grouped_exactly_as_before() -> None:
+    """The guard on the change above: same section, same path, still one unit."""
+    blocks = [
+        Block(
+            heading_path=["5. Sys", "5.2. Units"],
+            locator={"page": 3},
+            text=_para(40),
+            section="5.2",
+        )
+        for _ in range(4)
+    ]
+    chunks = chunk(_extraction(blocks))
+    assert len(chunks) == 1
+    assert chunks[0].heading_path == "5. Sys > 5.2. Units"

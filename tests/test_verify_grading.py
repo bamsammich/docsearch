@@ -11,7 +11,7 @@ import itertools
 import sqlite3
 from pathlib import Path
 
-from docsearch.ingest import ingest_file
+from docsearch.ingest import FileSource, ingest_source
 from docsearch.verify import (
     VERDICT_DEGRADED,
     VERDICT_GOOD,
@@ -243,7 +243,7 @@ def test_every_finding_states_its_evidence_and_consequence() -> None:
 
 
 def test_clean_ingest_verdicts_good_end_to_end(conn: sqlite3.Connection, md_file: Path) -> None:
-    result = ingest_file(conn, md_file)
+    result = ingest_source(conn, FileSource(md_file))
     report = verify_document(conn, result.doc_id)
     assert report.problems == []
     assert report.verdict == VERDICT_GOOD

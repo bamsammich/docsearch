@@ -16,9 +16,27 @@ from typing import Any
 #: exists to check it against and none is required.
 AUTHORITATIVE = ("outline",)
 
-#: Equally author-declared, but recovered by parsing a printed page. The parse
-#: can misread, so it is checked against the body and a disagreement fails.
-_VALIDATABLE = ("front_toc",)
+#: Equally author-declared, but recovered by parsing a printed page or a
+#: rendered navigation. The parse can misread, so it is checked against what
+#: the document actually turned out to contain and a disagreement fails.
+#:
+#: A site's sidebar and a hub page's heading grouping sit here for the same
+#: reason a printed table of contents does: the author declared the structure,
+#: and a parser recovered it. ``url_path`` is absent deliberately -- nesting
+#: pages by their path is inference with nothing to check it against, which
+#: puts it beside ``font_heuristic``.
+_VALIDATABLE = ("front_toc", "sidebar_dom", "index_page")
+
+#: Share of a site's known pages that may fail to fetch before the ingest is
+#: refused rather than reported.
+#:
+#: PROVISIONAL. The plan defers this to the recalibration pass, which has no
+#: doc-site corpus yet, and the number should come from one rather than from
+#: taste. It is set loose on purpose: it exists to catch the case the gate was
+#: written for -- an index covering a fraction of a site while reporting
+#: success -- and not to adjudicate a handful of broken links, which are
+#: ordinary on any large site and are reported either way.
+SITE_INCOMPLETE_FATAL_SHARE = 0.20
 
 #: Distinct heading paths per chunk, below which the derived structure does not
 #: separate the document's own chunks: `section_filter` cannot narrow and
@@ -60,6 +78,13 @@ class StructureReport:
     distinct_heading_paths: int = 0
     headless_chunks: int = 0
     uncalibrated_script_share: float = 0.0
+    #: Site ingest only. Pages some coverage source said exist, pages that were
+    #: actually fetched, and the ones that produced nothing.
+    pages_declared: int = 0
+    pages_fetched: int = 0
+    unreachable_pages: list[str] = field(default_factory=list)
+    #: Pages no declared hierarchy source mentioned, nested by URL path instead.
+    placed_by_path: list[str] = field(default_factory=list)
 
     @property
     def validatable(self) -> bool:
@@ -96,9 +121,39 @@ class StructureReport:
         """
         return self.chunks >= ADDRESSABILITY_MIN_CHUNKS and self.addressability < ADDRESSABLE_MIN
 
+    @property
+    def unreachable_share(self) -> float:
+        if not self.pages_declared:
+            return 0.0
+        return len(self.unreachable_pages) / self.pages_declared
+
+    @property
+    def incomplete(self) -> bool:
+        """Too much of the site never arrived for the index to be trusted.
+
+        An index covering part of a site while reporting success is the web's
+        version of the unaddressable failure: legally formed, internally
+        consistent, and quietly answering from a fraction of what was asked
+        for. A caller has no way to tell, because everything it can see about
+        the document is correct.
+        """
+        return bool(self.pages_declared and self.unreachable_share >= SITE_INCOMPLETE_FATAL_SHARE)
+
     def notes(self) -> list[str]:
         """Findings a caller should see, in the caller's terms."""
         out: list[str] = []
+        if self.unreachable_pages:
+            out.append(
+                f"{len(self.unreachable_pages)} of {self.pages_declared} known page(s) "
+                f"({self.unreachable_share:.0%}) could not be fetched and are absent from "
+                f"the index"
+            )
+        if self.placed_by_path:
+            out.append(
+                f"{len(self.placed_by_path)} page(s) were named by no navigation source and "
+                f"are nested by their URL path instead, which is inferred and has nothing to "
+                f"check it against"
+            )
         if self.unaddressable:
             out.append(
                 f"{self.chunks} chunks share only {self.distinct_heading_paths} distinct "
@@ -138,8 +193,12 @@ class StructureReport:
         is not known to describe the document, chunks carry section paths that
         may be wrong, and the index answers confidently from the wrong place.
         That is worse than failing, so it fails.
+
+        A site fails on a different disagreement: not between two descriptions
+        of the document, but between what the site said it had and what
+        arrived.
         """
-        return self.validatable and bool(self.symmetric_difference)
+        return (self.validatable and bool(self.symmetric_difference)) or self.incomplete
 
     @property
     def degraded(self) -> bool:
@@ -165,6 +224,22 @@ class StructureReport:
 
     def failure_message(self) -> str:
         """Operator-readable, and readable by someone with no worker logs."""
+        if self.incomplete:
+            shown = ", ".join(self.unreachable_pages[:10])
+            more = (
+                f" (+{len(self.unreachable_pages) - 10} more)"
+                if len(self.unreachable_pages) > 10
+                else ""
+            )
+            return (
+                f"completeness gate failed: {len(self.unreachable_pages)} of "
+                f"{self.pages_declared} known page(s) ({self.unreachable_share:.0%}) could not "
+                f"be fetched, at or above the {SITE_INCOMPLETE_FATAL_SHARE:.0%} threshold. "
+                f"The site was not navigable enough to index. Unreachable: {shown}{more}. "
+                f"The site was not indexed: an index built from a fraction of a site answers "
+                f"confidently from the part it happens to hold, and nothing a caller can see "
+                f"reveals the rest is missing."
+            )
         missing = self.in_toc_not_in_body
         extra = self.in_body_not_in_toc
         parts = [
@@ -198,6 +273,20 @@ class StructureReport:
 
 def from_diagnostics(diagnostics: dict[str, Any]) -> StructureReport:
     xv = diagnostics.get("cross_validation") or {}
+    site = diagnostics.get("site") or {}
+    if site:
+        # A site's two sides are what the navigation declared and what the
+        # crawl actually brought back, which is the same shape of check a
+        # printed table of contents gets against the body.
+        return StructureReport(
+            structure_source=str(diagnostics.get("structure_source", "unknown")),
+            toc_sections=int(site.get("pages_declared", 0)),
+            body_sections=int(site.get("pages_fetched", 0)),
+            pages_declared=int(site.get("pages_declared", 0)),
+            pages_fetched=int(site.get("pages_fetched", 0)),
+            unreachable_pages=list(site.get("unreachable", [])),
+            placed_by_path=list(site.get("placed_by_path", [])),
+        )
     return StructureReport(
         structure_source=str(diagnostics.get("structure_source", "unknown")),
         toc_sections=int(xv.get("toc_sections", 0)),
