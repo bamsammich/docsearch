@@ -24,15 +24,14 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
-from pathlib import Path
-
 import sys
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 
-from docsearch.chunker import MAX_TOKENS, MIN_TOKENS, PATH_SEP  # noqa: E402
-from docsearch.tokens import estimate_tokens  # noqa: E402
-from docsearch.verify import ChunkStat, grade, verify_document  # noqa: E402
+from docsearch.chunker import MAX_TOKENS, MIN_TOKENS, PATH_SEP
+from docsearch.tokens import estimate_tokens
+from docsearch.verify import ChunkStat, grade, verify_document
 
 
 def _pct(values: list[int], q: float) -> int:
@@ -136,7 +135,7 @@ def main() -> None:
     ]
     print("  ".join(f"{name:<{w}}" for name, w in cols))
     for r in results:
-        print("  ".join(f"{str(r[name]):<{w}}" for name, w in cols))
+        print("  ".join(f"{r[name]!s:<{w}}" for name, w in cols))
 
     print("\n--- findings per document ---")
     for r in results:
