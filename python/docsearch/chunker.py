@@ -96,7 +96,7 @@ class Chunk:
 class _Unit:
     """Consecutive blocks sharing one chunk key."""
 
-    key: tuple[str, ...] | str
+    key: tuple[str | None, tuple[str, ...]]
     section: str | None
     heading_path: list[str]
     blocks: list[Block] = field(default_factory=list)
@@ -116,9 +116,25 @@ class _Unit:
 
 
 def _group(blocks: list[Block]) -> list[_Unit]:
+    """Consecutive blocks sharing both a section and a heading path.
+
+    Keyed on the pair, not on the section alone. A unit keeps only its first
+    block's heading path, so keying on the section discards the path of every
+    block after it -- invisible while a section and a heading path are the same
+    thing, which is true of every paginated format here: the path is built from
+    the section's own ancestry, so it cannot vary within one.
+
+    It is not true of a site. There the section is the page's position in the
+    navigation and is deliberately constant across the whole page, so a page
+    collapsed to one unit and every chunk of it came back carrying the page
+    title alone. Measured on five documentation sites, that cost pytest's
+    getting-started page its nine internal headings and left 377 chunks sharing
+    57 heading paths -- the shape `unaddressable` is meant to catch, produced by
+    the chunker rather than by the document.
+    """
     units: list[_Unit] = []
     for b in blocks:
-        key: tuple[str, ...] | str = b.section if b.section is not None else tuple(b.heading_path)
+        key = (b.section, tuple(b.heading_path))
         if units and units[-1].key == key:
             units[-1].blocks.append(b)
             continue

@@ -277,3 +277,46 @@ def test_entries_described_in_sentences_are_not_a_reference_listing() -> None:
     ]
     classify_kinds(chunks)
     assert all(c.kind == "prose" for c in chunks)
+
+
+def test_one_section_keeps_its_internal_heading_paths() -> None:
+    """A section held constant across differing headings must not collapse.
+
+    Grouping on the section alone kept only the first block's heading path and
+    discarded the rest. That is invisible for a paginated format, where the
+    path is built from the section's own ancestry and cannot vary within one --
+    and wrong for a site, where the section is the page's position in the
+    navigation and is constant across every heading on the page.
+    """
+    blocks = [
+        Block(heading_path=["Page"], locator={"offset": 0}, text=_para(40), section="3.2"),
+        Block(
+            heading_path=["Page", "Install"], locator={"offset": 1}, text=_para(40), section="3.2"
+        ),
+        Block(
+            heading_path=["Page", "Configure"], locator={"offset": 2}, text=_para(40), section="3.2"
+        ),
+    ]
+    chunks = chunk(_extraction(blocks))
+    assert [c.heading_path for c in chunks] == [
+        "Page",
+        "Page > Install",
+        "Page > Configure",
+    ]
+    assert all(c.section == "3.2" for c in chunks), "the declared section is unchanged"
+
+
+def test_a_paginated_section_is_grouped_exactly_as_before() -> None:
+    """The guard on the change above: same section, same path, still one unit."""
+    blocks = [
+        Block(
+            heading_path=["5. Sys", "5.2. Units"],
+            locator={"page": 3},
+            text=_para(40),
+            section="5.2",
+        )
+        for _ in range(4)
+    ]
+    chunks = chunk(_extraction(blocks))
+    assert len(chunks) == 1
+    assert chunks[0].heading_path == "5. Sys > 5.2. Units"
