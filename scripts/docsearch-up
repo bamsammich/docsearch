@@ -1,0 +1,50 @@
+#!/bin/sh
+# Rebuild the images from this checkout and roll the running stack forward.
+#
+# This is the whole update story. `up -d --build` rebuilds both images and then
+# recreates a container only when its image digest actually changed, so running
+# it after a merge that touched neither the Go nor the Python tree costs a
+# cache-hit build and leaves the containers alone. Run it after every merge; it
+# is safe to run when nothing changed.
+#
+#   scripts/docsearch-up          rebuild and roll forward
+#   scripts/docsearch-up --logs   the same, then follow the logs
+#
+# Anything else is passed through to `docker compose up`.
+set -eu
+
+# What actually makes the no-op case a no-op. buildx stamps its default
+# provenance attestation with the build time, so a rebuild that hits cache on
+# every layer still exports a new manifest digest -- and compose then recreates
+# a perfectly healthy container because it believes the image changed. Setting
+# this yields a byte-identical image ID for identical input.
+#
+# The compose-spec `build.provenance: false` field does not do it: compose
+# renders it as the string "false" and buildx does not act on it (verified
+# against Compose v5.3.1). This variable does.
+BUILDX_NO_DEFAULT_ATTESTATIONS=1
+export BUILDX_NO_DEFAULT_ATTESTATIONS
+
+repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+compose="$repo/deploy/docker/compose.yaml"
+
+follow=false
+args=""
+for arg in "$@"; do
+  if [ "$arg" = "--logs" ]; then
+    follow=true
+  else
+    args="$args $arg"
+  fi
+done
+
+# --remove-orphans so a service renamed in compose.yaml does not leave a
+# container running against the same database.
+# shellcheck disable=SC2086
+docker compose -f "$compose" up -d --build --remove-orphans $args
+
+docker compose -f "$compose" ps
+
+if [ "$follow" = true ]; then
+  exec docker compose -f "$compose" logs -f server worker
+fi
