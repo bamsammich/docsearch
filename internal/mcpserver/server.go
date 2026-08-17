@@ -83,6 +83,33 @@ func describeAddDocument(roots []string) string {
 		describeRoots(roots)
 }
 
+// serverInstructions is sent in the initialize result and lands in the client's
+// system prompt for every session, whether or not any tool is ever called.
+//
+// The tool descriptions can only speak once a caller has decided to look at
+// docsearch, which is too late for the two habits that decide whether the
+// corpus is worth having. A session that reaches for the web first never learns
+// the answer was already local, and a session that ingests its own write-up
+// instead of the source poisons the corpus for every session after it. Both are
+// choices made before any tool call, so they have to be stated somewhere that
+// is read before any tool call.
+const serverInstructions = "docsearch holds the full text of documentation the user has " +
+	"ingested -- manuals, specifications and documentation sites -- and searches it locally.\n\n" +
+	"SEARCH HERE FIRST. Before searching the web or fetching a documentation page, call " +
+	"list_documents: it is one call and it names the whole corpus, so it settles whether the " +
+	"answer is already local. When a document covers the question, read its outline, then " +
+	"search with section_filter set to the chapter that covers it. Go to the web only once " +
+	"the corpus has been checked and does not hold the answer.\n\n" +
+	"INGEST WHAT YOU READ. When research settles on a documentation site or a manual worth " +
+	"having again, queue it with add_document so the next session finds it locally. Ingest " +
+	"the source itself -- the documentation root URL, or the file -- and never your own " +
+	"summary, notes or synthesis of it. An interpretation in the corpus is worse than " +
+	"nothing: it displaces the primary text a later search should have found, and carries " +
+	"one session's compression forward as though it were the source.\n\n" +
+	"Ingest is asynchronous and slow. add_document returns as soon as the job is queued and " +
+	"nothing is searchable at that point. Queue it, say that it is queued, and carry on with " +
+	"the task; check ingest_status later rather than waiting on it."
+
 var supportedSuffixes = map[string]bool{
 	".pdf": true, ".md": true, ".markdown": true, ".html": true,
 	".htm": true, ".docx": true, ".txt": true, ".text": true,
@@ -93,7 +120,7 @@ func New(d Deps) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{
 		Name:    "docsearch",
 		Version: "0.1.0",
-	}, nil)
+	}, &mcp.ServerOptions{Instructions: serverInstructions})
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "list_documents",
