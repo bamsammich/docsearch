@@ -312,6 +312,61 @@ launchd has no `EnvironmentFile`, so the server agent sources the token from
 its 0600 file in a shell wrapper — it stays out of the plist and out of
 `launchctl print` output.
 
+### Docker, on the same machine
+
+`deploy/docker/compose.yaml` runs the same two processes as containers built
+from the checkout, and replaces the agents above rather than joining them —
+both bind `127.0.0.1:8765` and both write the same database, so run one or the
+other.
+
+```bash
+scripts/docsearch-up          # rebuild and roll forward
+scripts/docsearch-up --logs   # the same, then follow the logs
+```
+
+That one command is the whole update story. `up -d --build` rebuilds both
+images and recreates a container only when its image digest actually changed,
+so running it after a merge that touched neither tree costs a cache-hit build
+and leaves the containers alone. Run it after every merge; it is safe to run
+when nothing changed. `restart: unless-stopped` plus Docker Desktop's
+start-at-login brings the stack back after a reboot.
+
+Two things about this shape are load-bearing:
+
+**The library is bind-mounted at the same absolute path it has on the host,**
+and `--root` is that same path. `add_document` takes a filesystem path from the
+MCP client, which is a process on the *host*; mounting the library at
+`/library` would reject every path a client can actually name.
+
+**The database is a named volume, not a bind mount.** SQLite in WAL mode needs
+real file locking, and the macOS bind-mount path is not something to bet a
+single-writer database on. It lives on ext4 inside the Linux VM, which also
+means it is not directly readable from the host — `scripts/docsearch-db` opens
+it read-only, and `scripts/docsearch-db --backup out.db` copies it out through
+`.backup` rather than `cp`, so the snapshot is consistent across the WAL while
+the worker is mid-transaction.
+
+Migration runs in its own service for the reason the systemd unit runs it from
+`ExecStartPre`: the worker is the only writer, so it races nothing there. Both
+real services gate on `service_completed_successfully`, so a migration that
+cannot be applied means neither ever starts.
+
+Moving an existing installation across: stop the agents first — a clean
+shutdown checkpoints the WAL into the main file — then copy it in.
+
+```bash
+launchctl bootout gui/$(id -u)/com.bamsammich.docsearch-mcp
+launchctl bootout gui/$(id -u)/com.bamsammich.docsearch-worker
+docker volume create docsearch_data
+docker run --rm -v docsearch_data:/data -v "$HOME/.local/share/docsearch:/src:ro" \
+  alpine:3.20 sh -c 'cp /src/docsearch.db* /data/ && chown -R 65532:65532 /data'
+scripts/docsearch-up
+```
+
+No client configuration changes: the container publishes the same
+`127.0.0.1:8765` and reads the same token file, so the bridge in
+`deploy/client/` keeps working untouched.
+
 ## Deployment
 
 `deploy/k8s/` — one Deployment, `replicas: 1`, `strategy: Recreate`. SQLite

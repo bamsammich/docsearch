@@ -1,6 +1,6 @@
 # The ingest worker. Separate image from the server: the extraction stack is
-# Python and OCR saturates a core for tens of minutes, which is exactly why it
-# does not share a process with request handling.
+# Python and a large PDF saturates a core for minutes at a time, which is
+# exactly why it does not share a process with request handling.
 FROM python:3.13-slim AS build
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -13,12 +13,21 @@ COPY python ./python
 RUN uv sync --frozen --no-dev
 
 FROM python:3.13-slim
-# ocrmypdf and its tesseract/ghostscript chain are needed only for scanned
-# PDFs with no text layer. qpdf and poppler-utils cover inspection.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      ocrmypdf tesseract-ocr ghostscript qpdf poppler-utils \
- && rm -rf /var/lib/apt/lists/*
-
+# No apt layer, and specifically no ocrmypdf/tesseract/ghostscript/qpdf/
+# poppler-utils. That chain used to be installed here and was never once
+# invoked: nothing under python/ shells out at all -- no subprocess, Popen,
+# os.system or shutil.which exists in the tree -- and ocrmypdf appears only
+# inside a warning string in inspect.py, which tells the *operator* to OCR a
+# scanned PDF before ingesting it. Blocking an image-only document is the
+# deliberate behaviour; OCRing it silently is not. Every format adapter runs on
+# pymupdf, which bundles its own MuPDF.
+#
+# It cost 389MB of a 714MB image, because Debian's ocrmypdf is a Python
+# application and apt therefore dragged in a second complete interpreter at
+# /usr/bin/python3.13, 35 python3-* packages alongside this image's own
+# /usr/local/bin/python3.13 -- python3-hypothesis, a test framework, among
+# them. If a future adapter genuinely needs to shell out to one of these,
+# add back only that tool and say here which code path calls it.
 RUN useradd --create-home --uid 65532 docsearch
 COPY --from=build --chown=docsearch:docsearch /app /app
 ENV PATH="/app/.venv/bin:$PATH"

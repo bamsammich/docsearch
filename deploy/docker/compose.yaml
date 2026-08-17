@@ -1,0 +1,127 @@
+# Local Docker deployment: the same two processes the launchd agents run, as
+# containers built from this checkout. `scripts/docsearch-up` is the whole
+# operator interface -- it rebuilds and recreates in one command, and Docker
+# recreates a container only when its image digest actually changed, so running
+# it after a merge that touched nothing is a no-op.
+#
+#   scripts/docsearch-up          rebuild and roll forward
+#   scripts/docsearch-up --logs   the same, then follow the logs
+#
+# Replaces deploy/launchd/*.plist on this machine. The plists and the systemd
+# units stay in the repo; the code does not know which supervisor it is under.
+name: docsearch
+
+# Build through `scripts/docsearch-up`, not `docker compose up --build` by hand.
+# The script exports BUILDX_NO_DEFAULT_ATTESTATIONS=1, and that is what makes a
+# no-change rebuild a genuine no-op: buildx stamps its default provenance
+# attestation with the build time, so an all-cache-hit rebuild still exports a
+# new manifest digest and compose recreates the container believing the image
+# changed. The compose-spec `build.provenance: false` field does NOT fix this --
+# compose renders it as the string "false" and buildx does not act on it
+# (verified against Compose v5.3.1). The environment variable does.
+
+# The library is bind-mounted at the SAME absolute path it has on the host, and
+# --root is that same path. That is load-bearing, not cosmetic: add_document
+# takes a filesystem path from the MCP client, which is a process on the host,
+# and the server validates it against --root. Mounting the library at /library
+# instead would reject every path a client can actually name.
+#
+# Set DOCSEARCH_LIBRARY to move it; the path must be identical on both sides of
+# every colon below, or add_document starts rejecting valid paths.
+
+services:
+  # The named volume starts life root-owned -- Docker only copies ownership
+  # from the image when the mount point exists there, and neither image creates
+  # /data. Both real services run as uid 65532, so one root container fixes the
+  # ownership before anything tries to write. Idempotent; costs a container
+  # start per `up`.
+  init:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.worker
+    image: docsearch-worker:local
+    user: "0:0"
+    entrypoint: ["sh", "-c"]
+    command: ["mkdir -p /data && chown -R 65532:65532 /data"]
+    volumes:
+      - data:/data
+    restart: "no"
+
+  # Migration runs here and nowhere else, for the same reason the systemd unit
+  # runs it from ExecStartPre: the worker is the only writer, so this is the
+  # one point in the lifecycle where a schema change races nothing. Idempotent,
+  # so it is free on the restarts that need no migration.
+  #
+  # A migration that cannot be applied exits nonzero, and because both real
+  # services gate on service_completed_successfully, neither ever starts. That
+  # is the intended outcome: serving through a schema the code does not match
+  # is worse than not serving.
+  migrate:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.worker
+    image: docsearch-worker:local
+    entrypoint: ["docsearch"]
+    command: ["migrate", "--db", "/data/docsearch.db"]
+    volumes:
+      - data:/data
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    restart: "no"
+
+  server:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.server
+    image: docsearch-server:local
+    # 0.0.0.0 is the container's network namespace, not the host's. The
+    # published port below binds host loopback only, so nothing outside this
+    # machine can reach it -- but the server cannot know that, hence the
+    # explicit --allow-public-bind and the warning it logs at startup.
+    command:
+      - --db=/data/docsearch.db
+      - --root=${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}
+      - --addr=0.0.0.0:8765
+      - --allow-public-bind
+      - --allowed-origins=https://claude.ai,https://app.claude.ai
+    # The token stays in its 0600 file and never enters this world-readable
+    # compose file, matching what the launchd wrapper did with `set -a`.
+    env_file:
+      - ${HOME}/.config/docsearch/token.env
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - data:/data
+      # The server only validates paths; it never reads document bytes.
+      - ${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}:${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.worker
+    image: docsearch-worker:local
+    command: ["--db", "/data/docsearch.db", "--root", "${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}"]
+    volumes:
+      - data:/data
+      # Read-write: the worker is what actually opens the documents.
+      - ${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}:${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # The worker checkpoints or rolls back its partial rows on SIGTERM. A large
+    # scanned PDF can sit inside one unit of work for minutes, so give it the
+    # same room the launchd ExitTimeOut and the Pod grace period give it.
+    stop_grace_period: 900s
+    restart: unless-stopped
+
+volumes:
+  # A Docker-managed volume, not a bind mount: SQLite in WAL mode needs real
+  # file locking, and locking over the macOS virtiofs bind-mount path is not
+  # something to bet a single-writer database on. This lives on ext4 inside the
+  # Linux VM. Reach it with `scripts/docsearch-db`.
+  data:

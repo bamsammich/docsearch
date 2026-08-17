@@ -1,0 +1,37 @@
+#!/bin/sh
+# Reach the database inside the named volume, which is not on the host
+# filesystem. Read-only by design: the worker is the only writer, and it is
+# running.
+#
+#   scripts/docsearch-db                       open a sqlite3 shell
+#   scripts/docsearch-db "select count(*) from documents;"
+#   scripts/docsearch-db --backup out.db       copy it out to the host
+set -eu
+
+# Compose namespaces volumes with the project name from compose.yaml.
+volume=docsearch_data
+
+if [ "${1:-}" = "--backup" ]; then
+  [ -n "${2:-}" ] || { echo "usage: $0 --backup <destination>" >&2; exit 2; }
+  dest=$2
+  dir=$(CDPATH= cd -- "$(dirname -- "$dest")" && pwd)
+  # `.backup` rather than cp: it takes a consistent snapshot across the WAL
+  # while the worker is mid-transaction, which copying the three files cannot.
+  docker run --rm \
+    -v "$volume:/data:ro" -v "$dir:/out" \
+    keinos/sqlite3:latest \
+    sqlite3 -readonly "file:/data/docsearch.db?immutable=1" \
+    ".backup '/out/$(basename -- "$dest")'"
+  echo "wrote $dir/$(basename -- "$dest")"
+  exit 0
+fi
+
+if [ $# -gt 0 ]; then
+  # -readonly plus a read-only mount: sqlite otherwise insists on being able to
+  # create the -wal and -shm sidecars and fails to open the file at all.
+  exec docker run --rm -v "$volume:/data:ro" keinos/sqlite3:latest \
+    sqlite3 -readonly "file:/data/docsearch.db?immutable=1" "$@"
+fi
+
+exec docker run --rm -it -v "$volume:/data:ro" keinos/sqlite3:latest \
+  sqlite3 -readonly "file:/data/docsearch.db?immutable=1"

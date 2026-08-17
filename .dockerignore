@@ -1,0 +1,18 @@
+# The build context is the repo root for both images. Without this, the ~400MB
+# .venv and the caches ship to the daemon on every build and defeat the layer
+# cache, because their mtimes change constantly.
+.git
+.venv
+.mypy_cache
+.pytest_cache
+.ruff_cache
+__pycache__
+*.pyc
+var
+docs
+tests
+testdata
+deploy
+scripts
+mise.toml
+sqlc.yaml
