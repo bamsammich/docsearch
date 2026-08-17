@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/bamsammich/docsearch/internal/urlguard"
 )
 
@@ -137,6 +139,52 @@ func TestAnEmptyTargetIsRejected(t *testing.T) {
 	d := Deps{LibraryRoots: []string{"/library"}, Log: slog.New(slog.DiscardHandler)}
 	if _, _, err := d.addDocument(context.Background(), nil, addDocumentInput{}); err == nil {
 		t.Error("empty target should be rejected")
+	}
+}
+
+// -- server instructions --------------------------------------------------
+
+// The instructions are only worth writing if a client actually receives them,
+// and the way to lose them is a one-word regression: New passed nil server
+// options for as long as it existed, and nothing about that reads as broken.
+// So assert on what a connected client sees rather than on the constant.
+func TestAConnectedClientReceivesTheServerInstructions(t *testing.T) {
+	ctx := context.Background()
+	clientT, serverT := mcp.NewInMemoryTransports()
+
+	server := New(Deps{LibraryRoots: []string{"/library"}, Log: slog.New(slog.DiscardHandler)})
+	ss, err := server.Connect(ctx, serverT, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	defer func() { _ = ss.Close() }()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0"}, nil)
+	cs, err := client.Connect(ctx, clientT, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	defer func() { _ = cs.Close() }()
+
+	if got := cs.InitializeResult().Instructions; got != serverInstructions {
+		t.Errorf("client received instructions %q, want the server's", got)
+	}
+}
+
+// The instructions exist for two habits a session settles before it calls any
+// tool: whether it looks here before the web, and what it puts back. A revision
+// that drops either one leaves the corpus unread or fills it with write-ups.
+func TestTheInstructionsStateBothHabits(t *testing.T) {
+	for _, want := range []string{
+		"list_documents", // where a session starts, by name
+		"the web",        // and that it comes second
+		"add_document",   // what to put back
+		"never your own", // and what not to
+		"asynchronous",   // nothing is searchable when it returns
+	} {
+		if !strings.Contains(strings.ToLower(serverInstructions), strings.ToLower(want)) {
+			t.Errorf("instructions do not mention %q", want)
+		}
 	}
 }
 
