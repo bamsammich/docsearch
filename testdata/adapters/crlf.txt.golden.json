@@ -1,0 +1,96 @@
+{
+ "blocks": [
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [],
+   "image_count": 0,
+   "locator": {
+    "offset": 0
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Paragraph number 0 with some content to index.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [],
+   "image_count": 0,
+   "locator": {
+    "offset": 48
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Paragraph number 1 with some content to index.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [],
+   "image_count": 0,
+   "locator": {
+    "offset": 96
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Paragraph number 2 with some content to index.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [],
+   "image_count": 0,
+   "locator": {
+    "offset": 144
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Paragraph number 3 with some content to index.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [],
+   "image_count": 0,
+   "locator": {
+    "offset": 192
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Paragraph number 4 with some content to index.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [],
+   "image_count": 0,
+   "locator": {
+    "offset": 240
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Paragraph number 5 with some content to index.",
+   "url": null
+  }
+ ],
+ "diagnostics": {
+  "structure_source": "none (blank-line paragraphs)"
+ },
+ "format": "text",
+ "index_terms": [],
+ "page_count": null,
+ "pages": {},
+ "title": "crlf"
+}

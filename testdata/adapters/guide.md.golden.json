@@ -1,0 +1,152 @@
+{
+ "blocks": [
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Operator Guide"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 18
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Intro paragraph about the console and its layout.\nIt continues on a second line.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Operator Guide",
+    "Executors"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 117
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Executors run sequences. Executors run sequences. Executors run sequences.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Operator Guide",
+    "Executors"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 193
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "#NoSpace is not a heading.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Operator Guide",
+    "Executors",
+    "Assigning Sequences"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 246
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Press Assign then select the sequence.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Operator Guide",
+    "Executors",
+    "Assigning Sequences"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 286
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "```\n# not a heading, inside a fence\ncode line\n```",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Operator Guide",
+    "Executors",
+    "Assigning Sequences"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 337
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "~~~\n## also not a heading\n~~~",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Operator Guide",
+    "Executors",
+    "Assigning Sequences",
+    "Deep, under a skipped level"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 402
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Tabs\tand   spaces   survive inside a paragraph.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Operator Guide",
+    "Glossary"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 468
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Short. Ünïcödé text: 調整音量 and — punctuation.",
+   "url": null
+  }
+ ],
+ "diagnostics": {
+  "structure_source": "atx_headings"
+ },
+ "format": "markdown",
+ "index_terms": [],
+ "page_count": null,
+ "pages": {},
+ "title": "Operator Guide"
+}

@@ -11,11 +11,11 @@ import (
 )
 
 const (
-	_english  = "The console stores each cue in a sequence and plays it back on an executor. "
-	_japanese = "ミキシングコンソールはチャンネルごとに信号を処理します。"
-	_chinese  = "调音台按通道处理信号。请操作推子来调整音量。"
-	_korean   = "믹싱 콘솔은 채널별로 신호를 처리합니다."
-	_russian  = "Микшерная консоль обрабатывает сигнал по каждому каналу отдельно. "
+	englishText  = "The console stores each cue in a sequence and plays it back on an executor. "
+	japaneseText = "ミキシングコンソールはチャンネルごとに信号を処理します。"
+	chineseText  = "调音台按通道处理信号。请操作推子来调整音量。"
+	koreanText   = "믹싱 콘솔은 채널별로 신호를 처리합니다."
+	russianText  = "Микшерная консоль обрабатывает сигнал по каждому каналу отдельно. "
 )
 
 // TokensSuite covers token estimation across scripts. No tokenizer is
@@ -37,7 +37,7 @@ func charsPerToken(text string) float64 {
 // Latin technical prose runs about four characters per BPE token. Moving
 // that silently re-sizes every chunk in every index.
 func (s *TokensSuite) TestLatinCalibrationIsUnchanged() {
-	ratio := charsPerToken(strings.Repeat(_english, 20))
+	ratio := charsPerToken(strings.Repeat(englishText, 20))
 	s.GreaterOrEqual(ratio, 3.0)
 	s.LessOrEqual(ratio, 4.5)
 }
@@ -49,9 +49,9 @@ func (s *TokensSuite) TestSpaceFreeScriptsAreNotUnderCounted() {
 		name string
 		text string
 	}{
-		{name: "Japanese", text: _japanese},
-		{name: "Chinese", text: _chinese},
-		{name: "Korean", text: _korean},
+		{name: "Japanese", text: japaneseText},
+		{name: "Chinese", text: chineseText},
+		{name: "Korean", text: koreanText},
 	}
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
@@ -68,7 +68,7 @@ func (s *TokensSuite) TestACJKCharacterIsAboutOneToken() {
 }
 
 func (s *TokensSuite) TestMixedScriptTextCountsBothHalves() {
-	english, japanese := strings.Repeat(_english, 5), strings.Repeat(_japanese, 5)
+	english, japanese := strings.Repeat(englishText, 5), strings.Repeat(japaneseText, 5)
 	mixed := domain.EstimateTokens(english + japanese)
 	s.Greater(mixed, domain.EstimateTokens(english))
 	s.Greater(mixed, domain.EstimateTokens(japanese))
@@ -86,7 +86,7 @@ func (s *TokensSuite) TestIdeographRunsAreNotDoubleCounted() {
 // EstimateTokens instead compounds truncation into a budget check that
 // silently never trips.
 func (s *TokensSuite) TestAccumulateThenConvertMatchesDirectEstimation() {
-	pieces := []string{_english, _japanese, _chinese, _english, _korean}
+	pieces := []string{englishText, japaneseText, chineseText, englishText, koreanText}
 	atoms := 0
 	for _, p := range pieces {
 		atoms += domain.CountAtoms(p)
@@ -100,13 +100,13 @@ func (s *TokensSuite) TestUncalibratedLetterShare() {
 		text     string
 		min, max float64
 	}{
-		{name: "Russian is reported", text: strings.Repeat(_russian, 5), min: 0.9, max: 1},
-		{name: "English is calibrated", text: strings.Repeat(_english, 5), min: 0, max: 0},
-		{name: "Japanese is calibrated", text: strings.Repeat(_japanese, 5), min: 0, max: 0},
+		{name: "Russian is reported", text: strings.Repeat(russianText, 5), min: 0.9, max: 1},
+		{name: "English is calibrated", text: strings.Repeat(englishText, 5), min: 0, max: 0},
+		{name: "Japanese is calibrated", text: strings.Repeat(japaneseText, 5), min: 0, max: 0},
 		{name: "empty text", text: "", min: 0, max: 0},
 		{
 			name: "half Russian is a partial share",
-			text: strings.Repeat(_english, 3) + strings.Repeat(_russian, 3),
+			text: strings.Repeat(englishText, 3) + strings.Repeat(russianText, 3),
 			min:  0.2, max: 0.8,
 		},
 	}

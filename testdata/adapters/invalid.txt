@@ -1,0 +1,3 @@
+Before â‚A after.
+
+Lone € byte and ÿ here.

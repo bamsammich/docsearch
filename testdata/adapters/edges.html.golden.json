@@ -1,0 +1,194 @@
+{
+ "blocks": [
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Top level € heading"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 0
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "one",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Top level € heading"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 4
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "two, after an unclosed paragraph",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Top level € heading"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 37
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "first item",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Top level € heading"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 48
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "second item, unclosed",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Top level € heading"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 70
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Heading in a list item text",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Top level € heading",
+    "Heading in a list"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 98
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Under the list heading.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Top level € heading",
+    "Heading in a list"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 122
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "cell paragraph in a cell",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Top level € heading",
+    "Heading in a list"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 147
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "outerinnertail",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Top level € heading",
+    "Heading in a list"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 162
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "next block",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Top level € heading",
+    "Heading in a list"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 173
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Empty heading above changes nothing.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Top level € heading",
+    "Empty id"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 210
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Ideographic space around.",
+   "url": null
+  }
+ ],
+ "diagnostics": {
+  "structure_source": "h1_h6_nesting"
+ },
+ "format": "html",
+ "index_terms": [],
+ "page_count": null,
+ "pages": {},
+ "title": "Edge & Cases"
+}

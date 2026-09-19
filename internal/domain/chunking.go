@@ -48,12 +48,12 @@ const (
 	referenceLeafRate     = 0.6
 )
 
-// _referenceParent matches a heading that declares its children a listing of
+// referenceParent matches a heading that declares its children a listing of
 // entries. Size alone cannot tell a reference index from a chapter of uniform
 // siblings, so the document's own declaration is the whole signal. Python's
 // `\s` and `\b` are Unicode-aware; `[`+SpaceChars+`]` stands in for the first
 // and wordBounded checks the second.
-var _referenceParent = regexp.MustCompile(`(?i)keywords?|glossary` +
+var referenceParent = regexp.MustCompile(`(?i)keywords?|glossary` +
 	`|error[` + pystr.SpaceChars + `]+(?:codes?|messages?)` +
 	`|(?:command|api|syntax|function)[` + pystr.SpaceChars + `]+(?:reference|index|listing)`)
 
@@ -427,10 +427,10 @@ func isReferenceListing(chunks []Chunk, members []int) bool {
 	return float64(named)/float64(len(members)) >= referenceLeafRate
 }
 
-// declaresListing reports whether a heading matches _referenceParent at Unicode
+// declaresListing reports whether a heading matches referenceParent at Unicode
 // word boundaries, as Python's `\b` requires.
 func declaresListing(heading string) bool {
-	for _, loc := range _referenceParent.FindAllStringIndex(heading, -1) {
+	for _, loc := range referenceParent.FindAllStringIndex(heading, -1) {
 		if wordBounded(heading, loc[0], loc[1]) {
 			return true
 		}

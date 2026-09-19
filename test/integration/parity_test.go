@@ -19,6 +19,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/bamsammich/docsearch/internal/adapter"
 	"github.com/bamsammich/docsearch/internal/domain"
 )
 
@@ -48,6 +49,24 @@ var _ = Describe("Parity with the Python pipeline", func() {
 
 			BeforeEach(func() {
 				Expect(readJSON(filepath.Join(docDir, "extraction.json"), &ext)).To(Succeed())
+			})
+
+			It("extracts what the Python adapter extracts", func() {
+				var source struct {
+					Path string `json:"path"`
+				}
+				Expect(readJSON(filepath.Join(docDir, "extraction.json"), &source)).To(Succeed())
+				if source.Path == "" {
+					Skip("reference output predates source paths; regenerate it")
+				}
+				if !adapter.IsSupported(source.Path) {
+					Skip("no Go adapter for " + filepath.Ext(source.Path) + " yet")
+				}
+				extract, err := adapter.For(source.Path)
+				Expect(err).NotTo(HaveOccurred())
+				got, err := extract(source.Path)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(extractionDifference(got, &ext)).To(BeEmpty())
 			})
 
 			It("counts every block's atoms as Python does", func() {
@@ -165,10 +184,36 @@ func firstDifference(got, want []domain.Chunk) string {
 	return ""
 }
 
+// extractionDifference describes the first place got and want disagree, or
+// returns "" when they match, for the same reason firstDifference does.
+func extractionDifference(got, want *domain.Extraction) string {
+	blocksGot, blocksWant := got.Blocks, want.Blocks
+	headGot, headWant := *got, *want
+	headGot.Blocks, headWant.Blocks = nil, nil
+	if !reflect.DeepEqual(headGot, headWant) {
+		return fmt.Sprintf("extractions differ outside their blocks\n  got:  %s\n  want: %s",
+			truncatedJSON(headGot), truncatedJSON(headWant))
+	}
+	for i := range min(len(blocksGot), len(blocksWant)) {
+		if !reflect.DeepEqual(blocksGot[i], blocksWant[i]) {
+			return fmt.Sprintf("block %d differs\n  got:  %s\n  want: %s",
+				i, truncatedJSON(blocksGot[i]), truncatedJSON(blocksWant[i]))
+		}
+	}
+	if len(blocksGot) != len(blocksWant) {
+		return fmt.Sprintf("got %d blocks, want %d", len(blocksGot), len(blocksWant))
+	}
+	return ""
+}
+
 func describe(c domain.Chunk) string {
-	raw, err := json.Marshal(c)
+	return truncatedJSON(c)
+}
+
+func truncatedJSON(v any) string {
+	raw, err := json.Marshal(v)
 	if err != nil {
-		return fmt.Sprintf("unmarshalable chunk %d: %v", c.Ordinal, err)
+		return fmt.Sprintf("unmarshalable %T: %v", v, err)
 	}
 	const limit = 600
 	if len(raw) > limit {
