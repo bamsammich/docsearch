@@ -1,0 +1,51 @@
+# Lint and test every pull request and every push to a long-lived branch.
+#
+# The jobs run the same mise tasks a contributor runs locally, with the tool
+# versions mise.toml pins, so a green run here means `mise run lint` and
+# `mise run test` pass on a clean checkout.
+#
+# The ginkgo parity suite skips here: its reference output is extracted from
+# a local library of copyrighted documents and never leaves the machine that
+# made it.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, v2]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # golangci-lint reports only issues new since the v1.0.0 tag, so
+          # the history back to it has to be present.
+          fetch-depth: 0
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: 2026.8.14
+      - run: mise run setup
+      - run: mise run lint
+      - name: go.mod and go.sum are tidy
+        run: go mod tidy -diff
+      - name: sqlc output matches python/docsearch/schema.sql
+        run: sqlc diff
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: 2026.8.14
+      - run: mise run setup
+      - run: mise run test
