@@ -17,6 +17,10 @@ __pycache__/
 *.db-wal
 *.db-shm
 
+# Local parity tooling for the Go port: it reads a library on this machine
+# and is retired with the Python pipeline. Its output lands in /var/parity.
+/scripts/parity_dump.py
+
 # Local secrets
 .env
 .env.local
