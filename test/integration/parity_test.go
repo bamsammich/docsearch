@@ -73,6 +73,28 @@ var _ = Describe("Parity with the Python pipeline", func() {
 				Expect(readJSON(filepath.Join(docDir, "chunks.json"), &want)).To(Succeed())
 				Expect(firstDifference(domain.Chunks(ext), want)).To(BeEmpty())
 			})
+
+			It("grades the structure and persists the same report", func() {
+				var want struct {
+					Payload        map[string]any `json:"payload"`
+					FailureMessage string         `json:"failure_message"`
+					Fatal          bool           `json:"fatal"`
+				}
+				Expect(readJSON(filepath.Join(docDir, "structure.json"), &want)).To(Succeed())
+
+				report := domain.NewStructureReport(ext.Diagnostics)
+				Expect(report.Fatal()).To(Equal(want.Fatal))
+				if want.Fatal {
+					Expect(report.FailureMessage()).To(Equal(want.FailureMessage))
+					return
+				}
+				report.MeasureChunks(domain.Chunks(ext))
+				raw, err := report.JSON()
+				Expect(err).NotTo(HaveOccurred())
+				var got map[string]any
+				Expect(json.Unmarshal(raw, &got)).To(Succeed())
+				Expect(got).To(Equal(want.Payload))
+			})
 		})
 	}
 })

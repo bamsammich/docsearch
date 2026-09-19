@@ -21,7 +21,8 @@ implements one of those interfaces.
 |---|---|---|---|
 | domain | `internal/domain`, `internal/pystr` | nothing | testify suites |
 | application | `internal/service` | domain, and the ports it declares | testify suites, with mockery mocks of those ports |
-| infrastructure | `internal/adapter/...`, `internal/site`, `internal/repository/...`, `internal/mcpserver` | domain and service ports | testify suites on small fixtures |
+| infrastructure | `internal/adapter/...`, `internal/site`, `internal/repository/...` | domain and service ports | testify suites on small fixtures |
+| API | `internal/api/mcpapi`, `internal/api/connectapi` | service | testify suites over mocked services, as RightNow's API tests are |
 | integration | `test/integration` | everything | ginkgo and gomega BDD suites |
 
 Unit tests are testify suites, as in RightNow: one `suite.Suite` per test
@@ -32,6 +33,49 @@ run their methods serially on one `*testing.T`, so they do not call
 
 `.mockery.yaml` arrives with the first port, the extractor interface in step
 3, so no mock exists before an interface does.
+
+## Two front doors: MCP for Claude, ConnectRPC for programs
+
+The service layer gets two API adapters, the pair RightNow runs. Claude only
+speaks MCP, so MCP cannot be replaced; every other client gets a typed
+ConnectRPC API instead of hand-built HTTP.
+
+| client | door |
+|---|---|
+| Claude: claude.ai, Desktop, Code | MCP, `internal/api/mcpapi` |
+| `docsearch` CLI | ConnectRPC; with several users it authenticates through the server rather than opening the database |
+| `docsearch-sync` beside Paperless | ConnectRPC |
+| upload page and any later web UI | Connect-Web |
+| file bytes on upload | plain HTTP `PUT` to a signed link, never an RPC message |
+
+Both doors verify tokens through the same check, a Connect interceptor on one
+side and MCP middleware on the other.
+
+The MCP tools stay hand-written. `redpanda-data/protoc-gen-go-mcp` can generate
+MCP tools from a proto service, but it returns each response's raw proto JSON,
+and docsearch's results are rendered for a model: full chunk text, relevance on
+a 0 to 1 scale, figure warnings, quality notes. Tool descriptions and server
+instructions are tuned prose that proto comments would hold poorly.
+
+### Enums line up with proto
+
+Domain enums start at `iota + 1`, as the go-project skill requires, and proto
+enums reserve `0` for `UNSPECIFIED`, so the two share numbering and the
+boundary conversion is a checked cast. RightNow generates those converters
+with goverter.
+
+| domain | proto |
+|---|---|
+| `QualityOK = iota + 1` | `QUALITY_OK = 1` |
+| `QualityDegraded` | `QUALITY_DEGRADED = 2` |
+| `QualityFailed` | `QUALITY_FAILED = 3` |
+
+Persisted values keep their strings: each enum marshals as text, so
+`documents.warnings` still reads `"ok"`, `"degraded"`, `"failed"` and parity
+with Python is unaffected. `Quality`, `ChunkKind` and `StructureSource` move
+from string constants to typed enums in step 6, when the proto that mirrors
+them is written. `StructureSource` becomes a closed set, since adapters are its
+only producers.
 
 ## How parity is checked
 
@@ -68,8 +112,8 @@ from have landed.
 | 3 | `adapters/text.py`, `markdown.py`, `docx.py`, `html.py` | `internal/adapter/...`, behind a service-declared extractor port | identical extraction |
 | 4 | `adapters/pdf.py` | `internal/adapter/pdf`, on go-pdfium | the spike 1 rules; identical chunks on the manuals |
 | 5 | `fetch.py`, `fetchcache.py`, `discover.py`, `nav.py`, `crawl.py`, `site.py` | `internal/site/...` | identical extraction from the same fetch cache |
-| 6 | `ingest.py`, `db.py`, `worker.py` | `internal/service`, `internal/repository/sqlite`, `cmd/docsearch-worker` | an index built by Go passes `docsearch verify` and matches the eval, in a ginkgo full-stack suite |
-| 7 | `cli.py`, `inspect.py`, `verify.py` | `cmd/docsearch` | same commands, same reports |
+| 6 | `ingest.py`, `db.py`, `worker.py` | `internal/service`, `internal/repository/sqlite`, `cmd/docsearch-worker`, the service's proto and `internal/api/connectapi`, typed domain enums | an index built by Go passes `docsearch verify` and matches the eval, in a ginkgo full-stack suite; a structure mismatch refuses the document, writes nothing, and fails the job permanently |
+| 7 | `cli.py`, `inspect.py`, `verify.py` | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |
 
 `urlguard.py` already has a Go twin in `internal/urlguard`, held to the same
 table of addresses; step 5 deletes the Python copy.
