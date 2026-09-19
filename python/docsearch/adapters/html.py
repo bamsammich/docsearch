@@ -70,11 +70,11 @@ def parse(html: bytes | str) -> tuple[str, list[HtmlItem]]:
     # keeps the element in document order for the walk below. Nested <pre> is
     # invalid and would be destroyed by clearing its parent, so only outermost
     # ones are collected -- that keeps this list aligned with what the walk
-    # finds.
+    # finds. They are all chosen before any is cleared: clearing a parent
+    # detaches the <pre> inside it, which would then look outermost.
+    outermost = [pre for pre in body.find_all("pre") if pre.find_parent("pre") is None]
     codes: list[str] = []
-    for pre in body.find_all("pre"):
-        if pre.find_parent("pre") is not None:
-            continue
+    for pre in outermost:
         codes.append(_code_text(pre))
         pre.clear()
     code_iter = iter(codes)

@@ -1,0 +1,60 @@
+{
+ "blocks": [
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Runs"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 0
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "tab\t-\n\nend linked",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Runs"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 18
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Custom heading-like style",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Runs"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 44
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Second title paragraph",
+   "url": null
+  }
+ ],
+ "diagnostics": {
+  "structure_source": "heading_styles"
+ },
+ "format": "docx",
+ "index_terms": [],
+ "page_count": null,
+ "pages": {},
+ "title": "Title-styled twice"
+}

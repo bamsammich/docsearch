@@ -12,9 +12,9 @@ import (
 // Control and exotic separators are built from code points, so the source
 // stays plain ASCII and says which character each case exercises.
 var (
-	_nel     = string(rune(0x85))   // NEXT LINE
-	_lineSep = string(rune(0x2028)) // LINE SEPARATOR
-	_ideoSp  = string(rune(0x3000)) // IDEOGRAPHIC SPACE
+	nel     = string(rune(0x85))   // NEXT LINE
+	lineSep = string(rune(0x2028)) // LINE SEPARATOR
+	ideoSp  = string(rune(0x3000)) // IDEOGRAPHIC SPACE
 )
 
 // PystrSuite checks each helper against the Python behaviour it reproduces.
@@ -44,8 +44,8 @@ func (s *PystrSuite) TestSplitLinesMatchesPython() {
 			in:   "a\x1eb\x1fc",
 			want: []string{"a", "b\x1fc"},
 		},
-		{name: "line separator", in: "a" + _lineSep + "b", want: []string{"a", "b"}},
-		{name: "next line", in: "a" + _nel + "b\n\n", want: []string{"a", "b", ""}},
+		{name: "line separator", in: "a" + lineSep + "b", want: []string{"a", "b"}},
+		{name: "next line", in: "a" + nel + "b\n\n", want: []string{"a", "b", ""}},
 		{name: "non-ASCII lines", in: "é\nü", want: []string{"é", "ü"}},
 	}
 	for _, tt := range tests {
@@ -56,7 +56,7 @@ func (s *PystrSuite) TestSplitLinesMatchesPython() {
 }
 
 func (s *PystrSuite) TestStripTreatsInformationSeparatorsAsSpace() {
-	s.Equal("text", pystr.Strip("\x1c\x1f text "+_ideoSp+_nel))
+	s.Equal("text", pystr.Strip("\x1c\x1f text "+ideoSp+nel))
 }
 
 func (s *PystrSuite) TestSpaceClassAgreesWithIsSpace() {

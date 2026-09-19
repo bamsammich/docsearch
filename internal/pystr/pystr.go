@@ -21,8 +21,8 @@ const SpaceChars = `\t\n\x0b\x0c\r\x1c-\x1f \x{85}\x{a0}\x{1680}\x{2000}-\x{200a
 // every letter, every number and the underscore. Go's `\w` is ASCII only.
 const WordChars = `\p{L}\p{N}_`
 
-// _space holds the code points Python's str.isspace accepts.
-var _space = &unicode.RangeTable{
+// spaceTable holds the code points Python's str.isspace accepts.
+var spaceTable = &unicode.RangeTable{
 	R16: []unicode.Range16{
 		{Lo: 0x0009, Hi: 0x000d, Stride: 1},
 		{Lo: 0x001c, Hi: 0x0020, Stride: 1},
@@ -38,8 +38,8 @@ var _space = &unicode.RangeTable{
 	LatinOffset: 4,
 }
 
-// _lineBreak holds the code points Python's str.splitlines splits at.
-var _lineBreak = &unicode.RangeTable{
+// lineBreakTable holds the code points Python's str.splitlines splits at.
+var lineBreakTable = &unicode.RangeTable{
 	R16: []unicode.Range16{
 		{Lo: 0x000a, Hi: 0x000d, Stride: 1},
 		{Lo: 0x001c, Hi: 0x001e, Stride: 1},
@@ -51,7 +51,7 @@ var _lineBreak = &unicode.RangeTable{
 
 // IsSpace reports whether Python's str.isspace would accept r.
 func IsSpace(r rune) bool {
-	return unicode.Is(_space, r)
+	return unicode.Is(spaceTable, r)
 }
 
 // IsWord reports whether Python's `\w` would match r.
@@ -86,11 +86,26 @@ func SplitLines(s string) []string {
 	return out
 }
 
+// SplitLinesKeepEnds is Python's str.splitlines(keepends=True): SplitLines
+// with each line's separator left on its end.
+func SplitLinesKeepEnds(s string) []string {
+	var out []string
+	for s != "" {
+		at, width := firstLineBreak(s)
+		if at < 0 {
+			return append(out, s)
+		}
+		out = append(out, s[:at+width])
+		s = s[at+width:]
+	}
+	return out
+}
+
 // firstLineBreak returns the byte offset and width of the first line break in
 // s, treating \r\n as one break, or -1 when there is none.
 func firstLineBreak(s string) (at, width int) {
 	for i, r := range s {
-		if !unicode.Is(_lineBreak, r) {
+		if !unicode.Is(lineBreakTable, r) {
 			continue
 		}
 		if r == '\r' && strings.HasPrefix(s[i+1:], "\n") {

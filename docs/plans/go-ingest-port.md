@@ -32,7 +32,9 @@ run their methods serially on one `*testing.T`, so they do not call
 `t.Parallel()`.
 
 `.mockery.yaml` arrives with the first port, the extractor interface in step
-3, so no mock exists before an interface does.
+6, so no mock exists before an interface does. The port belongs to the ingest
+service that calls it, and that service is written in step 6; until then the
+adapters are plain functions behind a suffix registry.
 
 ## Two front doors: MCP for Claude, ConnectRPC for programs
 
@@ -97,7 +99,10 @@ approximation of them.
 
 A parity test passes on exact equality. A difference is either a Go bug, or a
 Python behaviour the port deliberately drops, which the package then documents
-with the measurement that justified dropping it.
+with its reason. A drop that would change output on the library also needs the
+measurement that justified it. The port drops one behaviour so far: python-docx
+refuses a package holding two relationships of one type, and the Go adapter
+reads the first, since refusing a readable document only loses its text.
 
 ## Order
 
@@ -108,14 +113,28 @@ from have landed.
 |---|---|---|---|
 | 1 | `tokens.py`, `blocks.py`, `chunker.py` | `internal/domain`, `internal/pystr` | Python's extraction in, identical chunks out |
 | 2 | `structure.py` | `internal/domain` | identical quality grade and findings |
-| 3 | `adapters/text.py`, `markdown.py`, `docx.py`, `html.py` | `internal/adapter/...`, behind a service-declared extractor port | identical extraction |
+| 3 | `adapters/text.py`, `markdown.py`, `docx.py`, `html.py` | `internal/adapter` and a subpackage per format | identical extraction |
 | 4 | `adapters/pdf.py` | `internal/adapter/pdf`, on go-pdfium | the spike 1 rules; identical chunks on the manuals |
 | 5 | `fetch.py`, `fetchcache.py`, `discover.py`, `nav.py`, `crawl.py`, `site.py` | `internal/site/...` | identical extraction from the same fetch cache |
-| 6 | `ingest.py`, `db.py`, `worker.py` | `internal/service`, `internal/repository/sqlite`, `cmd/docsearch-worker`, the service's proto and `internal/api/connectapi`, typed domain enums | an index built by Go passes `docsearch verify` and matches the eval, in a ginkgo full-stack suite; a structure mismatch refuses the document, writes nothing, and fails the job permanently |
+| 6 | `ingest.py`, `db.py`, `worker.py` | `internal/service` and its extractor port, `internal/repository/sqlite`, `cmd/docsearch-worker`, the service's proto and `internal/api/connectapi`, typed domain enums | an index built by Go passes `docsearch verify` and matches the eval, in a ginkgo full-stack suite; a structure mismatch refuses the document, writes nothing, and fails the job permanently |
 | 7 | `cli.py`, `inspect.py`, `verify.py` | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |
 
 `urlguard.py` already has a Go twin in `internal/urlguard`, held to the same
 table of addresses; step 5 deletes the Python copy.
+
+## Improvements parity holds back until step 6
+
+Parity guards the port against accidental change; it does not claim Python's
+output is the best available. Some text the Python adapters never read stays
+unread in Go too, because reading it would break parity. Once step 6 retires
+the Python pipeline, each of these lands as its own pull request, judged by
+the retrieval eval before and after rather than by byte equality.
+
+| format | Python misses | Go-native change |
+|---|---|---|
+| DOCX | table cells, tracked insertions, content controls | walk the whole body, not only its top-level paragraphs |
+| Markdown | setext headings, indented code blocks, headings inside lists | parse with `goldmark`, a CommonMark parser, instead of line regexes |
+| DOCX | the "Word Document" fallback title, and "Heading 0" replacing the innermost heading | drop both quirks |
 
 ## Python behaviour Go does not share
 
@@ -130,3 +149,6 @@ Each of these changes output silently if ported naively.
 | `round()` rounds halves to even | `math.RoundToEven` |
 | `len(text)` counts code points | `utf8.RuneCountInString` |
 | `int(x)` truncates toward zero | `int(x)` on a float, same |
+| `Path.read_text(errors="replace")` gives a truncated sequence one U+FFFD, and reads `\r\n` and `\r` as `\n` | `pystr.ReadText`; ranging over bytes in Go gives one U+FFFD per byte |
+| `PurePath.stem` keeps `.bashrc` whole | `pystr.Stem`; `filepath.Ext` takes all of `.bashrc` as the extension |
+| lxml parses HTML and drops content after `</body>` | `x/net/html` follows HTML5 and moves it into the body; accepted, since a browser reads such a page the HTML5 way |

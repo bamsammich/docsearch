@@ -71,16 +71,16 @@ const (
 	UncalibratedScriptDegradedShare = 0.50
 )
 
-// _listLimit caps how many sections a failure message names.
-const _listLimit = 20
+// listLimit caps how many sections a failure message names.
+const listLimit = 20
 
-// _unreachableLimit caps how many pages a site failure message names.
-const _unreachableLimit = 10
+// unreachableLimit caps how many pages a site failure message names.
+const unreachableLimit = 10
 
-// _uncalibratedSamples is roughly how many chunks the script check samples,
+// uncalibratedSamples is roughly how many chunks the script check samples,
 // evenly across the document: front matter is often in a different script
 // from the body, and a title page proves nothing about the manual behind it.
-const _uncalibratedSamples = 200
+const uncalibratedSamples = 200
 
 // StructureReport is what extraction and chunking noticed about a document's
 // structure. The JSON field names are the ones persisted in
@@ -161,7 +161,7 @@ func (r *StructureReport) MeasureChunks(chunks []Chunk) {
 	}
 	r.DistinctHeadingPaths = len(paths)
 
-	stride := max(1, len(chunks)/_uncalibratedSamples)
+	stride := max(1, len(chunks)/uncalibratedSamples)
 	var sample []string
 	for i := 0; i < len(chunks); i += stride {
 		sample = append(sample, chunks[i].Text)
@@ -323,9 +323,9 @@ func (r *StructureReport) scaleNotes() []string {
 // logs.
 func (r *StructureReport) FailureMessage() string {
 	if r.Incomplete() {
-		shown := r.UnreachablePages[:min(len(r.UnreachablePages), _unreachableLimit)]
+		shown := r.UnreachablePages[:min(len(r.UnreachablePages), unreachableLimit)]
 		more := ""
-		if extra := len(r.UnreachablePages) - _unreachableLimit; extra > 0 {
+		if extra := len(r.UnreachablePages) - unreachableLimit; extra > 0 {
 			more = fmt.Sprintf(" (+%d more)", extra)
 		}
 		return fmt.Sprintf(
@@ -423,10 +423,10 @@ func contiguous(ordinals []int) bool {
 	return true
 }
 
-// listed joins up to _listLimit items, marking any cut.
+// listed joins up to listLimit items, marking any cut.
 func listed(items []string) string {
-	shown := strings.Join(items[:min(len(items), _listLimit)], ", ")
-	if len(items) > _listLimit {
+	shown := strings.Join(items[:min(len(items), listLimit)], ", ")
+	if len(items) > listLimit {
 		shown += " ..."
 	}
 	return shown

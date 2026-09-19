@@ -30,10 +30,10 @@ const SubwordFactor = 1.3
 // scale.
 const cjkAtomWeight = 1.0 / SubwordFactor
 
-// _cjk covers scripts written without spaces, where a character is roughly
+// cjkTable covers scripts written without spaces, where a character is roughly
 // one BPE token on its own. Word-atom counting reads a whole run of these as
 // one atom, which under-counts by roughly 9x on Japanese and 4x on Chinese.
-var _cjk = &unicode.RangeTable{
+var cjkTable = &unicode.RangeTable{
 	R16: []unicode.Range16{
 		{Lo: 0x3000, Hi: 0x303f, Stride: 1}, // CJK punctuation
 		{Lo: 0x3040, Hi: 0x30ff, Stride: 1}, // hiragana and katakana
@@ -44,10 +44,10 @@ var _cjk = &unicode.RangeTable{
 	},
 }
 
-// _uncalibrated covers scripts this estimator has no calibration for.
+// uncalibratedTable covers scripts this estimator has no calibration for.
 // Cyrillic and Greek split more aggressively than Latin, and the rest are
 // unmeasured. Their presence is reported rather than guessed at.
-var _uncalibrated = &unicode.RangeTable{
+var uncalibratedTable = &unicode.RangeTable{
 	R16: []unicode.Range16{
 		{Lo: 0x0370, Hi: 0x03ff, Stride: 1}, // Greek
 		{Lo: 0x0400, Hi: 0x04ff, Stride: 1}, // Cyrillic
@@ -76,7 +76,7 @@ func CountAtoms(text string) int {
 	inWord := false
 	for _, r := range text {
 		switch {
-		case unicode.Is(_cjk, r):
+		case unicode.Is(cjkTable, r):
 			cjk++
 			inWord = false
 		case pystr.IsWord(r):
@@ -120,7 +120,7 @@ func UncalibratedLetterShare(text string) float64 {
 		if pystr.IsLetter(r) {
 			letters++
 		}
-		if unicode.Is(_uncalibrated, r) {
+		if unicode.Is(uncalibratedTable, r) {
 			uncal++
 		}
 	}

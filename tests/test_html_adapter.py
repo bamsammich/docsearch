@@ -118,3 +118,14 @@ def test_heading_path_applies_to_code_blocks(tmp_path: Path) -> None:
     """
     blocks = extract(_write(tmp_path, body)).blocks
     assert blocks[0].heading_path == ["Guide", "Install"]
+
+
+def test_nested_code_block_does_not_take_the_next_ones_place(tmp_path: Path) -> None:
+    """Clearing an outer <pre> detaches the one inside it, which then looked
+    outermost and was collected, so the next <pre> read its text."""
+    body = """
+    <pre>outer<pre>inner</pre>tail</pre>
+    <pre>next</pre>
+    <p>After.</p>
+    """
+    assert _texts(tmp_path, body) == ["outerinnertail", "next", "After."]
