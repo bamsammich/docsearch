@@ -1,0 +1,20 @@
+# CloudNativePG's own PostgreSQL 17 image with pg_textsearch added: the image
+# the homelab's operator would run, plus one extension. The operator starts
+# postgres itself; start.sh stands in for it so the image runs under plain
+# Docker for the spike.
+FROM debian:bookworm-slim AS fetch
+ARG TARGETARCH
+ARG PG_TEXTSEARCH=1.4.0
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl unzip \
+ && curl -fsSL -o /tmp/pkg.zip \
+    "https://github.com/timescale/pg_textsearch/releases/download/v${PG_TEXTSEARCH}/pg-textsearch-v${PG_TEXTSEARCH}-pg17-${TARGETARCH}.zip" \
+ && unzip -d /tmp/pkg /tmp/pkg.zip
+
+FROM ghcr.io/cloudnative-pg/postgresql:17-standard-bookworm
+USER root
+COPY --from=fetch /tmp/pkg/*.deb /tmp/
+RUN dpkg -i /tmp/*.deb && rm /tmp/*.deb
+COPY start.sh /usr/local/bin/start.sh
+USER 26
+EXPOSE 5432
+CMD ["/usr/local/bin/start.sh"]
