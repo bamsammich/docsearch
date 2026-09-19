@@ -7,6 +7,11 @@ exposes search, navigation and retrieval tools over MCP Streamable HTTP.
 No vector database, no embeddings, no external services. SQLite FTS5 with BM25.
 [An embedding reranker was measured and rejected](docs/research/embedding-rerank-probe.md).
 
+**v2 is in progress on the [`v2` branch](https://github.com/bamsammich/docsearch/tree/v2):**
+a Go rewrite with multi-user storage and pluggable authentication. `main` stays
+v1 and keeps working as documented here until v2 is released with a migration
+path. Pin to the `v1.0.0` tag to stay on v1 regardless.
+
 ## Three processes
 
 | Process | Lifetime | Role |
@@ -587,3 +592,12 @@ see above.
 Of the 11 queries missing even at @20, 9 share at least one term with their
 target section and 2 share none — so most are reachable in principle and the
 failure is ranking depth, not absence.
+
+## License
+
+docsearch is released under the [MIT License](LICENSE).
+
+The ingest worker depends on [PyMuPDF](https://github.com/pymupdf/PyMuPDF),
+which is licensed under the AGPL-3.0. Distributing the worker with PyMuPDF, or
+offering a modified version of it as a network service, carries the AGPL's
+obligations for that combined work. v2 plans to replace PyMuPDF with PDFium.
