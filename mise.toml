@@ -32,7 +32,7 @@ description = "Format Python and Go"
 run = [
   "uv run ruff format .",
   "uv run ruff check --fix .",
-  "gofmt -w .",
+  "golangci-lint fmt ./...",
 ]
 
 [tasks.generate]
