@@ -84,6 +84,63 @@ func TestEveryGeneratedQueryExecutes(t *testing.T) {
 		{"JobStatus", func() error { _, err := q.JobStatus(ctx, jobID); return err }},
 		{"QueuePosition", func() error { _, err := q.QueuePosition(ctx, jobID); return err }},
 		{"RequestJobCancel", func() error { return q.RequestJobCancel(ctx, jobID) }},
+
+		// The ingest writes. internal/repository/sqlite owns what they mean;
+		// running them here keeps one place that proves every generated
+		// statement is well-formed.
+		{"ReadyDocumentWithDigest", func() error {
+			_, err := q.ReadyDocumentWithDigest(ctx, "big")
+			return err
+		}},
+		{"CountDocumentChunks", func() error {
+			_, err := q.CountDocumentChunks(ctx, "big")
+			return err
+		}},
+		{"DocIDForSourcePath", func() error {
+			_, err := q.DocIDForSourcePath(ctx, "/x")
+			return err
+		}},
+		{"DocIDsWithPrefix", func() error { _, err := q.DocIDsWithPrefix(ctx, "b%"); return err }},
+		{"InsertDocument", func() error {
+			return q.InsertDocument(ctx, dbgen.InsertDocumentParams{
+				DocID: "fresh", Title: "Fresh", Format: "markdown",
+				SourcePath: "/lib/fresh.md", SourceKind: "file", Sha256: "fresh",
+			})
+		}},
+		{"InsertChunk", func() error {
+			return q.InsertChunk(ctx, dbgen.InsertChunkParams{
+				DocID: "fresh", Ordinal: 0, Kind: "prose",
+				HeadingPath: "Fresh", Text: "text",
+			})
+		}},
+		{"UpsertPage", func() error {
+			return q.UpsertPage(ctx, dbgen.UpsertPageParams{
+				DocID: "fresh", Page: 1, Text: "page",
+			})
+		}},
+		{"InsertIndexTerm", func() error {
+			return q.InsertIndexTerm(ctx, dbgen.InsertIndexTermParams{
+				DocID: "fresh", Term: "dimmer", Section: "4.1",
+			})
+		}},
+		{"MarkDocumentReady", func() error {
+			return q.MarkDocumentReady(ctx, dbgen.MarkDocumentReadyParams{
+				ChunkCount: sql.NullInt64{Int64: 1, Valid: true},
+				IngestedAt: sql.NullString{String: "2026-09-20T09:30:00Z", Valid: true},
+				DocID:      "fresh",
+			})
+		}},
+		{"CompleteJob", func() error {
+			return q.CompleteJob(ctx, dbgen.CompleteJobParams{
+				DocID: sql.NullString{String: "fresh", Valid: true}, ID: jobID,
+			})
+		}},
+		{"DeleteDocumentChunks", func() error { return q.DeleteDocumentChunks(ctx, "fresh") }},
+		{"DeleteDocumentPages", func() error { return q.DeleteDocumentPages(ctx, "fresh") }},
+		{"DeleteDocumentIndexTerms", func() error {
+			return q.DeleteDocumentIndexTerms(ctx, "fresh")
+		}},
+		{"DeleteDocumentRow", func() error { return q.DeleteDocumentRow(ctx, "fresh") }},
 	} {
 		if err := tc.run(); err != nil {
 			t.Errorf("%s: %v", tc.name, err)
@@ -95,7 +152,7 @@ func TestEveryGeneratedQueryExecutes(t *testing.T) {
 // would go unexercised, so the count is asserted rather than trusted.
 func TestGeneratedQueryCoverageIsComplete(t *testing.T) {
 	// The table above, plus EnqueueJob which runs ahead of it.
-	const exercised = 18
+	const exercised = 32
 	// Every exported method on *Queries is a generated query, except WithTx.
 	total := reflect.TypeFor[*dbgen.Queries]().NumMethod()
 	if got := total - 1; got != exercised {

@@ -190,7 +190,7 @@ from have landed.
 | 5d | — | — | synthetic sites under `testdata/site`, served to both pipelines: identical extraction and identical chunks |
 | 6a | — | `internal/domain` | typed `Quality`, `ChunkKind` and `StructureSource`; every extraction still persists the text it did |
 | 6b | `ingest.py` | `internal/service/ingest` and the ports it declares, `internal/source/file`, `internal/source/site` | testify suites over mockery mocks of those ports |
-| 6c | `db.py` | `internal/repository/sqlite` | the rows Python writes, read back by the Go store |
+| 6c | `db.py` | `internal/repository/sqlite` | every write run against a real index built from `python/docsearch/schema.sql` |
 | 6d | `worker.py` | `cmd/docsearch-worker`, and a progress hook on `internal/site/crawl` | a job runs, reports progress, cancels and fails the way Python's does |
 | 6e | — | `proto/docsearch/ingest/v1`, `internal/api/connectapi`, `internal/source` | testify suites driving the real Connect stack over `httptest`, against a mocked service |
 | 6f | — | `test/integration` | an index built by Go passes `docsearch verify` and matches the eval, in a ginkgo full-stack suite; a structure mismatch refuses the document, writes nothing, and fails the job permanently |
