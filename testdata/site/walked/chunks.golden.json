@@ -1,0 +1,67 @@
+[
+ {
+  "fragment": null,
+  "heading_path": "Handbook",
+  "image_count": 0,
+  "kind": "prose",
+  "ordinal": 0,
+  "page_end": null,
+  "page_start": null,
+  "printed_page_start": null,
+  "section": "1",
+  "text": "How the workshop runs, written down so nobody has to ask twice.",
+  "url": "{{ORIGIN}}/handbook/"
+ },
+ {
+  "fragment": null,
+  "heading_path": "Handbook",
+  "image_count": 0,
+  "kind": "prose",
+  "ordinal": 1,
+  "page_end": null,
+  "page_start": null,
+  "printed_page_start": null,
+  "section": "1",
+  "text": "See opening .\n\nSee closing .\n\nThe rota has moved.\n\nUnrelated: the shop .",
+  "url": "{{ORIGIN}}/handbook/"
+ },
+ {
+  "fragment": null,
+  "heading_path": "Handbook > Opening > opening",
+  "image_count": 0,
+  "kind": "prose",
+  "ordinal": 2,
+  "page_end": null,
+  "page_start": null,
+  "printed_page_start": null,
+  "section": "2.1.1",
+  "text": "Unlock the side door, switch on the extraction and check the first aid kit is where it should be.\n\nThen read the checks .",
+  "url": "{{ORIGIN}}/handbook/opening"
+ },
+ {
+  "fragment": null,
+  "heading_path": "Handbook > Closing > closing",
+  "image_count": 0,
+  "kind": "prose",
+  "ordinal": 3,
+  "page_end": null,
+  "page_start": null,
+  "printed_page_start": null,
+  "section": "2.2.1",
+  "text": "Sweep, empty the extraction, and leave the log on the bench for whoever opens tomorrow.",
+  "url": "{{ORIGIN}}/handbook/closing"
+ },
+ {
+  "fragment": null,
+  "heading_path": "Opening > Checks",
+  "image_count": 0,
+  "kind": "prose",
+  "ordinal": 4,
+  "page_end": null,
+  "page_start": null,
+  "printed_page_start": null,
+  "section": "4.1.1",
+  "text": "Every powered machine is tested before the first person uses it, and the result goes in the log.",
+  "url": "{{ORIGIN}}/handbook/opening/checks"
+ }
+]

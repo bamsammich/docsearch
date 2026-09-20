@@ -131,6 +131,29 @@ if either falls below what was recorded. Every manual records 1.0; the
 two-column journal papers record the gaps
 [the spike](../research/pdfium-spike.md) explains.
 
+### The site pipeline is checked against a site this project invents
+
+A crawl has no input file to hand both implementations, and pointing the
+parity check at a real documentation site would make it depend on a
+stranger's uptime and on whatever they published this week. So each fixture
+under `testdata/site` is a site written here: a route manifest, the pages it
+answers with, and the Python pipeline's crawl of it, all committed.
+`scripts/site_goldens.py` serves the manifest over loopback and writes the
+golden; the Go spec serves the same manifest from the same files and must
+produce the same extraction and the same chunks.
+
+Both servers read the manifest rather than serving a directory, because a
+directory listing, a guessed content type or the body of a 404 differs
+between two static file servers, and any of those would show up as a
+difference between the two pipelines.
+
+Two sites, for the two shapes a crawl takes. `declared` publishes a sitemap,
+so nothing is walked: it carries a nested sidebar, a page under two spellings
+with a canonical link, a declared page that 404s, and a colophon on every
+page for the chrome check. `walked` publishes no manifest and answers 200 for
+addresses that do not exist, so link-following finds the pages and the
+not-found template is what marks a dead link unreachable.
+
 ## Order
 
 Each row is one pull request into `v2`. A row starts when the rows it reads
@@ -143,7 +166,9 @@ from have landed.
 | 3 | `adapters/text.py`, `markdown.py`, `docx.py`, `html.py` | `internal/adapter` and a subpackage per format | identical extraction |
 | 4 | `adapters/pdf.py` | `internal/adapter/pdf`, on go-pdfium | Build reproduces Python from PyMuPDF's primitives; the engine holds its recorded chunk structure |
 | 5a | `fetch.py`, `fetchcache.py` | `internal/site/fetch` | behaviour ported from `tests/test_fetch.py`; a fetcher talks to the network, so it has no output to compare |
-| 5b | `discover.py`, `nav.py`, `crawl.py`, `site.py` | `internal/site/...` | identical extraction from the same fetch cache |
+| 5b | `discover.py`, `crawl.py` | `internal/site/discover`, `internal/site/crawl` | behaviour ported from the Python tests; a crawl needs a site to compare over, which 5d supplies |
+| 5c | `nav.py`, `site.py` | `internal/site/nav`, `internal/site` | as 5b |
+| 5d | — | — | synthetic sites under `testdata/site`, served to both pipelines: identical extraction and identical chunks |
 | 6 | `ingest.py`, `db.py`, `worker.py` | `internal/service` and its extractor port, `internal/repository/sqlite`, `cmd/docsearch-worker`, the service's proto and `internal/api/connectapi`, typed domain enums | an index built by Go passes `docsearch verify` and matches the eval, in a ginkgo full-stack suite; a structure mismatch refuses the document, writes nothing, and fails the job permanently |
 | 7 | `cli.py`, `inspect.py`, `verify.py` | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |
 

@@ -176,6 +176,10 @@ def crawl(
         seed_page = None
 
     result.coverage = discover(fetcher, seed, seed_page=seed_page, revalidate=revalidate)
+    # Which sources answered and what they declared is the first thing anyone
+    # debugging a short crawl wants, and the coverage object goes no further
+    # than this function, so a note left on it is a note nobody ever reads.
+    result.notes.extend(result.coverage.notes)
     checkpoint()
 
     # A manifest describes the whole site, so its absence is what licenses
