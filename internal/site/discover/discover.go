@@ -132,26 +132,44 @@ func Discover(
 			len(sitemap), len(cov.FromSitemap)))
 	}
 
-	if seedPage == nil {
-		seedPage, err = fetchOrNote(ctx, f, seed, revalidate, cov, "seed page")
-		if err != nil {
-			return nil, err
-		}
+	if err := cov.addIndexPage(ctx, f, seed, seedPage, revalidate); err != nil {
+		return nil, err
 	}
-	if seedPage != nil && seedPage.Status == 200 {
-		// Declared by the seed, so in scope by declaration, not by prefix.
-		cov.FromIndex, err = IndexPageCandidates(seedPage.Body, seed)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	if err := cov.addLLMsTxt(ctx, f, seed, revalidate); err != nil {
 		return nil, err
 	}
 	cov.union()
 	cov.compareSources()
 	return cov, nil
+}
+
+// addIndexPage adds the links the seed page declares. They are in scope by
+// declaration rather than by prefix: a hub page legitimately lists documents
+// elsewhere on the host.
+func (c *Coverage) addIndexPage(
+	ctx context.Context,
+	f Fetcher,
+	seed string,
+	seedPage *fetch.Fetched,
+	revalidate bool,
+) error {
+	if seedPage == nil {
+		res, err := f.Fetch(ctx, seed, revalidate)
+		if err != nil {
+			c.Notes = append(c.Notes, fmt.Sprintf("seed page: %v", err))
+			return nil
+		}
+		seedPage = res
+	}
+	if seedPage.Status != 200 {
+		return nil
+	}
+	links, err := IndexPageCandidates(seedPage.Body, seed)
+	if err != nil {
+		return err
+	}
+	c.FromIndex = links
+	return nil
 }
 
 // union orders the page set: the index page supplies the publisher's own
@@ -172,35 +190,34 @@ func (c *Coverage) union() {
 // compareSources reports where the sources disagree, rather than resolving
 // it silently.
 func (c *Coverage) compareSources() {
-	inSitemap := map[string]bool{}
-	for _, u := range c.FromSitemap {
-		inSitemap[u] = true
-	}
-	onlyLLMs := 0
-	inLLMs := map[string]bool{}
-	for _, u := range c.FromLLMsTxt {
-		inLLMs[u] = true
-		if !inSitemap[u] {
-			onlyLLMs++
+	if len(c.FromSitemap) > 0 {
+		if n := countMissing(c.FromLLMsTxt, c.FromSitemap); n > 0 {
+			c.Notes = append(c.Notes, fmt.Sprintf("%d llms.txt URL(s) absent from the sitemap", n))
 		}
 	}
-	if len(c.FromSitemap) > 0 && onlyLLMs > 0 {
-		c.Notes = append(
-			c.Notes,
-			fmt.Sprintf("%d llms.txt URL(s) absent from the sitemap", onlyLLMs),
-		)
-	}
-	missing := 0
-	for _, u := range c.FromSitemap {
-		if !inLLMs[u] {
-			missing++
+	if len(c.FromLLMsTxt) > 0 {
+		if n := countMissing(c.FromSitemap, c.FromLLMsTxt); n > 0 {
+			c.Notes = append(c.Notes, fmt.Sprintf(
+				"llms.txt omits %d page(s) the sitemap declares; it is not authoritative for coverage",
+				n,
+			))
 		}
 	}
-	if len(c.FromLLMsTxt) > 0 && missing > 0 {
-		c.Notes = append(c.Notes, fmt.Sprintf(
-			"llms.txt omits %d page(s) the sitemap declares; it is not authoritative for coverage",
-			missing))
+}
+
+// countMissing is how many of urls are absent from have.
+func countMissing(urls, have []string) int {
+	present := make(map[string]bool, len(have))
+	for _, u := range have {
+		present[u] = true
 	}
+	n := 0
+	for _, u := range urls {
+		if !present[u] {
+			n++
+		}
+	}
+	return n
 }
 
 // addLLMsTxt adds the pages llms.txt lists, with their titles.
@@ -211,19 +228,21 @@ func (c *Coverage) addLLMsTxt(ctx context.Context, f Fetcher, seed string, reval
 	}
 	c.Notes = append(c.Notes, notes...)
 	for _, pair := range pairs {
-		u, err := fetch.Normalize(pair.url)
-		if err != nil {
-			continue
-		}
-		if !InPrefixScope(u, seed) {
-			continue
-		}
-		c.FromLLMsTxt = append(c.FromLLMsTxt, u)
-		if _, ok := c.Titles[u]; !ok && pair.title != "" {
-			c.Titles[u] = pair.title
-		}
+		c.addLLMsEntry(pair, seed)
 	}
 	return nil
+}
+
+// addLLMsEntry adds one llms.txt entry, when it sits under the seed.
+func (c *Coverage) addLLMsEntry(pair titledURL, seed string) {
+	u, err := fetch.Normalize(pair.url)
+	if err != nil || !InPrefixScope(u, seed) {
+		return
+	}
+	c.FromLLMsTxt = append(c.FromLLMsTxt, u)
+	if _, ok := c.Titles[u]; !ok && pair.title != "" {
+		c.Titles[u] = pair.title
+	}
 }
 
 // scopedAndSorted normalizes the sitemap's URLs, keeps those under the seed,
@@ -297,13 +316,8 @@ func IndexPageCandidates(body []byte, base string) ([]string, error) {
 // linkOf normalizes one href against the page it was found on, and reports
 // whether it is a same-host page link.
 func linkOf(base *url.URL, href string) (string, bool) {
-	if href == "" || strings.HasPrefix(href, "#") {
+	if !isPageLink(href) {
 		return "", false
-	}
-	for _, scheme := range []string{"mailto:", "javascript:", "tel:"} {
-		if strings.HasPrefix(href, scheme) {
-			return "", false
-		}
 	}
 	next, err := base.Parse(href)
 	if err != nil {
@@ -318,6 +332,20 @@ func linkOf(base *url.URL, href string) (string, bool) {
 		return "", false
 	}
 	return u, true
+}
+
+// isPageLink reports whether an href addresses a page rather than a
+// fragment of this one or another scheme entirely.
+func isPageLink(href string) bool {
+	if href == "" || strings.HasPrefix(href, "#") {
+		return false
+	}
+	for _, scheme := range []string{"mailto:", "javascript:", "tel:"} {
+		if strings.HasPrefix(href, scheme) {
+			return false
+		}
+	}
+	return true
 }
 
 // titledURL is one entry of llms.txt.
@@ -361,15 +389,9 @@ func sitemapCandidates(
 	revalidate bool,
 ) ([]string, []string, error) {
 	origin := originOf(seed)
-	var notes []string
-	roots, err := sitemapsFromRobots(ctx, f, origin)
+	roots, notes, err := sitemapRoots(ctx, f, origin)
 	if err != nil {
 		return nil, nil, err
-	}
-	if len(roots) > 0 {
-		notes = append(notes, fmt.Sprintf("robots.txt names %d sitemap(s)", len(roots)))
-	} else {
-		roots = []string{origin + "/sitemap.xml"}
 	}
 
 	var pages []string
@@ -393,6 +415,19 @@ func sitemapCandidates(
 		queue = append(queue, nested...)
 	}
 	return pages, notes, nil
+}
+
+// sitemapRoots is where to start reading sitemaps: what robots.txt names,
+// else the conventional location.
+func sitemapRoots(ctx context.Context, f Fetcher, origin string) ([]string, []string, error) {
+	declared, err := sitemapsFromRobots(ctx, f, origin)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(declared) == 0 {
+		return []string{origin + "/sitemap.xml"}, nil, nil
+	}
+	return declared, []string{fmt.Sprintf("robots.txt names %d sitemap(s)", len(declared))}, nil
 }
 
 type sitemapRef struct {
@@ -427,34 +462,50 @@ func readSitemap(
 // what they mean: a sitemapindex holds sitemaps, a urlset holds pages.
 func sitemapLocs(body []byte) (pages, nested []string) {
 	decoder := xml.NewDecoder(strings.NewReader(string(body)))
-	isIndex, inLoc := false, false
-	root := true
+	r := locReader{}
 	for {
 		token, err := decoder.Token()
 		if err != nil {
-			return pages, nested
+			return r.pages, r.nested
 		}
-		switch t := token.(type) {
-		case xml.StartElement:
-			if root {
-				isIndex = t.Name.Local == "sitemapindex"
-				root = false
-			}
-			inLoc = t.Name.Local == "loc"
-		case xml.EndElement:
-			inLoc = false
-		case xml.CharData:
-			loc := strings.TrimSpace(string(t))
-			if !inLoc || loc == "" {
-				continue
-			}
-			if isIndex {
-				nested = append(nested, loc)
-			} else {
-				pages = append(pages, loc)
-			}
-		}
+		r.read(token)
 	}
+}
+
+// locReader gathers a sitemap's locations as its tokens arrive.
+type locReader struct {
+	pages  []string
+	nested []string
+	// isIndex is set from the document element: a sitemapindex holds
+	// sitemaps, a urlset holds pages.
+	isIndex bool
+	sawRoot bool
+	inLoc   bool
+}
+
+func (r *locReader) read(token xml.Token) {
+	switch t := token.(type) {
+	case xml.StartElement:
+		if !r.sawRoot {
+			r.isIndex, r.sawRoot = t.Name.Local == "sitemapindex", true
+		}
+		r.inLoc = t.Name.Local == "loc"
+	case xml.EndElement:
+		r.inLoc = false
+	case xml.CharData:
+		r.addLoc(strings.TrimSpace(string(t)))
+	}
+}
+
+func (r *locReader) addLoc(loc string) {
+	if !r.inLoc || loc == "" {
+		return
+	}
+	if r.isIndex {
+		r.nested = append(r.nested, loc)
+		return
+	}
+	r.pages = append(r.pages, loc)
 }
 
 // sitemapsFromRobots reads the sitemaps a host's robots.txt names.
@@ -474,23 +525,6 @@ func sitemapsFromRobots(ctx context.Context, f Fetcher, origin string) ([]string
 		}
 	}
 	return out, nil
-}
-
-// fetchOrNote fetches a URL, recording a note instead of failing the crawl.
-func fetchOrNote(
-	ctx context.Context,
-	f Fetcher,
-	raw string,
-	revalidate bool,
-	cov *Coverage,
-	what string,
-) (*fetch.Fetched, error) {
-	res, err := f.Fetch(ctx, raw, revalidate)
-	if err != nil {
-		cov.Notes = append(cov.Notes, fmt.Sprintf("%s: %v", what, err))
-		return nil, nil
-	}
-	return res, nil
 }
 
 func originOf(raw string) string {

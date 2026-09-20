@@ -204,10 +204,10 @@ func (s *DiscoverSuite) TestASoft404SiteIsRecognised() {
 	s.Require().NoError(err)
 	s.True(absent)
 
-	real, err := discover.LooksAbsent([]byte("<html><body><h1>Install</h1><p>Run the installer "+
+	page, err := discover.LooksAbsent([]byte("<html><body><h1>Install</h1><p>Run the installer "+
 		"and follow the prompts to set the software up on your machine.</p></body></html>"), sig)
 	s.Require().NoError(err)
-	s.False(real, "a real page is not the template")
+	s.False(page, "a real page is not the template")
 }
 
 func (s *DiscoverSuite) TestNothingIsAbsentWithoutASignature() {
