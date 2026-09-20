@@ -95,7 +95,13 @@ func TestSymlinkedDirectoryEscapeIsRejected(t *testing.T) {
 	if err := os.Symlink(outsideDir, link); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	if _, err := Resolve([]string{root}, filepath.Join(link, "x.pdf")); !errors.Is(err, ErrOutsideRoot) {
+	if _, err := Resolve(
+		[]string{root},
+		filepath.Join(link, "x.pdf"),
+	); !errors.Is(
+		err,
+		ErrOutsideRoot,
+	) {
 		t.Errorf("error = %v, want ErrOutsideRoot through a symlinked directory", err)
 	}
 }
@@ -157,7 +163,13 @@ func TestEmptyInputsAreRejected(t *testing.T) {
 	if _, err := Resolve(nil, "/tmp/x"); !errors.Is(err, ErrOutsideRoot) {
 		t.Error("empty root should be rejected")
 	}
-	if _, err := Resolve([]string{"relative/root"}, "relative/root/x"); !errors.Is(err, ErrOutsideRoot) {
+	if _, err := Resolve(
+		[]string{"relative/root"},
+		"relative/root/x",
+	); !errors.Is(
+		err,
+		ErrOutsideRoot,
+	) {
 		t.Error("relative root should be rejected")
 	}
 }

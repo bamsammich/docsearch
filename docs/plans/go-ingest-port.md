@@ -181,9 +181,9 @@ from have landed.
 | 5c | `nav.py`, `site.py` | `internal/site/nav`, `internal/site` | as 5b |
 | 5d | — | — | synthetic sites under `testdata/site`, served to both pipelines: identical extraction and identical chunks |
 | 6a | — | `internal/domain` | typed `Quality`, `ChunkKind` and `StructureSource`; every extraction still persists the text it did |
-| 6b | `ingest.py` | `internal/service/ingest` and the ports it declares | testify suites over mockery mocks of those ports |
+| 6b | `ingest.py` | `internal/service/ingest` and the ports it declares, `internal/source/file`, `internal/source/site` | testify suites over mockery mocks of those ports |
 | 6c | `db.py` | `internal/repository/sqlite` | the rows Python writes, read back by the Go store |
-| 6d | `worker.py` | `cmd/docsearch-worker` | a job runs, reports progress, cancels and fails the way Python's does |
+| 6d | `worker.py` | `cmd/docsearch-worker`, and a progress hook on `internal/site/crawl` | a job runs, reports progress, cancels and fails the way Python's does |
 | 6e | — | the service's proto and `internal/api/connectapi` | testify suites over a mocked service |
 | 6f | — | `test/integration` | an index built by Go passes `docsearch verify` and matches the eval, in a ginkgo full-stack suite; a structure mismatch refuses the document, writes nothing, and fails the job permanently |
 | 7 | `cli.py`, `inspect.py`, `verify.py` | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |

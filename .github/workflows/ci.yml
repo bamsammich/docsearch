@@ -39,6 +39,8 @@ jobs:
         run: go mod tidy -diff
       - name: sqlc output matches python/docsearch/schema.sql
         run: sqlc diff
+      - name: the committed mocks match the ports they stand in for
+        run: mockery && git diff --exit-code
 
   test:
     runs-on: ubuntu-latest

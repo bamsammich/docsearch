@@ -1,0 +1,16 @@
+# Mocks for the ports the service layer declares, so a service test states
+# what its collaborators did rather than standing up a database.
+#
+# Regenerate with `mise run generate`; the result is committed, and `mise run
+# check` fails on a port whose mock was not regenerated.
+all: false
+dir: "{{.InterfaceDir}}/mocks"
+filename: "{{.InterfaceName | snakecase}}.go"
+structname: "Mock{{.InterfaceName}}"
+pkgname: mocks
+packages:
+  github.com/bamsammich/docsearch/internal/service/ingest:
+    interfaces:
+      Repository:
+      Source:
+      Extractor:

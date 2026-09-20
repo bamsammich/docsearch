@@ -22,6 +22,16 @@ const (
 	KindKeywordReference
 )
 
+// SourceKind says what a document was read from. It is stored on the
+// document so a reader knows what an identity means: a path on disk, or a
+// URL that was crawled.
+type SourceKind uint8
+
+const (
+	SourceKindFile SourceKind = iota + 1
+	SourceKindSite
+)
+
 // StructureSource is what a document's heading tree was derived from. The set
 // is closed: format adapters and the site navigation are its only producers,
 // and every value one of them can report is named here.
@@ -70,6 +80,10 @@ var (
 		KindProse:            "prose",
 		KindKeywordReference: "keyword-reference",
 	})
+	sourceKindText = newEnumText("source kind", map[SourceKind]string{
+		SourceKindFile: "file",
+		SourceKindSite: "site",
+	})
 	structureSourceText = newEnumText("structure source", map[StructureSource]string{
 		SourceOutline:       "outline",
 		SourceFrontTOC:      "front_toc",
@@ -92,6 +106,10 @@ func (q *Quality) UnmarshalText(b []byte) error { return qualityText.unmarshal(b
 func (k ChunkKind) String() string                { return chunkKindText.name(k) }
 func (k ChunkKind) MarshalText() ([]byte, error)  { return chunkKindText.marshal(k) }
 func (k *ChunkKind) UnmarshalText(b []byte) error { return chunkKindText.unmarshal(b, k) }
+
+func (k SourceKind) String() string                { return sourceKindText.name(k) }
+func (k SourceKind) MarshalText() ([]byte, error)  { return sourceKindText.marshal(k) }
+func (k *SourceKind) UnmarshalText(b []byte) error { return sourceKindText.unmarshal(b, k) }
 
 func (s StructureSource) String() string { return structureSourceText.name(s) }
 

@@ -5,6 +5,7 @@ go = "1.26"
 golangci-lint = "2.13.2"
 sqlc = "1.31.1"
 lefthook = "2.1.14"
+mockery = "3.8.0"
 
 # uv owns .venv entirely (`uv sync` / `uv run`); mise only supplies the
 # python and uv binaries so the venv is built against a pinned interpreter.
@@ -28,6 +29,11 @@ run = [
   "GOLANGCI_LINT_CACHE=$(mktemp -d) mise run lint",
   "go mod tidy -diff",
   "sqlc diff",
+  # Mocks are generated and committed, so a port edited without regenerating
+  # them would otherwise be caught by nothing until a test broke elsewhere.
+  # Scoped to the mocks, since a pre-push run has the rest of the branch's
+  # work in the tree beside it.
+  "mockery && git diff --exit-code -- '**/mocks/*.go'",
   "mise run test",
 ]
 
@@ -49,8 +55,11 @@ run = [
 ]
 
 [tasks.generate]
-description = "Regenerate the Go query layer from python/docsearch/schema.sql"
-run = "sqlc generate"
+description = "Regenerate the Go query layer and the service ports' mocks"
+run = [
+  "sqlc generate",
+  "mockery",
+]
 
 [tasks.test]
 description = "Run Python and Go unit tests"

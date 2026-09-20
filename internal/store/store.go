@@ -17,9 +17,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/bamsammich/docsearch/internal/store/dbgen"
-
 	_ "modernc.org/sqlite" // pure-Go driver; FTS5 is compiled in, no build tag
+
+	"github.com/bamsammich/docsearch/internal/store/dbgen"
 )
 
 // ErrNotFound is returned when a requested document or job does not exist.

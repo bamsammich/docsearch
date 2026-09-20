@@ -108,7 +108,11 @@ func estimateSpan(chunks []ContextChunk) int {
 }
 
 // GetPages returns raw page text for paginated documents.
-func (s *Store) GetPages(ctx context.Context, docID string, start, end int) ([]PageText, bool, error) {
+func (s *Store) GetPages(
+	ctx context.Context,
+	docID string,
+	start, end int,
+) ([]PageText, bool, error) {
 	if err := s.requireReady(ctx, docID); err != nil {
 		return nil, false, err
 	}

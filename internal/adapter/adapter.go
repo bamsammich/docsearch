@@ -89,6 +89,10 @@ func (r *Registry) Extract(ctx context.Context, path string) (*domain.Extraction
 	return nil, fmt.Errorf("%w: no adapter for format %d", ErrUnsupportedFormat, f)
 }
 
+// Supports reports whether an adapter reads path, satisfying the ingest
+// service's extractor port alongside Extract.
+func (*Registry) Supports(path string) bool { return IsSupported(path) }
+
 // IsSupported reports whether an adapter reads path.
 func IsSupported(path string) bool {
 	_, err := formatOf(path)
