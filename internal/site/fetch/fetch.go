@@ -310,6 +310,17 @@ func (f *Fetcher) allowedByRobots(ctx context.Context, raw string) (bool, error)
 	return grobotstxt.AgentAllowed(body, f.userAgent, raw), nil
 }
 
+// Robots is the robots.txt of the host raw names, read from the cache or
+// from the host. Discovery reads it for the sitemaps it declares, rather
+// than requesting the file a second time.
+func (f *Fetcher) Robots(ctx context.Context, raw string) (string, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("%w: %s: %w", ErrFetch, raw, err)
+	}
+	return f.robotsFor(ctx, u)
+}
+
 // robotsFor reads a host's robots.txt, from memory, then the cache, then
 // the host. A host that will not serve one has disallowed nothing: absent
 // is permission, per the standard.
