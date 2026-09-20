@@ -3,7 +3,6 @@ package sqlite_test
 import (
 	"context"
 	"database/sql"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/repository/sqlite"
+	"github.com/bamsammich/docsearch/internal/schema"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 )
 
@@ -37,12 +37,7 @@ func (s *RepositorySuite) SetupTest() {
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { s.Require().NoError(db.Close()) })
 
-	// The schema itself, read rather than copied, so a migration that
-	// changes it fails here rather than drifting.
-	schema, err := os.ReadFile("../../../python/docsearch/schema.sql")
-	s.Require().NoError(err)
-	_, err = db.Exec(string(schema))
-	s.Require().NoError(err)
+	s.Require().NoError(schema.Create(s.T().Context(), db))
 
 	s.db = db
 	s.repo = sqlite.New(db)

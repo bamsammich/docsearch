@@ -28,6 +28,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/adapter"
 	"github.com/bamsammich/docsearch/internal/adapter/pdf"
 	"github.com/bamsammich/docsearch/internal/repository/sqlite"
+	"github.com/bamsammich/docsearch/internal/schema"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 	"github.com/bamsammich/docsearch/internal/service/worker"
 	"github.com/bamsammich/docsearch/internal/source"
@@ -182,9 +183,6 @@ var _ = Describe("An index built by Go", Ordered, func() {
 
 // newIndex builds an empty index with a library root beside it.
 func newIndex() *index {
-	root, err := repoRoot()
-	Expect(err).NotTo(HaveOccurred())
-
 	dir := GinkgoT().TempDir()
 	library := filepath.Join(dir, "library")
 	Expect(os.Mkdir(library, 0o700)).To(Succeed())
@@ -194,19 +192,10 @@ func newIndex() *index {
 	Expect(err).NotTo(HaveOccurred())
 	DeferCleanup(func() { Expect(db.Close()).To(Succeed()) })
 
-	schema, err := os.ReadFile(filepath.Join(root, "python", "docsearch", "schema.sql"))
-	Expect(err).NotTo(HaveOccurred())
-	_, err = db.Exec(string(schema))
-	Expect(err).NotTo(HaveOccurred())
-
-	// schema.sql creates the version table and leaves it empty, so the stamp
-	// is written here the way db.connect writes it. Creating an index is
-	// still Python's job; step 7 gives the Go CLI a migrate of its own, and
-	// until then an unstamped database is refused by every Python command.
-	_, err = db.Exec(
-		`INSERT INTO schema_version (version, applied_at) VALUES (?, datetime('now'))`,
-		store.RequiredSchemaVersion)
-	Expect(err).NotTo(HaveOccurred())
+	// Created by the package that owns the schema, which stamps the version
+	// too. An unstamped index is refused by every Python command, and used
+	// to be what the Go stack produced.
+	Expect(schema.Create(context.Background(), db)).To(Succeed())
 
 	reader, err := store.Open(path)
 	Expect(err).NotTo(HaveOccurred())

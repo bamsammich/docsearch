@@ -37,6 +37,8 @@ run = [
   # Scoped to the mocks, since a pre-push run has the rest of the branch's
   # work in the tree beside it.
   "mockery && git diff --exit-code -- '**/mocks/*.go'",
+  "scripts/baseline-migration.sh && git diff --exit-code -- internal/schema/migrations",
+  "go run ./scripts/schema-snapshot && git diff --exit-code -- internal/schema/schema.snapshot.sql",
   "buf lint",
   "buf format --diff --exit-code",
   "buf generate && git diff --exit-code -- 'internal/api/**/*.pb.go' 'internal/api/**/*.connect.go'",
@@ -61,8 +63,13 @@ run = [
 ]
 
 [tasks.generate]
-description = "Regenerate the query layer, the ports' mocks and the proto output"
+description = "Regenerate the migrations, schema snapshot, query layer, mocks and proto output"
 run = [
+  # The schema is one file. goose's baseline wraps it in the annotations
+  # goose needs, and a binary carries the result, so a deployment is one file.
+  "scripts/baseline-migration.sh",
+  # What the migrations add up to, for a reviewer rather than for the code.
+  "go run ./scripts/schema-snapshot",
   "sqlc generate",
   "mockery",
   "buf generate",
@@ -76,8 +83,9 @@ run = [
 ]
 
 [tasks.build]
-description = "Build the server and worker binaries"
+description = "Build the server, worker and CLI binaries"
 run = [
   "go build -o bin/docsearch-mcp ./cmd/docsearch-mcp",
   "go build -o bin/docsearch-worker ./cmd/docsearch-worker",
+  "go build -o bin/docsearch ./cmd/docsearch",
 ]
