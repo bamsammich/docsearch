@@ -10,6 +10,16 @@ the Go server already reads, so `docsearch-eval` and the running MCP server
 keep working throughout, and every step can be checked end to end. Postgres
 arrives in phase 04, behind the store interface this phase introduces.
 
+The crawler's response cache goes the same way, in the same phase. It is an
+interface, `fetch.Cache`, with a SQLite implementation, which is what the
+Python worker writes today; phase 04 adds a Postgres one and the fetcher does
+not change. Both have to move together: a worker in a container loses a local
+file when it restarts, a restarted crawl that cannot resume is most of what
+the cache was for, and two workers cannot share a file at all.
+
+After phase 04 the deployment holds no SQLite file. The driver stays in the
+tree only while v1 is still readable.
+
 ## Layers
 
 The port follows a clean-architecture layering. Rules sit in a domain that does
@@ -132,7 +142,8 @@ from have landed.
 | 2 | `structure.py` | `internal/domain` | identical quality grade and findings |
 | 3 | `adapters/text.py`, `markdown.py`, `docx.py`, `html.py` | `internal/adapter` and a subpackage per format | identical extraction |
 | 4 | `adapters/pdf.py` | `internal/adapter/pdf`, on go-pdfium | Build reproduces Python from PyMuPDF's primitives; the engine holds its recorded chunk structure |
-| 5 | `fetch.py`, `fetchcache.py`, `discover.py`, `nav.py`, `crawl.py`, `site.py` | `internal/site/...` | identical extraction from the same fetch cache |
+| 5a | `fetch.py`, `fetchcache.py` | `internal/site/fetch` | behaviour ported from `tests/test_fetch.py`; a fetcher talks to the network, so it has no output to compare |
+| 5b | `discover.py`, `nav.py`, `crawl.py`, `site.py` | `internal/site/...` | identical extraction from the same fetch cache |
 | 6 | `ingest.py`, `db.py`, `worker.py` | `internal/service` and its extractor port, `internal/repository/sqlite`, `cmd/docsearch-worker`, the service's proto and `internal/api/connectapi`, typed domain enums | an index built by Go passes `docsearch verify` and matches the eval, in a ginkgo full-stack suite; a structure mismatch refuses the document, writes nothing, and fails the job permanently |
 | 7 | `cli.py`, `inspect.py`, `verify.py` | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |
 
@@ -169,4 +180,5 @@ Each of these changes output silently if ported naively.
 | `Path.read_text(errors="replace")` gives a truncated sequence one U+FFFD, and reads `\r\n` and `\r` as `\n` | `pystr.ReadText`; ranging over bytes in Go gives one U+FFFD per byte |
 | `PurePath.stem` keeps `.bashrc` whole | `pystr.Stem`; `filepath.Ext` takes all of `.bashrc` as the extension |
 | PyMuPDF writes page text with "\n" line endings, the last line included | the PDF engine rewrites PDFium's "\r\n" text the same way; nothing parses that text, and a search result shows it |
+| `urllib.robotparser` takes the first rule that matches a path | `grobotstxt`, Google's matcher, takes the longest; the two agree except where a robots.txt both allows and disallows one path |
 | lxml parses HTML and drops content after `</body>` | `x/net/html` follows HTML5 and moves it into the body; accepted, since a browser reads such a page the HTML5 way |

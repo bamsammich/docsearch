@@ -5,6 +5,7 @@ go 1.26.1
 require (
 	github.com/PuerkitoBio/goquery v1.13.0
 	github.com/jackc/pgx/v5 v5.11.0
+	github.com/jimsmart/grobotstxt v1.0.3
 	github.com/klippa-app/go-pdfium v1.20.3
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/onsi/ginkgo/v2 v2.33.0
