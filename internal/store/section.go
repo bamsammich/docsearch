@@ -99,7 +99,11 @@ type SampledChunk struct {
 // compared against the run before it. Stride also spreads the draw across the
 // whole document, where taking the first N would characterise only the front
 // matter.
-func (s *Store) SampleChunks(ctx context.Context, docID string, stride int) ([]SampledChunk, error) {
+func (s *Store) SampleChunks(
+	ctx context.Context,
+	docID string,
+	stride int,
+) ([]SampledChunk, error) {
 	if stride < 1 {
 		stride = 1
 	}

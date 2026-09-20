@@ -176,7 +176,7 @@ func New(d Deps) *mcp.Server {
 	}, d.getContext)
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name: "add_document",
+		Name:        "add_document",
 		Description: describeAddDocument(d.LibraryRoots),
 	}, d.addDocument)
 
@@ -218,7 +218,7 @@ func (d Deps) listDocuments(ctx context.Context, _ *mcp.CallToolRequest,
 // -- outline --------------------------------------------------------------
 
 type outlineInput struct {
-	DocID string `json:"doc_id" jsonschema:"the document to outline"`
+	DocID string `json:"doc_id"          jsonschema:"the document to outline"`
 	Depth int    `json:"depth,omitempty" jsonschema:"heading depth to return, default 2"`
 }
 
@@ -246,10 +246,10 @@ func (d Deps) outline(ctx context.Context, _ *mcp.CallToolRequest,
 // -- search ---------------------------------------------------------------
 
 type searchInput struct {
-	Query                   string `json:"query" jsonschema:"the search query"`
-	DocID                   string `json:"doc_id,omitempty" jsonschema:"restrict to one document"`
-	SectionFilter           string `json:"section_filter,omitempty" jsonschema:"heading_path prefix filter"`
-	K                       int    `json:"k,omitempty" jsonschema:"max results, default 8, max 25"`
+	Query                   string `json:"query"                               jsonschema:"the search query"`
+	DocID                   string `json:"doc_id,omitempty"                    jsonschema:"restrict to one document"`
+	SectionFilter           string `json:"section_filter,omitempty"            jsonschema:"heading_path prefix filter"`
+	K                       int    `json:"k,omitempty"                         jsonschema:"max results, default 8, max 25"`
 	IncludeKeywordReference bool   `json:"include_keyword_reference,omitempty" jsonschema:"include command-keyword reference entries, which are deprioritised by default"`
 }
 
@@ -316,12 +316,12 @@ func (d Deps) search(ctx context.Context, _ *mcp.CallToolRequest,
 // -- get_context ----------------------------------------------------------
 
 type getContextInput struct {
-	DocID     string `json:"doc_id" jsonschema:"the document"`
-	ChunkID   int64  `json:"chunk_id,omitempty" jsonschema:"anchor chunk from a search result"`
-	Before    int    `json:"before,omitempty" jsonschema:"chunks before the anchor, default 1"`
-	After     int    `json:"after,omitempty" jsonschema:"chunks after the anchor, default 1"`
+	DocID     string `json:"doc_id"               jsonschema:"the document"`
+	ChunkID   int64  `json:"chunk_id,omitempty"   jsonschema:"anchor chunk from a search result"`
+	Before    int    `json:"before,omitempty"     jsonschema:"chunks before the anchor, default 1"`
+	After     int    `json:"after,omitempty"      jsonschema:"chunks after the anchor, default 1"`
 	PageStart int    `json:"page_start,omitempty" jsonschema:"first page, paginated formats only"`
-	PageEnd   int    `json:"page_end,omitempty" jsonschema:"last page, max 20 pages"`
+	PageEnd   int    `json:"page_end,omitempty"   jsonschema:"last page, max 20 pages"`
 }
 
 type getContextOutput struct {
@@ -371,7 +371,7 @@ func (d Deps) getContext(ctx context.Context, _ *mcp.CallToolRequest,
 // -- add_document ---------------------------------------------------------
 
 type addDocumentInput struct {
-	Target string `json:"target" jsonschema:"a file or directory inside a library root, or an http(s) URL of a documentation site"`
+	Target string `json:"target"          jsonschema:"a file or directory inside a library root, or an http(s) URL of a documentation site"`
 	Title  string `json:"title,omitempty" jsonschema:"override the derived document title"`
 }
 
@@ -496,7 +496,7 @@ func (d Deps) addDocument(ctx context.Context, _ *mcp.CallToolRequest,
 // -- ingest_status --------------------------------------------------------
 
 type ingestStatusInput struct {
-	JobID            int64 `json:"job_id,omitempty" jsonschema:"a specific job"`
+	JobID            int64 `json:"job_id,omitempty"            jsonschema:"a specific job"`
 	IncludeCompleted bool  `json:"include_completed,omitempty" jsonschema:"include finished jobs"`
 }
 

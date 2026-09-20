@@ -138,7 +138,14 @@ func TestAHostResolvingToAnyBlockedAddressIsRefused(t *testing.T) {
 		{"93.184.216.34", "::ffff:127.0.0.1"},
 	} {
 		res := fixedResolver{"docs.example.com": mustAddrs(t, mixed...)}
-		if _, err := Check(context.Background(), "https://docs.example.com", res); !errors.Is(err, ErrBlocked) {
+		if _, err := Check(
+			context.Background(),
+			"https://docs.example.com",
+			res,
+		); !errors.Is(
+			err,
+			ErrBlocked,
+		) {
 			t.Errorf("answers %v: error = %v, want ErrBlocked", mixed, err)
 		}
 	}
@@ -146,14 +153,28 @@ func TestAHostResolvingToAnyBlockedAddressIsRefused(t *testing.T) {
 
 func TestUnresolvableHostIsRefused(t *testing.T) {
 	res := fixedResolver{}
-	if _, err := Check(context.Background(), "https://nope.example.com", res); !errors.Is(err, ErrBlocked) {
+	if _, err := Check(
+		context.Background(),
+		"https://nope.example.com",
+		res,
+	); !errors.Is(
+		err,
+		ErrBlocked,
+	) {
 		t.Errorf("error = %v, want ErrBlocked", err)
 	}
 }
 
 func TestEmptyAnswerIsRefused(t *testing.T) {
 	res := fixedResolver{"docs.example.com": {}}
-	if _, err := Check(context.Background(), "https://docs.example.com", res); !errors.Is(err, ErrBlocked) {
+	if _, err := Check(
+		context.Background(),
+		"https://docs.example.com",
+		res,
+	); !errors.Is(
+		err,
+		ErrBlocked,
+	) {
 		t.Errorf("error = %v, want ErrBlocked", err)
 	}
 }
@@ -203,7 +224,14 @@ func TestOnlyHTTPSchemesAreFetched(t *testing.T) {
 // the request goes to another.
 func TestCredentialsInTheURLAreRefused(t *testing.T) {
 	res := fixedResolver{"evil.example.com": mustAddrs(t, "93.184.216.34")}
-	if _, err := Check(context.Background(), "https://docs.example.com@evil.example.com/x", res); !errors.Is(err, ErrBlocked) {
+	if _, err := Check(
+		context.Background(),
+		"https://docs.example.com@evil.example.com/x",
+		res,
+	); !errors.Is(
+		err,
+		ErrBlocked,
+	) {
 		t.Errorf("error = %v, want ErrBlocked", err)
 	}
 }
@@ -222,7 +250,14 @@ func TestLocalNameSpacesAreRefusedBeforeResolving(t *testing.T) {
 	for _, host := range []string{
 		"printer.local", "wiki.internal", "localhost", "app.localhost", "nas.home.arpa",
 	} {
-		if _, err := Check(context.Background(), "https://"+host+"/x", res); !errors.Is(err, ErrBlocked) {
+		if _, err := Check(
+			context.Background(),
+			"https://"+host+"/x",
+			res,
+		); !errors.Is(
+			err,
+			ErrBlocked,
+		) {
 			t.Errorf("host %q: error = %v, want ErrBlocked", host, err)
 		}
 	}
@@ -235,7 +270,14 @@ func TestLocalNameSpacesAreRefusedBeforeResolving(t *testing.T) {
 
 func TestTrailingDotDoesNotEvadeTheSuffixRule(t *testing.T) {
 	res := fixedResolver{"printer.local.": mustAddrs(t, "93.184.216.34")}
-	if _, err := Check(context.Background(), "https://printer.local./x", res); !errors.Is(err, ErrBlocked) {
+	if _, err := Check(
+		context.Background(),
+		"https://printer.local./x",
+		res,
+	); !errors.Is(
+		err,
+		ErrBlocked,
+	) {
 		t.Errorf("error = %v, want ErrBlocked for a rooted local name", err)
 	}
 }
