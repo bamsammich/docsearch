@@ -195,7 +195,7 @@ from have landed.
 | 6e | — | `proto/docsearch/ingest/v1`, `internal/api/connectapi`, `internal/source` | testify suites driving the real Connect stack over `httptest`, against a mocked service |
 | 6f | — | `test/integration` | the worker builds an index from the committed fixtures, `internal/store` reads it back, and the Python verifier grades it; a refused document writes nothing and fails the job permanently |
 | 7a | `db.py`'s schema and migrations | `internal/schema` | a fresh database, an outdated one and a too-new one, each against the Python migration's outcome |
-| 7b | `verify.py` | `internal/domain`, `internal/service/document` | the same findings and the same verdict on the same chunks |
+| 7b | `verify.py`'s grading | `internal/domain` | the same findings, verdicts and detail strings on the distributions Python grades, from `testdata/grading` |
 | 7c | `inspect.py` | `internal/service/document` | the same report for a document and for a site |
 | 7d | — | the document proto and its `internal/api/connectapi` handlers | testify suites over a mocked service |
 | 7e | `cli.py` | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |

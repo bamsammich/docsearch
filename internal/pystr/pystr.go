@@ -7,6 +7,7 @@
 package pystr
 
 import (
+	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -114,4 +115,53 @@ func firstLineBreak(s string) (at, width int) {
 		return i, utf8.RuneLen(r)
 	}
 	return -1, 0
+}
+
+// Repr renders a string as Python's repr() does.
+//
+// The quote is a single quote, unless the string holds one and no double
+// quote, which is what makes Python print 'it' and "it's". Go's %q always
+// picks double quotes, so a report built with it diverges from Python's on
+// any line without an apostrophe.
+//
+// Non-printable runes are escaped the way Python escapes them. Go's
+// unicode.IsPrint covers the same categories as Python's str.isprintable:
+// both exclude the control, format, surrogate, private-use, unassigned and
+// separator categories, keeping ASCII space.
+func Repr(s string) string {
+	quote := byte('\'')
+	if strings.ContainsRune(s, '\'') && !strings.ContainsRune(s, '"') {
+		quote = '"'
+	}
+	var b strings.Builder
+	b.WriteByte(quote)
+	for _, r := range s {
+		b.WriteString(escapeRune(r, quote))
+	}
+	b.WriteByte(quote)
+	return b.String()
+}
+
+// escapeRune is one rune as Python's repr writes it.
+func escapeRune(r rune, quote byte) string {
+	switch {
+	case r == rune(quote):
+		return `\` + string(r)
+	case r == '\\':
+		return `\\`
+	case r == '\n':
+		return `\n`
+	case r == '\r':
+		return `\r`
+	case r == '\t':
+		return `\t`
+	case unicode.IsPrint(r):
+		return string(r)
+	case r < 0x100:
+		return fmt.Sprintf(`\x%02x`, r)
+	case r < 0x10000:
+		return fmt.Sprintf(`\u%04x`, r)
+	default:
+		return fmt.Sprintf(`\U%08x`, r)
+	}
 }

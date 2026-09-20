@@ -89,3 +89,41 @@ func (s *PystrSuite) TestIsLetter() {
 		})
 	}
 }
+
+// ReprSuite holds Repr to what Python's repr() prints. The boilerplate
+// finding quotes a line with it, and Go's %q would print double quotes where
+// Python prints single ones, on every line without an apostrophe.
+type ReprSuite struct{ suite.Suite }
+
+func TestRepr(t *testing.T) { suite.Run(t, new(ReprSuite)) }
+
+func (s *ReprSuite) TestReprMatchesPython() {
+	tests := []struct {
+		in   string
+		want string
+		note string
+	}{
+		{in: "plain", want: `'plain'`},
+		{in: "it's", want: `"it's"`, note: "an apostrophe alone switches the quote"},
+		{in: `say "hi"`, want: `'say "hi"'`},
+		{in: `both ' and "`, want: `'both \' and "'`, note: "both, so the quote is escaped"},
+		{in: "tab\there", want: `'tab\there'`},
+		{in: "nl\nhere", want: `'nl\nhere'`},
+		{in: `back\slash`, want: `'back\\slash'`},
+		{in: "café", want: `'café'`, note: "a printable letter is not escaped"},
+		{in: "zero\x00byte", want: `'zero\x00byte'`},
+		{
+			in: "sep" + lineSep + "here",
+			// The escape Python writes, spelled so the source holds a
+			// backslash rather than the separator itself.
+			want: "'sep\\" + "u2028here'",
+			note: "a line separator is not printable",
+		},
+		{in: "😀", want: `'😀'`},
+	}
+	for _, tt := range tests {
+		s.Run(tt.in, func() {
+			s.Equal(tt.want, pystr.Repr(tt.in), tt.note)
+		})
+	}
+}
