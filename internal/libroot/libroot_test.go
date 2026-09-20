@@ -339,3 +339,36 @@ func TestASymlinkOutOfASymlinkedRootIsStillRejected(t *testing.T) {
 		t.Errorf("Resolve() error = %v, want ErrOutsideRoot", err)
 	}
 }
+
+// A caller that resolved the path before asking is the other half of the
+// symlink problem: the full-stack suite resolves every path it writes, and
+// comparing that against a root spelled as the operator wrote it refused
+// every fixture in the library.
+func TestAResolvedCandidateIsAcceptedUnderAnUnresolvedRoot(t *testing.T) {
+	base := t.TempDir()
+	library := filepath.Join(base, "library")
+	if err := os.Mkdir(library, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "configured")
+	if err := os.Symlink(library, link); err != nil {
+		t.Fatal(err)
+	}
+	inside := filepath.Join(library, "manual.pdf")
+	if err := os.WriteFile(inside, []byte("%PDF-1.4"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := filepath.EvalSymlinks(inside)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The root as configured, the candidate already resolved.
+	got, err := Resolve([]string{link}, resolved)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v, want nil", err)
+	}
+	if got != resolved {
+		t.Errorf("Resolve() = %q, want %q", got, resolved)
+	}
+}
