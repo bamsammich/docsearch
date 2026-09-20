@@ -27,3 +27,5 @@ __pycache__/
 
 # Editor
 .DS_Store
+# Holds absolute paths to whatever is installed on one machine.
+.vscode/

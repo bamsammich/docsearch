@@ -298,6 +298,19 @@ def test_a_sitemap_suppresses_link_following(server: str, fetcher: Fetcher) -> N
     assert not any("following links" in n for n in res.notes)
 
 
+def test_what_discovery_found_is_reported(server: str, fetcher: Fetcher) -> None:
+    """Which source answered, and what it declared.
+
+    Discovery writes its notes on a coverage object that goes no further than
+    the crawl, so a note left there is a note nobody reads -- and a short
+    crawl is the first thing anyone asks this pipeline to explain.
+    """
+    _sitemap_site(server, ["a", "b"])
+
+    res = crawl(fetcher, f"{server}/docs")
+    assert any("sitemap declares" in n for n in res.notes)
+
+
 # -- cancellation and resume ----------------------------------------------
 
 
