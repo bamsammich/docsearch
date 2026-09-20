@@ -18,6 +18,7 @@ packages:
     interfaces:
       Ingester:
       Sources:
+      Documents:
   github.com/bamsammich/docsearch/internal/service/document:
     interfaces:
       Repository:

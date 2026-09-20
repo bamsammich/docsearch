@@ -42,7 +42,7 @@ func (d *Documents) Get(ctx context.Context, docID string) (*document.Document, 
 		DocID:      row.DocID,
 		Title:      row.Title,
 		Format:     row.Format,
-		SourceKind: row.SourceKind,
+		SourceKind: sourceKind(row.SourceKind),
 		Status:     row.Status,
 	}
 	doc.Quality, doc.Warnings = summarize(row.Warnings)
@@ -63,7 +63,7 @@ func (d *Documents) List(ctx context.Context) ([]document.Document, error) {
 			DocID:      row.DocID,
 			Title:      row.Title,
 			Format:     row.Format,
-			SourceKind: row.SourceKind,
+			SourceKind: sourceKind(row.SourceKind),
 			Status:     "ready",
 		}
 		doc.Quality, doc.Warnings = summarize(row.Warnings)
@@ -162,6 +162,17 @@ func summarize(warnings sql.NullString) (domain.Quality, []string) {
 		return 0, stored.Notes
 	}
 	return quality, stored.Notes
+}
+
+// sourceKind reads the kind a document was stored with. An index written by
+// a build that knew a kind this one does not reports unset rather than a
+// kind nobody chose.
+func sourceKind(stored string) domain.SourceKind {
+	var kind domain.SourceKind
+	if err := kind.UnmarshalText([]byte(stored)); err != nil {
+		return 0
+	}
+	return kind
 }
 
 func stringOf(v sql.NullString) *string {

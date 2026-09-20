@@ -32,16 +32,12 @@ run = [
   "GOLANGCI_LINT_CACHE=$(mktemp -d) mise run lint",
   "go mod tidy -diff",
   "sqlc diff",
-  # Mocks are generated and committed, so a port edited without regenerating
-  # them would otherwise be caught by nothing until a test broke elsewhere.
-  # Scoped to the mocks, since a pre-push run has the rest of the branch's
-  # work in the tree beside it.
-  "mockery && git diff --exit-code -- '**/mocks/*.go'",
-  "scripts/baseline-migration.sh && git diff --exit-code -- internal/schema/migrations",
-  "go run ./scripts/schema-snapshot && git diff --exit-code -- internal/schema/schema.snapshot.sql",
   "buf lint",
   "buf format --diff --exit-code",
-  "buf generate && git diff --exit-code -- 'internal/api/**/*.pb.go' 'internal/api/**/*.connect.go'",
+  # Everything generated is regenerated and compared with what was there, so
+  # a source edited without regenerating fails here rather than at a test
+  # that breaks somewhere else.
+  "scripts/generated-is-current.sh",
   "mise run test",
 ]
 

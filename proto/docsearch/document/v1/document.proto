@@ -1,0 +1,156 @@
+syntax = "proto3";
+
+// Package docsearch.document.v1 answers questions about what the index
+// already holds.
+package docsearch.document.v1;
+
+import "docsearch/type/v1/common.proto";
+
+// Document is one document the index holds.
+message Document {
+  string doc_id = 1;
+  string title = 2;
+  // Format is how the document was extracted; source_kind is where it came
+  // from. A site is a site whatever its pages were parsed as.
+  string format = 3;
+  docsearch.type.v1.SourceKind source_kind = 4;
+  // Status is 'ingesting' or 'ready'. Every search path filters for ready,
+  // so a document that is not is invisible to everything but verification.
+  string status = 5;
+  optional int64 page_count = 6;
+  optional int64 chunk_count = 7;
+  docsearch.type.v1.Quality quality = 8;
+  // Warnings are the structure report's notes, as an operator reads them.
+  repeated string warnings = 9;
+}
+
+// TokenSpread is the distribution of a document's chunk sizes.
+//
+// Eyeballing it catches a structural extraction failure immediately: a
+// heading source that silently collapsed shows up as a handful of enormous
+// chunks, and a shattered one as hundreds of near-empty chunks.
+message TokenSpread {
+  int64 min = 1;
+  int64 median = 2;
+  int64 p95 = 3;
+  int64 max = 4;
+  int64 mean = 5;
+  int64 total = 6;
+}
+
+// SizedChunk names one chunk by where it sits and how big it is.
+message SizedChunk {
+  // Ordinal rather than a row id, so a reader can find the chunk in the
+  // document.
+  int64 ordinal = 1;
+  int64 tokens = 2;
+  string heading_path = 3;
+}
+
+// Measurements are what a document's chunks show about how it was stored.
+message Measurements {
+  int64 chunk_count = 1;
+  TokenSpread tokens = 2;
+  repeated SizedChunk longest = 3;
+  repeated SizedChunk shortest = 4;
+  // Pages of a paginated document that no chunk claims.
+  repeated int64 uncovered_pages = 5;
+  // Where the chunk numbering skips, by the ordinal before each gap.
+  repeated int64 ordinal_gaps = 6;
+  // Sections whose chunks are not contiguous.
+  repeated string scattered_sections = 7;
+  // Chunks of a paginated document that name no page.
+  int64 missing_locator = 8;
+  int64 chunks_with_images = 9;
+}
+
+// Finding is one graded defect, its evidence, and what it costs a caller.
+message Finding {
+  string code = 1;
+  docsearch.type.v1.Verdict severity = 2;
+  string detail = 3;
+}
+
+// VerifyReport is what verification found.
+//
+// Two questions, kept apart. Problems are integrity failures: the rows
+// disagree with each other or with the document. Findings are quality
+// defects, every one of them compatible with a clean ingest that reached
+// 'ready'. A document can fail either while passing the other.
+message VerifyReport {
+  Document document = 1;
+  Measurements measurements = 2;
+  repeated string problems = 3;
+  repeated Finding findings = 4;
+  docsearch.type.v1.Verdict verdict = 5;
+}
+
+// InspectFinding is one question asked of a document before ingesting it.
+message InspectFinding {
+  docsearch.type.v1.Level level = 1;
+  string label = 2;
+  string detail = 3;
+}
+
+// InspectReport is what reconnaissance made of a target, having written
+// nothing.
+message InspectReport {
+  // A path for a file, a seed URL for a site.
+  string target = 1;
+  string format = 2;
+  // The structure source ingest would end up using, and how much it can be
+  // trusted.
+  string predicted_source = 3;
+  string predicted_tier = 4;
+  optional int64 page_count = 5;
+  repeated InspectFinding findings = 6;
+  // Blocked is true where ingest would refuse the target, or should.
+  bool blocked = 7;
+}
+
+message ListRequest {}
+
+message ListResponse {
+  repeated Document documents = 1;
+}
+
+message VerifyRequest {
+  string doc_id = 1;
+}
+
+message VerifyResponse {
+  VerifyReport report = 1;
+}
+
+message InspectRequest {
+  // A path inside the configured library root, or the URL of a site.
+  string target = 1;
+}
+
+message InspectResponse {
+  InspectReport report = 1;
+}
+
+message RemoveRequest {
+  string doc_id = 1;
+}
+
+message RemoveResponse {}
+
+// DocumentService reads and reports on what the index holds.
+service DocumentService {
+  // List is every ready document.
+  rpc List(ListRequest) returns (ListResponse) {}
+
+  // Verify checks one stored document, both ways.
+  rpc Verify(VerifyRequest) returns (VerifyResponse) {}
+
+  // Inspect reports what ingest would make of a target, writing nothing.
+  //
+  // A site is crawled for real, because every question worth asking about
+  // one is a question about what the server returns.
+  rpc Inspect(InspectRequest) returns (InspectResponse) {}
+
+  // Remove deletes a document from the index.
+  rpc Remove(RemoveRequest) returns (RemoveResponse) {}
+}

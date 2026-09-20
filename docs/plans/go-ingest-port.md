@@ -198,7 +198,7 @@ from have landed.
 | 7b | `verify.py`'s grading | `internal/domain` | the same findings, verdicts and detail strings on the distributions Python grades, from `testdata/grading` |
 | 7c | `inspect.py` | `internal/service/inspect`, with each report beside the data it reads: `internal/adapter/pdf`, `internal/site` | the same findings as Python on the committed PDFs, from `testdata/inspect` |
 | 7d | `verify.py`'s integrity half | `internal/domain` measurements, `internal/service/document` and its repository | the same measurements as `verify_document`; quality and integrity reported apart |
-| 7e | — | the document proto and its `internal/api/connectapi` handlers | testify suites over a mocked service |
+| 7e | — | `proto/docsearch/type/v1`, `proto/docsearch/document/v1` and their `internal/api/connectapi` handlers | testify suites driving the real Connect stack over `httptest`, against a mocked service |
 | 7f | `cli.py` | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |
 
 ### The snapshot is what a review reads

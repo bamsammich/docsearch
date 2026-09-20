@@ -20,6 +20,7 @@ import (
 
 	ingestv1 "github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1"
 	"github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1/ingestv1connect"
+	typev1 "github.com/bamsammich/docsearch/internal/api/docsearch/type/v1"
 	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 )
@@ -136,7 +137,7 @@ func resultMessage(result *ingest.Result) *ingestv1.Result {
 	if result.Report == nil {
 		return msg
 	}
-	msg.Quality = ingestv1.Quality(result.Report.Quality())
+	msg.Quality = typev1.Quality(result.Report.Quality())
 	if warnings, err := result.Report.JSON(); err == nil {
 		msg.Warnings = string(warnings)
 	}
@@ -167,12 +168,12 @@ func asConnectError(err error) error {
 // a value renumbered on either side stops the build here rather than
 // mislabelling a document's grade in a client.
 const (
-	_ = uint8(ingestv1.Quality_QUALITY_OK - ingestv1.Quality(domain.QualityOK))
-	_ = uint8(ingestv1.Quality_QUALITY_DEGRADED - ingestv1.Quality(domain.QualityDegraded))
-	_ = uint8(ingestv1.Quality_QUALITY_FAILED - ingestv1.Quality(domain.QualityFailed))
+	_ = uint8(typev1.Quality_QUALITY_OK - typev1.Quality(domain.QualityOK))
+	_ = uint8(typev1.Quality_QUALITY_DEGRADED - typev1.Quality(domain.QualityDegraded))
+	_ = uint8(typev1.Quality_QUALITY_FAILED - typev1.Quality(domain.QualityFailed))
 
-	_ = uint8(ingestv1.SourceKind_SOURCE_KIND_FILE - ingestv1.SourceKind(domain.SourceKindFile))
-	_ = uint8(ingestv1.SourceKind_SOURCE_KIND_SITE - ingestv1.SourceKind(domain.SourceKindSite))
+	_ = uint8(typev1.SourceKind_SOURCE_KIND_FILE - typev1.SourceKind(domain.SourceKindFile))
+	_ = uint8(typev1.SourceKind_SOURCE_KIND_SITE - typev1.SourceKind(domain.SourceKindSite))
 
 	_ = uint8(ingestv1.Phase_PHASE_DISCOVER - ingestv1.Phase(ingest.PhaseDiscover))
 	_ = uint8(ingestv1.Phase_PHASE_FETCH - ingestv1.Phase(ingest.PhaseFetch))

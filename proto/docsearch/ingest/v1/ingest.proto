@@ -11,22 +11,7 @@ syntax = "proto3";
 // signed link, and the URL of what was uploaded is what arrives here.
 package docsearch.ingest.v1;
 
-// Quality grades a document's derived structure. The numbering matches
-// docsearch's own enum, so the conversion at this boundary is a checked cast
-// rather than a lookup table that can drift.
-enum Quality {
-  QUALITY_UNSPECIFIED = 0;
-  QUALITY_OK = 1;
-  QUALITY_DEGRADED = 2;
-  QUALITY_FAILED = 3;
-}
-
-// SourceKind says what a document was read from.
-enum SourceKind {
-  SOURCE_KIND_UNSPECIFIED = 0;
-  SOURCE_KIND_FILE = 1;
-  SOURCE_KIND_SITE = 2;
-}
+import "docsearch/type/v1/common.proto";
 
 // Phase names the stage a progress report describes.
 enum Phase {
@@ -81,8 +66,8 @@ message Result {
   // Note explains an outcome the caller did not ask for, and is empty where
   // the outcome speaks for itself.
   string note = 5;
-  Quality quality = 6;
-  SourceKind source_kind = 7;
+  docsearch.type.v1.Quality quality = 6;
+  docsearch.type.v1.SourceKind source_kind = 7;
   // Warnings is the structure report as it is persisted, so a client can show
   // what `docsearch verify` would show without asking again.
   string warnings = 8;

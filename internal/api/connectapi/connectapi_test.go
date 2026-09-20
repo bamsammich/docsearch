@@ -15,6 +15,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/api/connectapi/mocks"
 	ingestv1 "github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1"
 	"github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1/ingestv1connect"
+	typev1 "github.com/bamsammich/docsearch/internal/api/docsearch/type/v1"
 	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 )
@@ -114,7 +115,7 @@ func (s *APISuite) TestTheStructureReportReachesTheCaller() {
 	s.Require().NoError(err)
 	s.Require().Len(got, 1)
 	result := got[0].GetResult()
-	s.Equal(ingestv1.Quality_QUALITY_OK, result.GetQuality())
+	s.Equal(typev1.Quality_QUALITY_OK, result.GetQuality())
 	s.Contains(result.GetWarnings(), `"structure_source":"outline"`)
 }
 

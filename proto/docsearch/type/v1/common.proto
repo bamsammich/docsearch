@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+// Package docsearch.type.v1 holds what more than one service says.
+//
+// A grade means the same thing to an ingest reporting what it just wrote and
+// to a verification reporting what it found, so it is declared once. Each
+// enum shares its numbering with docsearch's own, which is what makes the
+// conversion at the boundary a cast rather than a lookup table that can
+// drift.
+package docsearch.type.v1;
+
+// Quality grades a document's derived structure.
+enum Quality {
+  QUALITY_UNSPECIFIED = 0;
+  QUALITY_OK = 1;
+  QUALITY_DEGRADED = 2;
+  QUALITY_FAILED = 3;
+}
+
+// SourceKind says what a document was read from.
+enum SourceKind {
+  SOURCE_KIND_UNSPECIFIED = 0;
+  SOURCE_KIND_FILE = 1;
+  SOURCE_KIND_SITE = 2;
+}
+
+// Verdict is how usable a document's chunks are.
+//
+// Separate from whether the rows are sound: a document can be perfectly
+// consistent and still be shaped so retrieval cannot work on it.
+enum Verdict {
+  VERDICT_UNSPECIFIED = 0;
+  VERDICT_GOOD = 1;
+  VERDICT_DEGRADED = 2;
+  VERDICT_UNUSABLE = 3;
+}
+
+// Level is how much a reconnaissance finding matters.
+enum Level {
+  LEVEL_UNSPECIFIED = 0;
+  // A question answered well.
+  LEVEL_OK = 1;
+  // The document will ingest, and will search worse for what the finding
+  // names.
+  LEVEL_WARN = 2;
+  // Ingest would refuse the document, or should.
+  LEVEL_BLOCKED = 3;
+}
