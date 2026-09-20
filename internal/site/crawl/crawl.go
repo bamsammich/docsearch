@@ -31,6 +31,7 @@ import (
 
 	"github.com/bamsammich/docsearch/internal/site/discover"
 	"github.com/bamsammich/docsearch/internal/site/fetch"
+	"github.com/bamsammich/docsearch/internal/site/nav"
 )
 
 const (
@@ -69,6 +70,8 @@ type Pair struct {
 // Result is what a crawl visited, and everything it could not.
 type Result struct {
 	Coverage *discover.Coverage
+	// Hierarchy places every page the crawl fetched.
+	Hierarchy *nav.Hierarchy
 	// Pages are keyed by normalized URL, in the order the frontier visited.
 	Pages map[string]*Page
 	Seed  string
@@ -186,7 +189,24 @@ func (c *crawler) run(ctx context.Context) error {
 		return err
 	}
 	c.summarize()
+	// Derived against what was fetched rather than what was declared: a
+	// hierarchy source that places pages the crawl never got is not placing
+	// anything a caller can reach.
+	hierarchy, err := nav.Derive(c.result.Order, c.seed, seedBody(seedPage))
+	if err != nil {
+		return err
+	}
+	c.result.Hierarchy = hierarchy
+	c.result.Notes = append(c.result.Notes, hierarchy.Notes...)
 	return nil
+}
+
+// seedBody is the seed page's body, or nil where the seed could not be read.
+func seedBody(seedPage *fetch.Fetched) []byte {
+	if seedPage == nil {
+		return nil
+	}
+	return seedPage.Body
 }
 
 // fetchSeed reads the seed page, which discovery reads as the index page.

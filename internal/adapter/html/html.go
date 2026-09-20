@@ -109,7 +109,7 @@ func (w *walker) visit(el *goquery.Selection) {
 		w.emitCode()
 		return
 	}
-	text := proseText(el.Nodes[0])
+	text := ProseText(el.Nodes[0])
 	switch {
 	case text == "":
 	case el.Is(headingSelector):
@@ -183,11 +183,12 @@ func headingAnchor(h *goquery.Selection) *string {
 	return &id
 }
 
-// proseText is BeautifulSoup's get_text(" ", strip=True): every text node
+// ProseText is BeautifulSoup's get_text(" ", strip=True): every text node
 // under n, each stripped, the empty ones dropped, joined with a space.
 // goquery's Text concatenates the nodes unstripped, which would keep the
-// markup's line breaks and indentation inside prose.
-func proseText(n *nethtml.Node) string {
+// markup's line breaks and indentation inside prose. The site packages read
+// navigation labels with it, so they read as the adapters do.
+func ProseText(n *nethtml.Node) string {
 	var parts []string
 	eachText(n, func(s string) {
 		if s = pystr.Strip(s); s != "" {
