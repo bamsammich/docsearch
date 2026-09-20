@@ -1,0 +1,34 @@
+{
+ "blocked": false,
+ "findings": [
+  {
+   "detail": "present on 4 of 4 pages; no OCR needed",
+   "label": "text layer",
+   "level": "ok"
+  },
+  {
+   "detail": "absent. The producer toolchain stripped bookmarks, or none were authored, so structure must come from the page content instead.",
+   "label": "outline",
+   "level": "warn"
+  },
+  {
+   "detail": "body text at 10.0pt; heading candidates at 16.0pt",
+   "label": "font hierarchy",
+   "level": "ok"
+  },
+  {
+   "detail": "4 entries reconstructed from the first 40 pages. Author-declared, but recovered by parsing, so it will be checked against body headings and a disagreement fails the ingest.",
+   "label": "printed contents",
+   "level": "ok"
+  },
+  {
+   "detail": "0 repeated line(s), 0% of the document's token mass. Stripped before chunking; a high share means a large part of the raw text is a running header or footer.",
+   "label": "page furniture",
+   "level": "ok"
+  }
+ ],
+ "format": "pdf",
+ "page_count": 4,
+ "predicted_source": "front_toc",
+ "predicted_tier": "declared, recovered by parsing"
+}

@@ -1,0 +1,34 @@
+{
+ "blocked": false,
+ "findings": [
+  {
+   "detail": "present on 10 of 10 pages; no OCR needed",
+   "label": "text layer",
+   "level": "ok"
+  },
+  {
+   "detail": "absent. The producer toolchain stripped bookmarks, or none were authored, so structure must come from the page content instead.",
+   "label": "outline",
+   "level": "warn"
+  },
+  {
+   "detail": "body text at 10.0pt; heading candidates at 16.0pt",
+   "label": "font hierarchy",
+   "level": "ok"
+  },
+  {
+   "detail": "none reconstructable. Structure will be inferred from font sizes alone, with nothing to validate it against.",
+   "label": "printed contents",
+   "level": "warn"
+  },
+  {
+   "detail": "0 repeated line(s), 0% of the document's token mass. Stripped before chunking; a high share means a large part of the raw text is a running header or footer.",
+   "label": "page furniture",
+   "level": "ok"
+  }
+ ],
+ "format": "pdf",
+ "page_count": 10,
+ "predicted_source": "font_heuristic",
+ "predicted_tier": "inferred, no source to check it against"
+}

@@ -77,7 +77,8 @@ func sidebar() string {
 		`</ul></aside>`
 }
 
-func (s *SiteSuite) extraction() *domain.Extraction {
+// crawl walks the served fixture.
+func (s *SiteSuite) crawl() *crawl.Result {
 	cache, err := fetch.OpenSQLiteCache(s.T().Context(), filepath.Join(s.T().TempDir(), "cache.db"))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { s.Require().NoError(cache.Close()) })
@@ -90,7 +91,11 @@ func (s *SiteSuite) extraction() *domain.Extraction {
 		crawl.Options{Revalidate: true},
 	)
 	s.Require().NoError(err)
-	ext, err := site.BuildExtraction(result, "")
+	return result
+}
+
+func (s *SiteSuite) extraction() *domain.Extraction {
+	ext, err := site.BuildExtraction(s.crawl(), "")
 	s.Require().NoError(err)
 	return ext
 }

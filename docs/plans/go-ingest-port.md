@@ -196,7 +196,7 @@ from have landed.
 | 6f | — | `test/integration` | the worker builds an index from the committed fixtures, `internal/store` reads it back, and the Python verifier grades it; a refused document writes nothing and fails the job permanently |
 | 7a | `db.py`'s schema and migrations | `internal/schema` | a fresh database, an outdated one and a too-new one, each against the Python migration's outcome |
 | 7b | `verify.py`'s grading | `internal/domain` | the same findings, verdicts and detail strings on the distributions Python grades, from `testdata/grading` |
-| 7c | `inspect.py` | `internal/service/document` | the same report for a document and for a site |
+| 7c | `inspect.py` | `internal/service/inspect`, with each report beside the data it reads: `internal/adapter/pdf`, `internal/site` | the same findings as Python on the committed PDFs, from `testdata/inspect` |
 | 7d | — | the document proto and its `internal/api/connectapi` handlers | testify suites over a mocked service |
 | 7e | `cli.py` | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |
 

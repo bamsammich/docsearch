@@ -1,0 +1,29 @@
+{
+ "blocked": false,
+ "findings": [
+  {
+   "detail": "present on 3 of 3 pages; no OCR needed",
+   "label": "text layer",
+   "level": "ok"
+  },
+  {
+   "detail": "4 entries, nesting depth 1-2. Sections, nesting and the page each begins on are all declared, so none of the structure has to be inferred.",
+   "label": "outline",
+   "level": "ok"
+  },
+  {
+   "detail": "no size stands above the 10.0pt body text. Headings in this document are styled by weight or colour rather than size, so font detection cannot find them and cannot corroborate anything.",
+   "label": "font hierarchy",
+   "level": "warn"
+  },
+  {
+   "detail": "0 repeated line(s), 0% of the document's token mass. Stripped before chunking; a high share means a large part of the raw text is a running header or footer.",
+   "label": "page furniture",
+   "level": "ok"
+  }
+ ],
+ "format": "pdf",
+ "page_count": 3,
+ "predicted_source": "outline",
+ "predicted_tier": "authoritative"
+}
