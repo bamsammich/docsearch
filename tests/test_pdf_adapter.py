@@ -156,3 +156,20 @@ def test_a_short_page_is_never_a_contents_page() -> None:
         _Line(y0=10.0, x0=0.0, y1=18.0, size=10.0, text="Appendix"),
     ]
     assert _contents_pages([page], entries, boiler=set()) == set()
+
+
+def test_contents_row_with_number_and_title_in_one_cell_is_split() -> None:
+    """A long section number can leave too little gap for the line builder to
+    keep it apart from its title; the row is still a contents entry."""
+    from docsearch.adapters.pdf import _Line, reconstruct_front_toc
+
+    page = [
+        _Line(y0=100.0, x0=72.0, y1=110.0, size=10.0, text="7.17. Deep Section"),
+        _Line(y0=100.0, x0=400.0, y1=110.0, size=10.0, text="212"),
+        _Line(y0=120.0, x0=72.0, y1=130.0, size=10.0, text="7.18."),
+        _Line(y0=120.0, x0=110.0, y1=130.0, size=10.0, text="Next Section"),
+        _Line(y0=120.0, x0=400.0, y1=130.0, size=10.0, text="215"),
+    ]
+    entries, toc_pages = reconstruct_front_toc([page], boiler=set(), scan_pages=1)
+    assert entries == [("7.17", "Deep Section", 212), ("7.18", "Next Section", 215)]
+    assert toc_pages == {0}

@@ -54,6 +54,8 @@ MIN_FIGURE_AREA = 400.0
 
 _SECTION_LINE = re.compile(r"^(\d+(?:\.\d+)*)\.\s*(.*)$")
 _SECTION_ONLY = re.compile(r"^(\d+(?:\.\d+)*)\.$")
+#: A contents cell holding the section number and its title together.
+_SECTION_MERGED = re.compile(r"^(\d+(?:\.\d+)*)\.\s+(.+)$")
 _DIGITS = re.compile(r"\d+")
 _PAGE_OF = re.compile(r"^\d+\s+of\s+\d+$")
 #: ``term  1.2.3.   4.5.`` -- one or more trailing section references.
@@ -169,6 +171,11 @@ def reconstruct_front_toc(
     that to skip the TOC during body extraction -- inferring the TOC's extent
     from "page contains a bare numbered line" instead would swallow real
     chapters, since body pages carry numbered headings too.
+
+    A row whose first cell holds "7.17. Title" as one line is split into the
+    number and the title. MuPDF separates the two on every row of the manual
+    this was measured on; PDFium cannot for the longest section numbers, which
+    leave almost no gap before the title, and the Go port reads this parser.
     """
     entries: list[tuple[str, str, int]] = []
     toc_pages: set[int] = set()
@@ -181,6 +188,10 @@ def reconstruct_front_toc(
         for key in sorted(bands):
             cells = sorted(bands[key], key=lambda c: c.x0)
             texts = [c.text for c in cells]
+            if len(texts) >= 2 and not _SECTION_ONLY.match(texts[0]):
+                merged = _SECTION_MERGED.match(texts[0])
+                if merged:
+                    texts = [merged.group(1) + ".", merged.group(2), *texts[1:]]
             if len(texts) < 3:
                 continue
             head = _SECTION_ONLY.match(texts[0])

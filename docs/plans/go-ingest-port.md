@@ -85,6 +85,7 @@ Two kinds of test, because the library cannot be committed:
 | test | input | runs where |
 |---|---|---|
 | unit tests ported from `tests/` | small synthetic fixtures already in the Python tests | everywhere |
+| golden tests | synthetic documents in `testdata/adapters/`, with the Python adapters' extraction of each | everywhere |
 | parity tests | Python reference output in `var/parity/` | only where that output exists; skipped otherwise |
 
 The library holds copyrighted manuals, so their extracted text never goes into
@@ -104,6 +105,22 @@ measurement that justified it. The port drops one behaviour so far: python-docx
 refuses a package holding two relationships of one type, and the Go adapter
 reads the first, since refusing a readable document only loses its text.
 
+### PDF is checked in two halves
+
+PDFium and MuPDF do not report the same lines, so the PDF adapter cannot
+match Python end to end. It splits where the spike split it.
+
+`pdf.Build`, everything after the engine, is pure and is held to Python
+exactly: the parity script dumps the primitives PyMuPDF gave for each PDF,
+and Build must turn them into the same extraction, diagnostics included.
+
+The engine is held to the chunk structure instead, by the two measures the
+spike used: the overlap of the heading paths, and of the chunk starts. Each
+document's scores are recorded beside its reference output, and a run fails
+if either falls below what was recorded. Every manual records 1.0; the
+two-column journal papers record the gaps
+[the spike](../research/pdfium-spike.md) explains.
+
 ## Order
 
 Each row is one pull request into `v2`. A row starts when the rows it reads
@@ -114,7 +131,7 @@ from have landed.
 | 1 | `tokens.py`, `blocks.py`, `chunker.py` | `internal/domain`, `internal/pystr` | Python's extraction in, identical chunks out |
 | 2 | `structure.py` | `internal/domain` | identical quality grade and findings |
 | 3 | `adapters/text.py`, `markdown.py`, `docx.py`, `html.py` | `internal/adapter` and a subpackage per format | identical extraction |
-| 4 | `adapters/pdf.py` | `internal/adapter/pdf`, on go-pdfium | the spike 1 rules; identical chunks on the manuals |
+| 4 | `adapters/pdf.py` | `internal/adapter/pdf`, on go-pdfium | Build reproduces Python from PyMuPDF's primitives; the engine holds its recorded chunk structure |
 | 5 | `fetch.py`, `fetchcache.py`, `discover.py`, `nav.py`, `crawl.py`, `site.py` | `internal/site/...` | identical extraction from the same fetch cache |
 | 6 | `ingest.py`, `db.py`, `worker.py` | `internal/service` and its extractor port, `internal/repository/sqlite`, `cmd/docsearch-worker`, the service's proto and `internal/api/connectapi`, typed domain enums | an index built by Go passes `docsearch verify` and matches the eval, in a ginkgo full-stack suite; a structure mismatch refuses the document, writes nothing, and fails the job permanently |
 | 7 | `cli.py`, `inspect.py`, `verify.py` | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |
@@ -151,4 +168,5 @@ Each of these changes output silently if ported naively.
 | `int(x)` truncates toward zero | `int(x)` on a float, same |
 | `Path.read_text(errors="replace")` gives a truncated sequence one U+FFFD, and reads `\r\n` and `\r` as `\n` | `pystr.ReadText`; ranging over bytes in Go gives one U+FFFD per byte |
 | `PurePath.stem` keeps `.bashrc` whole | `pystr.Stem`; `filepath.Ext` takes all of `.bashrc` as the extension |
+| PyMuPDF writes page text with "\n" line endings, the last line included | the PDF engine rewrites PDFium's "\r\n" text the same way; nothing parses that text, and a search result shows it |
 | lxml parses HTML and drops content after `</body>` | `x/net/html` follows HTML5 and moves it into the body; accepted, since a browser reads such a page the HTML5 way |

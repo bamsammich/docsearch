@@ -17,6 +17,7 @@ import json
 from pathlib import Path
 
 import docx
+import pymupdf
 from docx.enum.text import WD_BREAK
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -183,6 +184,148 @@ def _run_element(text: str) -> OxmlElement:
     return r
 
 
+BODY = 10.0
+HEAD = 16.0
+WORDS = [
+    "amber",
+    "birch",
+    "cedar",
+    "delta",
+    "ember",
+    "fjord",
+    "grove",
+    "harbor",
+    "iris",
+    "juniper",
+    "kestrel",
+    "lumen",
+]
+
+
+def _pdf_page(doc: pymupdf.Document, rows: list[list[tuple[float, float, str]]]) -> None:
+    """One page; each row is ``(x, size, text)`` cells sharing a baseline."""
+    page = doc.new_page()
+    y = 90.0
+    for row in rows:
+        for x, size, text in row:
+            page.insert_text((x, y), text, fontsize=size)
+        y += max(size for _x, size, _t in row) * 2.2
+
+
+def _line(size: float, text: str) -> list[tuple[float, float, str]]:
+    return [(72.0, size, text)]
+
+
+def _body(n: int, topic: str) -> list[list[tuple[float, float, str]]]:
+    """Prose lines that differ from page to page even with digits masked, so
+    none repeats enough to read as running furniture."""
+    return [
+        _line(
+            BODY,
+            f"The {topic} notes cover {WORDS[i % len(WORDS)]} "
+            f"and {WORDS[(i * 5 + 3) % len(WORDS)]} work.",
+        )
+        for i in range(n)
+    ]
+
+
+def _write_numbered_pdf(path: Path) -> None:
+    """Structure from font sizes: numbered headings at a larger size, an
+    unnumbered heading-sized line that subdivides, a chapter number and title
+    set as two lines, and a numbered step at heading size that document
+    order rejects."""
+    doc = pymupdf.open()
+    doc.set_metadata({"title": "Numbered Guide"})
+    _pdf_page(doc, [_line(HEAD, "1. Overview"), *_body(8, "overview")])
+    _pdf_page(
+        doc,
+        [_line(HEAD, "2. Setup"), *_body(6, "setup"), _line(HEAD, "Wiring"), *_body(6, "wiring")],
+    )
+    _pdf_page(
+        doc,
+        [
+            _line(HEAD, "2.1. Power"),
+            *_body(5, "power"),
+            _line(HEAD, "1. Tap the switch"),
+            *_body(3, "step"),
+        ],
+    )
+    _pdf_page(doc, [_line(HEAD, "3."), _line(HEAD, "Maintenance"), *_body(9, "maintenance")])
+    later = ["cleaning", "storage", "transport", "repair", "disposal", "warranty"]
+    for i, topic in enumerate(later):
+        _pdf_page(doc, [_line(HEAD, f"{4 + i}. {topic.title()}"), *_body(10, topic)])
+    doc.save(str(path))
+    doc.close()
+
+
+def _write_outline_pdf(path: Path) -> None:
+    """Structure from an embedded outline, with one entry whose title is not
+    on its page."""
+    doc = pymupdf.open()
+    _pdf_page(
+        doc,
+        [
+            _line(HEAD, "Getting Started"),
+            *_body(6, "start"),
+            _line(HEAD, "First Steps"),
+            *_body(6, "steps"),
+        ],
+    )
+    _pdf_page(doc, [_line(HEAD, "Configuration"), *_body(10, "configuration")])
+    _pdf_page(doc, [*_body(12, "unmarked")])
+    doc.set_toc(
+        [
+            [1, "Getting Started", 1],
+            [2, "First Steps", 1],
+            [1, "Configuration", 2],
+            [2, "Advanced Options", 3],
+        ]
+    )
+    doc.save(str(path))
+    doc.close()
+
+
+def _write_contents_pdf(path: Path) -> None:
+    """Structure from a printed table of contents, with a back-of-book index
+    whose entries cite section numbers."""
+    doc = pymupdf.open()
+    chapters = [
+        ("1", "Introduction", 2),
+        ("2", "Controls", 3),
+        ("2.1", "Faders", 3),
+        ("3", "Index", 4),
+    ]
+    _pdf_page(
+        doc,
+        [_line(HEAD, "Contents")]
+        + [
+            [(72.0, BODY, f"{sec}."), (110.0, BODY, title), (400.0, BODY, str(pg))]
+            for sec, title, pg in chapters
+        ],
+    )
+    _pdf_page(doc, [_line(HEAD, "1. Introduction"), *_body(10, "introduction")])
+    _pdf_page(
+        doc,
+        [
+            _line(HEAD, "2. Controls"),
+            *_body(5, "controls"),
+            _line(HEAD, "2.1. Faders"),
+            *_body(5, "faders"),
+        ],
+    )
+    _pdf_page(
+        doc,
+        [
+            _line(HEAD, "3. Index"),
+            [(72.0, BODY, "channel strip"), (300.0, BODY, "2.1.")],
+            [(72.0, BODY, "master"), (300.0, BODY, "2. 2.1.")],
+            [(72.0, BODY, "unknown term"), (300.0, BODY, "9.")],
+        ],
+    )
+    doc.save(str(path))
+    doc.close()
+
+
 def _write_docx(path: Path, *, title: str | None, core_title: str) -> None:
     d = docx.Document()
     d.core_properties.title = core_title
@@ -218,6 +361,9 @@ def main() -> None:
     (OUT / "edges.html").write_text(HTML_EDGES, encoding="utf-8")
     (OUT / "edges.md").write_text(MARKDOWN_EDGES, encoding="utf-8")
     _write_docx_runs(OUT / "runs.docx")
+    _write_numbered_pdf(OUT / "numbered.pdf")
+    _write_outline_pdf(OUT / "outline.pdf")
+    _write_contents_pdf(OUT / "contents.pdf")
     _write_docx(OUT / "styled.docx", title="Operator Handbook", core_title="Core Title")
     _write_docx(OUT / "untitled.docx", title=None, core_title="From Core Properties")
     _write_docx(OUT / "bare.docx", title=None, core_title="")
