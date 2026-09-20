@@ -193,8 +193,14 @@ from have landed.
 | 6c | `db.py` | `internal/repository/sqlite` | every write run against a real index built from `python/docsearch/schema.sql` |
 | 6d | `worker.py` | `internal/service/worker`, its queue in `internal/repository/sqlite`, `cmd/docsearch-worker`, and a progress hook on `internal/site/crawl` | the claim's races and the lease against a real queue; the loop over mocked ports |
 | 6e | — | `proto/docsearch/ingest/v1`, `internal/api/connectapi`, `internal/source` | testify suites driving the real Connect stack over `httptest`, against a mocked service |
-| 6f | — | `test/integration` | an index built by Go passes `docsearch verify` and matches the eval, in a ginkgo full-stack suite; a structure mismatch refuses the document, writes nothing, and fails the job permanently |
-| 7 | `cli.py`, `inspect.py`, `verify.py` | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |
+| 6f | — | `test/integration` | the worker builds an index from the committed fixtures, `internal/store` reads it back, and the Python verifier grades it; a refused document writes nothing and fails the job permanently |
+| 7 | `cli.py`, `inspect.py`, `verify.py`, `db.py`'s migrations | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |
+
+Step 7 also takes over creating an index. `schema.sql` leaves `schema_version`
+empty and `db.connect` stamps it, so a database the Go stack creates today is
+refused by every Python command until something writes that row. The
+full-stack suite writes it itself and says so; nothing else in Go does, which
+is why `docsearch migrate` has to land before Python leaves.
 
 `urlguard.py` already has a Go twin in `internal/urlguard`, held to the same
 table of addresses; step 5 deletes the Python copy.

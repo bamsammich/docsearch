@@ -35,11 +35,17 @@ var ErrOutsideRoot = errors.New("path is not inside a configured library root")
 // accepts it wins, so the roots are searched rather than one of them being
 // privileged.
 //
-// The lexical check runs first so a path that is obviously outside every root
-// is rejected without the filesystem being touched at all. Only once a
-// candidate is lexically acceptable is it resolved through symlinks and
-// checked again -- a symlink inside a root pointing outside it passes the
-// first check and must fail the second.
+// Containment is decided once, on two fully resolved paths. Comparing a
+// resolved path against an unresolved one refuses files that are plainly
+// inside the root, in whichever direction the mismatch runs: a root reached
+// through a symlink holds none of its own files, and a caller that resolved
+// the path before asking is turned away. Both are ordinary, since /var is a
+// symlink to /private/var on macOS.
+//
+// Resolving the candidate is also what makes a traversal safe to allow this
+// far: EvalSymlinks collapses every ".." and every link, so a path dressed up
+// to look inside the root arrives as what it really points at and fails the
+// containment check on its merits.
 func Resolve(roots []string, candidate string) (string, error) {
 	if len(roots) == 0 || candidate == "" {
 		return "", ErrOutsideRoot
@@ -48,25 +54,15 @@ func Resolve(roots []string, candidate string) (string, error) {
 		if configured == "" || !filepath.IsAbs(configured) {
 			continue
 		}
-		abs := candidate
-		if !filepath.IsAbs(abs) {
-			abs = filepath.Join(configured, abs)
-		}
-		abs = filepath.Clean(abs)
-
-		// Each check compares two paths in the same state. The lexical one
-		// takes both as configured, and the second takes both resolved: a
-		// resolved candidate against an unresolved root refuses every file
-		// under a root that is itself reached through a symlink, which
-		// /var/... is on macOS.
-		if !within(configured, abs) {
-			continue
-		}
 		root, err := filepath.EvalSymlinks(configured)
 		if err != nil {
 			continue
 		}
-		resolved, err := filepath.EvalSymlinks(abs)
+		abs := candidate
+		if !filepath.IsAbs(abs) {
+			abs = filepath.Join(root, abs)
+		}
+		resolved, err := filepath.EvalSymlinks(filepath.Clean(abs))
 		if err != nil {
 			// Includes "does not exist". Same error either way: the caller
 			// must not be able to tell the difference.
