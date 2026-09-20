@@ -2,7 +2,6 @@ package sqlite_test
 
 import (
 	"database/sql"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/repository/sqlite"
+	"github.com/bamsammich/docsearch/internal/schema"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 	"github.com/bamsammich/docsearch/internal/service/worker"
 )
@@ -34,10 +34,7 @@ func (s *JobsSuite) SetupTest() {
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { s.Require().NoError(db.Close()) })
 
-	schema, err := os.ReadFile("../../../python/docsearch/schema.sql")
-	s.Require().NoError(err)
-	_, err = db.Exec(string(schema))
-	s.Require().NoError(err)
+	s.Require().NoError(schema.Create(s.T().Context(), db))
 
 	s.db = db
 	s.jobs = sqlite.NewJobs(db)

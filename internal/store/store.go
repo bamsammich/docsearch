@@ -19,6 +19,7 @@ import (
 
 	_ "modernc.org/sqlite" // pure-Go driver; FTS5 is compiled in, no build tag
 
+	"github.com/bamsammich/docsearch/internal/schema"
 	"github.com/bamsammich/docsearch/internal/store/dbgen"
 )
 
@@ -70,9 +71,10 @@ func nullInt(v sql.NullInt64) *int {
 	return &n
 }
 
-// RequiredSchemaVersion is the schema this binary was built against. It must
-// equal docsearch.db.SCHEMA_VERSION, which is where the number is chosen;
-// tests/test_schema_version_agreement.py fails when they diverge.
+// RequiredSchemaVersion is the schema this binary was built against. The
+// number is chosen in internal/schema, and must equal
+// docsearch.db.SCHEMA_VERSION while the Python pipeline is still the
+// reference; tests/test_schema_version_agreement.py fails when they diverge.
 //
 // A version is checked rather than a set of columns because the two catch
 // different faults. Column presence catches an *added* column. It cannot catch
@@ -80,7 +82,7 @@ func nullInt(v sql.NullInt64) *int {
 // numbers where it once held page numbers passes every structural check while
 // silently changing what the index-term boost resolves to. Only a version
 // number, bumped deliberately, catches that.
-const RequiredSchemaVersion = 5
+const RequiredSchemaVersion = schema.Version
 
 // ErrSchemaVersion reports a database written by a different schema revision.
 type ErrSchemaVersion struct {

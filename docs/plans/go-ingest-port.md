@@ -194,13 +194,52 @@ from have landed.
 | 6d | `worker.py` | `internal/service/worker`, its queue in `internal/repository/sqlite`, `cmd/docsearch-worker`, and a progress hook on `internal/site/crawl` | the claim's races and the lease against a real queue; the loop over mocked ports |
 | 6e | — | `proto/docsearch/ingest/v1`, `internal/api/connectapi`, `internal/source` | testify suites driving the real Connect stack over `httptest`, against a mocked service |
 | 6f | — | `test/integration` | the worker builds an index from the committed fixtures, `internal/store` reads it back, and the Python verifier grades it; a refused document writes nothing and fails the job permanently |
-| 7 | `cli.py`, `inspect.py`, `verify.py`, `db.py`'s migrations | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |
+| 7a | `db.py`'s schema and migrations | `internal/schema` | a fresh database, an outdated one and a too-new one, each against the Python migration's outcome |
+| 7b | `verify.py` | `internal/domain`, `internal/service/document` | the same findings and the same verdict on the same chunks |
+| 7c | `inspect.py` | `internal/service/document` | the same report for a document and for a site |
+| 7d | — | the document proto and its `internal/api/connectapi` handlers | testify suites over a mocked service |
+| 7e | `cli.py` | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |
 
-Step 7 also takes over creating an index. `schema.sql` leaves `schema_version`
-empty and `db.connect` stamps it, so a database the Go stack creates today is
-refused by every Python command until something writes that row. The
-full-stack suite writes it itself and says so; nothing else in Go does, which
-is why `docsearch migrate` has to land before Python leaves.
+### The snapshot is what a review reads
+
+Migrations are the source of truth and a source of truth nobody can read:
+once there are several, knowing the current shape means replaying them in
+your head. `internal/schema/schema.snapshot.sql` is what the migrations add
+up to, written by `mise run generate` and checked for drift. A change to the
+schema then shows up twice in a pull request, as the step and as the
+destination.
+
+Nothing reads the snapshot at runtime.
+
+### Every migration is tested against a real database, both ways
+
+A migration is the one piece of code that runs against data nobody can
+re-create, so asserting it in the abstract asserts nothing. Each one gets a
+case in `internal/schema` that applies it, fills the tables it touches with
+rows, rolls it back, and applies it again. The baseline's cases cover the
+full-text triggers in particular, since a schema created without them passes
+every structural check and returns nothing to any search.
+
+SQLite is embedded, so the real database is a file. The same cases run
+against a container when Postgres arrives in phase 04, which is what
+testcontainers is for.
+
+Migrations run through `pressly/goose`, which numbers and orders them and
+records what it applied. Version 5 is a baseline rather than a reconstruction:
+the DDL that produced versions 1 to 4 was never kept, so writing them now
+would be guesswork that might not reproduce a real index. An index still at
+one of those versions is repaired by the column backfill, which goes when
+Python does and 5 becomes the floor.
+
+Step 7a took over creating an index. `schema.sql` leaves `schema_version`
+empty and `db.connect` stamped it, so a database the Go stack created was
+refused by every Python command; `internal/schema` now creates and stamps
+one, and `docsearch migrate` is what an operator runs.
+
+The schema itself is still one file. Go embeds a copy so a binary carries it,
+`mise run generate` refreshes the copy, and a test fails on any drift. The
+copy goes away with the Python pipeline, at which point `internal/schema` is
+the only place it lives.
 
 `urlguard.py` already has a Go twin in `internal/urlguard`, held to the same
 table of addresses; step 5 deletes the Python copy.
