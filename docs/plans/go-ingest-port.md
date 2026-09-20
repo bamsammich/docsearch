@@ -73,7 +73,15 @@ instructions are tuned prose that proto comments would hold poorly.
 
 Domain enums start at `iota + 1`, so a zero value means unset, and proto
 enums reserve `0` for `UNSPECIFIED`, so the two share numbering and the
-boundary conversion is a checked cast. goverter generates those converters.
+boundary conversion is a cast.
+
+The cast is written out rather than generated. goverter was the plan, and it
+earns its place where a conversion walks a struct field by field; here the
+numbering is shared by construction, so there are no fields to walk. What the
+cast needs instead is proof that the numbering still agrees, which
+`internal/api/connectapi` states as constant expressions: a value renumbered
+on either side fails to compile rather than mislabelling a document's grade in
+a client.
 
 | domain | proto |
 |---|---|
@@ -184,7 +192,7 @@ from have landed.
 | 6b | `ingest.py` | `internal/service/ingest` and the ports it declares, `internal/source/file`, `internal/source/site` | testify suites over mockery mocks of those ports |
 | 6c | `db.py` | `internal/repository/sqlite` | the rows Python writes, read back by the Go store |
 | 6d | `worker.py` | `cmd/docsearch-worker`, and a progress hook on `internal/site/crawl` | a job runs, reports progress, cancels and fails the way Python's does |
-| 6e | — | the service's proto and `internal/api/connectapi` | testify suites over a mocked service |
+| 6e | — | `proto/docsearch/ingest/v1`, `internal/api/connectapi`, `internal/source` | testify suites driving the real Connect stack over `httptest`, against a mocked service |
 | 6f | — | `test/integration` | an index built by Go passes `docsearch verify` and matches the eval, in a ginkgo full-stack suite; a structure mismatch refuses the document, writes nothing, and fails the job permanently |
 | 7 | `cli.py`, `inspect.py`, `verify.py` | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |
 

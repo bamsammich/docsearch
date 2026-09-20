@@ -41,6 +41,10 @@ jobs:
         run: sqlc diff
       - name: the committed mocks match the ports they stand in for
         run: mockery && git diff --exit-code
+      - name: the proto lints and is formatted
+        run: buf lint && buf format --diff --exit-code
+      - name: the committed proto output matches the proto
+        run: buf generate && git diff --exit-code
 
   test:
     runs-on: ubuntu-latest
