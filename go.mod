@@ -12,6 +12,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.33.0
 	github.com/onsi/gomega v1.43.1
 	github.com/stretchr/testify v1.12.1
+	github.com/urfave/cli/v3 v3.12.0
 	golang.org/x/net v0.59.0
 	golang.org/x/text v0.42.0
 	google.golang.org/protobuf v1.36.11

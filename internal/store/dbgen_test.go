@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -141,6 +142,52 @@ func TestEveryGeneratedQueryExecutes(t *testing.T) {
 			return q.DeleteDocumentIndexTerms(ctx, "fresh")
 		}},
 		{"DeleteDocumentRow", func() error { return q.DeleteDocumentRow(ctx, "fresh") }},
+
+		// The worker's job statements. internal/repository/sqlite owns what
+		// they mean; running them here proves each one is well-formed.
+		{"ClaimJob", func() error {
+			_, err := q.ClaimJob(ctx, dbgen.ClaimJobParams{
+				Datetime: "+300 seconds", Attempts: 3,
+			})
+			if errors.Is(err, sql.ErrNoRows) {
+				// A claimable job may or may not be left by this point; the
+				// statement running is what is asserted.
+				return nil
+			}
+			return err
+		}},
+		{"RecordJobProgress", func() error {
+			return q.RecordJobProgress(ctx, dbgen.RecordJobProgressParams{
+				Phase:       sql.NullString{String: "fetch", Valid: true},
+				ProgressCur: sql.NullInt64{Int64: 1, Valid: true},
+				ProgressTot: sql.NullInt64{Int64: 9, Valid: true},
+				Datetime:    "+300 seconds",
+				ID:          jobID,
+			})
+		}},
+		{"RecordJobDocID", func() error {
+			return q.RecordJobDocID(ctx, dbgen.RecordJobDocIDParams{
+				DocID: sql.NullString{String: "fresh", Valid: true}, ID: jobID,
+			})
+		}},
+		{"JobCancelRequested", func() error {
+			_, err := q.JobCancelRequested(ctx, jobID)
+			return err
+		}},
+		{"JobDocID", func() error { _, err := q.JobDocID(ctx, jobID); return err }},
+		{"CancelJob", func() error { return q.CancelJob(ctx, jobID) }},
+		{"FinishJob", func() error {
+			return q.FinishJob(ctx, dbgen.FinishJobParams{
+				Status: "failed",
+				Error:  sql.NullString{String: "no adapter", Valid: true},
+				ID:     jobID,
+			})
+		}},
+		{"CompleteJobWithoutDocument", func() error {
+			return q.CompleteJobWithoutDocument(ctx, dbgen.CompleteJobWithoutDocumentParams{
+				DocID: sql.NullString{String: "fresh", Valid: true}, ID: jobID,
+			})
+		}},
 	} {
 		if err := tc.run(); err != nil {
 			t.Errorf("%s: %v", tc.name, err)
@@ -152,7 +199,7 @@ func TestEveryGeneratedQueryExecutes(t *testing.T) {
 // would go unexercised, so the count is asserted rather than trusted.
 func TestGeneratedQueryCoverageIsComplete(t *testing.T) {
 	// The table above, plus EnqueueJob which runs ahead of it.
-	const exercised = 32
+	const exercised = 40
 	// Every exported method on *Queries is a generated query, except WithTx.
 	total := reflect.TypeFor[*dbgen.Queries]().NumMethod()
 	if got := total - 1; got != exercised {

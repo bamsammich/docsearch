@@ -70,10 +70,7 @@ func (s *Source) Digest() string { return s.digest }
 //
 // The seed is checked against the guard here as well as inside the fetcher.
 // A job row is not proof that anything validated it, and this is the worker.
-// The crawler reports no progress of its own yet, so a caller watching a
-// site ingest sees nothing until extraction. Step 6d gives the crawler a
-// progress hook, because the worker is what surfaces one.
-func (s *Source) Acquire(ctx context.Context, _ ingest.Progress) error {
+func (s *Source) Acquire(ctx context.Context, progress ingest.Progress) error {
 	guard := s.opts.Guard
 	if guard == nil {
 		guard = func(ctx context.Context, raw string) (*urlguard.Target, error) {
@@ -96,6 +93,7 @@ func (s *Source) Acquire(ctx context.Context, _ ingest.Progress) error {
 		IgnoreRobots: s.opts.IgnoreRobots,
 	})
 	s.result, err = crawl.Crawl(ctx, fetcher, s.seed, crawl.Options{
+		Progress:   crawlProgress(progress),
 		MaxPages:   s.opts.MaxPages,
 		LinkDepth:  s.opts.LinkDepth,
 		Revalidate: s.opts.Revalidate,
@@ -118,6 +116,22 @@ func (s *Source) Extract(_ context.Context, _ ingest.Progress) (*domain.Extracti
 			s.seed, strings.Join(s.result.Notes, "; "))}
 	}
 	return site.BuildExtraction(s.result, "")
+}
+
+// crawlProgress names the crawler's phases as the ingest's, which are the
+// ones a caller watching a job sees.
+func crawlProgress(progress ingest.Progress) crawl.Progress {
+	if progress == nil {
+		return nil
+	}
+	return func(phase crawl.Phase, current, total int) {
+		switch phase {
+		case crawl.PhaseDiscover:
+			progress(ingest.PhaseDiscover, current, total)
+		case crawl.PhaseFetch:
+			progress(ingest.PhaseFetch, current, total)
+		}
+	}
 }
 
 // digestOf hashes every page's address and body, in address order, so the

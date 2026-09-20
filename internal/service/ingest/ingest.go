@@ -68,6 +68,25 @@ const (
 	PhaseIndex
 )
 
+// The text a phase is stored as, in ingest_jobs.phase, which the server
+// reads back and a status tool shows.
+func (p Phase) String() string {
+	switch p {
+	case PhaseDiscover:
+		return "discover"
+	case PhaseFetch:
+		return "fetch"
+	case PhaseExtract:
+		return "extract"
+	case PhaseChunk:
+		return "chunk"
+	case PhaseIndex:
+		return "index"
+	default:
+		return fmt.Sprintf("phase(%d)", uint8(p))
+	}
+}
+
 // Progress reports how far one phase has got. total is 0 where nothing knows
 // the total yet, which is ordinary while a crawl is still discovering pages.
 type Progress func(phase Phase, current, total int)

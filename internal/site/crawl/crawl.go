@@ -99,8 +99,35 @@ func (r *Result) UnreachableShare() float64 {
 	return float64(len(r.Unreachable)) / float64(r.Declared())
 }
 
+// Phase names the stage a progress report describes.
+type Phase uint8
+
+const (
+	// PhaseDiscover is asking every coverage source which pages exist.
+	PhaseDiscover Phase = iota + 1
+	// PhaseFetch is walking the frontier.
+	PhaseFetch
+)
+
+// Progress reports how far a crawl has got.
+//
+// The total rises as link-following discovers more pages, which is the honest
+// figure: nothing knows a walked site's page count up front, and a total that
+// only ever grew from a guess would read as a crawl going backwards.
+type Progress func(phase Phase, current, total int)
+
+// report calls a progress function that may be absent.
+func (p Progress) report(phase Phase, current, total int) {
+	if p != nil {
+		p(phase, current, total)
+	}
+}
+
 // Options bound one crawl.
 type Options struct {
+	// Progress is called as discovery and the walk advance. Nil reports
+	// nothing, which is what a caller with nobody watching wants.
+	Progress  Progress
 	MaxPages  int
 	LinkDepth int
 	// Revalidate false serves the whole crawl from the fetch cache without a
@@ -150,6 +177,7 @@ type frontierEntry struct {
 }
 
 func (c *crawler) run(ctx context.Context) error {
+	c.opts.Progress.report(PhaseDiscover, 0, 0)
 	seedPage := c.fetchSeed(ctx)
 	cov, err := discover.Discover(ctx, c.fetcher, c.seed, seedPage, c.opts.Revalidate)
 	if err != nil {
@@ -246,16 +274,20 @@ func (c *crawler) start(urls []string) {
 // walk visits the frontier, adding links from each page when no manifest
 // bounded the crawl.
 func (c *crawler) walk(ctx context.Context) error {
+	done := 0
 	for len(c.queue) > 0 {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("crawl %s: %w", c.seed, err)
 		}
+		c.opts.Progress.report(PhaseFetch, done, len(c.known))
+		done++
 		entry := c.queue[0]
 		c.queue = c.queue[1:]
 		if err := c.visit(ctx, entry); err != nil {
 			return err
 		}
 	}
+	c.opts.Progress.report(PhaseFetch, done, len(c.known))
 	return nil
 }
 
