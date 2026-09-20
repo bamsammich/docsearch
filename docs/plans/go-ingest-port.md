@@ -197,8 +197,9 @@ from have landed.
 | 7a | `db.py`'s schema and migrations | `internal/schema` | a fresh database, an outdated one and a too-new one, each against the Python migration's outcome |
 | 7b | `verify.py`'s grading | `internal/domain` | the same findings, verdicts and detail strings on the distributions Python grades, from `testdata/grading` |
 | 7c | `inspect.py` | `internal/service/inspect`, with each report beside the data it reads: `internal/adapter/pdf`, `internal/site` | the same findings as Python on the committed PDFs, from `testdata/inspect` |
-| 7d | — | the document proto and its `internal/api/connectapi` handlers | testify suites over a mocked service |
-| 7e | `cli.py` | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |
+| 7d | `verify.py`'s integrity half | `internal/domain` measurements, `internal/service/document` and its repository | the same measurements as `verify_document`; quality and integrity reported apart |
+| 7e | — | the document proto and its `internal/api/connectapi` handlers | testify suites over a mocked service |
+| 7f | `cli.py` | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |
 
 ### The snapshot is what a review reads
 

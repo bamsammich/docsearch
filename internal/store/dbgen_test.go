@@ -183,6 +183,22 @@ func TestEveryGeneratedQueryExecutes(t *testing.T) {
 				ID:     jobID,
 			})
 		}},
+		// What verification reads.
+		{"DocumentByID", func() error { _, err := q.DocumentByID(ctx, "big"); return err }},
+		{"DocumentChunks", func() error { _, err := q.DocumentChunks(ctx, "big"); return err }},
+		{"IndexTermSections", func() error {
+			_, err := q.IndexTermSections(ctx, "big")
+			return err
+		}},
+		{"SectionHasChunks", func() error {
+			_, err := q.SectionHasChunks(ctx, dbgen.SectionHasChunksParams{
+				DocID:   "big",
+				Section: sql.NullString{String: "1.1", Valid: true},
+				Column3: sql.NullString{String: "1.1", Valid: true},
+			})
+			return err
+		}},
+
 		{"CompleteJobWithoutDocument", func() error {
 			return q.CompleteJobWithoutDocument(ctx, dbgen.CompleteJobWithoutDocumentParams{
 				DocID: sql.NullString{String: "fresh", Valid: true}, ID: jobID,
@@ -199,7 +215,7 @@ func TestEveryGeneratedQueryExecutes(t *testing.T) {
 // would go unexercised, so the count is asserted rather than trusted.
 func TestGeneratedQueryCoverageIsComplete(t *testing.T) {
 	// The table above, plus EnqueueJob which runs ahead of it.
-	const exercised = 40
+	const exercised = 44
 	// Every exported method on *Queries is a generated query, except WithTx.
 	total := reflect.TypeFor[*dbgen.Queries]().NumMethod()
 	if got := total - 1; got != exercised {
