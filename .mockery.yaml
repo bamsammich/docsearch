@@ -14,3 +14,7 @@ packages:
       Repository:
       Source:
       Extractor:
+  github.com/bamsammich/docsearch/internal/api/connectapi:
+    interfaces:
+      Ingester:
+      Sources:

@@ -6,6 +6,9 @@ golangci-lint = "2.13.2"
 sqlc = "1.31.1"
 lefthook = "2.1.14"
 mockery = "3.8.0"
+buf = "1.73.0"
+protoc-gen-go = "1.36.12"
+protoc-gen-connect-go = "1.21.0"
 
 # uv owns .venv entirely (`uv sync` / `uv run`); mise only supplies the
 # python and uv binaries so the venv is built against a pinned interpreter.
@@ -34,6 +37,9 @@ run = [
   # Scoped to the mocks, since a pre-push run has the rest of the branch's
   # work in the tree beside it.
   "mockery && git diff --exit-code -- '**/mocks/*.go'",
+  "buf lint",
+  "buf format --diff --exit-code",
+  "buf generate && git diff --exit-code -- 'internal/api/**/*.pb.go' 'internal/api/**/*.connect.go'",
   "mise run test",
 ]
 
@@ -55,10 +61,11 @@ run = [
 ]
 
 [tasks.generate]
-description = "Regenerate the Go query layer and the service ports' mocks"
+description = "Regenerate the query layer, the ports' mocks and the proto output"
 run = [
   "sqlc generate",
   "mockery",
+  "buf generate",
 ]
 
 [tasks.test]

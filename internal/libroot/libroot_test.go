@@ -277,3 +277,65 @@ func TestMultiRootRejectionDoesNotDiscloseExistence(t *testing.T) {
 		}
 	}
 }
+
+// A root reached through a symlink is the ordinary case on macOS, where
+// every temporary directory sits under /var, itself a symlink to
+// /private/var. Every test above resolves the root before passing it, which
+// is why none of them caught a root configured as an operator would write it.
+func TestARootReachedThroughASymlinkContainsItsOwnFiles(t *testing.T) {
+	base := t.TempDir()
+	library := filepath.Join(base, "library")
+	if err := os.Mkdir(library, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "configured")
+	if err := os.Symlink(library, link); err != nil {
+		t.Fatal(err)
+	}
+	inside := filepath.Join(link, "manual.pdf")
+	if err := os.WriteFile(inside, []byte("%PDF-1.4"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Resolve([]string{link}, inside)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v, want nil", err)
+	}
+	want, err := filepath.EvalSymlinks(inside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("Resolve() = %q, want %q", got, want)
+	}
+}
+
+// The protection the second check exists for, with a symlinked root: a link
+// inside the root pointing out of it still resolves outside and is refused.
+func TestASymlinkOutOfASymlinkedRootIsStillRejected(t *testing.T) {
+	base := t.TempDir()
+	library := filepath.Join(base, "library")
+	outside := filepath.Join(base, "elsewhere")
+	for _, dir := range []string{library, outside} {
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	secret := filepath.Join(outside, "secret.pdf")
+	if err := os.WriteFile(secret, []byte("%PDF-1.4"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "configured")
+	if err := os.Symlink(library, link); err != nil {
+		t.Fatal(err)
+	}
+	escape := filepath.Join(library, "escape.pdf")
+	if err := os.Symlink(secret, escape); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Resolve([]string{link}, filepath.Join(link, "escape.pdf"))
+	if !errors.Is(err, ErrOutsideRoot) {
+		t.Errorf("Resolve() error = %v, want ErrOutsideRoot", err)
+	}
+}

@@ -3,6 +3,7 @@ module github.com/bamsammich/docsearch
 go 1.26.1
 
 require (
+	connectrpc.com/connect v1.21.0
 	github.com/PuerkitoBio/goquery v1.13.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/jimsmart/grobotstxt v1.0.3
@@ -13,6 +14,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/net v0.59.0
 	golang.org/x/text v0.42.0
+	google.golang.org/protobuf v1.36.11
 	modernc.org/sqlite v1.55.0
 )
 

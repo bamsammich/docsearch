@@ -44,17 +44,26 @@ func Resolve(roots []string, candidate string) (string, error) {
 	if len(roots) == 0 || candidate == "" {
 		return "", ErrOutsideRoot
 	}
-	for _, root := range roots {
-		if root == "" || !filepath.IsAbs(root) {
+	for _, configured := range roots {
+		if configured == "" || !filepath.IsAbs(configured) {
 			continue
 		}
 		abs := candidate
 		if !filepath.IsAbs(abs) {
-			abs = filepath.Join(root, abs)
+			abs = filepath.Join(configured, abs)
 		}
 		abs = filepath.Clean(abs)
 
-		if !within(root, abs) {
+		// Each check compares two paths in the same state. The lexical one
+		// takes both as configured, and the second takes both resolved: a
+		// resolved candidate against an unresolved root refuses every file
+		// under a root that is itself reached through a symlink, which
+		// /var/... is on macOS.
+		if !within(configured, abs) {
+			continue
+		}
+		root, err := filepath.EvalSymlinks(configured)
+		if err != nil {
 			continue
 		}
 		resolved, err := filepath.EvalSymlinks(abs)
