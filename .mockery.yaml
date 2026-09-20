@@ -18,3 +18,8 @@ packages:
     interfaces:
       Ingester:
       Sources:
+  github.com/bamsammich/docsearch/internal/service/worker:
+    interfaces:
+      Jobs:
+      Ingester:
+      Sources:
