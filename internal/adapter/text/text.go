@@ -30,5 +30,5 @@ func Extract(path string) (*domain.Extraction, error) {
 		offset += utf8.RuneCountInString(para) + len(paragraphBreak)
 	}
 	title := pystr.Stem(filepath.Base(path))
-	return domain.NewExtraction(title, "text", "none (blank-line paragraphs)", blocks), nil
+	return domain.NewExtraction(title, "text", domain.SourceBlankLines, blocks), nil
 }

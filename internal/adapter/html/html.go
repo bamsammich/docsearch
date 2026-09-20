@@ -91,7 +91,7 @@ func Extract(path string) (*domain.Extraction, error) {
 	if title == "" {
 		title = pystr.Stem(filepath.Base(path))
 	}
-	return domain.NewExtraction(title, "html", "h1_h6_nesting", blocks), nil
+	return domain.NewExtraction(title, "html", domain.SourceHTMLNesting, blocks), nil
 }
 
 // walker visits headings and block tags in document order.

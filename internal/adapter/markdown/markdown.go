@@ -44,7 +44,7 @@ func Extract(path string) (*domain.Extraction, error) {
 	if title == "" {
 		title = pystr.Stem(filepath.Base(path))
 	}
-	return domain.NewExtraction(title, "markdown", "atx_headings", r.blocks), nil
+	return domain.NewExtraction(title, "markdown", domain.SourceATXHeadings, r.blocks), nil
 }
 
 // reader gathers paragraphs line by line. Offsets count code points from the

@@ -20,33 +20,6 @@ import (
 	"github.com/bamsammich/docsearch/internal/pystr"
 )
 
-// Quality grades a document's derived structure.
-const (
-	QualityOK       = "ok"
-	QualityDegraded = "degraded"
-	QualityFailed   = "failed"
-)
-
-// Structure sources, the thing a document's heading tree was derived from.
-const (
-	// SourceOutline is an embedded outline, which declares which sections
-	// exist, how they nest and where each begins. Nothing is inferred, so
-	// nothing is required to corroborate it.
-	SourceOutline = "outline"
-	// SourceFrontTOC, SourceSidebarDOM and SourceIndexPage are equally
-	// author-declared but recovered by parsing a printed page or rendered
-	// navigation. The parse can misread, so each is checked against what the
-	// document turned out to contain, and a disagreement fails.
-	SourceFrontTOC   = "front_toc"
-	SourceSidebarDOM = "sidebar_dom"
-	SourceIndexPage  = "index_page"
-	// SourceFontHeuristic is inferred from type sizes with nothing to check
-	// it against.
-	SourceFontHeuristic = "font_heuristic"
-	// SourceUnknown is a report whose source was never recorded.
-	SourceUnknown = "unknown"
-)
-
 // Bounds the policy grades against.
 const (
 	// SiteIncompleteFatalShare is the share of a site's known pages that may
@@ -86,7 +59,6 @@ const uncalibratedSamples = 200
 // structure. The JSON field names are the ones persisted in
 // documents.warnings, which the MCP server reads back.
 type StructureReport struct {
-	StructureSource              string   `json:"structure_source"`
 	InTOCNotInBody               []string `json:"in_toc_not_in_body"`
 	InBodyNotInTOC               []string `json:"in_body_not_in_toc"`
 	DetectedMoreThanOnce         []string `json:"detected_more_than_once"`
@@ -105,8 +77,9 @@ type StructureReport struct {
 	UncalibratedScriptShare float64  `json:"uncalibrated_script_share"`
 	// PagesDeclared and PagesFetched are site ingest only: pages some
 	// coverage source said exist, and pages that arrived.
-	PagesDeclared int `json:"pages_declared"`
-	PagesFetched  int `json:"pages_fetched"`
+	PagesDeclared   int             `json:"pages_declared"`
+	PagesFetched    int             `json:"pages_fetched"`
+	StructureSource StructureSource `json:"structure_source"`
 }
 
 // NewStructureReport reads the report an adapter's diagnostics carry. A
@@ -119,7 +92,12 @@ type StructureReport struct {
 func NewStructureReport(diagnostics map[string]any) *StructureReport {
 	source := SourceUnknown
 	if s, ok := diagnostics["structure_source"]; ok {
-		source = fmt.Sprint(s)
+		// A source outside the closed set means an extraction no adapter in
+		// this tree produced, so it is graded as a document whose source was
+		// never recorded rather than trusted on its own word.
+		if parsed, err := ParseStructureSource(fmt.Sprint(s)); err == nil {
+			source = parsed
+		}
 	}
 	if site := mapOf(diagnostics["site"]); len(site) > 0 {
 		return &StructureReport{
@@ -173,7 +151,7 @@ func (r *StructureReport) MeasureChunks(chunks []Chunk) {
 // checked against the body.
 func (r *StructureReport) Validatable() bool {
 	return slices.Contains(
-		[]string{SourceFrontTOC, SourceSidebarDOM, SourceIndexPage},
+		[]StructureSource{SourceFrontTOC, SourceSidebarDOM, SourceIndexPage},
 		r.StructureSource,
 	)
 }
@@ -261,7 +239,7 @@ func (r *StructureReport) Degraded() bool {
 }
 
 // Quality is QualityFailed, QualityDegraded or QualityOK.
-func (r *StructureReport) Quality() string {
+func (r *StructureReport) Quality() Quality {
 	switch {
 	case r.Fatal():
 		return QualityFailed

@@ -27,6 +27,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 
 	"github.com/bamsammich/docsearch/internal/adapter/html"
+	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/site/fetch"
 )
 
@@ -35,13 +36,6 @@ import (
 // navigation rather than a map of one, which is what a generator that
 // collapses its categories renders.
 const minCoverage = 0.5
-
-// Hierarchy sources, as the "site" diagnostic names them.
-const (
-	SourceSidebar   = "sidebar_dom"
-	SourceIndexPage = "index_page"
-	SourceURLPath   = "url_path"
-)
 
 // navSelector matches the elements that plausibly hold a documentation
 // navigation.
@@ -63,12 +57,13 @@ type Placement struct {
 
 // Hierarchy is every page's placement, and how it was arrived at.
 type Hierarchy struct {
-	// Source is one of SourceSidebar, SourceIndexPage or SourceURLPath.
-	Source     string
 	Placements []Placement
 	// PlacedByPath are the pages no declared source mentioned.
 	PlacedByPath []string
 	Notes        []string
+	// Source is domain.SourceSidebarDOM, domain.SourceIndexPage or
+	// domain.SourceURLPath.
+	Source domain.StructureSource
 	// Inferred is true when the structure was read from URLs rather than
 	// declared, so nothing exists to check it against.
 	Inferred bool
@@ -94,7 +89,7 @@ type node struct {
 // Derive chooses a hierarchy source, places every page, and says what
 // happened. seedHTML is the seed page, where the crawl read one.
 func Derive(coverage []string, seed string, seedHTML []byte) (*Hierarchy, error) {
-	h := &Hierarchy{Source: SourceURLPath, Inferred: true}
+	h := &Hierarchy{Source: domain.SourceURLPath, Inferred: true}
 	if len(coverage) == 0 {
 		return h, nil
 	}
@@ -120,9 +115,9 @@ func Derive(coverage []string, seed string, seedHTML []byte) (*Hierarchy, error)
 
 // candidate is one hierarchy source and how much of the page set it places.
 type candidate struct {
-	name       string
 	placements []Placement
 	share      float64
+	name       domain.StructureSource
 }
 
 // bestCandidate reads the declared sources the seed page offers and returns
@@ -133,7 +128,7 @@ func bestCandidate(
 	seed string,
 	coverage []string,
 ) (candidate, error) {
-	best := candidate{name: SourceURLPath}
+	best := candidate{name: domain.SourceURLPath}
 	if seedHTML == nil {
 		return best, nil
 	}
@@ -142,11 +137,11 @@ func bestCandidate(
 		return best, fmt.Errorf("parse %s: %w", seed, err)
 	}
 	for _, source := range []struct {
-		name  string
 		nodes []*node
+		name  domain.StructureSource
 	}{
-		{name: SourceSidebar, nodes: sidebarTree(doc, seed)},
-		{name: SourceIndexPage, nodes: indexPageTree(doc, seed)},
+		{nodes: sidebarTree(doc, seed), name: domain.SourceSidebarDOM},
+		{nodes: indexPageTree(doc, seed), name: domain.SourceIndexPage},
 	} {
 		if len(source.nodes) == 0 {
 			continue

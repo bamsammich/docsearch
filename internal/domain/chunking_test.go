@@ -48,8 +48,8 @@ func headingPaths(chunks []domain.Chunk) []string {
 	return out
 }
 
-func kinds(chunks []domain.Chunk) map[string]int {
-	out := map[string]int{}
+func kinds(chunks []domain.Chunk) map[domain.ChunkKind]int {
+	out := map[domain.ChunkKind]int{}
 	for _, c := range chunks {
 		out[c.Kind]++
 	}
@@ -353,8 +353,8 @@ func (s *ChunkingSuite) TestClassifyKinds() {
 	}
 	tests := []struct {
 		name   string
-		want   string
 		chunks []domain.Chunk
+		want   domain.ChunkKind
 	}{
 		// Families were once keyed on section numbers, which left any
 		// unnumbered document's declared glossary unreachable.
@@ -380,7 +380,7 @@ func (s *ChunkingSuite) TestClassifyKinds() {
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
 			domain.ClassifyKinds(tt.chunks)
-			s.Equal(map[string]int{tt.want: len(tt.chunks)}, kinds(tt.chunks))
+			s.Equal(map[domain.ChunkKind]int{tt.want: len(tt.chunks)}, kinds(tt.chunks))
 		})
 	}
 }
@@ -401,7 +401,7 @@ func (s *ChunkingSuite) TestSubdividedEntriesStayWithTheirFamily() {
 		})
 	}
 	domain.ClassifyKinds(chunks)
-	s.Equal(map[string]int{domain.KindKeywordReference: len(chunks)}, kinds(chunks))
+	s.Equal(map[domain.ChunkKind]int{domain.KindKeywordReference: len(chunks)}, kinds(chunks))
 }
 
 // A section held constant across differing headings, as a site's page is,
