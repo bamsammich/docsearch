@@ -119,6 +119,124 @@ func (q *Queries) DocIDsWithPrefix(ctx context.Context, docID string) ([]string,
 	return items, nil
 }
 
+const documentByID = `-- name: DocumentByID :one
+SELECT doc_id, title, format, source_kind, status, page_count, chunk_count, warnings
+  FROM documents WHERE doc_id = ?
+`
+
+type DocumentByIDRow struct {
+	DocID      string
+	Title      string
+	Format     string
+	SourceKind string
+	Status     string
+	PageCount  sql.NullInt64
+	ChunkCount sql.NullInt64
+	Warnings   sql.NullString
+}
+
+func (q *Queries) DocumentByID(ctx context.Context, docID string) (DocumentByIDRow, error) {
+	row := q.db.QueryRowContext(ctx, documentByID, docID)
+	var i DocumentByIDRow
+	err := row.Scan(
+		&i.DocID,
+		&i.Title,
+		&i.Format,
+		&i.SourceKind,
+		&i.Status,
+		&i.PageCount,
+		&i.ChunkCount,
+		&i.Warnings,
+	)
+	return i, err
+}
+
+const documentChunks = `-- name: DocumentChunks :many
+SELECT ordinal, section, page_start, page_end, printed_page_start,
+       image_count, kind, url, fragment, heading_path, text
+  FROM chunks
+ WHERE doc_id = ?
+ ORDER BY ordinal
+`
+
+type DocumentChunksRow struct {
+	Ordinal          int64
+	Section          sql.NullString
+	PageStart        sql.NullInt64
+	PageEnd          sql.NullInt64
+	PrintedPageStart sql.NullInt64
+	ImageCount       int64
+	Kind             string
+	Url              sql.NullString
+	Fragment         sql.NullString
+	HeadingPath      string
+	Text             string
+}
+
+// Verification reads every column, because what it checks is whether the
+// columns agree with each other.
+func (q *Queries) DocumentChunks(ctx context.Context, docID string) ([]DocumentChunksRow, error) {
+	rows, err := q.db.QueryContext(ctx, documentChunks, docID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DocumentChunksRow{}
+	for rows.Next() {
+		var i DocumentChunksRow
+		if err := rows.Scan(
+			&i.Ordinal,
+			&i.Section,
+			&i.PageStart,
+			&i.PageEnd,
+			&i.PrintedPageStart,
+			&i.ImageCount,
+			&i.Kind,
+			&i.Url,
+			&i.Fragment,
+			&i.HeadingPath,
+			&i.Text,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const indexTermSections = `-- name: IndexTermSections :many
+SELECT DISTINCT section FROM index_terms WHERE doc_id = ? ORDER BY section
+`
+
+func (q *Queries) IndexTermSections(ctx context.Context, docID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, indexTermSections, docID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var section string
+		if err := rows.Scan(&section); err != nil {
+			return nil, err
+		}
+		items = append(items, section)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertChunk = `-- name: InsertChunk :exec
 INSERT INTO chunks (
   doc_id, ordinal, section, page_start, page_end, printed_page_start,
@@ -252,6 +370,27 @@ func (q *Queries) ReadyDocumentWithDigest(ctx context.Context, sha256 string) (R
 	var i ReadyDocumentWithDigestRow
 	err := row.Scan(&i.DocID, &i.Title)
 	return i, err
+}
+
+const sectionHasChunks = `-- name: SectionHasChunks :one
+SELECT EXISTS(
+  SELECT 1 FROM chunks
+   WHERE doc_id = ? AND (chunks.section = ? OR chunks.section LIKE ? || '.%'))
+`
+
+type SectionHasChunksParams struct {
+	DocID   string
+	Section sql.NullString
+	Column3 sql.NullString
+}
+
+// Subtree semantics, the same clause ChunksInSection uses: an index entry
+// pointing at chapter 4 refers to the whole chapter.
+func (q *Queries) SectionHasChunks(ctx context.Context, arg SectionHasChunksParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, sectionHasChunks, arg.DocID, arg.Section, arg.Column3)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const upsertPage = `-- name: UpsertPage :exec

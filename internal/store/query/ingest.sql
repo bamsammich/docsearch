@@ -67,3 +67,26 @@ DELETE FROM index_terms WHERE doc_id = ?;
 
 -- name: DeleteDocumentRow :exec
 DELETE FROM documents WHERE doc_id = ?;
+
+-- Verification reads every column, because what it checks is whether the
+-- columns agree with each other.
+-- name: DocumentChunks :many
+SELECT ordinal, section, page_start, page_end, printed_page_start,
+       image_count, kind, url, fragment, heading_path, text
+  FROM chunks
+ WHERE doc_id = ?
+ ORDER BY ordinal;
+
+-- name: DocumentByID :one
+SELECT doc_id, title, format, source_kind, status, page_count, chunk_count, warnings
+  FROM documents WHERE doc_id = ?;
+
+-- name: IndexTermSections :many
+SELECT DISTINCT section FROM index_terms WHERE doc_id = ? ORDER BY section;
+
+-- Subtree semantics, the same clause ChunksInSection uses: an index entry
+-- pointing at chapter 4 refers to the whole chapter.
+-- name: SectionHasChunks :one
+SELECT EXISTS(
+  SELECT 1 FROM chunks
+   WHERE doc_id = ? AND (chunks.section = ? OR chunks.section LIKE ? || '.%'));
