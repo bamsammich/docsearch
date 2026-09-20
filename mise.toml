@@ -4,6 +4,7 @@ uv = "0.11.2"
 go = "1.26"
 golangci-lint = "2.13.2"
 sqlc = "1.31.1"
+lefthook = "2.1.14"
 
 # uv owns .venv entirely (`uv sync` / `uv run`); mise only supplies the
 # python and uv binaries so the venv is built against a pinned interpreter.
@@ -12,10 +13,22 @@ DOCSEARCH_DB = "{{config_root}}/var/docsearch.db"
 DOCSEARCH_ROOT = "{{config_root}}/var/library"
 
 [tasks.setup]
-description = "Install Python deps and Go modules"
+description = "Install Python deps, Go modules and the git hooks"
 run = [
   "uv sync",
   "go mod download",
+  "lefthook install",
+]
+
+[tasks.check]
+description = "Everything CI runs, before a push"
+run = [
+  # A fresh lint cache: a stale one reported no issues for a whole package
+  # that CI then refused.
+  "GOLANGCI_LINT_CACHE=$(mktemp -d) mise run lint",
+  "go mod tidy -diff",
+  "sqlc diff",
+  "mise run test",
 ]
 
 [tasks.lint]
