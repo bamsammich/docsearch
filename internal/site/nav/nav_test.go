@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/site/nav"
 )
 
@@ -47,7 +48,7 @@ func (s *NavSuite) TestAHeadingInsideALinkTitlesThatLink() {
 		<a href="/docs/install"><h3>Install</h3></a>
 		<a href="/docs/usage"><h3>Usage</h3></a>
 	</main></body></html>`, "/docs/install", "/docs/usage")
-	s.Equal(nav.SourceIndexPage, h.Source)
+	s.Equal(domain.SourceIndexPage, h.Source)
 	titles := map[string]string{}
 	for _, p := range h.Placements {
 		titles[strings.TrimPrefix(p.URL, "https://example.com/docs/")] = p.Title
@@ -79,7 +80,7 @@ func (s *NavSuite) TestTheMarketingNavDoesNotBecomeTheHierarchy() {
 			<li><a href="/docs/api">API</a></li>
 		</ul></aside>
 	</body></html>`, "/docs/install", "/docs/usage", "/docs/api")
-	s.Equal(nav.SourceSidebar, h.Source)
+	s.Equal(domain.SourceSidebarDOM, h.Source)
 	s.False(h.Inferred)
 	s.Len(h.Placements, 3)
 }
@@ -91,7 +92,7 @@ func (s *NavSuite) TestACollapsedSidebarIsRejectedInFavourOfURLPaths() {
 	h := s.derive(`<html><body><aside class="sidebar"><ul>
 		<li><a href="/docs/a">A</a></li>
 	</ul></aside></body></html>`, paths...)
-	s.Equal(nav.SourceURLPath, h.Source)
+	s.Equal(domain.SourceURLPath, h.Source)
 	s.True(h.Inferred)
 	s.Len(h.Placements, 5)
 	s.Contains(strings.Join(h.Notes, "\n"), "falling back to URL path depth")
@@ -104,7 +105,7 @@ func (s *NavSuite) TestPagesAbsentFromTheSourceArePlacedByPath() {
 		<li><a href="/docs/b">B</a></li>
 		<li><a href="/docs/c">C</a></li>
 	</ul></aside></body></html>`, "/docs/a", "/docs/b", "/docs/c", "/docs/lonely")
-	s.Equal(nav.SourceSidebar, h.Source)
+	s.Equal(domain.SourceSidebarDOM, h.Source)
 	s.Len(h.Placements, 4)
 	s.Equal([]string{"https://example.com/docs/lonely"}, h.PlacedByPath)
 	s.Contains(strings.Join(h.Notes, "\n"), "1 page(s) absent from sidebar_dom, placed by URL path")
@@ -124,7 +125,7 @@ func (s *NavSuite) TestEveryPageGetsExactlyOnePlacement() {
 
 func (s *NavSuite) TestURLPathsNestBelowTheSeed() {
 	h := s.derive("", "/docs/cli/run", "/docs/cli/build", "/docs/intro")
-	s.Equal(nav.SourceURLPath, h.Source)
+	s.Equal(domain.SourceURLPath, h.Source)
 	s.Equal(map[string]string{
 		"/docs/cli/run":   "1.1 Cli",
 		"/docs/cli/build": "1.2 Cli",
@@ -143,7 +144,7 @@ func (s *NavSuite) TestASidebarWithoutListsStillYieldsLinks() {
 	h := s.derive(`<html><body><aside class="sidebar">
 		<a href="/docs/a">A</a><a href="/docs/b">B</a>
 	</aside></body></html>`, "/docs/a", "/docs/b")
-	s.Equal(nav.SourceSidebar, h.Source)
+	s.Equal(domain.SourceSidebarDOM, h.Source)
 	s.Equal(map[string]string{"/docs/a": "1 ", "/docs/b": "2 "}, placed(h))
 }
 

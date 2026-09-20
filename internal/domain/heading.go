@@ -44,10 +44,10 @@ func NewOffsetBlock(headingPath []string, offset int, text string) Block {
 // NewExtraction is an extraction of a format without pages. Pages and index
 // terms are empty rather than nil, matching Python's, so the two serialize
 // alike.
-func NewExtraction(title, format, structureSource string, blocks []Block) *Extraction {
+func NewExtraction(title, format string, source StructureSource, blocks []Block) *Extraction {
 	return &Extraction{
 		Pages:       map[int]string{},
-		Diagnostics: map[string]any{"structure_source": structureSource},
+		Diagnostics: map[string]any{"structure_source": source.String()},
 		Title:       title,
 		Format:      format,
 		Blocks:      blocks,

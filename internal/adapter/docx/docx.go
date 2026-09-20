@@ -58,7 +58,7 @@ func Extract(path string) (*domain.Extraction, error) {
 	if title == "" {
 		title = pystr.Stem(filepath.Base(path))
 	}
-	return domain.NewExtraction(title, "docx", "heading_styles", blocks), nil
+	return domain.NewExtraction(title, "docx", domain.SourceHeadingStyles, blocks), nil
 }
 
 // toBlocks turns body paragraphs into blocks. The first paragraph styled

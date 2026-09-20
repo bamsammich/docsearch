@@ -56,12 +56,6 @@ type Extraction struct {
 	IndexTerms [][2]string `json:"index_terms"`
 }
 
-// Chunk kinds.
-const (
-	KindProse            = "prose"
-	KindKeywordReference = "keyword-reference"
-)
-
 // Chunk is one retrievable unit: the text a search returns and cites.
 type Chunk struct {
 	Section          *string `json:"section"`
@@ -70,12 +64,11 @@ type Chunk struct {
 	PrintedPageStart *int    `json:"printed_page_start"`
 	// URL and Fragment address the page the chunk starts on; both nil for a
 	// local file.
-	URL         *string `json:"url"`
-	Fragment    *string `json:"fragment"`
-	HeadingPath string  `json:"heading_path"`
-	Text        string  `json:"text"`
-	// Kind is KindProse or KindKeywordReference.
-	Kind       string `json:"kind"`
-	Ordinal    int    `json:"ordinal"`
-	ImageCount int    `json:"image_count"`
+	URL         *string   `json:"url"`
+	Fragment    *string   `json:"fragment"`
+	HeadingPath string    `json:"heading_path"`
+	Text        string    `json:"text"`
+	Ordinal     int       `json:"ordinal"`
+	ImageCount  int       `json:"image_count"`
+	Kind        ChunkKind `json:"kind"`
 }

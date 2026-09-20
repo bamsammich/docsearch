@@ -42,9 +42,9 @@ func budgetSliced() *domain.StructureReport {
 
 func (s *StructureSuite) TestTOCAgreementDecidesFatality() {
 	tests := []struct {
-		name        string
 		report      *domain.StructureReport
-		wantQuality string
+		name        string
+		wantQuality domain.Quality
 	}{
 		{
 			name:        "empty symmetric difference",
@@ -130,7 +130,7 @@ func (s *StructureSuite) TestDiagnosticsRoundTripThroughJSON() {
 		},
 	})
 	payload := s.persisted(report)
-	s.Equal(domain.QualityOK, payload["quality"])
+	s.Equal("ok", payload["quality"], "a grade persists as the text v1 already stores")
 	s.InEpsilon(827.0, payload["toc_sections"], 0)
 	s.Equal([]any{"p315:1"}, payload["candidates_rejected_by_ordering"])
 }
@@ -234,8 +234,8 @@ func (s *StructureSuite) TestAddressability() {
 func (s *StructureSuite) TestUncalibratedScripts() {
 	tests := []struct {
 		name        string
-		wantQuality string
 		share       float64
+		wantQuality domain.Quality
 		wantNote    bool
 	}{
 		{name: "calibrated", share: 0, wantNote: false, wantQuality: domain.QualityOK},
@@ -260,7 +260,7 @@ func (s *StructureSuite) TestAHealthyDocumentHasNoNotes() {
 // A worker is headless; a finding that is not serialised is lost.
 func (s *StructureSuite) TestNotesAndAddressabilityReachThePersistedPayload() {
 	payload := s.persisted(budgetSliced())
-	s.Equal(domain.QualityDegraded, payload["quality"])
+	s.Equal("degraded", payload["quality"])
 	s.InEpsilon(0.286, payload["addressability"], 0)
 	s.Contains(fmt.Sprint(payload["notes"]), "section_filter cannot narrow")
 }

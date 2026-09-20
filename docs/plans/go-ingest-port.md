@@ -42,8 +42,8 @@ run their methods serially on one `*testing.T`, so they do not call
 `t.Parallel()`.
 
 `.mockery.yaml` arrives with the first port, the extractor interface in step
-6, so no mock exists before an interface does. The port belongs to the ingest
-service that calls it, and that service is written in step 6; until then the
+6b, so no mock exists before an interface does. The port belongs to the ingest
+service that calls it, and that service is written in 6b; until then the
 adapters are plain functions behind a suffix registry.
 
 ## Two front doors: MCP for Claude, ConnectRPC for programs
@@ -83,10 +83,21 @@ boundary conversion is a checked cast. goverter generates those converters.
 
 Persisted values keep their strings: each enum marshals as text, so
 `documents.warnings` still reads `"ok"`, `"degraded"`, `"failed"` and parity
-with Python is unaffected. `Quality`, `ChunkKind` and `StructureSource` move
-from string constants to typed enums in step 6, when the proto that mirrors
-them is written. `StructureSource` becomes a closed set, since adapters are its
-only producers.
+with Python is unaffected.
+
+The text is a literal table beside the constants rather than a generator's
+output. Both `dmarkham/enumer` and `abice/go-enum` would write these methods,
+and each derives the text from how a constant is spelled; the text here is the
+contract with a v1 database and with Python, and one value is
+`none (blank-line paragraphs)`. A transform rule between a constant and the
+byte that reaches `documents.warnings` buys nothing and can be got wrong, so
+11 values are written out.
+
+`StructureSource` is a closed set, since format adapters and the site
+navigation are its only producers. Closing it added `url_path`, a source
+`nav.py` produces that the Go constants had never listed, and deleted the
+second copy of `sidebar_dom`, `index_page` and `url_path` that
+`internal/site/nav` was carrying.
 
 ## How parity is checked
 
@@ -169,7 +180,12 @@ from have landed.
 | 5b | `discover.py`, `crawl.py` | `internal/site/discover`, `internal/site/crawl` | behaviour ported from the Python tests; a crawl needs a site to compare over, which 5d supplies |
 | 5c | `nav.py`, `site.py` | `internal/site/nav`, `internal/site` | as 5b |
 | 5d | — | — | synthetic sites under `testdata/site`, served to both pipelines: identical extraction and identical chunks |
-| 6 | `ingest.py`, `db.py`, `worker.py` | `internal/service` and its extractor port, `internal/repository/sqlite`, `cmd/docsearch-worker`, the service's proto and `internal/api/connectapi`, typed domain enums | an index built by Go passes `docsearch verify` and matches the eval, in a ginkgo full-stack suite; a structure mismatch refuses the document, writes nothing, and fails the job permanently |
+| 6a | — | `internal/domain` | typed `Quality`, `ChunkKind` and `StructureSource`; every extraction still persists the text it did |
+| 6b | `ingest.py` | `internal/service/ingest` and the ports it declares | testify suites over mockery mocks of those ports |
+| 6c | `db.py` | `internal/repository/sqlite` | the rows Python writes, read back by the Go store |
+| 6d | `worker.py` | `cmd/docsearch-worker` | a job runs, reports progress, cancels and fails the way Python's does |
+| 6e | — | the service's proto and `internal/api/connectapi` | testify suites over a mocked service |
+| 6f | — | `test/integration` | an index built by Go passes `docsearch verify` and matches the eval, in a ginkgo full-stack suite; a structure mismatch refuses the document, writes nothing, and fails the job permanently |
 | 7 | `cli.py`, `inspect.py`, `verify.py` | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |
 
 `urlguard.py` already has a Go twin in `internal/urlguard`, held to the same
