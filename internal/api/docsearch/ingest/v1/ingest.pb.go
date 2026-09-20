@@ -17,6 +17,7 @@
 package ingestv1
 
 import (
+	v1 "github.com/bamsammich/docsearch/internal/api/docsearch/type/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -30,111 +31,6 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
-
-// Quality grades a document's derived structure. The numbering matches
-// docsearch's own enum, so the conversion at this boundary is a checked cast
-// rather than a lookup table that can drift.
-type Quality int32
-
-const (
-	Quality_QUALITY_UNSPECIFIED Quality = 0
-	Quality_QUALITY_OK          Quality = 1
-	Quality_QUALITY_DEGRADED    Quality = 2
-	Quality_QUALITY_FAILED      Quality = 3
-)
-
-// Enum value maps for Quality.
-var (
-	Quality_name = map[int32]string{
-		0: "QUALITY_UNSPECIFIED",
-		1: "QUALITY_OK",
-		2: "QUALITY_DEGRADED",
-		3: "QUALITY_FAILED",
-	}
-	Quality_value = map[string]int32{
-		"QUALITY_UNSPECIFIED": 0,
-		"QUALITY_OK":          1,
-		"QUALITY_DEGRADED":    2,
-		"QUALITY_FAILED":      3,
-	}
-)
-
-func (x Quality) Enum() *Quality {
-	p := new(Quality)
-	*p = x
-	return p
-}
-
-func (x Quality) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (Quality) Descriptor() protoreflect.EnumDescriptor {
-	return file_docsearch_ingest_v1_ingest_proto_enumTypes[0].Descriptor()
-}
-
-func (Quality) Type() protoreflect.EnumType {
-	return &file_docsearch_ingest_v1_ingest_proto_enumTypes[0]
-}
-
-func (x Quality) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use Quality.Descriptor instead.
-func (Quality) EnumDescriptor() ([]byte, []int) {
-	return file_docsearch_ingest_v1_ingest_proto_rawDescGZIP(), []int{0}
-}
-
-// SourceKind says what a document was read from.
-type SourceKind int32
-
-const (
-	SourceKind_SOURCE_KIND_UNSPECIFIED SourceKind = 0
-	SourceKind_SOURCE_KIND_FILE        SourceKind = 1
-	SourceKind_SOURCE_KIND_SITE        SourceKind = 2
-)
-
-// Enum value maps for SourceKind.
-var (
-	SourceKind_name = map[int32]string{
-		0: "SOURCE_KIND_UNSPECIFIED",
-		1: "SOURCE_KIND_FILE",
-		2: "SOURCE_KIND_SITE",
-	}
-	SourceKind_value = map[string]int32{
-		"SOURCE_KIND_UNSPECIFIED": 0,
-		"SOURCE_KIND_FILE":        1,
-		"SOURCE_KIND_SITE":        2,
-	}
-)
-
-func (x SourceKind) Enum() *SourceKind {
-	p := new(SourceKind)
-	*p = x
-	return p
-}
-
-func (x SourceKind) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (SourceKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_docsearch_ingest_v1_ingest_proto_enumTypes[1].Descriptor()
-}
-
-func (SourceKind) Type() protoreflect.EnumType {
-	return &file_docsearch_ingest_v1_ingest_proto_enumTypes[1]
-}
-
-func (x SourceKind) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use SourceKind.Descriptor instead.
-func (SourceKind) EnumDescriptor() ([]byte, []int) {
-	return file_docsearch_ingest_v1_ingest_proto_rawDescGZIP(), []int{1}
-}
 
 // Phase names the stage a progress report describes.
 type Phase int32
@@ -179,11 +75,11 @@ func (x Phase) String() string {
 }
 
 func (Phase) Descriptor() protoreflect.EnumDescriptor {
-	return file_docsearch_ingest_v1_ingest_proto_enumTypes[2].Descriptor()
+	return file_docsearch_ingest_v1_ingest_proto_enumTypes[0].Descriptor()
 }
 
 func (Phase) Type() protoreflect.EnumType {
-	return &file_docsearch_ingest_v1_ingest_proto_enumTypes[2]
+	return &file_docsearch_ingest_v1_ingest_proto_enumTypes[0]
 }
 
 func (x Phase) Number() protoreflect.EnumNumber {
@@ -192,7 +88,7 @@ func (x Phase) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Phase.Descriptor instead.
 func (Phase) EnumDescriptor() ([]byte, []int) {
-	return file_docsearch_ingest_v1_ingest_proto_rawDescGZIP(), []int{2}
+	return file_docsearch_ingest_v1_ingest_proto_rawDescGZIP(), []int{0}
 }
 
 // Outcome says what an ingest did to the index.
@@ -236,11 +132,11 @@ func (x Outcome) String() string {
 }
 
 func (Outcome) Descriptor() protoreflect.EnumDescriptor {
-	return file_docsearch_ingest_v1_ingest_proto_enumTypes[3].Descriptor()
+	return file_docsearch_ingest_v1_ingest_proto_enumTypes[1].Descriptor()
 }
 
 func (Outcome) Type() protoreflect.EnumType {
-	return &file_docsearch_ingest_v1_ingest_proto_enumTypes[3]
+	return &file_docsearch_ingest_v1_ingest_proto_enumTypes[1]
 }
 
 func (x Outcome) Number() protoreflect.EnumNumber {
@@ -249,7 +145,7 @@ func (x Outcome) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Outcome.Descriptor instead.
 func (Outcome) EnumDescriptor() ([]byte, []int) {
-	return file_docsearch_ingest_v1_ingest_proto_rawDescGZIP(), []int{3}
+	return file_docsearch_ingest_v1_ingest_proto_rawDescGZIP(), []int{1}
 }
 
 // IngestRequest names one source to read.
@@ -391,9 +287,9 @@ type Result struct {
 	Outcome    Outcome                `protobuf:"varint,4,opt,name=outcome,proto3,enum=docsearch.ingest.v1.Outcome" json:"outcome,omitempty"`
 	// Note explains an outcome the caller did not ask for, and is empty where
 	// the outcome speaks for itself.
-	Note       string     `protobuf:"bytes,5,opt,name=note,proto3" json:"note,omitempty"`
-	Quality    Quality    `protobuf:"varint,6,opt,name=quality,proto3,enum=docsearch.ingest.v1.Quality" json:"quality,omitempty"`
-	SourceKind SourceKind `protobuf:"varint,7,opt,name=source_kind,json=sourceKind,proto3,enum=docsearch.ingest.v1.SourceKind" json:"source_kind,omitempty"`
+	Note       string        `protobuf:"bytes,5,opt,name=note,proto3" json:"note,omitempty"`
+	Quality    v1.Quality    `protobuf:"varint,6,opt,name=quality,proto3,enum=docsearch.type.v1.Quality" json:"quality,omitempty"`
+	SourceKind v1.SourceKind `protobuf:"varint,7,opt,name=source_kind,json=sourceKind,proto3,enum=docsearch.type.v1.SourceKind" json:"source_kind,omitempty"`
 	// Warnings is the structure report as it is persisted, so a client can show
 	// what `docsearch verify` would show without asking again.
 	Warnings      string `protobuf:"bytes,8,opt,name=warnings,proto3" json:"warnings,omitempty"`
@@ -466,18 +362,18 @@ func (x *Result) GetNote() string {
 	return ""
 }
 
-func (x *Result) GetQuality() Quality {
+func (x *Result) GetQuality() v1.Quality {
 	if x != nil {
 		return x.Quality
 	}
-	return Quality_QUALITY_UNSPECIFIED
+	return v1.Quality(0)
 }
 
-func (x *Result) GetSourceKind() SourceKind {
+func (x *Result) GetSourceKind() v1.SourceKind {
 	if x != nil {
 		return x.SourceKind
 	}
-	return SourceKind_SOURCE_KIND_UNSPECIFIED
+	return v1.SourceKind(0)
 }
 
 func (x *Result) GetWarnings() string {
@@ -575,7 +471,7 @@ var File_docsearch_ingest_v1_ingest_proto protoreflect.FileDescriptor
 
 const file_docsearch_ingest_v1_ingest_proto_rawDesc = "" +
 	"\n" +
-	" docsearch/ingest/v1/ingest.proto\x12\x13docsearch.ingest.v1\"]\n" +
+	" docsearch/ingest/v1/ingest.proto\x12\x13docsearch.ingest.v1\x1a\x1edocsearch/type/v1/common.proto\"]\n" +
 	"\rIngestRequest\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x1e\n" +
@@ -585,33 +481,22 @@ const file_docsearch_ingest_v1_ingest_proto_rawDesc = "" +
 	"\bProgress\x120\n" +
 	"\x05phase\x18\x01 \x01(\x0e2\x1a.docsearch.ingest.v1.PhaseR\x05phase\x12\x18\n" +
 	"\acurrent\x18\x02 \x01(\x03R\acurrent\x12\x14\n" +
-	"\x05total\x18\x03 \x01(\x03R\x05total\"\xb8\x02\n" +
+	"\x05total\x18\x03 \x01(\x03R\x05total\"\xb4\x02\n" +
 	"\x06Result\x12\x15\n" +
 	"\x06doc_id\x18\x01 \x01(\tR\x05docId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x1f\n" +
 	"\vchunk_count\x18\x03 \x01(\x03R\n" +
 	"chunkCount\x126\n" +
 	"\aoutcome\x18\x04 \x01(\x0e2\x1c.docsearch.ingest.v1.OutcomeR\aoutcome\x12\x12\n" +
-	"\x04note\x18\x05 \x01(\tR\x04note\x126\n" +
-	"\aquality\x18\x06 \x01(\x0e2\x1c.docsearch.ingest.v1.QualityR\aquality\x12@\n" +
-	"\vsource_kind\x18\a \x01(\x0e2\x1f.docsearch.ingest.v1.SourceKindR\n" +
+	"\x04note\x18\x05 \x01(\tR\x04note\x124\n" +
+	"\aquality\x18\x06 \x01(\x0e2\x1a.docsearch.type.v1.QualityR\aquality\x12>\n" +
+	"\vsource_kind\x18\a \x01(\x0e2\x1d.docsearch.type.v1.SourceKindR\n" +
 	"sourceKind\x12\x1a\n" +
 	"\bwarnings\x18\b \x01(\tR\bwarnings\"\x8f\x01\n" +
 	"\x0eIngestResponse\x12;\n" +
 	"\bprogress\x18\x01 \x01(\v2\x1d.docsearch.ingest.v1.ProgressH\x00R\bprogress\x125\n" +
 	"\x06result\x18\x02 \x01(\v2\x1b.docsearch.ingest.v1.ResultH\x00R\x06resultB\t\n" +
-	"\amessage*\\\n" +
-	"\aQuality\x12\x17\n" +
-	"\x13QUALITY_UNSPECIFIED\x10\x00\x12\x0e\n" +
-	"\n" +
-	"QUALITY_OK\x10\x01\x12\x14\n" +
-	"\x10QUALITY_DEGRADED\x10\x02\x12\x12\n" +
-	"\x0eQUALITY_FAILED\x10\x03*U\n" +
-	"\n" +
-	"SourceKind\x12\x1b\n" +
-	"\x17SOURCE_KIND_UNSPECIFIED\x10\x00\x12\x14\n" +
-	"\x10SOURCE_KIND_FILE\x10\x01\x12\x14\n" +
-	"\x10SOURCE_KIND_SITE\x10\x02*x\n" +
+	"\amessage*x\n" +
 	"\x05Phase\x12\x15\n" +
 	"\x11PHASE_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0ePHASE_DISCOVER\x10\x01\x12\x0f\n" +
@@ -640,27 +525,27 @@ func file_docsearch_ingest_v1_ingest_proto_rawDescGZIP() []byte {
 	return file_docsearch_ingest_v1_ingest_proto_rawDescData
 }
 
-var file_docsearch_ingest_v1_ingest_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_docsearch_ingest_v1_ingest_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_docsearch_ingest_v1_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_docsearch_ingest_v1_ingest_proto_goTypes = []any{
-	(Quality)(0),           // 0: docsearch.ingest.v1.Quality
-	(SourceKind)(0),        // 1: docsearch.ingest.v1.SourceKind
-	(Phase)(0),             // 2: docsearch.ingest.v1.Phase
-	(Outcome)(0),           // 3: docsearch.ingest.v1.Outcome
-	(*IngestRequest)(nil),  // 4: docsearch.ingest.v1.IngestRequest
-	(*Progress)(nil),       // 5: docsearch.ingest.v1.Progress
-	(*Result)(nil),         // 6: docsearch.ingest.v1.Result
-	(*IngestResponse)(nil), // 7: docsearch.ingest.v1.IngestResponse
+	(Phase)(0),             // 0: docsearch.ingest.v1.Phase
+	(Outcome)(0),           // 1: docsearch.ingest.v1.Outcome
+	(*IngestRequest)(nil),  // 2: docsearch.ingest.v1.IngestRequest
+	(*Progress)(nil),       // 3: docsearch.ingest.v1.Progress
+	(*Result)(nil),         // 4: docsearch.ingest.v1.Result
+	(*IngestResponse)(nil), // 5: docsearch.ingest.v1.IngestResponse
+	(v1.Quality)(0),        // 6: docsearch.type.v1.Quality
+	(v1.SourceKind)(0),     // 7: docsearch.type.v1.SourceKind
 }
 var file_docsearch_ingest_v1_ingest_proto_depIdxs = []int32{
-	2, // 0: docsearch.ingest.v1.Progress.phase:type_name -> docsearch.ingest.v1.Phase
-	3, // 1: docsearch.ingest.v1.Result.outcome:type_name -> docsearch.ingest.v1.Outcome
-	0, // 2: docsearch.ingest.v1.Result.quality:type_name -> docsearch.ingest.v1.Quality
-	1, // 3: docsearch.ingest.v1.Result.source_kind:type_name -> docsearch.ingest.v1.SourceKind
-	5, // 4: docsearch.ingest.v1.IngestResponse.progress:type_name -> docsearch.ingest.v1.Progress
-	6, // 5: docsearch.ingest.v1.IngestResponse.result:type_name -> docsearch.ingest.v1.Result
-	4, // 6: docsearch.ingest.v1.IngestService.Ingest:input_type -> docsearch.ingest.v1.IngestRequest
-	7, // 7: docsearch.ingest.v1.IngestService.Ingest:output_type -> docsearch.ingest.v1.IngestResponse
+	0, // 0: docsearch.ingest.v1.Progress.phase:type_name -> docsearch.ingest.v1.Phase
+	1, // 1: docsearch.ingest.v1.Result.outcome:type_name -> docsearch.ingest.v1.Outcome
+	6, // 2: docsearch.ingest.v1.Result.quality:type_name -> docsearch.type.v1.Quality
+	7, // 3: docsearch.ingest.v1.Result.source_kind:type_name -> docsearch.type.v1.SourceKind
+	3, // 4: docsearch.ingest.v1.IngestResponse.progress:type_name -> docsearch.ingest.v1.Progress
+	4, // 5: docsearch.ingest.v1.IngestResponse.result:type_name -> docsearch.ingest.v1.Result
+	2, // 6: docsearch.ingest.v1.IngestService.Ingest:input_type -> docsearch.ingest.v1.IngestRequest
+	5, // 7: docsearch.ingest.v1.IngestService.Ingest:output_type -> docsearch.ingest.v1.IngestResponse
 	7, // [7:8] is the sub-list for method output_type
 	6, // [6:7] is the sub-list for method input_type
 	6, // [6:6] is the sub-list for extension type_name
@@ -682,7 +567,7 @@ func file_docsearch_ingest_v1_ingest_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_docsearch_ingest_v1_ingest_proto_rawDesc), len(file_docsearch_ingest_v1_ingest_proto_rawDesc)),
-			NumEnums:      4,
+			NumEnums:      2,
 			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,

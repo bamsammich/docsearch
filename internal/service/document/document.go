@@ -23,9 +23,11 @@ type Document struct {
 	DocID      string
 	Title      string
 	Format     string
-	SourceKind string
 	Status     string
 	Warnings   []string
+	// SourceKind is unset where the index holds a kind this build does not
+	// know, which is a database from a newer build rather than a defect.
+	SourceKind domain.SourceKind
 	Quality    domain.Quality
 }
 
