@@ -10,16 +10,19 @@ package integration
 // generated. DOCSEARCH_PARITY_DIR points them elsewhere.
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/bamsammich/docsearch/internal/adapter"
+	"github.com/bamsammich/docsearch/internal/adapter/pdf"
 	"github.com/bamsammich/docsearch/internal/domain"
 )
 
@@ -62,11 +65,30 @@ var _ = Describe("Parity with the Python pipeline", func() {
 				if !adapter.IsSupported(source.Path) {
 					Skip("no Go adapter for " + filepath.Ext(source.Path) + " yet")
 				}
-				extract, err := adapter.For(source.Path)
+				if strings.EqualFold(filepath.Ext(source.Path), ".pdf") {
+					Skip("PDFium's lines differ from PyMuPDF's; the PDF specs cover PDFs")
+				}
+				ex, err := sharedEngine()
 				Expect(err).NotTo(HaveOccurred())
-				got, err := extract(source.Path)
+				got, err := adapter.New(ex).Extract(context.Background(), source.Path)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(extractionDifference(got, &ext)).To(BeEmpty())
+			})
+
+			It("builds the Python PDF extraction from PyMuPDF's primitives", func() {
+				primitives := filepath.Join(docDir, "primitives.json")
+				if _, err := os.Stat(primitives); err != nil {
+					Skip("no PyMuPDF primitives: not a PDF, or the reference output predates them")
+				}
+				var source struct {
+					Path string `json:"path"`
+				}
+				Expect(readJSON(filepath.Join(docDir, "extraction.json"), &source)).To(Succeed())
+				doc, err := readPrimitives(primitives)
+				Expect(err).NotTo(HaveOccurred())
+				got, err := pdf.Build(doc, filepath.Base(source.Path))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(extractionDifference(jsonDiagnostics(got), &ext)).To(BeEmpty())
 			})
 
 			It("counts every block's atoms as Python does", func() {

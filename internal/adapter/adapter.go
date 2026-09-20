@@ -5,11 +5,12 @@
 // test/integration holds them to the Python extraction of every document in
 // a local library.
 //
-// Adding a format is one subpackage plus one entry in bySuffix. The chunker
-// is untouched. PDF is not ported yet, so For refuses a .pdf.
+// Adding a format is one subpackage plus one entry in formats. The chunker
+// is untouched.
 package adapter
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"maps"
@@ -28,40 +29,86 @@ import (
 // ErrUnsupportedFormat is returned for a file whose suffix no adapter reads.
 var ErrUnsupportedFormat = errors.New("unsupported format")
 
-// Extract reads the file at path into an extraction.
-type Extract func(path string) (*domain.Extraction, error)
+// format names an adapter.
+type format int
 
-var bySuffix = map[string]Extract{
-	".md":       markdown.Extract,
-	".markdown": markdown.Extract,
-	".html":     html.Extract,
-	".htm":      html.Extract,
-	".docx":     docx.Extract,
-	".txt":      text.Extract,
-	".text":     text.Extract,
+const (
+	formatPDF format = iota + 1
+	formatMarkdown
+	formatHTML
+	formatDocx
+	formatText
+)
+
+var formats = map[string]format{
+	".pdf":      formatPDF,
+	".md":       formatMarkdown,
+	".markdown": formatMarkdown,
+	".html":     formatHTML,
+	".htm":      formatHTML,
+	".docx":     formatDocx,
+	".txt":      formatText,
+	".text":     formatText,
 }
 
-// For returns the adapter for path's suffix, compared without case.
-func For(path string) (Extract, error) {
-	name := filepath.Base(path)
-	suffix := pystr.Suffix(name)
-	if extract, ok := bySuffix[strings.ToLower(suffix)]; ok {
-		return extract, nil
-	}
-	if suffix == "" {
-		suffix = name
-	}
-	return nil, fmt.Errorf("%w: no adapter for '%s'; supported: %s",
-		ErrUnsupportedFormat, suffix, strings.Join(SupportedSuffixes(), ", "))
+// PDFExtractor reads a PDF. *pdf.Extractor is one; it holds a PDF engine
+// that is costly to start, so the caller starts it once and passes it in.
+type PDFExtractor interface {
+	Extract(ctx context.Context, path string) (*domain.Extraction, error)
 }
 
-// IsSupported reports whether For has an adapter for path.
+// Registry extracts a file with the adapter its suffix names.
+type Registry struct {
+	pdf PDFExtractor
+}
+
+// New returns a registry that reads PDFs with pdf.
+func New(pdf PDFExtractor) *Registry {
+	return &Registry{pdf: pdf}
+}
+
+// Extract reads the file at path with the adapter for its suffix, compared
+// without case.
+func (r *Registry) Extract(ctx context.Context, path string) (*domain.Extraction, error) {
+	f, err := formatOf(path)
+	if err != nil {
+		return nil, err
+	}
+	switch f {
+	case formatPDF:
+		return r.pdf.Extract(ctx, path)
+	case formatMarkdown:
+		return markdown.Extract(path)
+	case formatHTML:
+		return html.Extract(path)
+	case formatDocx:
+		return docx.Extract(path)
+	case formatText:
+		return text.Extract(path)
+	}
+	return nil, fmt.Errorf("%w: no adapter for format %d", ErrUnsupportedFormat, f)
+}
+
+// IsSupported reports whether an adapter reads path.
 func IsSupported(path string) bool {
-	_, ok := bySuffix[strings.ToLower(pystr.Suffix(filepath.Base(path)))]
-	return ok
+	_, err := formatOf(path)
+	return err == nil
 }
 
 // SupportedSuffixes lists every suffix with an adapter, sorted.
 func SupportedSuffixes() []string {
-	return slices.Sorted(maps.Keys(bySuffix))
+	return slices.Sorted(maps.Keys(formats))
+}
+
+func formatOf(path string) (format, error) {
+	name := filepath.Base(path)
+	suffix := pystr.Suffix(name)
+	if f, ok := formats[strings.ToLower(suffix)]; ok {
+		return f, nil
+	}
+	if suffix == "" {
+		suffix = name
+	}
+	return 0, fmt.Errorf("%w: no adapter for '%s'; supported: %s",
+		ErrUnsupportedFormat, suffix, strings.Join(SupportedSuffixes(), ", "))
 }
