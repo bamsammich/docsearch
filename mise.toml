@@ -81,7 +81,7 @@ run = [
 [tasks.build]
 description = "Build the server, worker and CLI binaries"
 run = [
-  "go build -o bin/docsearch-mcp ./cmd/docsearch-mcp",
+  "go build -o bin/docsearch-server ./cmd/docsearch-server",
   "go build -o bin/docsearch-worker ./cmd/docsearch-worker",
   "go build -o bin/docsearch ./cmd/docsearch",
 ]

@@ -46,13 +46,13 @@ run their methods serially on one `*testing.T`, so they do not call
 service that calls it, and that service is written in 6b; until then the
 adapters are plain functions behind a suffix registry.
 
-## Two front doors: MCP for Claude, ConnectRPC for programs
+## Two APIs: MCP for Claude, ConnectRPC for programs
 
 The service layer gets two API adapters. Claude only
 speaks MCP, so MCP cannot be replaced; every other client gets a typed
 ConnectRPC API instead of hand-built HTTP.
 
-| client | door |
+| client | API |
 |---|---|
 | Claude: claude.ai, Desktop, Code | MCP, `internal/api/mcpapi` |
 | `docsearch` CLI | ConnectRPC; with several users it authenticates through the server rather than opening the database |
@@ -60,8 +60,19 @@ ConnectRPC API instead of hand-built HTTP.
 | upload page and any later web UI | Connect-Web |
 | file bytes on upload | plain HTTP `PUT` to a signed link, never an RPC message |
 
-Both doors verify tokens through the same check, a Connect interceptor on one
-side and MCP middleware on the other.
+Both APIs verify tokens through the same check, a Connect interceptor on one
+side and MCP middleware on the other, and both are served by one process.
+`docsearch-mcp` became `docsearch-server` in step 7f, when it stopped being a
+server that only speaks MCP: the name described one API of two.
+
+`go.uber.org/fx` builds what the process runs, in `cmd/docsearch-server/wire.go`.
+Every provider registers its own OnStop hook beside the thing it opened, so a
+handle closes whether startup finished or fell over, which a `defer` further
+down one long function does not do. Each route is a provider tagged into one
+group, so a new service is added by writing a constructor and naming it. The
+listener is bound during OnStart rather than inside a goroutine, so a taken
+port fails startup instead of being logged after the process has claimed to be
+serving.
 
 The MCP tools stay hand-written. `redpanda-data/protoc-gen-go-mcp` can generate
 MCP tools from a proto service, but it returns each response's raw proto JSON,
@@ -199,7 +210,8 @@ from have landed.
 | 7c | `inspect.py` | `internal/service/inspect`, with each report beside the data it reads: `internal/adapter/pdf`, `internal/site` | the same findings as Python on the committed PDFs, from `testdata/inspect` |
 | 7d | `verify.py`'s integrity half | `internal/domain` measurements, `internal/service/document` and its repository | the same measurements as `verify_document`; quality and integrity reported apart |
 | 7e | — | `proto/docsearch/type/v1`, `proto/docsearch/document/v1` and their `internal/api/connectapi` handlers | testify suites driving the real Connect stack over `httptest`, against a mocked service |
-| 7f | `cli.py` | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |
+| 7f | `cli.py`'s queue commands | `proto/docsearch/ingest/v1/job.proto`, `internal/service/job`, its handlers, and `cmd/docsearch-server` serving both APIs | testify suites over mocked services; the server answers a real RPC and refuses an untokened one |
+| 7g | `cli.py` | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |
 
 ### The snapshot is what a review reads
 

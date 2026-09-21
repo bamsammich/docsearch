@@ -9,7 +9,11 @@ package source
 
 import (
 	"fmt"
+	"io/fs"
 	"net/url"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/bamsammich/docsearch/internal/libroot"
@@ -73,4 +77,60 @@ func IsURL(target string) bool {
 		return false
 	}
 	return strings.EqualFold(u.Scheme, "http") || strings.EqualFold(u.Scheme, "https")
+}
+
+// Targets is every source one target names, as an identity apiece.
+//
+// A URL is one site and therefore one document. A directory is still one
+// document per file: the site model applies to a crawled site, not to any
+// directory that happens to hold Markdown.
+func (r *Registry) Targets(target string) ([]string, error) {
+	if IsURL(target) {
+		source, err := r.For(target, true)
+		if err != nil {
+			return nil, err
+		}
+		return []string{source.Identity()}, nil
+	}
+
+	resolved, err := libroot.Resolve(r.roots, target)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", target, err)
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", target, err)
+	}
+	if !info.IsDir() {
+		return []string{resolved}, nil
+	}
+
+	found, err := r.supportedUnder(resolved)
+	if err != nil {
+		return nil, err
+	}
+	if len(found) == 0 {
+		return nil, fmt.Errorf("no supported files under %s", target)
+	}
+	return found, nil
+}
+
+// supportedUnder is every file beneath a directory an adapter can read,
+// sorted, so two runs queue the same documents in the same order.
+func (r *Registry) supportedUnder(dir string) ([]string, error) {
+	var found []string
+	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() && r.extractor.Supports(path) {
+			found = append(found, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("walk %s: %w", dir, err)
+	}
+	slices.Sort(found)
+	return found, nil
 }

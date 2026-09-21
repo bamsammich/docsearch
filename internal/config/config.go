@@ -96,19 +96,6 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// SplitRoots parses a list of library roots from one environment variable,
-// separated the way the platform separates path lists (":" on Unix). A single
-// path parses to a single root, so an existing DOCSEARCH_ROOT keeps working.
-func SplitRoots(v string) []string {
-	var out []string
-	for _, p := range filepath.SplitList(v) {
-		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
 // IsLoopbackAddr reports whether addr binds only to a loopback interface.
 // An empty host, "0.0.0.0" or "::" all bind every interface and are not
 // loopback.
@@ -127,33 +114,4 @@ func IsLoopbackAddr(addr string) bool {
 	// A specific non-loopback interface (a Tailscale address, say) is a
 	// deliberate choice and still requires the explicit flag.
 	return strings.HasPrefix(host, "127.")
-}
-
-// FromEnv fills unset fields from the environment.
-func (c *Config) FromEnv() {
-	if c.BearerToken == "" {
-		c.BearerToken = os.Getenv(EnvToken)
-	}
-	if c.DBPath == "" {
-		c.DBPath = os.Getenv(EnvDB)
-	}
-	if len(c.LibraryRoots) == 0 {
-		c.LibraryRoots = SplitRoots(os.Getenv(EnvRoot))
-	}
-	if c.Addr == "" {
-		if v := os.Getenv(EnvAddr); v != "" {
-			c.Addr = v
-		} else {
-			c.Addr = "127.0.0.1:8765"
-		}
-	}
-	if len(c.AllowedOrigins) == 0 {
-		if v := os.Getenv(EnvOrigins); v != "" {
-			for _, o := range strings.Split(v, ",") {
-				if o = strings.TrimSpace(o); o != "" {
-					c.AllowedOrigins = append(c.AllowedOrigins, o)
-				}
-			}
-		}
-	}
 }

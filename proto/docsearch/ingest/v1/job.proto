@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+// The ingest queue, which is the path a caller takes when it does not want
+// to wait. IngestService.Ingest is the other one: it streams, and the caller
+// watches.
+package docsearch.ingest.v1;
+
+import "docsearch/type/v1/common.proto";
+
+// Job is one row of the queue.
+message Job {
+  int64 job_id = 1;
+  // Source is the path or URL the job names.
+  string source = 2;
+  // Title overrides the name the document is given, and is empty where the
+  // operator left it to name itself.
+  string title = 3;
+  // DocID is empty until the ingest settles on one, which it does before
+  // writing anything, so a job that died mid-write still says what it was
+  // writing.
+  string doc_id = 4;
+  // Status is 'queued', 'running', 'done', 'failed' or 'cancelled'.
+  string status = 5;
+  // Phase and the progress pair are empty until the job is running.
+  string phase = 6;
+  optional int64 progress_current = 7;
+  optional int64 progress_total = 8;
+  int64 attempts = 9;
+  // Permanent marks a failure another attempt would not survive, which is
+  // what separates a job that failed deterministically from one that
+  // exhausted its attempts.
+  bool permanent = 10;
+  string error = 11;
+  docsearch.type.v1.Quality quality = 12;
+  repeated string warnings = 13;
+  string created_at = 14;
+  string updated_at = 15;
+}
+
+message EnqueueRequest {
+  // Source is a path inside the configured library root, or the URL of a
+  // documentation site.
+  string source = 1;
+  string title = 2;
+}
+
+message EnqueueResponse {
+  int64 job_id = 1;
+  // Position counts the job itself, so a freshly queued job with nothing
+  // ahead of it reports 1.
+  int64 queue_position = 2;
+}
+
+message ListJobsRequest {
+  // IncludeCompleted returns finished jobs as well as the queue.
+  bool include_completed = 1;
+  int64 limit = 2;
+}
+
+message ListJobsResponse {
+  repeated Job jobs = 1;
+}
+
+message CancelJobRequest {
+  int64 job_id = 1;
+}
+
+message CancelJobResponse {
+  // Status is what the job reads as now. A job already finished is not
+  // cancelled, and saying so beats reporting a cancellation that did
+  // nothing.
+  string status = 1;
+}
+
+// JobService drives the queue the worker reads.
+service JobService {
+  // Enqueue puts one source on the queue for the worker.
+  rpc Enqueue(EnqueueRequest) returns (EnqueueResponse) {}
+
+  // ListJobs is the queue, newest first.
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse) {}
+
+  // CancelJob asks a running job to stop. The worker notices between
+  // progress writes and removes whatever the job half wrote.
+  rpc CancelJob(CancelJobRequest) returns (CancelJobResponse) {}
+}

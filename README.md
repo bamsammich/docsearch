@@ -29,7 +29,7 @@ while the server is Go.
 ```bash
 mise install          # python 3.13, uv, go 1.26, golangci-lint
 uv sync               # python dependencies
-go build -o bin/docsearch-mcp ./cmd/docsearch-mcp
+go build -o bin/docsearch-server ./cmd/docsearch-server
 ```
 
 `pdffonts` (poppler) is useful for inspecting a PDF's text layer and is not in
@@ -275,13 +275,13 @@ For a client with native HTTP MCP support:
 and then `[localMcpBridge] no stdio servers connected`. That file takes stdio
 servers only, so the HTTP service is reached through a bridge.
 
-Install `deploy/client/docsearch-mcp-bridge` to `~/.local/bin/`, then:
+Install `deploy/client/docsearch-server-bridge` to `~/.local/bin/`, then:
 
 ```json
 {
   "mcpServers": {
     "docsearch": {
-      "command": "/Users/YOU/.local/bin/docsearch-mcp-bridge",
+      "command": "/Users/YOU/.local/bin/docsearch-server-bridge",
       "args": []
     }
   }
@@ -360,7 +360,7 @@ Moving an existing installation across: stop the agents first — a clean
 shutdown checkpoints the WAL into the main file — then copy it in.
 
 ```bash
-launchctl bootout gui/$(id -u)/com.bamsammich.docsearch-mcp
+launchctl bootout gui/$(id -u)/com.bamsammich.docsearch-server
 launchctl bootout gui/$(id -u)/com.bamsammich.docsearch-worker
 docker volume create docsearch_data
 docker run --rm -v docsearch_data:/data -v "$HOME/.local/share/docsearch:/src:ro" \
