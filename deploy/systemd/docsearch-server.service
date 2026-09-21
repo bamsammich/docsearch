@@ -16,7 +16,7 @@ Environment=DOCSEARCH_ALLOWED_ORIGINS=https://claude.ai
 # `systemctl cat` and out of the process environment listing.
 EnvironmentFile=%h/.config/docsearch/token.env
 
-ExecStart=%h/.local/bin/docsearch-mcp \
+ExecStart=%h/.local/bin/docsearch-server \
   --db ${DOCSEARCH_DB} \
   --root ${DOCSEARCH_ROOT} \
   --addr ${DOCSEARCH_ADDR} \

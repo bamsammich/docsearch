@@ -8,12 +8,12 @@ COPY cmd ./cmd
 COPY internal ./internal
 RUN CGO_ENABLED=0 GOOS=linux go build \
       -trimpath -ldflags="-s -w" \
-      -o /out/docsearch-mcp ./cmd/docsearch-mcp
+      -o /out/docsearch-server ./cmd/docsearch-server
 
 FROM gcr.io/distroless/static-debian12:nonroot
-COPY --from=build /out/docsearch-mcp /usr/local/bin/docsearch-mcp
+COPY --from=build /out/docsearch-server /usr/local/bin/docsearch-server
 USER nonroot:nonroot
 EXPOSE 8765
 # Bind address, library root and Origin allowlist come from the ConfigMap;
 # the bearer token comes from a Secret. Nothing is baked in.
-ENTRYPOINT ["/usr/local/bin/docsearch-mcp"]
+ENTRYPOINT ["/usr/local/bin/docsearch-server"]

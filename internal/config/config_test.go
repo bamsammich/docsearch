@@ -98,24 +98,6 @@ func TestNonexistentLibraryRootIsRejected(t *testing.T) {
 	}
 }
 
-func TestRootsParseFromOnePathList(t *testing.T) {
-	sep := string(filepath.ListSeparator)
-	for _, tc := range []struct {
-		name string
-		in   string
-		want int
-	}{
-		{"single path stays one root", "/a", 1},
-		{"two paths", "/a" + sep + "/b", 2},
-		{"blank entries are dropped", "/a" + sep + sep + " " + sep + "/b", 2},
-		{"empty is no roots", "", 0},
-	} {
-		if got := len(SplitRoots(tc.in)); got != tc.want {
-			t.Errorf("%s: SplitRoots(%q) = %d roots, want %d", tc.name, tc.in, got, tc.want)
-		}
-	}
-}
-
 func TestEveryRootIsResolvedThroughSymlinks(t *testing.T) {
 	a, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {

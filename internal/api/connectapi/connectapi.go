@@ -1,4 +1,4 @@
-// Package connectapi is the ConnectRPC door onto the ingest service.
+// Package connectapi is the ConnectRPC API onto the ingest service.
 //
 // Claude speaks MCP and cannot be asked to speak anything else, so
 // internal/api/mcpapi stays. Every other client comes through here: the
@@ -35,7 +35,7 @@ type Ingester interface {
 //
 // Whether a source is a path inside the library root or a URL worth crawling
 // is a policy question with a different answer per deployment, so the
-// decision belongs to whoever builds the server rather than to its door.
+// decision belongs to whoever builds the server rather than to its API.
 type Sources interface {
 	For(source string, revalidate bool) (ingest.Source, error)
 }

@@ -1,6 +1,6 @@
 // Package worker runs queued ingests, one at a time.
 //
-// It calls the same ingest service the CLI and the ConnectRPC door call. The
+// It calls the same ingest service the CLI and the ConnectRPC API call. The
 // difference is who drives it and who watches: a job row rather than a
 // caller, and a status tool rather than a terminal.
 //

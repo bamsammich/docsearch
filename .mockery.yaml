@@ -19,6 +19,11 @@ packages:
       Ingester:
       Sources:
       Documents:
+      Jobs:
+  github.com/bamsammich/docsearch/internal/service/job:
+    interfaces:
+      Queue:
+      Targets:
   github.com/bamsammich/docsearch/internal/service/document:
     interfaces:
       Repository:

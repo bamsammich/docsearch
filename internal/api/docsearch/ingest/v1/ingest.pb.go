@@ -4,7 +4,7 @@
 // 	protoc        (unknown)
 // source: docsearch/ingest/v1/ingest.proto
 
-// Package docsearch.ingest.v1 is the typed door onto one ingest.
+// Package docsearch.ingest.v1 is the typed API onto one ingest.
 //
 // Claude speaks MCP and cannot be asked to speak anything else, so MCP stays.
 // Every other client gets this instead of hand-built HTTP: the `docsearch`
