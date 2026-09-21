@@ -1,6 +1,9 @@
 package domain
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // Level is how much a reconnaissance finding matters.
 type Level uint8
@@ -90,3 +93,83 @@ const (
 	TierDeclared      = "declared, recovered by parsing"
 	TierInferred      = "inferred, no source to check it against"
 )
+
+// FormatSite is the format a crawled site reports, which is the one format
+// no adapter produces.
+const FormatSite = "site"
+
+// Report is the reconnaissance as `docsearch inspect` prints it.
+//
+// Ported from python/docsearch/inspect.py's format_report.
+func (r *InspectReport) Report() string {
+	label, unit := "file", "pages"
+	if r.Format == FormatSite {
+		label, unit = FormatSite, "pages found"
+	}
+
+	var b strings.Builder
+	line := func(format string, args ...any) {
+		fmt.Fprintf(&b, format+"\n", args...)
+	}
+
+	line("%-11s %s", label, r.Display())
+	line("%-11s %s", "format", r.Format)
+	if r.PageCount != nil {
+		line("%-11s %d", unit, *r.PageCount)
+	}
+	line("")
+	for _, f := range r.Findings {
+		line("[%s] %s", centred(strings.ToUpper(f.Level.String()), levelWidth), f.Label)
+		for _, wrapped := range wrapText(f.Detail, inspectDetailWidth) {
+			line("            %s", wrapped)
+		}
+	}
+	line("")
+	if r.Blocked() {
+		line("This document cannot be ingested as it stands.")
+	} else {
+		line("structure source: %s (%s)", r.PredictedSource, r.PredictedTier)
+	}
+	return strings.TrimSuffix(b.String(), "\n")
+}
+
+const (
+	// levelWidth is the box a level sits in, centred, so that findings line
+	// up however long the level's name is.
+	levelWidth = 7
+	// inspectDetailWidth is where a finding's explanation wraps.
+	inspectDetailWidth = 72
+)
+
+// centred pads text to width with the extra space on the right, the way
+// Python's ^ alignment does.
+func centred(text string, width int) string {
+	padding := width - len([]rune(text))
+	if padding <= 0 {
+		return text
+	}
+	left := padding / 2
+	return strings.Repeat(" ", left) + text + strings.Repeat(" ", padding-left)
+}
+
+// wrapText breaks text at width, greedily: on whitespace, never inside a
+// word, however long the word is.
+func wrapText(text string, width int) []string {
+	var lines []string
+	current := ""
+	for _, word := range strings.Fields(text) {
+		switch {
+		case current == "":
+			current = word
+		case len(current)+1+len(word) > width:
+			lines = append(lines, current)
+			current = word
+		default:
+			current += " " + word
+		}
+	}
+	if current != "" {
+		lines = append(lines, current)
+	}
+	return lines
+}

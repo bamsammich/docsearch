@@ -211,7 +211,30 @@ from have landed.
 | 7d | `verify.py`'s integrity half | `internal/domain` measurements, `internal/service/document` and its repository | the same measurements as `verify_document`; quality and integrity reported apart |
 | 7e | — | `proto/docsearch/type/v1`, `proto/docsearch/document/v1` and their `internal/api/connectapi` handlers | testify suites driving the real Connect stack over `httptest`, against a mocked service |
 | 7f | `cli.py`'s queue commands | `proto/docsearch/ingest/v1/job.proto`, `internal/service/job`, its handlers, and `cmd/docsearch-server` serving both APIs | testify suites over mocked services; the server answers a real RPC and refuses an untokened one |
-| 7g | `cli.py` | `cmd/docsearch`, a ConnectRPC client of the server | same commands, same reports |
+| 7g | `cli.py` | `cmd/docsearch`, a ConnectRPC client of the server | the two report formatters against Python's text, from `testdata/verify` and `testdata/inspect`; the client over `httptest` against the real Connect stack |
+| 7h | — | Python leaves the tree | the Go suites alone, once nothing reads `python/` |
+
+### What the CLI asks the server, and what it asks the index
+
+`docsearch` is a client of `docsearch-server` for everything except
+`migrate`, which opens the database directly because it writes the schema the
+server expects to find and so has to run before the server does.
+`docsearch-worker` stays a separate binary beside the index it writes.
+
+A report is printed by the package that defines it: `document.VerifyReport`
+and `domain.InspectReport` each carry their own text, and
+`internal/api/connectclient` converts the wire messages back into those types
+rather than formatting from the messages. Two formatters for one report is
+how the CLI and the MCP tools would come to describe the same document
+differently.
+
+Three fields were added to the API for reports the CLI has to print: the
+index-term count and its unjoinable sections on `VerifyReport`, and the
+adapter's diagnostics on an ingest `Result`. The diagnostics cross as JSON
+because their shape belongs to whichever adapter produced them; typing them
+in proto would freeze every adapter's internals into the API. What the
+structure report makes of them crosses as sentences, because the report is
+the grader and a client rendering the JSON itself would be a second one.
 
 ### The snapshot is what a review reads
 

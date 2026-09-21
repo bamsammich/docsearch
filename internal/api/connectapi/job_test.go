@@ -52,13 +52,14 @@ func (s *JobAPISuite) TestQueueingReportsTheJobAndItsPosition() {
 		Source: "/library/guide.md", Title: "Guide",
 	}))
 	s.Require().NoError(err)
-	s.Equal(int64(7), res.Msg.GetJobId())
-	s.Equal(int64(3), res.Msg.GetQueuePosition())
+	s.Require().Len(res.Msg.GetJobs(), 1)
+	s.Equal(int64(7), res.Msg.GetJobs()[0].GetJobId())
+	s.Equal(int64(3), res.Msg.GetJobs()[0].GetQueuePosition())
 }
 
-func (s *JobAPISuite) TestADirectoryReportsTheFirstJobItQueued() {
-	// A caller that queued a library wants an id it can follow rather than a
-	// list it did not ask for; ListJobs shows the rest.
+func (s *JobAPISuite) TestADirectoryReportsEveryJobItQueued() {
+	// A caller that queued a library has to be able to say what it got, so
+	// each file beneath the directory comes back named.
 	s.jobs.EXPECT().Enqueue(mock.Anything, "/library", "").Return([]job.Queued{
 		{Source: "/library/a.md", JobID: 1, Position: 1},
 		{Source: "/library/b.pdf", JobID: 2, Position: 2},
@@ -67,7 +68,10 @@ func (s *JobAPISuite) TestADirectoryReportsTheFirstJobItQueued() {
 	res, err := s.client.Enqueue(s.T().Context(),
 		connect.NewRequest(&ingestv1.EnqueueRequest{Source: "/library"}))
 	s.Require().NoError(err)
-	s.Equal(int64(1), res.Msg.GetJobId())
+	s.Require().Len(res.Msg.GetJobs(), 2)
+	s.Equal("/library/a.md", res.Msg.GetJobs()[0].GetSource())
+	s.Equal(int64(2), res.Msg.GetJobs()[1].GetJobId())
+	s.Equal(int64(2), res.Msg.GetJobs()[1].GetQueuePosition())
 }
 
 func (s *JobAPISuite) TestATargetNoAdapterReadsIsTheCallersMistake() {

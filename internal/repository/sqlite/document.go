@@ -110,6 +110,16 @@ func (d *Documents) IndexTermSections(ctx context.Context, docID string) ([]stri
 	return sections, nil
 }
 
+// IndexTermCount is how many entries a back-of-book index holds, which is
+// more than the number of sections they point at.
+func (d *Documents) IndexTermCount(ctx context.Context, docID string) (int, error) {
+	count, err := d.q.IndexTermCount(ctx, docID)
+	if err != nil {
+		return 0, fmt.Errorf("count the index terms of %s: %w", docID, err)
+	}
+	return int(count), nil
+}
+
 // SectionHasChunks reports whether a section, or any section beneath it,
 // holds a chunk.
 func (d *Documents) SectionHasChunks(

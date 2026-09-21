@@ -25,5 +25,6 @@
  "format": "pdf",
  "page_count": 3,
  "predicted_source": "outline",
- "predicted_tier": "authoritative"
+ "predicted_tier": "authoritative",
+ "text": "file        outline.pdf\nformat      pdf\npages       3\n\n[  OK   ] text layer\n            present on 3 of 3 pages; no OCR needed\n[  OK   ] outline\n            4 entries, nesting depth 1-2. Sections, nesting and the page each begins\n            on are all declared, so none of the structure has to be inferred.\n[ WARN  ] font hierarchy\n            no size stands above the 10.0pt body text. Headings in this document are\n            styled by weight or colour rather than size, so font detection cannot\n            find them and cannot corroborate anything.\n[  OK   ] page furniture\n            0 repeated line(s), 0% of the document's token mass. Stripped before\n            chunking; a high share means a large part of the raw text is a running\n            header or footer.\n\nstructure source: outline (authoritative)"
 }

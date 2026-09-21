@@ -210,6 +210,19 @@ func (q *Queries) DocumentChunks(ctx context.Context, docID string) ([]DocumentC
 	return items, nil
 }
 
+const indexTermCount = `-- name: IndexTermCount :one
+SELECT COUNT(*) FROM index_terms WHERE doc_id = ?
+`
+
+// Entries, not sections: the verify report counts what the back-of-book
+// index holds, and many entries point at one section.
+func (q *Queries) IndexTermCount(ctx context.Context, docID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, indexTermCount, docID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const indexTermSections = `-- name: IndexTermSections :many
 SELECT DISTINCT section FROM index_terms WHERE doc_id = ? ORDER BY section
 `

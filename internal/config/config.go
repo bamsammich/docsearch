@@ -29,6 +29,9 @@ const (
 	EnvRoot    = "DOCSEARCH_ROOT"
 	EnvOrigins = "DOCSEARCH_ALLOWED_ORIGINS"
 	EnvAddr    = "DOCSEARCH_ADDR"
+	// EnvServer is where docsearch finds docsearch-server. Every command but
+	// migrate goes through it.
+	EnvServer = "DOCSEARCH_SERVER"
 )
 
 // ErrPublicBind is returned when the configured address is not loopback and

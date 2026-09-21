@@ -472,14 +472,21 @@ func (x *Finding) GetDetail() string {
 // defects, every one of them compatible with a clean ingest that reached
 // 'ready'. A document can fail either while passing the other.
 type VerifyReport struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Document      *Document              `protobuf:"bytes,1,opt,name=document,proto3" json:"document,omitempty"`
-	Measurements  *Measurements          `protobuf:"bytes,2,opt,name=measurements,proto3" json:"measurements,omitempty"`
-	Problems      []string               `protobuf:"bytes,3,rep,name=problems,proto3" json:"problems,omitempty"`
-	Findings      []*Finding             `protobuf:"bytes,4,rep,name=findings,proto3" json:"findings,omitempty"`
-	Verdict       v1.Verdict             `protobuf:"varint,5,opt,name=verdict,proto3,enum=docsearch.type.v1.Verdict" json:"verdict,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Document     *Document              `protobuf:"bytes,1,opt,name=document,proto3" json:"document,omitempty"`
+	Measurements *Measurements          `protobuf:"bytes,2,opt,name=measurements,proto3" json:"measurements,omitempty"`
+	Problems     []string               `protobuf:"bytes,3,rep,name=problems,proto3" json:"problems,omitempty"`
+	Findings     []*Finding             `protobuf:"bytes,4,rep,name=findings,proto3" json:"findings,omitempty"`
+	Verdict      v1.Verdict             `protobuf:"varint,5,opt,name=verdict,proto3,enum=docsearch.type.v1.Verdict" json:"verdict,omitempty"`
+	// IndexTerms is how many entries a back-of-book index holds, and 0 where
+	// the document has no such index.
+	IndexTerms int64 `protobuf:"varint,6,opt,name=index_terms,json=indexTerms,proto3" json:"index_terms,omitempty"`
+	// UnjoinableSections are the sections those entries point at that no chunk
+	// answers for. Each one is also a problem; the report states how many
+	// there are next to how large the index is.
+	UnjoinableSections []string `protobuf:"bytes,7,rep,name=unjoinable_sections,json=unjoinableSections,proto3" json:"unjoinable_sections,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *VerifyReport) Reset() {
@@ -545,6 +552,20 @@ func (x *VerifyReport) GetVerdict() v1.Verdict {
 		return x.Verdict
 	}
 	return v1.Verdict(0)
+}
+
+func (x *VerifyReport) GetIndexTerms() int64 {
+	if x != nil {
+		return x.IndexTerms
+	}
+	return 0
+}
+
+func (x *VerifyReport) GetUnjoinableSections() []string {
+	if x != nil {
+		return x.UnjoinableSections
+	}
+	return nil
 }
 
 // InspectFinding is one question asked of a document before ingesting it.
@@ -1089,13 +1110,16 @@ const file_docsearch_document_v1_document_proto_rawDesc = "" +
 	"\aFinding\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x126\n" +
 	"\bseverity\x18\x02 \x01(\x0e2\x1a.docsearch.type.v1.VerdictR\bseverity\x12\x16\n" +
-	"\x06detail\x18\x03 \x01(\tR\x06detail\"\xa2\x02\n" +
+	"\x06detail\x18\x03 \x01(\tR\x06detail\"\xf4\x02\n" +
 	"\fVerifyReport\x12;\n" +
 	"\bdocument\x18\x01 \x01(\v2\x1f.docsearch.document.v1.DocumentR\bdocument\x12G\n" +
 	"\fmeasurements\x18\x02 \x01(\v2#.docsearch.document.v1.MeasurementsR\fmeasurements\x12\x1a\n" +
 	"\bproblems\x18\x03 \x03(\tR\bproblems\x12:\n" +
 	"\bfindings\x18\x04 \x03(\v2\x1e.docsearch.document.v1.FindingR\bfindings\x124\n" +
-	"\averdict\x18\x05 \x01(\x0e2\x1a.docsearch.type.v1.VerdictR\averdict\"n\n" +
+	"\averdict\x18\x05 \x01(\x0e2\x1a.docsearch.type.v1.VerdictR\averdict\x12\x1f\n" +
+	"\vindex_terms\x18\x06 \x01(\x03R\n" +
+	"indexTerms\x12/\n" +
+	"\x13unjoinable_sections\x18\a \x03(\tR\x12unjoinableSections\"n\n" +
 	"\x0eInspectFinding\x12.\n" +
 	"\x05level\x18\x01 \x01(\x0e2\x18.docsearch.type.v1.LevelR\x05level\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x16\n" +

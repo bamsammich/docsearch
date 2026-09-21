@@ -43,6 +43,9 @@ type Repository interface {
 	// IndexTermSections are the distinct sections a document's back-of-book
 	// index points at.
 	IndexTermSections(ctx context.Context, docID string) ([]string, error)
+	// IndexTermCount is how many entries that index holds, which the report
+	// states alongside how many of them join nothing.
+	IndexTermCount(ctx context.Context, docID string) (int, error)
 	// SectionHasChunks reports whether a section, or any section beneath it,
 	// holds a chunk.
 	SectionHasChunks(ctx context.Context, docID, section string) (bool, error)
@@ -63,8 +66,15 @@ type VerifyReport struct {
 	Problems []string `json:"problems"`
 	// Findings are quality defects, every one of them compatible with a
 	// clean ingest that reached 'ready'.
-	Findings     []domain.Finding    `json:"findings"`
-	Measurements domain.Measurements `json:"measurements"`
+	Findings []domain.Finding `json:"findings"`
+	// UnjoinableSections are the sections the back-of-book index points at
+	// that no chunk answers for. Each one is also a problem; the report
+	// states how many there are next to how large the index is.
+	UnjoinableSections []string            `json:"unjoinable_index_sections"`
+	Measurements       domain.Measurements `json:"measurements"`
+	// IndexTerms is how many entries that index holds, and 0 where a
+	// document has no back-of-book index at all.
+	IndexTerms int `json:"index_terms"`
 	// Verdict grades the chunks. Integrity is reported in Problems: the two
 	// answer different questions and a document can fail either.
 	Verdict domain.Verdict `json:"verdict"`
@@ -134,6 +144,10 @@ func (s *Service) Verify(ctx context.Context, docID string) (*VerifyReport, erro
 
 	unjoinable, err := s.unjoinableSections(ctx, docID)
 	if err != nil {
+		return nil, err
+	}
+	report.UnjoinableSections = unjoinable
+	if report.IndexTerms, err = s.repo.IndexTermCount(ctx, docID); err != nil {
 		return nil, err
 	}
 	report.Problems = append(report.Problems, problemsOf(report.Measurements, unjoinable)...)

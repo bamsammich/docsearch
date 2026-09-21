@@ -1,8 +1,9 @@
 // Command docsearch is the operator's command line.
 //
-// Step 7 fills it out. Only migrate is here so far, because nothing else in
-// Go could create an index: schema.sql leaves the version unrecorded, and
-// every command that opens an index refuses an unrecorded one.
+// Every command but migrate is a client of docsearch-server, which is what
+// lets the index sit on another host and what makes one token the only way
+// in. migrate is the exception because it writes the schema the server
+// expects to find, and so has to run before the server does.
 package main
 
 import (
@@ -15,6 +16,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"connectrpc.com/connect"
 	"github.com/urfave/cli/v3"
 	_ "modernc.org/sqlite" // the driver an index is written with
 
@@ -24,16 +26,51 @@ import (
 
 func main() {
 	if err := command().Run(context.Background(), os.Args); err != nil {
-		fmt.Fprintln(os.Stderr, "fatal:", err)
+		// A report that already said what was wrong exits on its status
+		// alone, so a script can act on it without a second copy of the
+		// explanation on stderr.
+		var code exitCode
+		if errors.As(err, &code) {
+			os.Exit(int(code))
+		}
+		fmt.Fprintln(os.Stderr, "fatal:", plainly(err))
 		os.Exit(1)
 	}
 }
+
+// exitCode is an outcome the command has already explained.
+type exitCode int
+
+func (e exitCode) Error() string { return fmt.Sprintf("exit status %d", int(e)) }
+
+// exit ends a command on a status without printing anything more.
+func exit(code int) error { return exitCode(code) }
+
+var (
+	errNoTarget = errors.New("name a path or an http(s) URL to read")
+	errNoDocID  = errors.New("name the document to act on")
+	errNoJobID  = errors.New("name the job to cancel")
+)
 
 func command() *cli.Command {
 	return &cli.Command{
 		Name:  "docsearch",
 		Usage: "manage a docsearch index",
 		Commands: []*cli.Command{
+			addCommand("add"),
+			// `ingest` is what add was called before it could take a URL.
+			// Kept as a second name rather than a deprecation: it is in the
+			// README, in two service units, and in whatever scripts an
+			// operator already wrote.
+			addCommand("ingest"),
+			enqueueCommand(),
+			jobsCommand(),
+			cancelCommand(),
+			listCommand(),
+			verifyCommand(),
+			inspectCommand(),
+			refreshCommand(),
+			removeCommand(),
 			migrateCommand(),
 		},
 	}
@@ -185,4 +222,23 @@ func at(found int, recorded bool) string {
 		return "unversioned"
 	}
 	return fmt.Sprintf("%d", found)
+}
+
+// plainly is what the server said, without the wire's vocabulary.
+//
+// A connect error prints as "not_found: no such document: nope", and the
+// operator asking for a document that is not there has no use for the code
+// in front of the sentence.
+func plainly(err error) string {
+	var connectErr *connect.Error
+	if !errors.As(err, &connectErr) {
+		return err.Error()
+	}
+	if connectErr.Code() == connect.CodeUnauthenticated {
+		// "401 Unauthorized" on its own sends the reader to the server logs
+		// for something they can fix from here.
+		return connectErr.Message() + ": set " + config.EnvToken +
+			" to the token the server was given"
+	}
+	return connectErr.Message()
 }

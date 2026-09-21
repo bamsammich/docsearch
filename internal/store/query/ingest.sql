@@ -84,6 +84,11 @@ SELECT doc_id, title, format, source_kind, status, page_count, chunk_count, warn
 -- name: IndexTermSections :many
 SELECT DISTINCT section FROM index_terms WHERE doc_id = ? ORDER BY section;
 
+-- Entries, not sections: the verify report counts what the back-of-book
+-- index holds, and many entries point at one section.
+-- name: IndexTermCount :one
+SELECT COUNT(*) FROM index_terms WHERE doc_id = ?;
+
 -- Subtree semantics, the same clause ChunksInSection uses: an index entry
 -- pointing at chapter 4 refers to the whole chapter.
 -- name: SectionHasChunks :one

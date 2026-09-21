@@ -292,7 +292,20 @@ type Result struct {
 	SourceKind v1.SourceKind `protobuf:"varint,7,opt,name=source_kind,json=sourceKind,proto3,enum=docsearch.type.v1.SourceKind" json:"source_kind,omitempty"`
 	// Warnings is the structure report as it is persisted, so a client can show
 	// what `docsearch verify` would show without asking again.
-	Warnings      string `protobuf:"bytes,8,opt,name=warnings,proto3" json:"warnings,omitempty"`
+	Warnings string `protobuf:"bytes,8,opt,name=warnings,proto3" json:"warnings,omitempty"`
+	// Diagnostics is what the adapter observed while reading the source, as
+	// JSON: where the structure came from, how a table of contents compared
+	// with the body, how much of a site was reachable.
+	//
+	// JSON rather than a message per key, because the shape belongs to
+	// whichever adapter produced it. Typing it here would freeze every
+	// adapter's internals into the API, and a client shows these lines
+	// without reasoning about them.
+	Diagnostics string `protobuf:"bytes,9,opt,name=diagnostics,proto3" json:"diagnostics,omitempty"`
+	// Findings are what the structure report makes of those diagnostics, in
+	// the sentences it writes them as. The report grades what it reads, so a
+	// client that rendered `warnings` itself would be writing a second grader.
+	Findings      []string `protobuf:"bytes,10,rep,name=findings,proto3" json:"findings,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -381,6 +394,20 @@ func (x *Result) GetWarnings() string {
 		return x.Warnings
 	}
 	return ""
+}
+
+func (x *Result) GetDiagnostics() string {
+	if x != nil {
+		return x.Diagnostics
+	}
+	return ""
+}
+
+func (x *Result) GetFindings() []string {
+	if x != nil {
+		return x.Findings
+	}
+	return nil
 }
 
 // IngestResponse is one message of the stream: progress while the ingest
@@ -481,7 +508,7 @@ const file_docsearch_ingest_v1_ingest_proto_rawDesc = "" +
 	"\bProgress\x120\n" +
 	"\x05phase\x18\x01 \x01(\x0e2\x1a.docsearch.ingest.v1.PhaseR\x05phase\x12\x18\n" +
 	"\acurrent\x18\x02 \x01(\x03R\acurrent\x12\x14\n" +
-	"\x05total\x18\x03 \x01(\x03R\x05total\"\xb4\x02\n" +
+	"\x05total\x18\x03 \x01(\x03R\x05total\"\xf2\x02\n" +
 	"\x06Result\x12\x15\n" +
 	"\x06doc_id\x18\x01 \x01(\tR\x05docId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x1f\n" +
@@ -492,7 +519,10 @@ const file_docsearch_ingest_v1_ingest_proto_rawDesc = "" +
 	"\aquality\x18\x06 \x01(\x0e2\x1a.docsearch.type.v1.QualityR\aquality\x12>\n" +
 	"\vsource_kind\x18\a \x01(\x0e2\x1d.docsearch.type.v1.SourceKindR\n" +
 	"sourceKind\x12\x1a\n" +
-	"\bwarnings\x18\b \x01(\tR\bwarnings\"\x8f\x01\n" +
+	"\bwarnings\x18\b \x01(\tR\bwarnings\x12 \n" +
+	"\vdiagnostics\x18\t \x01(\tR\vdiagnostics\x12\x1a\n" +
+	"\bfindings\x18\n" +
+	" \x03(\tR\bfindings\"\x8f\x01\n" +
 	"\x0eIngestResponse\x12;\n" +
 	"\bprogress\x18\x01 \x01(\v2\x1d.docsearch.ingest.v1.ProgressH\x00R\bprogress\x125\n" +
 	"\x06result\x18\x02 \x01(\v2\x1b.docsearch.ingest.v1.ResultH\x00R\x06resultB\t\n" +

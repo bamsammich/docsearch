@@ -37,6 +37,7 @@ func (s *DocumentSuite) holds(doc document.Document, chunks []domain.Chunk) {
 	s.repo.EXPECT().Get(mock.Anything, doc.DocID).Return(&doc, nil)
 	s.repo.EXPECT().Chunks(mock.Anything, doc.DocID).Return(chunks, nil).Maybe()
 	s.repo.EXPECT().IndexTermSections(mock.Anything, doc.DocID).Return(nil, nil).Maybe()
+	s.repo.EXPECT().IndexTermCount(mock.Anything, doc.DocID).Return(0, nil).Maybe()
 }
 
 // prose is one well-formed chunk.
@@ -103,6 +104,7 @@ func (s *DocumentSuite) TestAnIndexTermPointingAtNothingIsAnIntegrityProblem() {
 	s.repo.EXPECT().Get(mock.Anything, "manual").Return(&doc, nil)
 	s.repo.EXPECT().Chunks(mock.Anything, "manual").Return(chunks, nil)
 	s.repo.EXPECT().IndexTermSections(mock.Anything, "manual").Return([]string{"1", "9"}, nil)
+	s.repo.EXPECT().IndexTermCount(mock.Anything, "manual").Return(14, nil)
 	s.repo.EXPECT().SectionHasChunks(mock.Anything, "manual", "1").Return(true, nil)
 	s.repo.EXPECT().SectionHasChunks(mock.Anything, "manual", "9").Return(false, nil)
 
@@ -111,6 +113,8 @@ func (s *DocumentSuite) TestAnIndexTermPointingAtNothingIsAnIntegrityProblem() {
 	s.Require().Len(report.Problems, 1)
 	s.Contains(report.Problems[0], "[9]")
 	s.Contains(report.Problems[0], "resolve to nothing")
+	s.Equal([]string{"9"}, report.UnjoinableSections)
+	s.Equal(14, report.IndexTerms, "entries, not the sections they point at")
 }
 
 func (s *DocumentSuite) TestQualityAndIntegrityAreReportedApart() {

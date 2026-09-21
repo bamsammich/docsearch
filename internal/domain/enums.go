@@ -82,7 +82,7 @@ var (
 	})
 	sourceKindText = newEnumText("source kind", map[SourceKind]string{
 		SourceKindFile: "file",
-		SourceKindSite: "site",
+		SourceKindSite: FormatSite,
 	})
 	structureSourceText = newEnumText("structure source", map[StructureSource]string{
 		SourceOutline:       "outline",
