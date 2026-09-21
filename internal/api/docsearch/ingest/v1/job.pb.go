@@ -248,19 +248,84 @@ func (x *EnqueueRequest) GetTitle() string {
 	return ""
 }
 
-type EnqueueResponse struct {
+// QueuedJob is one job Enqueue created.
+type QueuedJob struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	JobId int64                  `protobuf:"varint,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	// Source is what this job will read, which is one of the files under the
+	// directory the caller named rather than the directory itself.
+	Source string `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	JobId  int64  `protobuf:"varint,2,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
 	// Position counts the job itself, so a freshly queued job with nothing
 	// ahead of it reports 1.
-	QueuePosition int64 `protobuf:"varint,2,opt,name=queue_position,json=queuePosition,proto3" json:"queue_position,omitempty"`
+	QueuePosition int64 `protobuf:"varint,3,opt,name=queue_position,json=queuePosition,proto3" json:"queue_position,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueuedJob) Reset() {
+	*x = QueuedJob{}
+	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueuedJob) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueuedJob) ProtoMessage() {}
+
+func (x *QueuedJob) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueuedJob.ProtoReflect.Descriptor instead.
+func (*QueuedJob) Descriptor() ([]byte, []int) {
+	return file_docsearch_ingest_v1_job_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *QueuedJob) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *QueuedJob) GetJobId() int64 {
+	if x != nil {
+		return x.JobId
+	}
+	return 0
+}
+
+func (x *QueuedJob) GetQueuePosition() int64 {
+	if x != nil {
+		return x.QueuePosition
+	}
+	return 0
+}
+
+// EnqueueResponse names every job the request created, in the order they
+// were queued, because a directory becomes one job per file beneath it and a
+// caller that queued a library needs to see what it got.
+type EnqueueResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Jobs          []*QueuedJob           `protobuf:"bytes,3,rep,name=jobs,proto3" json:"jobs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *EnqueueResponse) Reset() {
 	*x = EnqueueResponse{}
-	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[2]
+	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -272,7 +337,7 @@ func (x *EnqueueResponse) String() string {
 func (*EnqueueResponse) ProtoMessage() {}
 
 func (x *EnqueueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[2]
+	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -285,21 +350,14 @@ func (x *EnqueueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnqueueResponse.ProtoReflect.Descriptor instead.
 func (*EnqueueResponse) Descriptor() ([]byte, []int) {
-	return file_docsearch_ingest_v1_job_proto_rawDescGZIP(), []int{2}
+	return file_docsearch_ingest_v1_job_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *EnqueueResponse) GetJobId() int64 {
+func (x *EnqueueResponse) GetJobs() []*QueuedJob {
 	if x != nil {
-		return x.JobId
+		return x.Jobs
 	}
-	return 0
-}
-
-func (x *EnqueueResponse) GetQueuePosition() int64 {
-	if x != nil {
-		return x.QueuePosition
-	}
-	return 0
+	return nil
 }
 
 type ListJobsRequest struct {
@@ -313,7 +371,7 @@ type ListJobsRequest struct {
 
 func (x *ListJobsRequest) Reset() {
 	*x = ListJobsRequest{}
-	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[3]
+	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -325,7 +383,7 @@ func (x *ListJobsRequest) String() string {
 func (*ListJobsRequest) ProtoMessage() {}
 
 func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[3]
+	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -338,7 +396,7 @@ func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobsRequest.ProtoReflect.Descriptor instead.
 func (*ListJobsRequest) Descriptor() ([]byte, []int) {
-	return file_docsearch_ingest_v1_job_proto_rawDescGZIP(), []int{3}
+	return file_docsearch_ingest_v1_job_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ListJobsRequest) GetIncludeCompleted() bool {
@@ -364,7 +422,7 @@ type ListJobsResponse struct {
 
 func (x *ListJobsResponse) Reset() {
 	*x = ListJobsResponse{}
-	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[4]
+	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -376,7 +434,7 @@ func (x *ListJobsResponse) String() string {
 func (*ListJobsResponse) ProtoMessage() {}
 
 func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[4]
+	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -389,7 +447,7 @@ func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobsResponse.ProtoReflect.Descriptor instead.
 func (*ListJobsResponse) Descriptor() ([]byte, []int) {
-	return file_docsearch_ingest_v1_job_proto_rawDescGZIP(), []int{4}
+	return file_docsearch_ingest_v1_job_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ListJobsResponse) GetJobs() []*Job {
@@ -408,7 +466,7 @@ type CancelJobRequest struct {
 
 func (x *CancelJobRequest) Reset() {
 	*x = CancelJobRequest{}
-	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[5]
+	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -420,7 +478,7 @@ func (x *CancelJobRequest) String() string {
 func (*CancelJobRequest) ProtoMessage() {}
 
 func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[5]
+	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -433,7 +491,7 @@ func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobRequest.ProtoReflect.Descriptor instead.
 func (*CancelJobRequest) Descriptor() ([]byte, []int) {
-	return file_docsearch_ingest_v1_job_proto_rawDescGZIP(), []int{5}
+	return file_docsearch_ingest_v1_job_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CancelJobRequest) GetJobId() int64 {
@@ -455,7 +513,7 @@ type CancelJobResponse struct {
 
 func (x *CancelJobResponse) Reset() {
 	*x = CancelJobResponse{}
-	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[6]
+	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -467,7 +525,7 @@ func (x *CancelJobResponse) String() string {
 func (*CancelJobResponse) ProtoMessage() {}
 
 func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[6]
+	mi := &file_docsearch_ingest_v1_job_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -480,7 +538,7 @@ func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobResponse.ProtoReflect.Descriptor instead.
 func (*CancelJobResponse) Descriptor() ([]byte, []int) {
-	return file_docsearch_ingest_v1_job_proto_rawDescGZIP(), []int{6}
+	return file_docsearch_ingest_v1_job_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CancelJobResponse) GetStatus() string {
@@ -518,10 +576,13 @@ const file_docsearch_ingest_v1_job_proto_rawDesc = "" +
 	"\x0f_progress_total\">\n" +
 	"\x0eEnqueueRequest\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x14\n" +
-	"\x05title\x18\x02 \x01(\tR\x05title\"O\n" +
-	"\x0fEnqueueResponse\x12\x15\n" +
-	"\x06job_id\x18\x01 \x01(\x03R\x05jobId\x12%\n" +
-	"\x0equeue_position\x18\x02 \x01(\x03R\rqueuePosition\"T\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\"a\n" +
+	"\tQueuedJob\x12\x16\n" +
+	"\x06source\x18\x01 \x01(\tR\x06source\x12\x15\n" +
+	"\x06job_id\x18\x02 \x01(\x03R\x05jobId\x12%\n" +
+	"\x0equeue_position\x18\x03 \x01(\x03R\rqueuePosition\"Q\n" +
+	"\x0fEnqueueResponse\x122\n" +
+	"\x04jobs\x18\x03 \x03(\v2\x1e.docsearch.ingest.v1.QueuedJobR\x04jobsJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03\"T\n" +
 	"\x0fListJobsRequest\x12+\n" +
 	"\x11include_completed\x18\x01 \x01(\bR\x10includeCompleted\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x03R\x05limit\"@\n" +
@@ -550,31 +611,33 @@ func file_docsearch_ingest_v1_job_proto_rawDescGZIP() []byte {
 	return file_docsearch_ingest_v1_job_proto_rawDescData
 }
 
-var file_docsearch_ingest_v1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_docsearch_ingest_v1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_docsearch_ingest_v1_job_proto_goTypes = []any{
 	(*Job)(nil),               // 0: docsearch.ingest.v1.Job
 	(*EnqueueRequest)(nil),    // 1: docsearch.ingest.v1.EnqueueRequest
-	(*EnqueueResponse)(nil),   // 2: docsearch.ingest.v1.EnqueueResponse
-	(*ListJobsRequest)(nil),   // 3: docsearch.ingest.v1.ListJobsRequest
-	(*ListJobsResponse)(nil),  // 4: docsearch.ingest.v1.ListJobsResponse
-	(*CancelJobRequest)(nil),  // 5: docsearch.ingest.v1.CancelJobRequest
-	(*CancelJobResponse)(nil), // 6: docsearch.ingest.v1.CancelJobResponse
-	(v1.Quality)(0),           // 7: docsearch.type.v1.Quality
+	(*QueuedJob)(nil),         // 2: docsearch.ingest.v1.QueuedJob
+	(*EnqueueResponse)(nil),   // 3: docsearch.ingest.v1.EnqueueResponse
+	(*ListJobsRequest)(nil),   // 4: docsearch.ingest.v1.ListJobsRequest
+	(*ListJobsResponse)(nil),  // 5: docsearch.ingest.v1.ListJobsResponse
+	(*CancelJobRequest)(nil),  // 6: docsearch.ingest.v1.CancelJobRequest
+	(*CancelJobResponse)(nil), // 7: docsearch.ingest.v1.CancelJobResponse
+	(v1.Quality)(0),           // 8: docsearch.type.v1.Quality
 }
 var file_docsearch_ingest_v1_job_proto_depIdxs = []int32{
-	7, // 0: docsearch.ingest.v1.Job.quality:type_name -> docsearch.type.v1.Quality
-	0, // 1: docsearch.ingest.v1.ListJobsResponse.jobs:type_name -> docsearch.ingest.v1.Job
-	1, // 2: docsearch.ingest.v1.JobService.Enqueue:input_type -> docsearch.ingest.v1.EnqueueRequest
-	3, // 3: docsearch.ingest.v1.JobService.ListJobs:input_type -> docsearch.ingest.v1.ListJobsRequest
-	5, // 4: docsearch.ingest.v1.JobService.CancelJob:input_type -> docsearch.ingest.v1.CancelJobRequest
-	2, // 5: docsearch.ingest.v1.JobService.Enqueue:output_type -> docsearch.ingest.v1.EnqueueResponse
-	4, // 6: docsearch.ingest.v1.JobService.ListJobs:output_type -> docsearch.ingest.v1.ListJobsResponse
-	6, // 7: docsearch.ingest.v1.JobService.CancelJob:output_type -> docsearch.ingest.v1.CancelJobResponse
-	5, // [5:8] is the sub-list for method output_type
-	2, // [2:5] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	8, // 0: docsearch.ingest.v1.Job.quality:type_name -> docsearch.type.v1.Quality
+	2, // 1: docsearch.ingest.v1.EnqueueResponse.jobs:type_name -> docsearch.ingest.v1.QueuedJob
+	0, // 2: docsearch.ingest.v1.ListJobsResponse.jobs:type_name -> docsearch.ingest.v1.Job
+	1, // 3: docsearch.ingest.v1.JobService.Enqueue:input_type -> docsearch.ingest.v1.EnqueueRequest
+	4, // 4: docsearch.ingest.v1.JobService.ListJobs:input_type -> docsearch.ingest.v1.ListJobsRequest
+	6, // 5: docsearch.ingest.v1.JobService.CancelJob:input_type -> docsearch.ingest.v1.CancelJobRequest
+	3, // 6: docsearch.ingest.v1.JobService.Enqueue:output_type -> docsearch.ingest.v1.EnqueueResponse
+	5, // 7: docsearch.ingest.v1.JobService.ListJobs:output_type -> docsearch.ingest.v1.ListJobsResponse
+	7, // 8: docsearch.ingest.v1.JobService.CancelJob:output_type -> docsearch.ingest.v1.CancelJobResponse
+	6, // [6:9] is the sub-list for method output_type
+	3, // [3:6] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_docsearch_ingest_v1_job_proto_init() }
@@ -589,7 +652,7 @@ func file_docsearch_ingest_v1_job_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_docsearch_ingest_v1_job_proto_rawDesc), len(file_docsearch_ingest_v1_job_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

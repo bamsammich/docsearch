@@ -30,5 +30,6 @@
  "format": "pdf",
  "page_count": 10,
  "predicted_source": "font_heuristic",
- "predicted_tier": "inferred, no source to check it against"
+ "predicted_tier": "inferred, no source to check it against",
+ "text": "file        numbered.pdf\nformat      pdf\npages       10\n\n[  OK   ] text layer\n            present on 10 of 10 pages; no OCR needed\n[ WARN  ] outline\n            absent. The producer toolchain stripped bookmarks, or none were\n            authored, so structure must come from the page content instead.\n[  OK   ] font hierarchy\n            body text at 10.0pt; heading candidates at 16.0pt\n[ WARN  ] printed contents\n            none reconstructable. Structure will be inferred from font sizes alone,\n            with nothing to validate it against.\n[  OK   ] page furniture\n            0 repeated line(s), 0% of the document's token mass. Stripped before\n            chunking; a high share means a large part of the raw text is a running\n            header or footer.\n\nstructure source: font_heuristic (inferred, no source to check it against)"
 }

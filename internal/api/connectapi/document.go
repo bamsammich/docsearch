@@ -146,11 +146,13 @@ func verifyMessage(report *document.VerifyReport) *documentv1.VerifyReport {
 		}
 	}
 	return &documentv1.VerifyReport{
-		Document:     documentMessage(report.Document),
-		Measurements: measurementsMessage(report.Measurements),
-		Problems:     report.Problems,
-		Findings:     findings,
-		Verdict:      typev1.Verdict(report.Verdict),
+		Document:           documentMessage(report.Document),
+		Measurements:       measurementsMessage(report.Measurements),
+		Problems:           report.Problems,
+		Findings:           findings,
+		Verdict:            typev1.Verdict(report.Verdict),
+		IndexTerms:         int64(report.IndexTerms),
+		UnjoinableSections: report.UnjoinableSections,
 	}
 }
 

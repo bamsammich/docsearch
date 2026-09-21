@@ -43,14 +43,25 @@ docsearch inspect <target>                         # what structure does it offe
 docsearch add     <target> [--title T]             # synchronous; file, directory or URL
 docsearch enqueue <target> [--title T]             # queue for the worker
 docsearch refresh <doc_id> [--from-cache]          # re-crawl an ingested site
-docsearch worker  [--db PATH] [--root PATH]        # run the daemon
-docsearch jobs    [--db PATH]                      # queue state
-docsearch list    [--db PATH]
-docsearch remove  <doc_id> [--db PATH]
-docsearch verify  <doc_id> [--db PATH]             # did it chunk well enough?
+docsearch jobs    [--all] [--limit N]              # queue state
+docsearch cancel  <job_id>                         # ask a job to stop
+docsearch list
+docsearch remove  <doc_id>
+docsearch verify  <doc_id>                         # did it chunk well enough?
 ```
 
 A target is a path or an `http(s)` URL. `ingest` is a second name for `add`.
+
+Every command but `migrate` is a client of `docsearch-server`, which is what
+lets the index sit on another host and what makes one token the only way in.
+`--server` says where it is, `DOCSEARCH_SERVER` is the same setting, and
+`DOCSEARCH_TOKEN` carries the token, which has no flag because an argument is
+visible to every process on the host through `ps`.
+
+`migrate` is the exception: it opens the database directly, because it writes
+the schema the server expects to find and so has to run before the server
+does. `docsearch-worker` is a separate binary for the same reason, and runs
+beside the index it writes.
 
 Three commands answer three different questions, and a document can pass one
 while failing another:
@@ -185,7 +196,7 @@ index is fully regenerable**, which is what makes refusing the right answer.
 ## Running the worker
 
 ```bash
-docsearch worker --db var/docsearch.db --root ~/Documents/library
+docsearch-worker --db var/docsearch.db --root ~/Documents/library
 ```
 
 Jobs are claimed under a lease. A worker killed mid-job leaves an expired

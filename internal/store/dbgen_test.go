@@ -190,6 +190,10 @@ func TestEveryGeneratedQueryExecutes(t *testing.T) {
 			_, err := q.IndexTermSections(ctx, "big")
 			return err
 		}},
+		{"IndexTermCount", func() error {
+			_, err := q.IndexTermCount(ctx, "big")
+			return err
+		}},
 		{"SectionHasChunks", func() error {
 			_, err := q.SectionHasChunks(ctx, dbgen.SectionHasChunksParams{
 				DocID:   "big",
@@ -215,7 +219,7 @@ func TestEveryGeneratedQueryExecutes(t *testing.T) {
 // would go unexercised, so the count is asserted rather than trusted.
 func TestGeneratedQueryCoverageIsComplete(t *testing.T) {
 	// The table above, plus EnqueueJob which runs ahead of it.
-	const exercised = 44
+	const exercised = 45
 	// Every exported method on *Queries is a generated query, except WithTx.
 	total := reflect.TypeFor[*dbgen.Queries]().NumMethod()
 	if got := total - 1; got != exercised {

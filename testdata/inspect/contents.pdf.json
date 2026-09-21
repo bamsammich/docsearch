@@ -30,5 +30,6 @@
  "format": "pdf",
  "page_count": 4,
  "predicted_source": "front_toc",
- "predicted_tier": "declared, recovered by parsing"
+ "predicted_tier": "declared, recovered by parsing",
+ "text": "file        contents.pdf\nformat      pdf\npages       4\n\n[  OK   ] text layer\n            present on 4 of 4 pages; no OCR needed\n[ WARN  ] outline\n            absent. The producer toolchain stripped bookmarks, or none were\n            authored, so structure must come from the page content instead.\n[  OK   ] font hierarchy\n            body text at 10.0pt; heading candidates at 16.0pt\n[  OK   ] printed contents\n            4 entries reconstructed from the first 40 pages. Author-declared, but\n            recovered by parsing, so it will be checked against body headings and a\n            disagreement fails the ingest.\n[  OK   ] page furniture\n            0 repeated line(s), 0% of the document's token mass. Stripped before\n            chunking; a high share means a large part of the raw text is a running\n            header or footer.\n\nstructure source: front_toc (declared, recovered by parsing)"
 }

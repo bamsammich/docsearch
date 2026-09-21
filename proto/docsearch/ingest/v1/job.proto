@@ -44,11 +44,25 @@ message EnqueueRequest {
   string title = 2;
 }
 
-message EnqueueResponse {
-  int64 job_id = 1;
+// QueuedJob is one job Enqueue created.
+message QueuedJob {
+  // Source is what this job will read, which is one of the files under the
+  // directory the caller named rather than the directory itself.
+  string source = 1;
+  int64 job_id = 2;
   // Position counts the job itself, so a freshly queued job with nothing
   // ahead of it reports 1.
-  int64 queue_position = 2;
+  int64 queue_position = 3;
+}
+
+// EnqueueResponse names every job the request created, in the order they
+// were queued, because a directory becomes one job per file beneath it and a
+// caller that queued a library needs to see what it got.
+message EnqueueResponse {
+  // 1 and 2 held the first job's id and position, before a caller needed to
+  // see the rest.
+  reserved 1, 2;
+  repeated QueuedJob jobs = 3;
 }
 
 message ListJobsRequest {

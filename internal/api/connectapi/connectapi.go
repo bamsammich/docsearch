@@ -13,6 +13,7 @@ package connectapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -134,10 +135,19 @@ func resultMessage(result *ingest.Result) *ingestv1.Result {
 		Outcome:    ingestv1.Outcome(result.Outcome),
 		Note:       result.Note,
 	}
+	// A diagnostic that will not marshal is a defect in an adapter, and not
+	// a reason to withhold the result of an ingest that has already written
+	// the document. The structure report below is carried the same way.
+	if len(result.Diagnostics) > 0 {
+		if diagnostics, err := json.Marshal(result.Diagnostics); err == nil {
+			msg.Diagnostics = string(diagnostics)
+		}
+	}
 	if result.Report == nil {
 		return msg
 	}
 	msg.Quality = typev1.Quality(result.Report.Quality())
+	msg.Findings = result.Report.Notes()
 	if warnings, err := result.Report.JSON(); err == nil {
 		msg.Warnings = string(warnings)
 	}

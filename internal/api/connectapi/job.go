@@ -44,9 +44,8 @@ func NewJobServer(
 // Enqueue puts everything a target names on the queue.
 //
 // A directory becomes one job per supported file beneath it, and the
-// response names the first, because a caller that queued a library wants an
-// id it can follow rather than a list it did not ask for. ListJobs shows the
-// rest.
+// response names every one, in the order they were queued, because a caller
+// that queued a library has to be able to say what it got.
 func (s *JobServer) Enqueue(
 	ctx context.Context,
 	req *connect.Request[ingestv1.EnqueueRequest],
@@ -65,10 +64,15 @@ func (s *JobServer) Enqueue(
 			connect.CodeInvalidArgument,
 			errors.New("nothing under that source can be read by any adapter"))
 	}
-	return connect.NewResponse(&ingestv1.EnqueueResponse{
-		JobId:         queued[0].JobID,
-		QueuePosition: int64(queued[0].Position),
-	}), nil
+	jobs := make([]*ingestv1.QueuedJob, len(queued))
+	for i, q := range queued {
+		jobs[i] = &ingestv1.QueuedJob{
+			Source:        q.Source,
+			JobId:         q.JobID,
+			QueuePosition: int64(q.Position),
+		}
+	}
+	return connect.NewResponse(&ingestv1.EnqueueResponse{Jobs: jobs}), nil
 }
 
 func (s *JobServer) ListJobs(

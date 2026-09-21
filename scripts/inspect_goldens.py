@@ -17,7 +17,7 @@ import dataclasses
 import json
 from pathlib import Path
 
-from docsearch.inspect import inspect_document
+from docsearch.inspect import format_report, inspect_document
 
 FIXTURES = Path("testdata/adapters")
 OUT = Path("testdata/inspect")
@@ -34,6 +34,7 @@ def main() -> None:
             "predicted_tier": report.predicted_tier,
             "blocked": report.blocked,
             "findings": [dataclasses.asdict(f) for f in report.findings],
+            "text": format_report(report),
         }
         (OUT / f"{pdf.name}.json").write_text(
             json.dumps(payload, ensure_ascii=False, indent=1, sort_keys=True) + "\n"

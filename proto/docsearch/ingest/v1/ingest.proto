@@ -71,6 +71,19 @@ message Result {
   // Warnings is the structure report as it is persisted, so a client can show
   // what `docsearch verify` would show without asking again.
   string warnings = 8;
+  // Diagnostics is what the adapter observed while reading the source, as
+  // JSON: where the structure came from, how a table of contents compared
+  // with the body, how much of a site was reachable.
+  //
+  // JSON rather than a message per key, because the shape belongs to
+  // whichever adapter produced it. Typing it here would freeze every
+  // adapter's internals into the API, and a client shows these lines
+  // without reasoning about them.
+  string diagnostics = 9;
+  // Findings are what the structure report makes of those diagnostics, in
+  // the sentences it writes them as. The report grades what it reads, so a
+  // client that rendered `warnings` itself would be writing a second grader.
+  repeated string findings = 10;
 }
 
 // IngestResponse is one message of the stream: progress while the ingest

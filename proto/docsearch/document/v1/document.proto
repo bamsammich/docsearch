@@ -83,6 +83,13 @@ message VerifyReport {
   repeated string problems = 3;
   repeated Finding findings = 4;
   docsearch.type.v1.Verdict verdict = 5;
+  // IndexTerms is how many entries a back-of-book index holds, and 0 where
+  // the document has no such index.
+  int64 index_terms = 6;
+  // UnjoinableSections are the sections those entries point at that no chunk
+  // answers for. Each one is also a problem; the report states how many
+  // there are next to how large the index is.
+  repeated string unjoinable_sections = 7;
 }
 
 // InspectFinding is one question asked of a document before ingesting it.
