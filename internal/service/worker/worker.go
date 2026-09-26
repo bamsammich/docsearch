@@ -7,8 +7,6 @@
 // Crash recovery rests on the lease. A claimed job carries a lease, and the
 // claim takes back any running job whose lease has expired, so a worker
 // killed mid-job is recovered by the next one without anyone intervening.
-//
-// Ported from python/docsearch/worker.py.
 package worker
 
 import (

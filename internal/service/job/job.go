@@ -3,8 +3,6 @@
 // The queue is the path a caller takes when it does not want to wait.
 // internal/service/ingest is the other one: it runs the ingest there and
 // then, and the caller watches it.
-//
-// Ported from python/docsearch/cli.py.
 package job
 
 import (

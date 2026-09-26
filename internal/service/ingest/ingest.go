@@ -12,8 +12,6 @@
 //	acquire    read from disk              fetch, or a cache hit
 //	identity   absolute path               canonical base URL
 //	extract    adapter by suffix           walk the nav, parse each page
-//
-// Ported from python/docsearch/ingest.py.
 package ingest
 
 import (

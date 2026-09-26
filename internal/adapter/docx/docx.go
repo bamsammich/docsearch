@@ -1,7 +1,7 @@
 // Package docx reads a Word document, taking its structure from paragraph
-// heading styles. Ported from python/docsearch/adapters/docx.py, which reads
-// through python-docx, so the rules here are python-docx's: which paragraphs
-// count, how a run becomes text, and how a paragraph's style is resolved.
+// heading styles. The rules are python-docx's, which the adapter docsearch
+// was ported from read through: which paragraphs count, how a run becomes
+// text, and how a paragraph's style is resolved.
 //
 // The package is read with archive/zip and encoding/xml rather than a DOCX
 // library. The Go readers available drop run content python-docx keeps

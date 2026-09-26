@@ -2,8 +2,7 @@
 // owes a stranger's site: one request at a time per host, robots.txt obeyed,
 // every hop checked by the URL guard, and every response cached.
 //
-// Ported from python/docsearch/fetch.py and fetchcache.py. Nothing else in
-// the ingest path talks to the network.
+// Nothing else in the ingest path talks to the network.
 package fetch
 
 import (

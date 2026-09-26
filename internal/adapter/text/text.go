@@ -1,6 +1,5 @@
 // Package text reads a plain-text file, which has no structure: every run of
-// text between blank lines is one block. Ported from
-// python/docsearch/adapters/text.py.
+// text between blank lines is one block.
 package text
 
 import (

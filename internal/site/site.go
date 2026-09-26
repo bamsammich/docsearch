@@ -6,8 +6,6 @@
 // section keyed by its position in that tree, and the page's own h1 to h6
 // subdivide beneath it. Nothing here is a new chunking strategy: it is the
 // existing one, handed a section it already knows what to do with.
-//
-// Ported from python/docsearch/site.py.
 package site
 
 import (

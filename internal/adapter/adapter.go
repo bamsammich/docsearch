@@ -1,9 +1,8 @@
 // Package adapter picks the format adapter for a source file by its suffix.
-// Each adapter lives in its own subpackage, turns a file into a
-// domain.Extraction, and is ported from python/docsearch/adapters: the tests
-// hold every adapter to Python goldens in testdata/adapters, and
-// test/integration holds them to the Python extraction of every document in
-// a local library.
+// Each adapter lives in its own subpackage and turns a file into a
+// domain.Extraction. The tests hold every adapter to the goldens in
+// testdata/adapters, which were recorded from the pipeline docsearch was
+// ported from and are now the baseline a change is read against.
 //
 // Adding a format is one subpackage plus one entry in formats. The chunker
 // is untouched.

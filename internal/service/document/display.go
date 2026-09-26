@@ -10,8 +10,6 @@ import (
 	"github.com/bamsammich/docsearch/internal/domain"
 )
 
-// Ported from python/docsearch/verify.py's format_report.
-
 const (
 	// detailWidth is where a finding's explanation wraps.
 	detailWidth = 76

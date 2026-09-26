@@ -12,7 +12,7 @@ set -euo pipefail
 generated() {
   find internal/api internal/schema/migrations internal/store/dbgen \
     -type f \( -name '*.go' -o -name '*.sql' \) 2>/dev/null | sort
-  find . -path ./.venv -prune -o -type d -name mocks -print 2>/dev/null |
+  find . -type d -name mocks -print 2>/dev/null |
     while read -r dir; do find "$dir" -type f -name '*.go' | sort; done
   echo internal/schema/schema.snapshot.sql
 }

@@ -7,8 +7,6 @@
 // Postgres arrives in phase 04 behind the same port, so the transaction
 // boundaries and the ordering rules are written down here rather than left
 // to the caller to repeat.
-//
-// Ported from python/docsearch/ingest.py and db.py.
 package sqlite
 
 import (

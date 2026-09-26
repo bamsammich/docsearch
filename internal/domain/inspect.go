@@ -99,8 +99,6 @@ const (
 const FormatSite = "site"
 
 // Report is the reconnaissance as `docsearch inspect` prints it.
-//
-// Ported from python/docsearch/inspect.py's format_report.
 func (r *InspectReport) Report() string {
 	label, unit := "file", "pages"
 	if r.Format == FormatSite {

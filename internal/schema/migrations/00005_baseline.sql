@@ -1,7 +1,11 @@
--- Generated from python/docsearch/schema.sql by `mise run generate`.
--- Do not edit: the schema is one file, and sqlc types its queries against
--- the original. Version 5 is the floor this baseline establishes; every
--- later change is its own numbered migration.
+-- The schema docsearch started from, and the floor every later migration
+-- builds on. Written by hand from here on: it was generated while the Python
+-- pipeline owned the schema, and owns it now that sqlc types its queries
+-- against these migrations.
+--
+-- Idempotent on purpose. An index created before goose existed carries no
+-- goose record, so the first migration run applies this baseline again;
+-- CREATE TABLE IF NOT EXISTS is what makes that harmless.
 --
 -- +goose Up
 -- +goose StatementBegin

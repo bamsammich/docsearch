@@ -1,6 +1,4 @@
 [tools]
-python = "3.13"
-uv = "0.11.2"
 go = "1.26"
 golangci-lint = "2.13.2"
 sqlc = "1.31.1"
@@ -10,16 +8,13 @@ buf = "1.73.0"
 protoc-gen-go = "1.36.12"
 protoc-gen-connect-go = "1.21.0"
 
-# uv owns .venv entirely (`uv sync` / `uv run`); mise only supplies the
-# python and uv binaries so the venv is built against a pinned interpreter.
 [env]
 DOCSEARCH_DB = "{{config_root}}/var/docsearch.db"
 DOCSEARCH_ROOT = "{{config_root}}/var/library"
 
 [tasks.setup]
-description = "Install Python deps, Go modules and the git hooks"
+description = "Install Go modules and the git hooks"
 run = [
-  "uv sync",
   "go mod download",
   "lefthook install",
 ]
@@ -42,28 +37,16 @@ run = [
 ]
 
 [tasks.lint]
-description = "Lint Python and Go"
-run = [
-  "uv run ruff check .",
-  "uv run ruff format --check .",
-  "uv run mypy python/docsearch",
-  "golangci-lint run ./...",
-]
+description = "Lint Go"
+run = ["golangci-lint run ./..."]
 
 [tasks.fmt]
-description = "Format Python and Go"
-run = [
-  "uv run ruff format .",
-  "uv run ruff check --fix .",
-  "golangci-lint fmt ./...",
-]
+description = "Format Go"
+run = ["golangci-lint fmt ./..."]
 
 [tasks.generate]
 description = "Regenerate the migrations, schema snapshot, query layer, mocks and proto output"
 run = [
-  # The schema is one file. goose's baseline wraps it in the annotations
-  # goose needs, and a binary carries the result, so a deployment is one file.
-  "scripts/baseline-migration.sh",
   # What the migrations add up to, for a reviewer rather than for the code.
   "go run ./scripts/schema-snapshot",
   "sqlc generate",
@@ -72,11 +55,8 @@ run = [
 ]
 
 [tasks.test]
-description = "Run Python and Go unit tests"
-run = [
-  "uv run pytest -q",
-  "go test ./...",
-]
+description = "Run the Go tests"
+run = ["go test ./..."]
 
 [tasks.build]
 description = "Build the server, worker and CLI binaries"

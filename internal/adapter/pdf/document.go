@@ -1,5 +1,4 @@
-// Package pdf reads a PDF into an extraction. Ported from
-// python/docsearch/adapters/pdf.py.
+// Package pdf reads a PDF into an extraction.
 //
 // The work splits in two. An Engine reads the primitives a PDF engine
 // offers: text lines with a position and a font size, plain page text, image

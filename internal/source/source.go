@@ -3,8 +3,6 @@
 // A worker gets a job row holding either a path or a URL, and a ConnectRPC
 // caller sends one string. Turning that string into one kind of ingest or the
 // other happens once, here.
-//
-// Ported from python/docsearch/ingest.py.
 package source
 
 import (

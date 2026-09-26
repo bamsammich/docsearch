@@ -1,6 +1,5 @@
 // Package markdown reads a Markdown file, taking its structure from ATX
 // headings. A heading inside a fenced code block is code, not structure.
-// Ported from python/docsearch/adapters/markdown.py.
 package markdown
 
 import (

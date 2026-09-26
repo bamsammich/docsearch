@@ -20,16 +20,14 @@ path. Pin to the `v1.0.0` tag to stay on v1 regardless.
 | MCP server | daemon | reads the database, enqueues jobs, reports status |
 | CLI | one-shot | manual ingest, listing, removal, verification |
 
-Ingest never runs inside the server process. Extraction saturates a core for
-minutes and would starve request handling, and the extraction stack is Python
-while the server is Go.
+Ingest never runs inside the server process: extraction saturates a core for
+minutes and would starve request handling.
 
 ## Setup
 
 ```bash
-mise install          # python 3.13, uv, go 1.26, golangci-lint
-uv sync               # python dependencies
-go build -o bin/docsearch-server ./cmd/docsearch-server
+mise install          # go 1.26, golangci-lint, buf, sqlc, mockery
+mise run build        # docsearch-server, docsearch-worker, docsearch
 ```
 
 `pdffonts` (poppler) is useful for inspecting a PDF's text layer and is not in
@@ -148,10 +146,10 @@ what makes a cancelled crawl resume rather than restart.
 
 **The URL is a security boundary**, held to the standard the library roots are.
 Scheme, host and every resolved address are validated before a request, on
-every redirect hop, and again in the worker — a job row is not proof that
-anything validated it. The rules live in `internal/urlguard` and
-`python/docsearch/urlguard.py` with `testdata/urlguard-addresses.txt` as the
-table both must agree on, because two implementations of one rule drift.
+every redirect hop, and again in the worker: a job row is not proof that
+anything validated it. The rules live in `internal/urlguard`, with
+`testdata/urlguard-addresses.txt` as the
+table it is held to.
 Every rejection returns the same error, so the fetcher cannot be used to map
 an internal network.
 
@@ -432,12 +430,12 @@ and a DOCX heading style are all declarations, not inferences.
 
 One module plus one registry entry. The chunker is untouched.
 
-1. Write `python/docsearch/adapters/yourformat.py` exporting
-   `extract(path, progress=None) -> Extraction`.
-2. Emit `Block`s: `heading_path` (full ancestry, root-first), `locator`
-   (`{"page": n}` for paginated formats, `{"offset": n}` otherwise), and `text`.
-   Set `section` only if the format carries authoritative numbering.
-3. Register the suffix in `adapters/__init__.py`.
+1. Write `internal/adapter/yourformat`, exporting an `Extract` that returns
+   a `domain.Extraction`.
+2. Emit `Block`s: `HeadingPath` (full ancestry, root-first), `Locator`
+   (a page for paginated formats, an offset otherwise), and `Text`.
+   Set `Section` only if the format carries authoritative numbering.
+3. Register the suffix in `internal/adapter`.
 
 The chunker reads only the normalized intermediate and never learns which
 adapter produced it. If your format's structure cannot be derived, **raise**
@@ -561,8 +559,7 @@ only irreplaceable data. `docsearch-data` can be treated as a cache.
 ## Testing
 
 ```bash
-uv run pytest                                    # ingest, chunker, worker, policy
-go test ./...                                    # store, transport, path validation
+go test ./...                                    # every package, and the integration suites
 go run ./cmd/docsearch-eval --db var/docsearch.db  # retrieval evaluation
 go run ./cmd/docsearch-eval --db PATH --self-label # measure any corpus, no query set
 ```

@@ -6,9 +6,8 @@ package domain
 // are captured as data instead, persisted on the job and the document, and
 // surfaced through the status and listing tools.
 //
-// Ported from python/docsearch/structure.py and the report assembly in
-// python/docsearch/ingest.py, which explain each bound with the measurement
-// behind it.
+// Each bound was measured rather than chosen: docs/research records what it
+// was set from.
 
 import (
 	"encoding/json"

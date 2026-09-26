@@ -12,8 +12,8 @@ package domain
 // merges forward into its next sibling, but never across a boundary the
 // document declared with a section number: small sections stay small.
 //
-// Ported from python/docsearch/chunker.py, which explains each rule with the
-// measurement behind it.
+// Both bounds were measured rather than chosen: docs/research records what
+// each one was set from.
 
 import (
 	"regexp"

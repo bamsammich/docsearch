@@ -11,8 +11,6 @@ import (
 	"github.com/bamsammich/docsearch/internal/service/document"
 )
 
-// Ported from python/docsearch/cli.py.
-
 // titleWidth is where a title is cut in the listing, so that one document
 // stays on one line.
 const titleWidth = 40

@@ -3,24 +3,22 @@
 //
 // Migrations run through goose, which numbers and orders them, records what
 // it applied, and does the same for Postgres in phase 04. Version 5 is the
-// floor: the baseline migration is the schema as it stands, generated from
-// python/docsearch/schema.sql, and every later change is its own numbered
-// file. Versions 1 to 4 are history rather than migrations, since the DDL
-// that produced them was never kept; an index still at one of them is
-// repaired by the column backfill this package runs after goose.
+// floor: the baseline migration is the schema docsearch started from, and
+// every later change is its own numbered file. Versions 1 to 4 are history
+// rather than migrations, since the DDL that produced them was never kept;
+// an index still at one of them is repaired by the column backfill this
+// package runs after goose.
 //
 // The baseline is idempotent, and has to stay that way while indexes exist
-// that goose has never seen: the Python pipeline stamps schema_version and
-// writes no goose record, so goose meeting one of those applies the baseline
-// over a schema that is already there.
+// that goose has never seen: an index created before goose stamps
+// schema_version and writes no goose record, so goose meeting one of those
+// applies the baseline over a schema that is already there.
 //
 // Opening a database does not migrate it. Opening used to imply migrating,
 // and because every read path opens the database, list, verify and jobs all
 // rewrote the recorded version: running an older build against a newer index
 // stamped it backwards, and the newer server then refused to serve an index
 // that was perfectly sound. Migrating is something an operator asks for.
-//
-// Ported from python/docsearch/db.py.
 package schema
 
 import (
