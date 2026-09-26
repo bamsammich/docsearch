@@ -1,7 +1,7 @@
 // Package html reads an HTML document, taking its structure from h1 to h6.
-// Ported from python/docsearch/adapters/html.py. A local .html file and a
-// page of a crawled site are the same parsing problem, so the site crawler
-// calls Parse too and supplies its own locators.
+// A local .html file and a page of a crawled site are the same parsing
+// problem, so the site crawler calls Parse too and supplies its own
+// locators.
 //
 // The Python reference parses with lxml through BeautifulSoup; this package
 // parses with goquery over the HTML5 algorithm. The two agree on the

@@ -1,9 +1,10 @@
 version: "2"
 sql:
   - engine: "sqlite"
-    # The schema itself, not a copy of it. docsearch.db reads the same file to
-    # create databases, and the Go store tests build their index from it.
-    schema: "python/docsearch/schema.sql"
+    # The migrations are the schema: sqlc replays them in order, reading
+    # goose's annotations, so a query is typed against the shape a migrated
+    # database actually has.
+    schema: "internal/schema/migrations"
     queries: "internal/store/query"
     gen:
       go:

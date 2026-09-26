@@ -8,8 +8,8 @@ package integration
 // document that every unit test approves of is still worthless if it cannot
 // be searched, and only running both halves shows that.
 //
-// The Python verifier grades the result too, while it is still the reference.
-// Step 7 ports it, and this spec then holds the Go one.
+// Verification runs over the result too: a document the worker called ready
+// still has to survive being measured against its own rows.
 
 import (
 	"context"
@@ -18,7 +18,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -29,6 +28,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/adapter/pdf"
 	"github.com/bamsammich/docsearch/internal/repository/sqlite"
 	"github.com/bamsammich/docsearch/internal/schema"
+	"github.com/bamsammich/docsearch/internal/service/document"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 	"github.com/bamsammich/docsearch/internal/service/worker"
 	"github.com/bamsammich/docsearch/internal/source"
@@ -105,18 +105,17 @@ var _ = Describe("An index built by Go", Ordered, func() {
 		Expect(rows.Err()).NotTo(HaveOccurred())
 	})
 
-	It("passes the Python verifier", func() {
-		// The reference until step 7 ports it. A non-zero exit is a database
-		// integrity problem, which is what this spec is for; the chunk-
+	It("passes verification", func() {
+		// Integrity only, which is what this spec is for: rows that agree
+		// with each other and with the document they came from. The chunk-
 		// quality verdict is the structure policy's business and is graded
 		// at ingest.
-		if _, err := exec.LookPath("uv"); err != nil {
-			Skip("uv is not installed, so the Python reference cannot be run")
-		}
+		documents := document.New(sqlite.NewDocuments(built.db), nil)
 		for _, fixture := range fixtures {
 			docID := built.docIDFor(fixture)
-			out, err := built.verify(docID)
-			Expect(err).NotTo(HaveOccurred(), "%s:\n%s", docID, out)
+			report, err := documents.Verify(context.Background(), docID)
+			Expect(err).NotTo(HaveOccurred(), docID)
+			Expect(report.Problems).To(BeEmpty(), docID)
 		}
 	})
 
@@ -282,16 +281,4 @@ func (i *index) count(query string, args ...any) int {
 	var n int
 	Expect(i.db.QueryRow(query, args...).Scan(&n)).To(Succeed())
 	return n
-}
-
-// verify runs the Python verifier over this index.
-func (i *index) verify(docID string) (string, error) {
-	root, err := repoRoot()
-	if err != nil {
-		return "", err
-	}
-	cmd := exec.Command("uv", "run", "docsearch", "verify", docID, "--db", i.path)
-	cmd.Dir = root
-	out, err := cmd.CombinedOutput()
-	return string(out), err
 }

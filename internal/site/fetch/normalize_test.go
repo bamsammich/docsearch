@@ -14,7 +14,7 @@ type NormalizeSuite struct{ suite.Suite }
 func TestNormalize(t *testing.T) { suite.Run(t, new(NormalizeSuite)) }
 
 func (s *NormalizeSuite) TestMatchesPython() {
-	// Expected values from python/docsearch/fetch.py's normalize().
+	// Expected values recorded from the normalizer docsearch was ported from.
 	tests := []struct {
 		name, in, want string
 	}{

@@ -28,7 +28,7 @@ var ErrNotFound = errors.New("not found")
 
 // Store wraps the shared SQLite database.
 //
-// q holds the queries generated from python/docsearch/schema.sql. The two
+// q holds the queries generated from the migrations. The two
 // statements it cannot express -- Search, which composes its WHERE clause from
 // the request and calls bm25(), and matchingIndexSections, which builds one
 // term per query word -- run through db directly.

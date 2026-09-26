@@ -161,60 +161,37 @@ func (s *SchemaSuite) TestAMissingTableStopsTheStamp() {
 	s.Contains(problems, "table pages is missing")
 }
 
-// The number is chosen once. The Python pipeline is still the reference, and
-// the server refuses to serve a database it was not built against, so a
-// build where the three disagree would refuse sound indexes or serve unsound
-// ones.
-func TestTheVersionAgreesWithPython(t *testing.T) {
-	root, err := repoRoot()
+// Version is the number a reader checks an index against, and the
+// migrations are what move an index to it. A migration added without the
+// bump would leave the server serving a shape it says it was not built for.
+func TestTheVersionIsTheHighestMigration(t *testing.T) {
+	entries, err := os.ReadDir("migrations")
 	if err != nil {
 		t.Fatal(err)
 	}
-	source, err := os.ReadFile(filepath.Join(root, "python", "docsearch", "db.py"))
-	if err != nil {
-		t.Fatal(err)
+	highest := 0
+	for _, entry := range entries {
+		if n := migrationNumber(t, entry.Name()); n > highest {
+			highest = n
+		}
 	}
-	want := "SCHEMA_VERSION = " + strconv.Itoa(schema.Version)
-	if !strings.Contains(string(source), want) {
-		t.Errorf("db.py does not hold %q; internal/schema.Version is %d", want, schema.Version)
+	if highest != schema.Version {
+		t.Errorf("the highest migration is %d but internal/schema.Version is %d",
+			highest, schema.Version)
 	}
 }
 
-// The schema is one file. The baseline migration wraps it in goose's
-// annotations, and a baseline that drifted would have sqlc typing its queries
-// against one shape while the migration wrote another.
-func TestTheBaselineMigrationMatchesTheSchema(t *testing.T) {
-	root, err := repoRoot()
+// migrationNumber is the order goose applies a migration in, which its file
+// name carries ahead of the first underscore.
+func migrationNumber(t *testing.T, name string) int {
+	t.Helper()
+	digits, _, found := strings.Cut(name, "_")
+	if !found {
+		t.Fatalf("migration %q is not numbered", name)
+	}
+	n, err := strconv.Atoi(digits)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("migration %q is not numbered: %v", name, err)
 	}
-	original, err := os.ReadFile(filepath.Join(root, "python", "docsearch", "schema.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	baseline, err := os.ReadFile(filepath.Join(
-		root, "internal", "schema", "migrations", "00005_baseline.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(baseline), string(original)) {
-		t.Error("00005_baseline.sql has drifted from the schema; run `mise run generate`")
-	}
-}
-
-func repoRoot() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir, nil
-		}
-		up := filepath.Dir(dir)
-		if up == dir {
-			return "", os.ErrNotExist
-		}
-		dir = up
-	}
+	return n
 }

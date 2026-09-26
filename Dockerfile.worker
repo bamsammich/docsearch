@@ -1,40 +1,36 @@
-# The ingest worker. Separate image from the server: the extraction stack is
-# Python and a large PDF saturates a core for minutes at a time, which is
-# exactly why it does not share a process with request handling.
-FROM python:3.13-slim AS build
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-# Built at its final path, not at /src: a virtualenv bakes absolute paths into
-# its console-script shebangs, so building elsewhere and copying yields
-# "no such file or directory" on every entry point.
-WORKDIR /app
-COPY pyproject.toml uv.lock README.md ./
-COPY python ./python
-RUN uv sync --frozen --no-dev
-
-FROM python:3.13-slim
-# No apt layer, and specifically no ocrmypdf/tesseract/ghostscript/qpdf/
-# poppler-utils. That chain used to be installed here and was never once
-# invoked: nothing under python/ shells out at all -- no subprocess, Popen,
-# os.system or shutil.which exists in the tree -- and ocrmypdf appears only
-# inside a warning string in inspect.py, which tells the *operator* to OCR a
-# scanned PDF before ingesting it. Blocking an image-only document is the
-# deliberate behaviour; OCRing it silently is not. Every format adapter runs on
-# pymupdf, which bundles its own MuPDF.
+# The ingest worker. Separate image from the server because a large PDF
+# saturates a core for minutes at a time, which is exactly why extraction
+# does not share a process with request handling.
 #
-# It cost 389MB of a 714MB image, because Debian's ocrmypdf is a Python
-# application and apt therefore dragged in a second complete interpreter at
-# /usr/bin/python3.13, 35 python3-* packages alongside this image's own
-# /usr/local/bin/python3.13 -- python3-hypothesis, a test framework, among
-# them. If a future adapter genuinely needs to shell out to one of these,
-# add back only that tool and say here which code path calls it.
-RUN useradd --create-home --uid 65532 docsearch
-COPY --from=build --chown=docsearch:docsearch /app /app
-ENV PATH="/app/.venv/bin:$PATH"
-WORKDIR /app
-USER docsearch
+# No apt layer, and specifically no ocrmypdf/tesseract/ghostscript/qpdf/
+# poppler-utils. That chain was installed here while the worker was Python
+# and was never once invoked; it cost 389MB of a 714MB image. Nothing shells
+# out now either: every format adapter runs in-process, and the PDF engine is
+# PDFium compiled to WebAssembly, which wazero runs with no host dependency.
+# ocrmypdf appears only in a warning that tells the operator to OCR a scanned
+# PDF before ingesting it. Blocking an image-only document is the deliberate
+# behaviour; OCRing it silently is not. If a future adapter genuinely needs
+# one of these tools, add back only that tool and say here which code path
+# calls it.
+FROM golang:1.26-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd ./cmd
+COPY internal ./internal
+RUN CGO_ENABLED=0 GOOS=linux go build \
+      -trimpath -ldflags="-s -w" \
+      -o /out/docsearch-worker ./cmd/docsearch-worker
 
-# The worker checkpoints or rolls back on SIGTERM; give it room in the Pod
-# spec via terminationGracePeriodSeconds.
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/docsearch-worker /usr/local/bin/docsearch-worker
+USER nonroot:nonroot
+# Database path and library roots come from the ConfigMap. The library is
+# mounted at the same path the server sees, so a job's source_path resolves
+# in both.
+#
+# The worker finishes or abandons the job it holds on SIGTERM rather than
+# leaving a half-written document; give it room in the Pod spec via
+# terminationGracePeriodSeconds.
 STOPSIGNAL SIGTERM
-ENTRYPOINT ["docsearch", "worker"]
+ENTRYPOINT ["/usr/local/bin/docsearch-worker"]

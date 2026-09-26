@@ -5,8 +5,6 @@
 // the document they came from, and whether the chunks are shaped so search
 // can work on them. A document can fail either while passing the other, and
 // a report that conflated them would say a consistent document is fine.
-//
-// Ported from python/docsearch/verify.py and cli.py.
 package document
 
 import (

@@ -10,8 +10,6 @@ import (
 	"github.com/bamsammich/docsearch/internal/service/job"
 )
 
-// Ported from python/docsearch/cli.py.
-
 func enqueueCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "enqueue",

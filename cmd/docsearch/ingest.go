@@ -12,8 +12,6 @@ import (
 	"github.com/bamsammich/docsearch/internal/domain"
 )
 
-// Ported from python/docsearch/cli.py.
-
 // progressStride is how far an ingest advances before another line is
 // printed. A 1,800-page manual reports every page, and a line each would
 // bury the result.

@@ -3,10 +3,11 @@ package store
 import (
 	"context"
 	"database/sql"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/bamsammich/docsearch/internal/schema"
 )
 
 // buildIndex creates a two-document index where one document is deliberately
@@ -19,16 +20,11 @@ func buildIndex(t *testing.T) *Store {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The schema itself, the same file docsearch.db creates databases from
-	// and sqlc types its queries against. Read rather than copied, and fatal
-	// rather than skipped: skipping would leave the whole store suite green
-	// without having exercised anything.
-	schema, err := os.ReadFile("../../python/docsearch/schema.sql")
-	if err != nil {
-		t.Fatalf("read schema: %v", err)
-	}
-	if _, err := raw.Exec(string(schema)); err != nil {
-		t.Fatal(err)
+	// The migrations, the same ones a deployment runs and sqlc types its
+	// queries against. Fatal rather than skipped: skipping would leave the
+	// whole store suite green without having exercised anything.
+	if err := schema.Create(t.Context(), raw); err != nil {
+		t.Fatalf("create schema: %v", err)
 	}
 	for _, d := range []struct {
 		id     string

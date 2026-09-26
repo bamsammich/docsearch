@@ -1,9 +1,11 @@
 # Porting ingest to Go
 
-Phase 03 of v2. The Python ingest pipeline moves to Go, one package at a time,
-and each package ships only when its output matches Python's on every document
-in the library. Python stays in the tree as the reference until the last
-package lands, then leaves.
+Phase 03 of v2, complete. The Python ingest pipeline moved to Go one package
+at a time, each package shipping only when its output matched Python's on
+every document in the library, and Python left the tree in step 7h. The plan
+stays as the record of what was ported and what was decided along the way;
+every sentence about Python below describes the pipeline that was, not one
+the repository still holds.
 
 Storage does not change in this phase. The Go worker writes the SQLite schema
 the Go server already reads, so `docsearch-eval` and the running MCP server
@@ -118,15 +120,21 @@ navigation are its only producers. Closing it added `url_path`, a source
 second copy of `sidebar_dom`, `index_page` and `url_path` that
 `internal/site/nav` was carrying.
 
-## How parity is checked
+## How parity was checked
 
 Two kinds of test, because the library cannot be committed:
 
-| test | input | runs where |
+| test | input | ran where |
 |---|---|---|
 | unit tests ported from `tests/` | small synthetic fixtures already in the Python tests | everywhere |
 | golden tests | synthetic documents in `testdata/adapters/`, with the Python adapters' extraction of each | everywhere |
-| parity tests | Python reference output in `var/parity/` | only where that output exists; skipped otherwise |
+| parity tests | Python reference output in `var/parity/` | only where that output existed; skipped otherwise |
+
+The goldens survived step 7h and the parity tests did not. A golden is a
+committed file and still fails a change that alters extraction, grading or a
+report; it now reads as the answer this repository gives rather than as
+Python's. The parity tests read output no one can regenerate, so they went
+with the pipeline that wrote it.
 
 The library holds copyrighted manuals, so their extracted text never goes into
 the repository, and neither does the tool that produces the reference output:
@@ -212,7 +220,7 @@ from have landed.
 | 7e | — | `proto/docsearch/type/v1`, `proto/docsearch/document/v1` and their `internal/api/connectapi` handlers | testify suites driving the real Connect stack over `httptest`, against a mocked service |
 | 7f | `cli.py`'s queue commands | `proto/docsearch/ingest/v1/job.proto`, `internal/service/job`, its handlers, and `cmd/docsearch-server` serving both APIs | testify suites over mocked services; the server answers a real RPC and refuses an untokened one |
 | 7g | `cli.py` | `cmd/docsearch`, a ConnectRPC client of the server | the two report formatters against Python's text, from `testdata/verify` and `testdata/inspect`; the client over `httptest` against the real Connect stack |
-| 7h | — | Python leaves the tree | the Go suites alone, once nothing reads `python/` |
+| 7h | — | Python leaves the tree | the Go suites alone; sqlc types against the migrations, and the worker image builds the Go binary |
 
 ### What the CLI asks the server, and what it asks the index
 
@@ -264,21 +272,21 @@ Migrations run through `pressly/goose`, which numbers and orders them and
 records what it applied. Version 5 is a baseline rather than a reconstruction:
 the DDL that produced versions 1 to 4 was never kept, so writing them now
 would be guesswork that might not reproduce a real index. An index still at
-one of those versions is repaired by the column backfill, which goes when
-Python does and 5 becomes the floor.
+one of those versions is repaired by the column backfill.
 
 Step 7a took over creating an index. `schema.sql` leaves `schema_version`
 empty and `db.connect` stamped it, so a database the Go stack created was
 refused by every Python command; `internal/schema` now creates and stamps
 one, and `docsearch migrate` is what an operator runs.
 
-The schema itself is still one file. Go embeds a copy so a binary carries it,
-`mise run generate` refreshes the copy, and a test fails on any drift. The
-copy goes away with the Python pipeline, at which point `internal/schema` is
-the only place it lives.
+The schema lives in `internal/schema/migrations` and nowhere else. Step 7h
+made the baseline migration the original rather than a generated copy, and
+pointed sqlc at the migrations directory, so a query is typed against the
+shape a migrated database actually has. A binary embeds the migrations, so a
+deployment is one file.
 
-`urlguard.py` already has a Go twin in `internal/urlguard`, held to the same
-table of addresses; step 5 deletes the Python copy.
+`internal/urlguard` is held to the committed table of addresses in
+`testdata/urlguard-addresses.txt`.
 
 ## Improvements parity holds back until step 6
 

@@ -1,6 +1,4 @@
 // Package site reads a documentation site as one document, by crawling it.
-//
-// Ported from python/docsearch/ingest.py.
 package site
 
 import (

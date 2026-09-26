@@ -20,8 +20,6 @@
 //
 // Link-following is the last resort and belongs to the crawler, under a
 // budget.
-//
-// Ported from python/docsearch/discover.py.
 package discover
 
 import (

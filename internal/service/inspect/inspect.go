@@ -5,8 +5,6 @@
 // derived from it, and that is knowable before any of it is stored. A
 // document that will fail, or will succeed badly, says so here rather than
 // after it has cost a worker an hour.
-//
-// Ported from python/docsearch/inspect.py.
 package inspect
 
 import (

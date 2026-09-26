@@ -3,14 +3,14 @@
 // knows nothing of PDF, HTML, SQLite, Postgres or MCP. Format adapters produce
 // an Extraction; services persist the Chunks this package derives from it.
 //
-// The rules are ported from the Python pipeline under python/docsearch, which
-// stays the reference until it is retired: test/integration checks every
-// function here against its output on a real library.
+// The rules were ported from the pipeline docsearch started as, and
+// test/integration still checks them against the extraction goldens that
+// port was held to.
 package domain
 
-// Block is one structural unit of a document, format-agnostic. The JSON field
-// names match python/docsearch/blocks.py, so an extraction the Python pipeline
-// dumps decodes here unchanged.
+// Block is one structural unit of a document, format-agnostic. The JSON
+// field names are the ones the extraction goldens carry, so a golden decodes
+// here unchanged.
 //
 // Fields are ordered pointers first, which keeps the span the garbage
 // collector scans short; the same holds for Extraction and Chunk.

@@ -14,8 +14,6 @@
 //
 // The output is what the chunker needs: for each page, a dotted section
 // number and the heading ancestry above it.
-//
-// Ported from python/docsearch/nav.py.
 package nav
 
 import (

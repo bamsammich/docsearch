@@ -17,8 +17,6 @@
 // depth and a page budget. Links are harvested from pages as they are
 // fetched, so no page is requested twice and the known-page count rises as
 // the crawl proceeds.
-//
-// Ported from python/docsearch/crawl.py.
 package crawl
 
 import (

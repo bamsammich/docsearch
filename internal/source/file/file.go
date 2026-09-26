@@ -1,7 +1,5 @@
 // Package file reads one file on disk as a document, extracted by the
 // adapter its suffix selects.
-//
-// Ported from python/docsearch/ingest.py.
 package file
 
 import (
