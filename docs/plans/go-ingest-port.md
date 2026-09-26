@@ -20,7 +20,8 @@ file when it restarts, a restarted crawl that cannot resume is most of what
 the cache was for, and two workers cannot share a file at all.
 
 After phase 04 the deployment holds no SQLite file. The driver stays in the
-tree only while v1 is still readable.
+tree only while v1 is still readable. `docs/plans/postgres-multiuser.md` is
+that phase.
 
 ## Layers
 
