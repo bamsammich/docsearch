@@ -2,6 +2,12 @@
 /bin/
 *.exe
 
+# Compiled Python left over from the pipeline retired in 7h. Nothing here
+# produces bytecode any more, and the caches that survived the deletion
+# embed the absolute path of whoever compiled them.
+__pycache__/
+*.py[cod]
+
 # Runtime state — database, WAL sidecars, ingested library
 /var/
 *.db
