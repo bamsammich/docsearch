@@ -126,7 +126,16 @@ The two dialects part company here. Postgres reaches version 6 and SQLite
 freezes at 5, since multi-user exists only on Postgres, so `VersionFor`
 answers per dialect and a new SQLite migration fails the version guard. A
 schema change goes to Postgres from here.
-| 4c | sqlc on the `postgresql` engine, 45 queries ported, `internal/repository/postgres` in place of the SQLite writer | the repository suite, moved over and run against a container; `FOR UPDATE SKIP LOCKED` replaces the single-writer claim, so two workers claiming at once is now a case worth writing |
+| 4c | sqlc on the `postgresql` engine beside the sqlite one, 45 queries ported, `internal/repository/postgres` beside the SQLite writer | all three repository suites against a container; two workers claiming at once, which `FOR UPDATE SKIP LOCKED` makes possible where SQLite's single writer serialised it |
+
+Row-level security changes what a repository may do, and 4c settled three
+things because of it. Nothing touches the database outside a transaction that
+named its user, single reads included, since a bare statement matches no rows
+at all; `session` and the `read` helper over it are the only paths. The user
+is bound when a repository is constructed rather than passed per call, which
+keeps the service ports unchanged until 4f threads an owner down. Session-level
+`SET` was rejected: `database/sql` hands out pooled connections, so a variable
+set for one request would still be set when another borrowed that connection.
 | 4d | search on `pg_textsearch`, built from one expression index, scoring a scoped query through the per-document loop, with NUL stripped at ingest | `docsearch-eval` on a Postgres index the Go worker wrote, held to the spike's labelled and self-label figures |
 | 4e | the response cache on Postgres, per user, behind the `fetch.Cache` interface it already has | the cache suite against a container, and a crawl resumed after the process that started it exits |
 | 4f | a user on every request: the service layer takes an owner, both API doors supply the built-in one, and every transaction opens with `SET LOCAL app.user_id` | a unit test per service that a call without an owner is refused rather than defaulted |

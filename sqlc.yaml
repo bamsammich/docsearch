@@ -5,13 +5,23 @@ sql:
     # goose's annotations, so a query is typed against the shape a migrated
     # database actually has.
     #
-    # The SQLite set, which is the dialect internal/store and
-    # internal/repository still speak. Step 4c moves them to Postgres and
-    # this moves with them, to migrations/postgres on the postgresql engine.
+    # The SQLite set, which is the dialect internal/store still speaks. It
+    # goes with the SQLite half of internal/schema in step 4g.
     schema: "internal/schema/migrations/sqlite"
-    queries: "internal/store/query"
+    queries: "internal/store/query/sqlite"
     gen:
       go:
         package: "dbgen"
         out: "internal/store/dbgen"
+        emit_empty_slices: true
+  - engine: "postgresql"
+    # The same arrangement on Postgres: the migrations are the schema, so a
+    # query is typed against the shape a migrated database has, partitions
+    # and row-level security included.
+    schema: "internal/schema/migrations/postgres"
+    queries: "internal/store/query/postgres"
+    gen:
+      go:
+        package: "pgdbgen"
+        out: "internal/store/pgdbgen"
         emit_empty_slices: true
