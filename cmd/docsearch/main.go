@@ -104,16 +104,10 @@ func migrate(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("no database: pass --db or set %s", config.EnvDB)
 	}
 
-	fresh, err := absent(path)
-	if err != nil {
-		return err
-	}
 	checking := cmd.Bool("check")
-	if fresh {
-		if checking {
-			return fmt.Errorf("database does not exist: %s", path)
-		}
-		return create(ctx, path)
+	done, err := creating(ctx, path, checking)
+	if err != nil || done {
+		return err
 	}
 
 	db, err := open(path, false)
@@ -126,10 +120,39 @@ func migrate(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	if checking {
-		return report(path, found, recorded)
+	target, err := required(ctx, db)
+	if err != nil {
+		return err
 	}
-	return upgrade(ctx, db, found, recorded)
+	if checking {
+		return report(path, target, found, recorded)
+	}
+	return upgrade(ctx, db, target, found, recorded)
+}
+
+// creating makes a database that is not there yet, and reports whether it
+// did, since a fresh index needs no migration and --check has nothing to
+// report about a file that does not exist.
+func creating(ctx context.Context, path string, checking bool) (bool, error) {
+	fresh, err := absent(path)
+	if err != nil || !fresh {
+		return false, err
+	}
+	if checking {
+		return true, fmt.Errorf("database does not exist: %s", path)
+	}
+	return true, create(ctx, path)
+}
+
+// required is the version this database must be at. The two dialects sit at
+// different versions while phase 04 runs, so the answer is a question about
+// the database rather than a constant.
+func required(ctx context.Context, db *sql.DB) (int, error) {
+	dialect, err := schema.DialectOf(ctx, db)
+	if err != nil {
+		return 0, err
+	}
+	return schema.VersionFor(dialect), nil
 }
 
 // create writes a new index, which is not a migration: no existing data's
@@ -144,15 +167,17 @@ func create(ctx context.Context, path string) error {
 	if err := schema.Create(ctx, db); err != nil {
 		return err
 	}
-	fmt.Printf("created %s at version %d\n", path, schema.Version)
+	// A file is SQLite, which the migrate command's own dialect check would
+	// also say; a fresh index is created rather than asked.
+	fmt.Printf("created %s at version %d\n", path, schema.SQLiteVersion)
 	return nil
 }
 
 // report says where the index stands and refuses where it is not current.
-func report(path string, found int, recorded bool) error {
+func report(path string, target, found int, recorded bool) error {
 	fmt.Printf("database %s: schema %s, build requires %d\n",
-		path, at(found, recorded), schema.Version)
-	if recorded && found == schema.Version {
+		path, at(found, recorded), target)
+	if recorded && found == target {
 		fmt.Println("up to date")
 		return nil
 	}
@@ -161,8 +186,8 @@ func report(path string, found int, recorded bool) error {
 
 // upgrade migrates the index and says what changed, naming every version it
 // passed through so an operator can see what they are getting.
-func upgrade(ctx context.Context, db *sql.DB, found int, recorded bool) error {
-	if recorded && found == schema.Version {
+func upgrade(ctx context.Context, db *sql.DB, target, found int, recorded bool) error {
+	if recorded && found == target {
 		fmt.Printf("already at version %d; nothing to do\n", found)
 		return nil
 	}

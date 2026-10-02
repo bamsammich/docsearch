@@ -120,7 +120,12 @@ prove it, and never leaves the tree unable to build an index end to end.
 | step | what lands | how it is checked |
 |---|---|---|
 | 4a | a Postgres harness: testcontainers helpers over the published image, and `internal/schema` speaking both dialects | the Postgres baseline creates version 5's shape, applied and rolled back against a container with rows in every table it touches; both dialects reach the same version; a database without the extension fails with a message naming it |
-| 4b | `users`, `user_id` on every tenant table, `PARTITION BY LIST (user_id)`, the app role, and the policies | the spike's four row-level-security checks, run against a role that owns nothing: no user set sees nothing, a query without a filter sees one user's rows, an index search without a filter sees one user's rows, and an insert as the app role is refused |
+| 4b | `users`, `user_id` on every tenant table, `PARTITION BY LIST (user_id)`, and the policies | the row-level-security checks run against the role that owns nothing: a session naming no user sees nothing, a query without a filter sees one library, two libraries holding one `doc_id` stay apart, a write for another user is refused, an update it cannot see changes nothing, and the role cannot reach the schema; the migration moves existing rows into a partition and comes back out |
+
+The two dialects part company here. Postgres reaches version 6 and SQLite
+freezes at 5, since multi-user exists only on Postgres, so `VersionFor`
+answers per dialect and a new SQLite migration fails the version guard. A
+schema change goes to Postgres from here.
 | 4c | sqlc on the `postgresql` engine, 45 queries ported, `internal/repository/postgres` in place of the SQLite writer | the repository suite, moved over and run against a container; `FOR UPDATE SKIP LOCKED` replaces the single-writer claim, so two workers claiming at once is now a case worth writing |
 | 4d | search on `pg_textsearch`, built from one expression index, scoring a scoped query through the per-document loop, with NUL stripped at ingest | `docsearch-eval` on a Postgres index the Go worker wrote, held to the spike's labelled and self-label figures |
 | 4e | the response cache on Postgres, per user, behind the `fetch.Cache` interface it already has | the cache suite against a container, and a crawl resumed after the process that started it exits |

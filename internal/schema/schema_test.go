@@ -126,12 +126,15 @@ func (s *SchemaSuite) TestAMissingTableStopsTheStamp() {
 	s.Contains(problems, "table pages is missing")
 }
 
-// Version is the number a reader checks an index against, and the
-// migrations are what move a database to it. Both dialects declare the same
-// schema, so both must reach the same version: a migration added to one and
-// forgotten in the other would leave the two engines disagreeing about what
-// version 5, or 6, means.
-func TestEveryDialectReachesTheVersion(t *testing.T) {
+// Each dialect's migrations must reach the version that dialect declares.
+// A migration added without the bump would leave a server serving a shape it
+// says it was not built for.
+//
+// The two numbers differ while phase 04 runs: Postgres advances, and SQLite
+// is frozen because the SQLite half exists only to keep the packages not yet
+// moved buildable. A new SQLite migration fails here, which is the intended
+// answer: a schema change goes to Postgres.
+func TestEveryDialectReachesItsVersion(t *testing.T) {
 	dialects, err := os.ReadDir("migrations")
 	if err != nil {
 		t.Fatal(err)
@@ -139,13 +142,15 @@ func TestEveryDialectReachesTheVersion(t *testing.T) {
 	if len(dialects) == 0 {
 		t.Fatal("no dialects under migrations/")
 	}
-	for _, dialect := range dialects {
-		if !dialect.IsDir() {
-			t.Fatalf("migrations/%s is not a dialect directory", dialect.Name())
+	for _, entry := range dialects {
+		if !entry.IsDir() {
+			t.Fatalf("migrations/%s is not a dialect directory", entry.Name())
 		}
-		if got := highestMigration(t, dialect.Name()); got != schema.Version {
-			t.Errorf("the highest %s migration is %d but internal/schema.Version is %d",
-				dialect.Name(), got, schema.Version)
+		dialect := schema.Dialect(entry.Name())
+		want := schema.VersionFor(dialect)
+		if got := highestMigration(t, entry.Name()); got != want {
+			t.Errorf("the highest %s migration is %d but %s wants version %d",
+				dialect, got, dialect, want)
 		}
 	}
 }

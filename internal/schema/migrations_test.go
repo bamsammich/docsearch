@@ -32,11 +32,20 @@ func (s *MigrationSuite) SetupTest() {
 	s.db = pgtest.Start(s.T()).Owner
 }
 
-// up applies every migration.
+// up applies every migration the database has yet to see.
 func (s *MigrationSuite) up() {
 	provider, err := schema.ProviderFor(schema.Postgres, s.db)
 	s.Require().NoError(err)
 	_, err = provider.Up(s.T().Context())
+	s.Require().NoError(err)
+}
+
+// upTo applies the migrations through one version, for a case that needs the
+// shape a later migration changes.
+func (s *MigrationSuite) upTo(version int) {
+	provider, err := schema.ProviderFor(schema.Postgres, s.db)
+	s.Require().NoError(err)
+	_, err = provider.UpTo(s.T().Context(), int64(version))
 	s.Require().NoError(err)
 }
 
@@ -97,7 +106,7 @@ func (s *MigrationSuite) library() {
 // -- 00006_postgres_baseline ----------------------------------------------
 
 func (s *MigrationSuite) TestBaselineUpHoldsADocumentAndEverythingThatHangsOffIt() {
-	s.up()
+	s.upTo(5)
 	s.library()
 
 	s.Equal(2, s.count(`SELECT COUNT(*) FROM chunks WHERE doc_id = 'guide'`))
@@ -109,7 +118,7 @@ func (s *MigrationSuite) TestBaselineUpHoldsADocumentAndEverythingThatHangsOffIt
 func (s *MigrationSuite) TestBaselineNumbersAChunkWithoutBeingTold() {
 	// SQLite filled the key from the rowid. An identity column is what
 	// replaces it, and a chunk insert never names an id.
-	s.up()
+	s.upTo(5)
 	s.library()
 
 	s.Equal(2, s.count(`SELECT COUNT(DISTINCT id) FROM chunks`))
@@ -119,7 +128,7 @@ func (s *MigrationSuite) TestBaselineNumbersAChunkWithoutBeingTold() {
 func (s *MigrationSuite) TestBaselineRefusesAChunkWithNoDocument() {
 	// The foreign key is what keeps a chunk from outliving its document,
 	// which is the integrity the verification report assumes.
-	s.up()
+	s.upTo(5)
 
 	_, err := s.db.ExecContext(s.T().Context(),
 		`INSERT INTO chunks (doc_id, ordinal, heading_path, text)
@@ -131,7 +140,7 @@ func (s *MigrationSuite) TestBaselineOrdersTimestampsByTimeRatherThanByText() {
 	// The timestamps were TEXT on SQLite, where '2026-9-1' sorts after
 	// '2026-10-1'. timestamptz is what makes a lease comparison mean what it
 	// reads as.
-	s.up()
+	s.upTo(5)
 	s.exec(`INSERT INTO ingest_jobs (source_path, status, created_at, updated_at)
 		VALUES ('/library/early.md', 'done', '2026-09-01T00:00:00Z', now())`)
 	s.exec(`INSERT INTO ingest_jobs (source_path, status, created_at, updated_at)
@@ -144,7 +153,7 @@ func (s *MigrationSuite) TestBaselineOrdersTimestampsByTimeRatherThanByText() {
 }
 
 func (s *MigrationSuite) TestBaselineDownRemovesEverythingItMade() {
-	s.up()
+	s.upTo(5)
 	s.library()
 
 	s.down()
@@ -157,10 +166,10 @@ func (s *MigrationSuite) TestBaselineDownRemovesEverythingItMade() {
 }
 
 func (s *MigrationSuite) TestBaselineGoesDownAndUpAgain() {
-	s.up()
+	s.upTo(5)
 	s.library()
 	s.down()
-	s.up()
+	s.upTo(5)
 
 	s.True(s.tableExists("documents"))
 	s.Equal(0, s.count(`SELECT COUNT(*) FROM documents`),
@@ -168,4 +177,92 @@ func (s *MigrationSuite) TestBaselineGoesDownAndUpAgain() {
 
 	s.library()
 	s.Equal(2, s.count(`SELECT COUNT(*) FROM chunks`))
+}
+
+// -- 00006_users ----------------------------------------------------------
+
+func (s *MigrationSuite) TestUsersUpGivesTheRowsAlreadyThereAnOwner() {
+	// The rows exist before the migration and must come out of it belonging
+	// to the one user, which is what makes a v1 library survive the move.
+	s.upTo(5)
+	s.library()
+
+	s.up()
+
+	pgtest.ReadAs(s.T(), s.db, "default", func(tx *sql.Tx) {
+		var chunks, documents int
+		s.Require().NoError(tx.QueryRowContext(s.T().Context(),
+			`SELECT COUNT(*) FROM chunks`).Scan(&chunks))
+		s.Require().NoError(tx.QueryRowContext(s.T().Context(),
+			`SELECT COUNT(*) FROM documents`).Scan(&documents))
+		s.Equal(2, chunks)
+		s.Equal(1, documents)
+	})
+}
+
+func (s *MigrationSuite) TestUsersUpMovesChunksIntoAPartition() {
+	s.upTo(5)
+	s.library()
+
+	s.up()
+
+	pgtest.ReadAs(s.T(), s.db, "default", func(tx *sql.Tx) {
+		var partition string
+		s.Require().NoError(tx.QueryRowContext(s.T().Context(),
+			`SELECT DISTINCT tableoid::regclass::text FROM chunks`).Scan(&partition))
+		s.Equal("chunks_default", partition)
+	})
+}
+
+func (s *MigrationSuite) TestUsersUpKeepsNumberingChunksWhereItLeftOff() {
+	// The rows move through a copy, so the identity column has to be told
+	// where they got to or the next chunk collides with one that came across.
+	s.upTo(5)
+	s.library()
+	s.up()
+
+	pgtest.WriteAs(s.T(), s.db, "default", func(tx *sql.Tx) {
+		_, err := tx.ExecContext(s.T().Context(),
+			`INSERT INTO chunks (user_id, doc_id, ordinal, heading_path, text)
+			 VALUES ('default', 'guide', 2, 'Operator Guide > Later', 'a third chunk')`)
+		s.Require().NoError(err)
+	})
+
+	pgtest.ReadAs(s.T(), s.db, "default", func(tx *sql.Tx) {
+		var distinct, total int
+		s.Require().NoError(tx.QueryRowContext(s.T().Context(),
+			`SELECT COUNT(DISTINCT id), COUNT(*) FROM chunks`).Scan(&distinct, &total))
+		s.Equal(3, total)
+		s.Equal(3, distinct, "a new chunk took an id no moved chunk already had")
+	})
+}
+
+func (s *MigrationSuite) TestUsersDownReturnsToOneLibrary() {
+	s.upTo(5)
+	s.library()
+	s.up()
+
+	s.down()
+
+	s.False(s.tableExists("users"))
+	s.Equal(2, s.count(`SELECT COUNT(*) FROM chunks`),
+		"the one user's chunks come back, and read without naming a user")
+	s.Equal(0, s.count(
+		`SELECT COUNT(*) FROM information_schema.columns
+		  WHERE table_name = 'documents' AND column_name = 'user_id'`))
+}
+
+func (s *MigrationSuite) TestUsersGoesDownAndUpAgain() {
+	s.upTo(5)
+	s.library()
+	s.up()
+	s.down()
+	s.up()
+
+	pgtest.ReadAs(s.T(), s.db, "default", func(tx *sql.Tx) {
+		var chunks int
+		s.Require().NoError(tx.QueryRowContext(s.T().Context(),
+			`SELECT COUNT(*) FROM chunks`).Scan(&chunks))
+		s.Equal(2, chunks, "the rows survive a round trip through both shapes")
+	})
 }
