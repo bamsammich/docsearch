@@ -176,34 +176,60 @@ func open(t *testing.T, dsn string) *sql.DB {
 	return db
 }
 
-// AsUser runs fn in a transaction that names the user first, which is what
-// every request does and what any write has to do: FORCE ROW LEVEL SECURITY
-// binds the owner as well, so even a seed says who it writes for.
-func AsUser(t *testing.T, db *sql.DB, userID string, fn func(tx *sql.Tx)) {
+// ReadAs runs fn in a transaction that names the user, then rolls back.
+//
+// The default for anything that is not a seed. FORCE ROW LEVEL SECURITY
+// binds the table owner too, so even a read as the owner sees nothing until
+// a user is named. Rolling back is what lets a case assert that a statement
+// was refused: a refused statement aborts its transaction, and a commit
+// afterwards would fail for that reason rather than the one under test.
+func ReadAs(t *testing.T, db *sql.DB, userID string, fn func(tx *sql.Tx)) {
 	t.Helper()
-	tx, err := db.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	// Rolled back where fn failed the test and the commit never ran. After a
-	// commit the rollback reports a finished transaction, which is the
-	// expected answer rather than a failure.
+	tx := begin(t, db, userID)
 	defer func() {
 		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 			t.Errorf("roll back: %v", err)
 		}
 	}()
+	fn(tx)
+}
 
-	// SET LOCAL takes no placeholder, and the user identifier comes from the
-	// test rather than from a request.
-	if _, err := tx.ExecContext(t.Context(),
-		fmt.Sprintf("SET LOCAL app.user_id = %s", quote(userID))); err != nil {
-		t.Fatalf("set the user: %v", err)
-	}
+// WriteAs runs fn in a transaction that names the user, then commits, so
+// what it wrote is there for the rest of the case.
+func WriteAs(t *testing.T, db *sql.DB, userID string, fn func(tx *sql.Tx)) {
+	t.Helper()
+	tx := begin(t, db, userID)
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+			t.Errorf("roll back: %v", err)
+		}
+	}()
 	fn(tx)
 	if err := tx.Commit(); err != nil {
 		t.Fatalf("commit: %v", err)
 	}
+	committed = true
+}
+
+// begin opens a transaction and names the user it belongs to, which is what
+// every request does before it reads or writes anything.
+func begin(t *testing.T, db *sql.DB, userID string) *sql.Tx {
+	t.Helper()
+	tx, err := db.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	// SET LOCAL takes no placeholder, and the identifier comes from the test
+	// rather than from a request.
+	if _, err := tx.ExecContext(t.Context(),
+		fmt.Sprintf("SET LOCAL app.user_id = %s", quote(userID))); err != nil {
+		t.Fatalf("set the user: %v", err)
+	}
+	return tx
 }
 
 // quote wraps a literal the way Postgres does, doubling any quote inside it.

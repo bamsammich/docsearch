@@ -52,7 +52,21 @@ var migrations embed.FS
 // section did when it began holding section numbers rather than page
 // numbers, is invisible to any structural check while silently changing what
 // queries return.
-const Version = 5
+const Version = 6
+
+// SQLiteVersion is frozen. The SQLite half of this package exists to keep
+// the packages phase 04 has yet to move buildable, and takes no further
+// migrations: a schema change goes to Postgres, which is where a deployment
+// is. Step 4g deletes the SQLite half entirely.
+const SQLiteVersion = 5
+
+// VersionFor is the version a database of one dialect must be at.
+func VersionFor(dialect Dialect) int {
+	if dialect == SQLite {
+		return SQLiteVersion
+	}
+	return Version
+}
 
 // History is readable, so a version mismatch can be diagnosed without
 // reading the git log.
@@ -65,6 +79,8 @@ var History = map[int]string{
 		"can deprioritise them without deleting them",
 	5: "documents.source_kind names what a source is; chunks.url and chunks.fragment " +
 		"carry the address a chunk was read from, so a result can be cited",
+	6: "every row belongs to a user: user_id on each tenant table, chunks " +
+		"partitioned by owner, and row-level security on all five",
 }
 
 // Dialect is the SQL a database speaks, and which migrations apply to it.
@@ -81,6 +97,7 @@ const (
 // PRAGMA that would then report a column missing from a table that does not
 // exist.
 const (
+	tableUsers      = "users"
 	tableDocuments  = "documents"
 	tableJobs       = "ingest_jobs"
 	tableChunks     = "chunks"
@@ -104,9 +121,9 @@ func RequiredTables(dialect Dialect) []string {
 		tableIndexTerms,
 	}
 	if dialect == SQLite {
-		required = append(required, tableChunksFTS)
+		return append(required, tableChunksFTS)
 	}
-	return required
+	return append(required, tableUsers)
 }
 
 // ErrTooNew reports an index written by a newer build. Nothing here can know
@@ -170,23 +187,24 @@ func Migrate(ctx context.Context, db *sql.DB) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	if recorded && before > Version {
-		return nil, &ErrTooNew{Found: before, Supported: Version}
+	target := VersionFor(dialect)
+	if recorded && before > target {
+		return nil, &ErrTooNew{Found: before, Supported: target}
 	}
 	if err := up(ctx, db); err != nil {
 		return nil, err
 	}
-	if err := verify(ctx, db); err != nil {
+	if err := verify(ctx, db, target); err != nil {
 		return nil, err
 	}
-	if err := stamp(ctx, dialect, db, Version); err != nil {
+	if err := stamp(ctx, dialect, db, target); err != nil {
 		return nil, err
 	}
-	return &Result{From: before, To: Version, FromRecorded: recorded}, nil
+	return &Result{From: before, To: target, FromRecorded: recorded}, nil
 }
 
 // verify refuses to let a stamp claim what the schema does not hold.
-func verify(ctx context.Context, db *sql.DB) error {
+func verify(ctx context.Context, db *sql.DB, target int) error {
 	problems, err := Problems(ctx, db)
 	if err != nil {
 		return err
@@ -194,7 +212,7 @@ func verify(ctx context.Context, db *sql.DB) error {
 	if len(problems) > 0 {
 		return fmt.Errorf(
 			"migrated to version %d, but the schema is not what that version means: %s",
-			Version, strings.Join(problems, " "))
+			target, strings.Join(problems, " "))
 	}
 	return nil
 }
@@ -302,15 +320,20 @@ func RequireExtensions(ctx context.Context, dialect Dialect, db *sql.DB) error {
 // Check reports whether a database is at the version this build requires,
 // without changing it.
 func Check(ctx context.Context, db *sql.DB) error {
+	dialect, err := DialectOf(ctx, db)
+	if err != nil {
+		return err
+	}
 	found, recorded, err := Recorded(ctx, db)
 	if err != nil {
 		return err
 	}
+	target := VersionFor(dialect)
 	switch {
-	case recorded && found > Version:
-		return &ErrTooNew{Found: found, Supported: Version}
-	case !recorded || found != Version:
-		return &ErrOutdated{Found: found, Supported: Version, Recorded: recorded}
+	case recorded && found > target:
+		return &ErrTooNew{Found: found, Supported: target}
+	case !recorded || found != target:
+		return &ErrOutdated{Found: found, Supported: target, Recorded: recorded}
 	}
 	return nil
 }
