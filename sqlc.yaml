@@ -4,7 +4,11 @@ sql:
     # The migrations are the schema: sqlc replays them in order, reading
     # goose's annotations, so a query is typed against the shape a migrated
     # database actually has.
-    schema: "internal/schema/migrations"
+    #
+    # The SQLite set, which is the dialect internal/store and
+    # internal/repository still speak. Step 4c moves them to Postgres and
+    # this moves with them, to migrations/postgres on the postgresql engine.
+    schema: "internal/schema/migrations/sqlite"
     queries: "internal/store/query"
     gen:
       go:

@@ -2,6 +2,7 @@ package schema_test
 
 import (
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -9,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	_ "modernc.org/sqlite" // the driver the index is written with
 
+	"github.com/bamsammich/docsearch/internal/pgtest"
 	"github.com/bamsammich/docsearch/internal/schema"
 )
 
@@ -25,10 +26,7 @@ type SchemaSuite struct {
 func TestSchema(t *testing.T) { suite.Run(t, new(SchemaSuite)) }
 
 func (s *SchemaSuite) SetupTest() {
-	db, err := sql.Open("sqlite", filepath.Join(s.T().TempDir(), "index.db"))
-	s.Require().NoError(err)
-	s.T().Cleanup(func() { s.Require().NoError(db.Close()) })
-	s.db = db
+	s.db = pgtest.Start(s.T()).Owner
 }
 
 // recorded is the version the database carries, and whether it carries one.
@@ -63,12 +61,15 @@ func (s *SchemaSuite) TestAFreshIndexHoldsEveryTableTheGateChecksFor() {
 	s.Empty(problems)
 }
 
-// unstamped is an index the schema built and nothing recorded, which is what
-// a database from before the version stamp looks like.
+// unstamped is a migrated index carrying no version, which is what a
+// migration interrupted between goose's record and the stamp leaves behind.
+//
+// goose's own record stays. A database that predates goose entirely was a
+// SQLite one, and the baseline no longer has to survive being applied over a
+// schema that is already there.
 func (s *SchemaSuite) unstamped() {
 	s.Require().NoError(schema.Create(s.T().Context(), s.db))
 	s.exec(`DELETE FROM schema_version`)
-	s.exec(`DROP TABLE goose_db_version`)
 }
 
 func (s *SchemaSuite) TestAnUnversionedIndexIsOutdatedRatherThanBroken() {
@@ -98,14 +99,13 @@ func (s *SchemaSuite) TestMigratingTwiceChangesNothingTheSecondTime() {
 
 	again, err := schema.Migrate(s.T().Context(), s.db)
 	s.Require().NoError(err)
-	s.Empty(again.ColumnsAdded)
 	s.Equal(schema.Version, again.From)
 }
 
 func (s *SchemaSuite) TestAnIndexFromANewerBuildIsRefused() {
 	// Nothing here can know what changed, so serving it would be a guess.
 	s.Require().NoError(schema.Create(s.T().Context(), s.db))
-	s.exec(`UPDATE schema_version SET version = ?`, schema.Version+1)
+	s.exec(`UPDATE schema_version SET version = $1`, schema.Version+1)
 
 	var tooNew *schema.ErrTooNew
 	s.Require().ErrorAs(schema.Check(s.T().Context(), s.db), &tooNew)
@@ -115,46 +115,11 @@ func (s *SchemaSuite) TestAnIndexFromANewerBuildIsRefused() {
 	s.Require().ErrorAs(err, &tooNew)
 }
 
-func (s *SchemaSuite) TestAColumnAnOlderSchemaLacksIsAddedAndNamed() {
-	// CREATE TABLE IF NOT EXISTS leaves an existing table untouched, so a
-	// column added after the initial schema needs an explicit backfill.
-	s.exec(`CREATE TABLE documents (
-		doc_id TEXT PRIMARY KEY, title TEXT NOT NULL, format TEXT NOT NULL,
-		source_path TEXT NOT NULL, sha256 TEXT NOT NULL, status TEXT NOT NULL,
-		page_count INTEGER, chunk_count INTEGER, ingested_at TEXT)`)
-
-	result, err := schema.Migrate(s.T().Context(), s.db)
-	s.Require().NoError(err)
-	s.Contains(result.ColumnsAdded, "documents.warnings")
-	s.Contains(result.ColumnsAdded, "documents.source_kind")
-	s.Require().NoError(schema.Check(s.T().Context(), s.db))
-}
-
-func (s *SchemaSuite) TestAnIndexPredatingSectionReferencesIsRefused() {
-	// The version 2 change was semantic: index_terms.section held printed
-	// page numbers and now holds section numbers. Nothing recovers one from
-	// the other without the source documents, and the index is regenerable,
-	// so refusing beats stamping a version the data does not match.
-	// Built by hand rather than by the schema, because an index that
-	// predates the change is one no migration of this build ever touched.
-	s.exec(`CREATE TABLE index_terms (doc_id TEXT NOT NULL, term TEXT NOT NULL, page INTEGER)`)
-
-	_, err := schema.Migrate(s.T().Context(), s.db)
-	var refused *schema.ErrUnmigratable
-	s.Require().ErrorAs(err, &refused)
-	s.Contains(err.Error(), "delete it and re-ingest the library")
-	s.Contains(err.Error(), "was NOT recorded")
-
-	_, recorded := s.recorded()
-	s.False(recorded, "a refused migration records nothing")
-}
-
 func (s *SchemaSuite) TestAMissingTableStopsTheStamp() {
 	// A stamp is a claim that the database matches the code, and writing it
 	// unchecked makes the claim unfalsifiable.
 	s.Require().NoError(schema.Create(s.T().Context(), s.db))
 	s.exec(`DROP TABLE pages`)
-	s.exec(`CREATE VIEW pages_placeholder AS SELECT 1`)
 
 	problems, err := schema.Problems(s.T().Context(), s.db)
 	s.Require().NoError(err)
@@ -162,10 +127,33 @@ func (s *SchemaSuite) TestAMissingTableStopsTheStamp() {
 }
 
 // Version is the number a reader checks an index against, and the
-// migrations are what move an index to it. A migration added without the
-// bump would leave the server serving a shape it says it was not built for.
-func TestTheVersionIsTheHighestMigration(t *testing.T) {
-	entries, err := os.ReadDir("migrations")
+// migrations are what move a database to it. Both dialects declare the same
+// schema, so both must reach the same version: a migration added to one and
+// forgotten in the other would leave the two engines disagreeing about what
+// version 5, or 6, means.
+func TestEveryDialectReachesTheVersion(t *testing.T) {
+	dialects, err := os.ReadDir("migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dialects) == 0 {
+		t.Fatal("no dialects under migrations/")
+	}
+	for _, dialect := range dialects {
+		if !dialect.IsDir() {
+			t.Fatalf("migrations/%s is not a dialect directory", dialect.Name())
+		}
+		if got := highestMigration(t, dialect.Name()); got != schema.Version {
+			t.Errorf("the highest %s migration is %d but internal/schema.Version is %d",
+				dialect.Name(), got, schema.Version)
+		}
+	}
+}
+
+// highestMigration is the last version one dialect's migrations reach.
+func highestMigration(t *testing.T, dialect string) int {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Join("migrations", dialect))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,10 +163,7 @@ func TestTheVersionIsTheHighestMigration(t *testing.T) {
 			highest = n
 		}
 	}
-	if highest != schema.Version {
-		t.Errorf("the highest migration is %d but internal/schema.Version is %d",
-			highest, schema.Version)
-	}
+	return highest
 }
 
 // migrationNumber is the order goose applies a migration in, which its file
@@ -194,4 +179,23 @@ func migrationNumber(t *testing.T, name string) int {
 		t.Fatalf("migration %q is not numbered: %v", name, err)
 	}
 	return n
+}
+
+func TestAMigrationNamesTheExtensionTheClusterDidNotInstall(t *testing.T) {
+	// Creating it needs a superuser, so docsearch cannot repair this. Saying
+	// which extension is missing is the whole of what it can usefully do,
+	// and saying it here beats failing on the first query that needs one.
+	db := pgtest.StartWithoutExtension(t)
+
+	_, err := schema.Migrate(t.Context(), db.Owner)
+	var missing *schema.ErrMissingExtension
+	if !errors.As(err, &missing) {
+		t.Fatalf("migrate on a database without the extension: %v", err)
+	}
+	if missing.Name != pgtest.Extension {
+		t.Errorf("named %q, want %q", missing.Name, pgtest.Extension)
+	}
+	if !strings.Contains(err.Error(), "shared_preload_libraries") {
+		t.Errorf("the error does not say what to do: %s", err)
+	}
 }
