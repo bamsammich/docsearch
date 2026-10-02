@@ -21,13 +21,22 @@ numbers.
 
 ## Postgres replaces SQLite rather than joining it
 
-The store could keep both dialects behind its interface. It will not.
+The store could keep both dialects behind its interface for good. It will not.
 
-The query layer is 45 sqlc queries, and a second dialect doubles what every
-later change costs: two files to edit, two generated packages, two sets of
-placeholder syntax, and a class of bug where the dialects agree in tests and
-diverge on a fixture nobody wrote. The deployment holds no SQLite file after
-this phase, so the second dialect would exist only to be maintained.
+The query layer is 45 sqlc queries, and a second permanent dialect doubles
+what every later change costs: two files to edit, two generated packages, two
+sets of placeholder syntax, and a class of bug where the dialects agree in
+tests and diverge on a fixture nobody wrote. The deployment holds no SQLite
+file after this phase, so a permanent second dialect would exist only to be
+maintained.
+
+Both do live side by side while the phase runs, which step 4a discovered
+rather than planned. `internal/schema` is where every other suite builds its
+test database, so switching it alone left three packages with no way to make
+one, and a step that breaks the tree does not ship. So the migrations are
+written once per dialect under `internal/schema/migrations/`, a database is
+asked which SQL it speaks, and the packages that read and write an index move
+one step at a time. Step 4g deletes the SQLite half with the last of them.
 
 What stays is narrower. A v1 index is a SQLite file someone is still running,
 and phase 08 ships a command that reads one and re-ingests each document from
@@ -110,13 +119,13 @@ prove it, and never leaves the tree unable to build an index end to end.
 
 | step | what lands | how it is checked |
 |---|---|---|
-| 4a | a Postgres harness: testcontainers helpers over the published image, and `internal/schema` speaking goose's Postgres dialect | the first migration creates today's shape in Postgres, applied and rolled back against a container with rows in every table it touches; a database without the extension fails with a message naming it |
+| 4a | a Postgres harness: testcontainers helpers over the published image, and `internal/schema` speaking both dialects | the Postgres baseline creates version 5's shape, applied and rolled back against a container with rows in every table it touches; both dialects reach the same version; a database without the extension fails with a message naming it |
 | 4b | `users`, `user_id` on every tenant table, `PARTITION BY LIST (user_id)`, the app role, and the policies | the spike's four row-level-security checks, run against a role that owns nothing: no user set sees nothing, a query without a filter sees one user's rows, an index search without a filter sees one user's rows, and an insert as the app role is refused |
 | 4c | sqlc on the `postgresql` engine, 45 queries ported, `internal/repository/postgres` in place of the SQLite writer | the repository suite, moved over and run against a container; `FOR UPDATE SKIP LOCKED` replaces the single-writer claim, so two workers claiming at once is now a case worth writing |
 | 4d | search on `pg_textsearch`, built from one expression index, scoring a scoped query through the per-document loop, with NUL stripped at ingest | `docsearch-eval` on a Postgres index the Go worker wrote, held to the spike's labelled and self-label figures |
 | 4e | the response cache on Postgres, per user, behind the `fetch.Cache` interface it already has | the cache suite against a container, and a crawl resumed after the process that started it exits |
 | 4f | a user on every request: the service layer takes an owner, both API doors supply the built-in one, and every transaction opens with `SET LOCAL app.user_id` | a unit test per service that a call without an owner is refused rather than defaulted |
-| 4g | the isolation test in CI, and SQLite out of the deployment: the driver, the FTS5 schema and the file paths go | the isolation test as described, plus a deployment that starts with no SQLite file present |
+| 4g | the isolation test in CI, and SQLite out of the tree: the driver, the FTS5 schema, the SQLite migrations and the file paths go | the isolation test as described, plus a deployment that starts with no SQLite file present |
 
 ## What the code assumes, and what a deployment provides
 

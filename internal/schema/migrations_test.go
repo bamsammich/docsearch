@@ -2,12 +2,11 @@ package schema_test
 
 import (
 	"database/sql"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	_ "modernc.org/sqlite" // the driver an index is written with
 
+	"github.com/bamsammich/docsearch/internal/pgtest"
 	"github.com/bamsammich/docsearch/internal/schema"
 )
 
@@ -19,9 +18,9 @@ import (
 // abstract asserts nothing: what matters is what happens to rows that are
 // already there.
 //
-// SQLite is embedded, so the real database is a file. When Postgres arrives
-// in phase 04 the same cases run against a container, which is what
-// testcontainers is for.
+// The database is a container, reached as the role that owns the schema
+// rather than as a superuser, so a migration reaching for a privilege a
+// deployment lacks fails here instead of on the cluster.
 type MigrationSuite struct {
 	suite.Suite
 	db *sql.DB
@@ -30,15 +29,12 @@ type MigrationSuite struct {
 func TestMigrations(t *testing.T) { suite.Run(t, new(MigrationSuite)) }
 
 func (s *MigrationSuite) SetupTest() {
-	db, err := sql.Open("sqlite", filepath.Join(s.T().TempDir(), "index.db"))
-	s.Require().NoError(err)
-	s.T().Cleanup(func() { s.Require().NoError(db.Close()) })
-	s.db = db
+	s.db = pgtest.Start(s.T()).Owner
 }
 
 // up applies every migration.
 func (s *MigrationSuite) up() {
-	provider, err := schema.Provider(s.db)
+	provider, err := schema.ProviderFor(schema.Postgres, s.db)
 	s.Require().NoError(err)
 	_, err = provider.Up(s.T().Context())
 	s.Require().NoError(err)
@@ -46,7 +42,7 @@ func (s *MigrationSuite) up() {
 
 // down rolls the most recent migration back.
 func (s *MigrationSuite) down() {
-	provider, err := schema.Provider(s.db)
+	provider, err := schema.ProviderFor(schema.Postgres, s.db)
 	s.Require().NoError(err)
 	_, err = provider.Down(s.T().Context())
 	s.Require().NoError(err)
@@ -68,7 +64,8 @@ func (s *MigrationSuite) count(query string, args ...any) int {
 func (s *MigrationSuite) tableExists(name string) bool {
 	var found int
 	err := s.db.QueryRowContext(s.T().Context(),
-		`SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table','view') AND name = ?`,
+		`SELECT COUNT(*) FROM information_schema.tables
+		  WHERE table_schema = current_schema() AND table_name = $1`,
 		name).Scan(&found)
 	s.Require().NoError(err)
 	return found == 1
@@ -94,12 +91,12 @@ func (s *MigrationSuite) library() {
 	s.exec(`INSERT INTO index_terms (doc_id, term, section)
 		VALUES ('guide', 'installer', '1')`)
 	s.exec(`INSERT INTO ingest_jobs (source_path, status, created_at, updated_at)
-		VALUES ('/library/guide.md', 'done', datetime('now'), datetime('now'))`)
+		VALUES ('/library/guide.md', 'done', now(), now())`)
 }
 
-// -- 00005_baseline --------------------------------------------------------
+// -- 00006_postgres_baseline ----------------------------------------------
 
-func (s *MigrationSuite) TestBaselineUpHoldsADocumentAndIndexesItsText() {
+func (s *MigrationSuite) TestBaselineUpHoldsADocumentAndEverythingThatHangsOffIt() {
 	s.up()
 	s.library()
 
@@ -107,22 +104,43 @@ func (s *MigrationSuite) TestBaselineUpHoldsADocumentAndIndexesItsText() {
 	s.Equal(1, s.count(`SELECT COUNT(*) FROM pages WHERE doc_id = 'guide'`))
 	s.Equal(1, s.count(`SELECT COUNT(*) FROM index_terms WHERE doc_id = 'guide'`))
 	s.Equal(1, s.count(`SELECT COUNT(*) FROM ingest_jobs`))
-
-	// The trigger, not the insert, is what fills the full-text index, so a
-	// baseline that created the tables without them would pass every other
-	// check and return nothing to any search.
-	s.Equal(1, s.count(`SELECT COUNT(*) FROM chunks_fts WHERE chunks_fts MATCH 'installer'`))
 }
 
-func (s *MigrationSuite) TestBaselineUpKeepsTheFullTextIndexWithItsChunks() {
-	// The AFTER DELETE trigger is what clears chunks_fts. Without it a
-	// deleted chunk keeps matching, and a search cites a chunk that is gone.
+func (s *MigrationSuite) TestBaselineNumbersAChunkWithoutBeingTold() {
+	// SQLite filled the key from the rowid. An identity column is what
+	// replaces it, and a chunk insert never names an id.
 	s.up()
 	s.library()
 
-	s.exec(`DELETE FROM chunks WHERE ordinal = 0`)
-	s.Equal(0, s.count(`SELECT COUNT(*) FROM chunks_fts WHERE chunks_fts MATCH 'installer'`))
-	s.Equal(1, s.count(`SELECT COUNT(*) FROM chunks_fts WHERE chunks_fts MATCH 'description'`))
+	s.Equal(2, s.count(`SELECT COUNT(DISTINCT id) FROM chunks`))
+	s.Equal(0, s.count(`SELECT COUNT(*) FROM chunks WHERE id IS NULL`))
+}
+
+func (s *MigrationSuite) TestBaselineRefusesAChunkWithNoDocument() {
+	// The foreign key is what keeps a chunk from outliving its document,
+	// which is the integrity the verification report assumes.
+	s.up()
+
+	_, err := s.db.ExecContext(s.T().Context(),
+		`INSERT INTO chunks (doc_id, ordinal, heading_path, text)
+		 VALUES ('absent', 0, 'Nowhere', 'orphan')`)
+	s.Require().Error(err)
+}
+
+func (s *MigrationSuite) TestBaselineOrdersTimestampsByTimeRatherThanByText() {
+	// The timestamps were TEXT on SQLite, where '2026-9-1' sorts after
+	// '2026-10-1'. timestamptz is what makes a lease comparison mean what it
+	// reads as.
+	s.up()
+	s.exec(`INSERT INTO ingest_jobs (source_path, status, created_at, updated_at)
+		VALUES ('/library/early.md', 'done', '2026-09-01T00:00:00Z', now())`)
+	s.exec(`INSERT INTO ingest_jobs (source_path, status, created_at, updated_at)
+		VALUES ('/library/late.md', 'done', '2026-10-01T00:00:00Z', now())`)
+
+	var first string
+	s.Require().NoError(s.db.QueryRowContext(s.T().Context(),
+		`SELECT source_path FROM ingest_jobs ORDER BY created_at DESC LIMIT 1`).Scan(&first))
+	s.Equal("/library/late.md", first)
 }
 
 func (s *MigrationSuite) TestBaselineDownRemovesEverythingItMade() {
@@ -132,24 +150,10 @@ func (s *MigrationSuite) TestBaselineDownRemovesEverythingItMade() {
 	s.down()
 
 	for _, name := range []string{
-		"documents", "chunks", "chunks_fts", "pages", "index_terms",
-		"ingest_jobs", "schema_version",
+		"documents", "chunks", "pages", "index_terms", "ingest_jobs", "schema_version",
 	} {
 		s.False(s.tableExists(name), name)
 	}
-}
-
-func (s *MigrationSuite) TestBaselineDownLeavesNoTriggerBehind() {
-	// A trigger outliving the table it writes to breaks the next insert into
-	// chunks, which is the table a re-applied baseline creates first.
-	s.up()
-	s.down()
-
-	var triggers int
-	err := s.db.QueryRowContext(s.T().Context(),
-		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger'`).Scan(&triggers)
-	s.Require().NoError(err)
-	s.Zero(triggers)
 }
 
 func (s *MigrationSuite) TestBaselineGoesDownAndUpAgain() {
@@ -162,22 +166,6 @@ func (s *MigrationSuite) TestBaselineGoesDownAndUpAgain() {
 	s.Equal(0, s.count(`SELECT COUNT(*) FROM documents`),
 		"the rows went with the tables; an index is regenerable")
 
-	// The rebuilt schema still works, triggers and all.
 	s.library()
-	s.Equal(1, s.count(`SELECT COUNT(*) FROM chunks_fts WHERE chunks_fts MATCH 'installer'`))
-}
-
-func (s *MigrationSuite) TestBaselineAppliedTwiceChangesNothing() {
-	// An index the Python pipeline created carries no goose record, so the
-	// first time goose meets one it applies the baseline over a schema that
-	// is already there.
-	s.up()
-	s.library()
-	s.exec(`DROP TABLE goose_db_version`)
-
-	s.up()
-
-	s.Equal(2, s.count(`SELECT COUNT(*) FROM chunks WHERE doc_id = 'guide'`),
-		"the rows survive a baseline applied over them")
-	s.Equal(1, s.count(`SELECT COUNT(*) FROM chunks_fts WHERE chunks_fts MATCH 'installer'`))
+	s.Equal(2, s.count(`SELECT COUNT(*) FROM chunks`))
 }

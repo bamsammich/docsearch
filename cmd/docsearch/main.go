@@ -171,9 +171,6 @@ func upgrade(ctx context.Context, db *sql.DB, found int, recorded bool) error {
 		return err
 	}
 	fmt.Printf("migrated %s -> %d\n", at(found, recorded), result.To)
-	for _, column := range result.ColumnsAdded {
-		fmt.Printf("  added column %s\n", column)
-	}
 	for _, version := range slices.Sorted(maps.Keys(schema.History)) {
 		if !recorded || version > found {
 			fmt.Printf("  v%d: %s\n", version, schema.History[version])
