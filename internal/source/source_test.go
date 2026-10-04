@@ -9,7 +9,7 @@ import (
 
 	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/service/ingest/mocks"
-	"github.com/bamsammich/docsearch/internal/site/fetch"
+	"github.com/bamsammich/docsearch/internal/site/fetch/fetchtest"
 	"github.com/bamsammich/docsearch/internal/source"
 	"github.com/bamsammich/docsearch/internal/source/site"
 )
@@ -26,14 +26,10 @@ func TestSource(t *testing.T) { suite.Run(t, new(SourceSuite)) }
 
 func (s *SourceSuite) SetupTest() {
 	s.root = s.T().TempDir()
-	cache, err := fetch.OpenSQLiteCache(s.T().Context(),
-		filepath.Join(s.T().TempDir(), "cache.db"))
-	s.Require().NoError(err)
-	s.T().Cleanup(func() { s.Require().NoError(cache.Close()) })
 	s.registry = source.New(
 		mocks.NewMockExtractor(s.T()),
 		[]string{s.root},
-		cache,
+		fetchtest.New(),
 		site.Options{},
 	)
 }

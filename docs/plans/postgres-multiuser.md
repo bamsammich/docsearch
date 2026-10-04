@@ -201,14 +201,44 @@ of its own, so switching it means handing it a `fetch.Cache` instead, and the
 cache needs an owner that no request carries until 4f. `internal/site/fetch/pgcache`
 is complete and tested ahead of the wiring that 4f rewrites anyway.
 | 4f | a user on every request, and both binaries on Postgres: the doors resolve an owner and ask for that user's services, and the worker claims one library's queue | a refusal case per door for a request that named no user, plus the end-to-end suite rebuilt on a container |
-| 4g | the isolation test in CI, and SQLite out of the tree: the driver, the FTS5 schema, the SQLite migrations and the remaining file paths go | the isolation test as described, plus a deployment that starts with no SQLite file present |
+| 4g | SQLite out of the tree: the store, the writer, the migrations, the file cache, the driver and the tooling that opened a file | the whole suite on Postgres alone, with the isolation cases running in CI like every other test |
+
+The isolation test needed nothing: CI runs `go test ./...` on a runner with
+Docker, so the testcontainer suites step 4a introduced have been running
+there since. Saying so is the check.
+
+| deleted | why |
+|---|---|
+| `internal/store`, `internal/repository/sqlite` | `internal/pgstore` and `internal/repository/postgres` replaced them |
+| `fetch.SQLiteCache` | `internal/site/fetch/pgcache` replaced it; crawl suites take an in-memory cache, since what they test is crawling |
+| `cmd/docsearch-query`, `scripts/docsearch-db` | both opened a file directly, and there is no file |
+| `spike/postgres` | it compared the two engines side by side, so it stopped building with the SQLite half; `docs/research/postgres-spike.md` cites the commit |
+
+Two things were rebuilt rather than deleted. `scripts/schema-snapshot` read
+`sqlite_master` for the DDL SQLite stores; Postgres keeps none, so the
+snapshot is now `pg_dump --schema-only` run inside the same container the
+tests use, which beats a renderer of our own reading the catalog. pg_dump
+writes a fresh random restrict token per run, stripped so the snapshot does
+not differ from itself.
+
+The query-coverage test went the other way. The SQLite one listed each
+generated query by hand and asserted the count, which went stale whenever
+someone added one. The replacement calls every method on `*pgdbgen.Queries`
+by reflection with zero-valued arguments and fails only where the error did
+not come from Postgres: a constraint violation means the statement was
+understood, while an argument count disagreeing with the SQL never reaches
+the database at all. Verified by breaking a generated call on purpose.
+
+Deleting the file cache surfaced a bug 4e introduced. `fetchRobots`
+discarded every error, so a cancelled crawl read as an unreachable host and
+came back as a complete disallow: the operator who stopped an ingest was
+told robots.txt refused them. The SQLite cache hid it by failing on the
+cancelled context first.
 
 4f took the Postgres switch that 4g was going to make. Threading an owner
 through a door that then reads SQLite is theatre, because the SQLite store
 has no user to thread it to, so the two had to happen together. 4g keeps the
-deletion: `internal/store`, `internal/repository/sqlite`, the SQLite
-migrations, `scripts/docsearch-db`, which opens a volume the compose file no
-longer mounts, and `docsearch-eval`, which still reads a file.
+deletion.
 
 The owner travels in the request context. `internal/owner` puts it there and
 `owner.From` takes it out, refusing where nothing named one. A parameter

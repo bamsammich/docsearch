@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/bamsammich/docsearch/internal/site/discover"
 	"github.com/bamsammich/docsearch/internal/site/fetch"
+	"github.com/bamsammich/docsearch/internal/site/fetch/fetchtest"
 	"github.com/bamsammich/docsearch/internal/urlguard"
 )
 
@@ -54,10 +54,8 @@ func (s *DiscoverSuite) write(w http.ResponseWriter, body string) {
 	s.Require().NoError(err)
 }
 
-func (s *DiscoverSuite) fetcher() *fetch.Fetcher {
-	cache, err := fetch.OpenSQLiteCache(s.T().Context(), filepath.Join(s.T().TempDir(), "cache.db"))
-	s.Require().NoError(err)
-	s.T().Cleanup(func() { s.Require().NoError(cache.Close()) })
+func (*DiscoverSuite) fetcher() *fetch.Fetcher {
+	cache := fetchtest.New()
 	return fetch.New(cache, fetch.Options{Guard: allowLoopback, Interval: time.Millisecond})
 }
 

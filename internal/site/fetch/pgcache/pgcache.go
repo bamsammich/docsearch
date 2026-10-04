@@ -17,8 +17,8 @@ import (
 	"fmt"
 
 	"github.com/bamsammich/docsearch/internal/pgsession"
+	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
 	"github.com/bamsammich/docsearch/internal/site/fetch"
-	"github.com/bamsammich/docsearch/internal/store/pgdbgen"
 )
 
 // Cache is a fetch.Cache over one user's rows in a Postgres database.

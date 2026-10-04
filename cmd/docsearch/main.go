@@ -13,14 +13,11 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"path/filepath"
 	"slices"
-	"strings"
 
 	"connectrpc.com/connect"
 	_ "github.com/jackc/pgx/v5/stdlib" // the driver a Postgres database is migrated through
 	"github.com/urfave/cli/v3"
-	_ "modernc.org/sqlite" // the driver a SQLite index is written with
 
 	"github.com/bamsammich/docsearch/internal/config"
 	"github.com/bamsammich/docsearch/internal/schema"
@@ -87,10 +84,9 @@ func migrateCommand() *cli.Command {
 			"the only writer.",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name: "dsn",
-				Usage: "the database to migrate: a Postgres `DSN`, or a path to " +
-					"a SQLite file while both dialects live",
-				Sources: cli.EnvVars(config.EnvDSN, config.EnvDB),
+				Name:    "dsn",
+				Usage:   "Postgres `DSN` of the database to migrate",
+				Sources: cli.EnvVars(config.EnvDSN),
 			},
 			&cli.BoolFlag{
 				Name:  "check",
@@ -102,18 +98,16 @@ func migrateCommand() *cli.Command {
 }
 
 func migrate(ctx context.Context, cmd *cli.Command) error {
-	path := cmd.String("dsn")
-	if path == "" {
+	dsn := cmd.String("dsn")
+	if dsn == "" {
 		return fmt.Errorf("no database: pass --dsn or set %s", config.EnvDSN)
 	}
 
-	checking := cmd.Bool("check")
-	done, err := creating(ctx, path, checking)
-	if err != nil || done {
-		return err
-	}
-
-	db, err := open(path, false)
+	// Nothing to create: the cluster provisions the database, along with the
+	// roles and the extension no migration has the privileges to make. Goose
+	// runs against whatever is there, and an empty database is the ordinary
+	// case rather than a special one.
+	db, err := open(dsn)
 	if err != nil {
 		return err
 	}
@@ -123,83 +117,20 @@ func migrate(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	target, err := required(ctx, db)
-	if err != nil {
-		return err
+	if cmd.Bool("check") {
+		return report(schema.Version, found, recorded)
 	}
-	if checking {
-		return report(path, target, found, recorded)
-	}
-	return upgrade(ctx, db, target, found, recorded)
-}
-
-// creating makes a database that is not there yet, and reports whether it
-// did, since a fresh index needs no migration and --check has nothing to
-// report about a file that does not exist.
-func creating(ctx context.Context, path string, checking bool) (bool, error) {
-	if remote(path) {
-		// The cluster provisions a Postgres database, along with the roles
-		// and the extension no migration has the privileges to create. Goose
-		// runs against whatever is there.
-		return false, nil
-	}
-	fresh, err := absent(path)
-	if err != nil || !fresh {
-		return false, err
-	}
-	if checking {
-		return true, fmt.Errorf("database does not exist: %s", path)
-	}
-	return true, create(ctx, path)
-}
-
-// required is the version this database must be at. The two dialects sit at
-// different versions while phase 04 runs, so the answer is a question about
-// the database rather than a constant.
-func required(ctx context.Context, db *sql.DB) (int, error) {
-	dialect, err := schema.DialectOf(ctx, db)
-	if err != nil {
-		return 0, err
-	}
-	return schema.VersionFor(dialect), nil
-}
-
-// create writes a new index, which is not a migration: no existing data's
-// meaning could be misread.
-func create(ctx context.Context, path string) error {
-	db, err := open(path, true)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = db.Close() }()
-
-	if err := schema.Create(ctx, db); err != nil {
-		return err
-	}
-	// A file is SQLite, which the migrate command's own dialect check would
-	// also say; a fresh index is created rather than asked.
-	fmt.Printf("created %s at version %d\n", path, schema.SQLiteVersion)
-	return nil
+	return upgrade(ctx, db, schema.Version, found, recorded)
 }
 
 // report says where the index stands and refuses where it is not current.
-func report(path string, target, found int, recorded bool) error {
-	fmt.Printf("database %s: schema %s, build requires %d\n",
-		label(path), at(found, recorded), target)
+func report(target, found int, recorded bool) error {
+	fmt.Printf("database: schema %s, build requires %d\n", at(found, recorded), target)
 	if recorded && found == target {
 		fmt.Println("up to date")
 		return nil
 	}
 	return errors.New("migration needed: run `docsearch migrate`")
-}
-
-// label is what a database is called in output. A DSN can carry a password,
-// so a remote one is never printed.
-func label(path string) string {
-	if remote(path) {
-		return "(postgres)"
-	}
-	return path
 }
 
 // upgrade migrates the index and says what changed, naming every version it
@@ -224,52 +155,17 @@ func upgrade(ctx context.Context, db *sql.DB, target, found int, recorded bool) 
 
 // open connects to the index, creating the file only where the caller meant
 // to.
-// remote reports whether a target names a Postgres database rather than a
-// file on disk.
-func remote(target string) bool {
-	return strings.HasPrefix(target, "postgres://") ||
-		strings.HasPrefix(target, "postgresql://")
-}
-
-func open(path string, fresh bool) (*sql.DB, error) {
-	if remote(path) {
-		return dial("pgx", path, "the database")
-	}
-	if fresh {
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			return nil, fmt.Errorf("create %s: %w", filepath.Dir(path), err)
-		}
-	}
-	return dial("sqlite", path+
-		"?_pragma=busy_timeout(5000)"+
-		"&_pragma=journal_mode(WAL)"+
-		"&_pragma=foreign_keys(ON)"+
-		"&_time_format=sqlite", path)
-}
-
 // dial opens a database and proves it answers, naming it as called rather
 // than as addressed: a DSN can carry a password.
-func dial(driver, target, called string) (*sql.DB, error) {
-	db, err := sql.Open(driver, target)
+func open(dsn string) (*sql.DB, error) {
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("open %s: %w", called, err)
+		return nil, fmt.Errorf("open the database: %w", err)
 	}
 	if err := db.Ping(); err != nil {
-		return nil, errors.Join(fmt.Errorf("open %s: %w", called, err), db.Close())
+		return nil, errors.Join(fmt.Errorf("open the database: %w", err), db.Close())
 	}
 	return db, nil
-}
-
-// absent reports whether the index has yet to be created.
-func absent(path string) (bool, error) {
-	_, err := os.Stat(path)
-	switch {
-	case errors.Is(err, os.ErrNotExist):
-		return true, nil
-	case err != nil:
-		return false, fmt.Errorf("read %s: %w", path, err)
-	}
-	return false, nil
 }
 
 // at is a version as an operator reads it.

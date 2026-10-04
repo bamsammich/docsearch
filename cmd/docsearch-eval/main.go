@@ -1,7 +1,7 @@
 // Command docsearch-eval runs the committed retrieval query set against a
 // built index and reports hit rates.
 //
-// It drives the real store.Search path, not a reimplementation, so what it
+// It drives the real pgstore.Search path, not a reimplementation, so what it
 // measures is what the MCP server returns. Misses are printed in full: a query
 // that fails is information about whether the retrieval design holds, and the
 // rule for this suite is that a failing query stays in the file unedited.
@@ -17,7 +17,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bamsammich/docsearch/internal/store"
+	"github.com/bamsammich/docsearch/internal/owner"
+	"github.com/bamsammich/docsearch/internal/pgstore"
 )
 
 type query struct {
@@ -56,7 +57,7 @@ type file struct {
 }
 
 // docID resolves a query's document alias. An unknown alias yields the empty
-// string, which store.Search treats as unscoped — the cross-doc queries rely
+// string, which pgstore.Search treats as unscoped — the cross-doc queries rely
 // on that and carry an alias no document declares.
 func (f file) docID(alias string) string { return f.Documents[alias].DocID }
 
@@ -73,13 +74,13 @@ func (f file) label(docID string) string {
 
 // matches applies the expectation semantics the query set declared for the
 // document the query targets.
-func (f file) matches(q query, r store.SearchResult) bool {
+func (f file) matches(q query, r pgstore.SearchResult) bool {
 	if q.Expect == nil {
 		return false
 	}
 	want := *q.Expect
 	if f.Documents[q.Doc].Match == matchSection {
-		return store.SectionCovers(want, r.Section)
+		return pgstore.SectionCovers(want, r.Section)
 	}
 	return strings.Contains(strings.ToLower(r.HeadingPath), strings.ToLower(want))
 }
@@ -123,7 +124,8 @@ func (f file) aliases() []string {
 }
 
 func main() {
-	dbPath := flag.String("db", "var/docsearch.db", "index to evaluate")
+	dsn := flag.String("dsn", "", "Postgres DSN of the database to evaluate")
+	user := flag.String("user", owner.Builtin, "whose library to evaluate")
 	qPath := flag.String("queries", "tests/retrieval/queries.json", "committed query set")
 	dump := flag.String("dump-candidates", "", "write top-N BM25 candidates as JSON here")
 	dumpN := flag.Int("dump-n", 50, "candidates per query when dumping")
@@ -137,7 +139,7 @@ func main() {
 	// Runs against any index without an authored query set, so it is resolved
 	// before the committed one is read.
 	if *selfLabel {
-		st, err := store.Open(*dbPath)
+		st, err := pgstore.Open(*dsn, *user)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -164,7 +166,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", *qPath, err)
 		os.Exit(1)
 	}
-	st, err := store.Open(*dbPath)
+	st, err := pgstore.Open(*dsn, *user)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -178,7 +180,7 @@ func main() {
 		top3   bool
 		top8   bool
 		top20  bool
-		hits   []store.SearchResult
+		hits   []pgstore.SearchResult
 		hitPos int
 	}
 	var results []outcome
@@ -196,7 +198,7 @@ func main() {
 			// not to assert a correct answer.
 			continue
 		}
-		res, err := st.Search(ctx, store.SearchParams{
+		res, err := st.Search(ctx, pgstore.SearchParams{
 			Query: q.Query, DocID: f.docID(q.Doc), K: poolDepth,
 		})
 		if err != nil {
@@ -350,7 +352,7 @@ func main() {
 		}
 		var chapter string
 		for _, e := range outline {
-			if store.SectionCovers(*o.q.Expect, e.Section) || e.Section == *o.q.Expect {
+			if pgstore.SectionCovers(*o.q.Expect, e.Section) || e.Section == *o.q.Expect {
 				chapter = e.Heading
 				break
 			}
@@ -360,7 +362,7 @@ func main() {
 				o.q.ID, *o.q.Expect)
 			continue
 		}
-		scoped, err := st.Search(ctx, store.SearchParams{
+		scoped, err := st.Search(ctx, pgstore.SearchParams{
 			Query: o.q.Query, DocID: f.docID(o.q.Doc), SectionFilter: chapter, K: 8,
 		})
 		if err != nil {
@@ -416,78 +418,100 @@ func main() {
 // spec flags: IDF is computed over the whole table, so a term that is rare
 // globally but common inside a small document can lift that document's chunks
 // above better answers in a large one.
-func crossDoc(ctx context.Context, st *store.Store, f file, queries []string) {
+func crossDoc(ctx context.Context, st *pgstore.Store, f file, queries []string) {
 	fmt.Println("\n========================================================================")
 	fmt.Println("CROSS-DOCUMENT IDF EFFECT")
 	fmt.Println("========================================================================")
 
-	// The effect this exposes needs documents of unequal size, so report the
-	// actual split rather than asserting one: a corpus of evenly sized
-	// documents will show little here, and that is a fact about the corpus
-	// worth seeing rather than a broken measurement.
 	sizes, total := chunkCounts(ctx, st)
-	var sizeParts []string
+	reportSizes(f, sizes)
+	smallest := smallestDocument(f, sizes)
+
+	for _, q := range queries {
+		fmt.Printf("\n--- %q ---\n", q)
+		unscoped, err := st.Search(ctx, pgstore.SearchParams{Query: q, K: 6})
+		if err != nil {
+			fmt.Println("  error:", err)
+			continue
+		}
+		counts := reportUnscoped(f, unscoped)
+		if smallest != "" && len(unscoped) > 0 && total > 0 {
+			reportShare(f, smallest, counts[smallest], len(unscoped), sizes[smallest], total)
+		}
+		reportScoped(ctx, st, f, q)
+	}
+}
+
+// reportSizes states the corpus split rather than asserting one.
+//
+// The effect this section exposes needs documents of unequal size, so a
+// corpus of evenly sized documents will show little, and that is a fact
+// about the corpus worth seeing rather than a broken measurement.
+func reportSizes(f file, sizes map[string]int) {
+	var parts []string
 	for _, a := range f.aliases() {
 		id := f.Documents[a].DocID
-		sizeParts = append(sizeParts, fmt.Sprintf("%s %d chunks", f.label(id), sizes[id]))
+		parts = append(parts, fmt.Sprintf("%s %d chunks", f.label(id), sizes[id]))
 	}
-	if len(sizeParts) > 0 {
-		fmt.Printf("Corpus sizes: %s.\n", strings.Join(sizeParts, ", "))
+	if len(parts) > 0 {
+		fmt.Printf("Corpus sizes: %s.\n", strings.Join(parts, ", "))
 	}
+}
 
-	// The smallest declared document is where an inflated IDF advantage is
-	// most visible, because a term that is globally rare can be locally common
-	// in it.
-	var smallest string
+// smallestDocument is where an inflated IDF advantage shows most, because a
+// term that is globally rare can be locally common in a small document.
+func smallestDocument(f file, sizes map[string]int) string {
+	smallest := ""
 	for _, a := range f.aliases() {
 		id := f.Documents[a].DocID
 		if smallest == "" || sizes[id] < sizes[smallest] {
 			smallest = id
 		}
 	}
+	return smallest
+}
 
-	for _, q := range queries {
-		fmt.Printf("\n--- %q ---\n", q)
-		unscoped, err := st.Search(ctx, store.SearchParams{Query: q, K: 6})
-		if err != nil {
-			fmt.Println("  error:", err)
+// reportUnscoped prints the unscoped ranking and counts it by document.
+func reportUnscoped(f file, results []pgstore.SearchResult) map[string]int {
+	counts := map[string]int{}
+	fmt.Println("  UNSCOPED:")
+	for _, r := range results {
+		counts[r.DocID]++
+		fmt.Printf("    %d. rel=%.2f [%-9s] %s\n", r.Rank, r.Relevance,
+			f.label(r.DocID), truncate(r.HeadingPath, 62))
+	}
+	return counts
+}
+
+// reportShare compares the slots one document took against the share of the
+// index it is, which is the whole point of the section.
+func reportShare(f file, docID string, held, slots, chunks, total int) {
+	fmt.Printf(
+		"  -> %s holds %d/%d unscoped slots (%.0f%%) while being %.0f%% of the index\n",
+		f.label(docID), held, slots,
+		100*float64(held)/float64(slots),
+		100*float64(chunks)/float64(total),
+	)
+}
+
+// reportScoped prints each document's own best answer, which is what the
+// merge has to beat.
+func reportScoped(ctx context.Context, st *pgstore.Store, f file, query string) {
+	for _, a := range f.aliases() {
+		d := f.Documents[a].DocID
+		scoped, err := st.Search(ctx, pgstore.SearchParams{Query: query, DocID: d, K: 2})
+		if err != nil || len(scoped) == 0 {
 			continue
 		}
-		counts := map[string]int{}
-		fmt.Println("  UNSCOPED:")
-		for _, r := range unscoped {
-			counts[r.DocID]++
-			fmt.Printf("    %d. rel=%.2f [%-9s] %s\n", r.Rank, r.Relevance,
-				f.label(r.DocID), truncate(r.HeadingPath, 62))
-		}
-		if smallest != "" && len(unscoped) > 0 && total > 0 {
-			small := counts[smallest]
-			fmt.Printf(
-				"  -> %s holds %d/%d unscoped slots (%.0f%%) while being %.0f%% of the index\n",
-				f.label(smallest),
-				small,
-				len(unscoped),
-				100*float64(small)/float64(len(unscoped)),
-				100*float64(sizes[smallest])/float64(total),
-			)
-		}
-
-		for _, a := range f.aliases() {
-			d := f.Documents[a].DocID
-			scoped, err := st.Search(ctx, store.SearchParams{Query: q, DocID: d, K: 2})
-			if err != nil || len(scoped) == 0 {
-				continue
-			}
-			fmt.Printf("  SCOPED %-9s top: rel=%.2f %s\n", f.label(d), scoped[0].Relevance,
-				truncate(scoped[0].HeadingPath, 60))
-		}
+		fmt.Printf("  SCOPED %-9s top: rel=%.2f %s\n", f.label(d), scoped[0].Relevance,
+			truncate(scoped[0].HeadingPath, 60))
 	}
 }
 
 // chunkCounts reads each ready document's chunk count from the index, so the
 // reported corpus split describes the database being evaluated rather than
 // figures pasted in from an earlier run.
-func chunkCounts(ctx context.Context, st *store.Store) (map[string]int, int) {
+func chunkCounts(ctx context.Context, st *pgstore.Store) (map[string]int, int) {
 	sizes := map[string]int{}
 	total := 0
 	docs, err := st.ListDocuments(ctx)
@@ -524,31 +548,20 @@ type dumpEntry struct {
 	Candidates []candidate `json:"candidates"`
 }
 
-func dumpCandidates(ctx context.Context, st *store.Store, f file,
+func dumpCandidates(ctx context.Context, st *pgstore.Store, f file,
 	path string, n int) {
 	var out []dumpEntry
 	for _, q := range f.Queries {
 		if q.Category == "cross-doc" {
 			continue
 		}
-		res, err := st.Search(ctx, store.SearchParams{
+		res, err := st.Search(ctx, pgstore.SearchParams{
 			Query: q.Query, DocID: f.docID(q.Doc), K: n,
 		})
 		if err != nil {
 			continue
 		}
-		e := dumpEntry{ID: q.ID, Query: q.Query, Doc: q.Doc, Expect: q.Expect,
-			Category: q.Category, BM25Hit: -1}
-		for i, r := range res {
-			if f.matches(q, r) && e.BM25Hit < 0 {
-				e.BM25Hit = i + 1
-			}
-			e.Candidates = append(e.Candidates, candidate{
-				ChunkID: r.ChunkID, Section: r.Section, HeadingPath: r.HeadingPath,
-				Kind: r.Kind, ImageCount: r.ImageCount, Relevance: r.Relevance, Text: r.Text,
-			})
-		}
-		out = append(out, e)
+		out = append(out, entryFor(f, q, res))
 	}
 	b, err := json.MarshalIndent(out, "", " ")
 	if err != nil {
@@ -560,6 +573,23 @@ func dumpCandidates(ctx context.Context, st *store.Store, f file,
 		os.Exit(1)
 	}
 	fmt.Printf("wrote %d queries, up to %d candidates each, to %s\n", len(out), n, path)
+}
+
+// entryFor records one query's candidates and where its expected answer
+// landed, or -1 where nothing in the pool matched.
+func entryFor(f file, q query, results []pgstore.SearchResult) dumpEntry {
+	e := dumpEntry{ID: q.ID, Query: q.Query, Doc: q.Doc, Expect: q.Expect,
+		Category: q.Category, BM25Hit: -1}
+	for i, r := range results {
+		if f.matches(q, r) && e.BM25Hit < 0 {
+			e.BM25Hit = i + 1
+		}
+		e.Candidates = append(e.Candidates, candidate{
+			ChunkID: r.ChunkID, Section: r.Section, HeadingPath: r.HeadingPath,
+			Kind: r.Kind, ImageCount: r.ImageCount, Relevance: r.Relevance, Text: r.Text,
+		})
+	}
+	return e
 }
 
 var evalWordRe = regexp.MustCompile(`[\p{L}\p{N}_]+`)
@@ -587,7 +617,7 @@ func wordsOf(q string) []string {
 // most query terms, and reports that overlap. It looks the target up directly
 // rather than through search, so it answers "is the answer findable in
 // principle" independently of how the ranker behaved.
-func bestTargetOverlap(ctx context.Context, st *store.Store, f file, q query,
+func bestTargetOverlap(ctx context.Context, st *pgstore.Store, f file, q query,
 	terms []string) (string, int, int) {
 	chunks, err := st.ChunksMatchingExpectation(ctx, f.docID(q.Doc),
 		derefOr(q.Expect, ""), f.Documents[q.Doc].Match == matchSection)
@@ -596,18 +626,23 @@ func bestTargetOverlap(ctx context.Context, st *store.Store, f file, q query,
 	}
 	bestPath, bestOverlap := chunks[0].HeadingPath, -1
 	for _, c := range chunks {
-		body := strings.ToLower(c.HeadingPath + " " + c.Text)
-		n := 0
-		for _, t := range terms {
-			if strings.Contains(body, t) {
-				n++
-			}
-		}
-		if n > bestOverlap {
+		if n := overlap(c.HeadingPath+" "+c.Text, terms); n > bestOverlap {
 			bestOverlap, bestPath = n, c.HeadingPath
 		}
 	}
 	return bestPath, bestOverlap, len(terms)
+}
+
+// overlap counts how many of a query's terms appear in a chunk.
+func overlap(text string, terms []string) int {
+	body := strings.ToLower(text)
+	found := 0
+	for _, t := range terms {
+		if strings.Contains(body, t) {
+			found++
+		}
+	}
+	return found
 }
 
 func derefOr(s *string, alt string) string {

@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -16,6 +15,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/bamsammich/docsearch/internal/site/fetch"
+	"github.com/bamsammich/docsearch/internal/site/fetch/fetchtest"
 	"github.com/bamsammich/docsearch/internal/urlguard"
 )
 
@@ -100,13 +100,10 @@ func (s *FetchSuite) fetcher(opts fetch.Options) *fetch.Fetcher {
 	return fetcherOn(s.cache(), opts)
 }
 
-// cache opens a cache file the case keeps a handle on, so it can plant a
-// stored copy or read one back.
-func (s *FetchSuite) cache() *fetch.SQLiteCache {
-	cache, err := fetch.OpenSQLiteCache(s.T().Context(), filepath.Join(s.T().TempDir(), "cache.db"))
-	s.Require().NoError(err)
-	s.T().Cleanup(func() { s.Require().NoError(cache.Close()) })
-	return cache
+// cache is one the case keeps a handle on, so it can plant a stored copy or
+// read one back.
+func (*FetchSuite) cache() *fetchtest.Memory {
+	return fetchtest.New()
 }
 
 // fetcherOn builds a fetcher over a cache the case already holds.
@@ -378,4 +375,15 @@ func (s *FetchSuite) TestARedirectedRobotsFileDoesNotStopTheCrawl() {
 		s.T().Context(), s.server.URL+"/page.html", true)
 	s.Require().NoError(err)
 	s.Equal(http.StatusOK, got.Status)
+}
+
+// A cancelled fetch says it was cancelled. Reading the cancellation as an
+// unreachable host would answer with a complete disallow, so an operator who
+// stopped an ingest would be told robots.txt refused them.
+func (s *FetchSuite) TestACancelledFetchReportsTheCancellation() {
+	ctx, cancel := context.WithCancel(s.T().Context())
+	cancel()
+
+	_, err := s.fetcher(fetch.Options{}).Fetch(ctx, s.server.URL+"/page.html", true)
+	s.Require().ErrorIs(err, context.Canceled)
 }

@@ -6,8 +6,10 @@ built-in `ts_rank` · Host: Apple Silicon, arm64
 Method: copy the live FTS5 index (20 documents, 2,096 chunks) into Postgres
 under a user ID, then run the committed labelled query set and the self-label
 probe through each engine with one scoring harness. The FTS5 baseline goes
-through `store.Search` itself. Code in `spike/postgres/`;
-`spike/postgres/run.sh` reproduces every figure here in about ten minutes.
+through the store's own search path rather than a reimplementation of it.
+The harness compared SQLite against Postgres side by side, so it stopped
+building when step 4g removed the SQLite half, and was deleted there. Read
+it at 53a40c4 if a figure needs checking.
 
 ## Verdict: Postgres can replace FTS5, using pg_textsearch
 

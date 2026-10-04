@@ -9,8 +9,8 @@ import (
 
 	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/pgsession"
+	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
 	"github.com/bamsammich/docsearch/internal/service/document"
-	"github.com/bamsammich/docsearch/internal/store/pgdbgen"
 )
 
 // ErrNotFound reports a document the index does not hold.

@@ -35,7 +35,7 @@ func (s *MigrationSuite) SetupTest() {
 // upTo applies the migrations through one version, for a case that needs the
 // shape a later migration changes.
 func (s *MigrationSuite) upTo(version int) {
-	provider, err := schema.ProviderFor(schema.Postgres, s.db)
+	provider, err := schema.Provider(s.db)
 	s.Require().NoError(err)
 	_, err = provider.UpTo(s.T().Context(), int64(version))
 	s.Require().NoError(err)
@@ -43,7 +43,7 @@ func (s *MigrationSuite) upTo(version int) {
 
 // down rolls the most recent migration back.
 func (s *MigrationSuite) down() {
-	provider, err := schema.ProviderFor(schema.Postgres, s.db)
+	provider, err := schema.Provider(s.db)
 	s.Require().NoError(err)
 	_, err = provider.Down(s.T().Context())
 	s.Require().NoError(err)

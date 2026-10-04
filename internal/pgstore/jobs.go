@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/bamsammich/docsearch/internal/pgsession"
-	"github.com/bamsammich/docsearch/internal/store/pgdbgen"
+	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
 )
 
 // Job is one row of the ingest queue as reported by ingest_status.

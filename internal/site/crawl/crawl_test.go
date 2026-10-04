@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/bamsammich/docsearch/internal/site/crawl"
 	"github.com/bamsammich/docsearch/internal/site/fetch"
+	"github.com/bamsammich/docsearch/internal/site/fetch/fetchtest"
 	"github.com/bamsammich/docsearch/internal/urlguard"
 )
 
@@ -90,10 +90,8 @@ func (s *CrawlSuite) page(path, title string, links ...string) {
 
 // crawler returns a crawler over a fetcher with its own cache, and the
 // server's URL for the seed.
-func (s *CrawlSuite) fetcher() *fetch.Fetcher {
-	cache, err := fetch.OpenSQLiteCache(s.T().Context(), filepath.Join(s.T().TempDir(), "cache.db"))
-	s.Require().NoError(err)
-	s.T().Cleanup(func() { s.Require().NoError(cache.Close()) })
+func (*CrawlSuite) fetcher() *fetch.Fetcher {
+	cache := fetchtest.New()
 	return fetch.New(cache, fetch.Options{
 		Guard:        allowLoopback,
 		IgnoreRobots: false,
@@ -254,9 +252,7 @@ func (s *CrawlSuite) TestASitemapSuppressesLinkFollowing() {
 func (s *CrawlSuite) TestASecondCrawlCanRunEntirelyFromTheCache() {
 	s.page("/docs/", "Guide", "/docs/one")
 	s.page("/docs/one", "One")
-	cache, err := fetch.OpenSQLiteCache(s.T().Context(), filepath.Join(s.T().TempDir(), "cache.db"))
-	s.Require().NoError(err)
-	defer func() { s.Require().NoError(cache.Close()) }()
+	cache := fetchtest.New()
 	f := fetch.New(cache, fetch.Options{Guard: allowLoopback, Interval: time.Millisecond})
 
 	first, err := crawl.Crawl(

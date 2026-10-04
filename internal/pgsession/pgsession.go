@@ -23,7 +23,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/bamsammich/docsearch/internal/store/pgdbgen"
+	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
 )
 
 // Run opens a transaction scoped to userID and runs work in it.

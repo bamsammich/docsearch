@@ -1,5 +1,12 @@
 # Build artifacts
 /bin/
+# `go build ./cmd/x` writes the binary into the working directory rather than
+# into /bin, and a Go binary carries the absolute paths it was built from.
+/docsearch
+/docsearch-server
+/docsearch-worker
+/docsearch-eval
+/schema-snapshot
 *.exe
 
 # Compiled Python left over from the pipeline retired in 7h. Nothing here
