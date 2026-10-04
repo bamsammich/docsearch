@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/bamsammich/docsearch/internal/pgsession"
-	"github.com/bamsammich/docsearch/internal/store/pgdbgen"
+	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
 )
 
 // SectionCovers reports whether ref covers section: the in-memory half of a

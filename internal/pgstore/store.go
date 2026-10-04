@@ -19,8 +19,8 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // the driver the server and worker use
 
 	"github.com/bamsammich/docsearch/internal/pgsession"
+	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
 	"github.com/bamsammich/docsearch/internal/schema"
-	"github.com/bamsammich/docsearch/internal/store/pgdbgen"
 )
 
 // ErrNotFound is returned when a requested document or job does not exist.
@@ -119,7 +119,7 @@ func (s *Store) Ready(ctx context.Context) error {
 	// migration cannot disagree about what a complete schema is. Neither
 	// table it reads carries a policy, which is why this needs no user: the
 	// probe answers before anyone has signed in.
-	for _, name := range schema.RequiredTables(schema.Postgres) {
+	for _, name := range schema.RequiredTables() {
 		var found string
 		err := s.db.QueryRowContext(ctx,
 			`SELECT table_name FROM information_schema.tables

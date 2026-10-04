@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/site"
 	"github.com/bamsammich/docsearch/internal/site/crawl"
 	"github.com/bamsammich/docsearch/internal/site/fetch"
+	"github.com/bamsammich/docsearch/internal/site/fetch/fetchtest"
 	"github.com/bamsammich/docsearch/internal/urlguard"
 )
 
@@ -79,9 +79,7 @@ func sidebar() string {
 
 // crawl walks the served fixture.
 func (s *SiteSuite) crawl() *crawl.Result {
-	cache, err := fetch.OpenSQLiteCache(s.T().Context(), filepath.Join(s.T().TempDir(), "cache.db"))
-	s.Require().NoError(err)
-	s.T().Cleanup(func() { s.Require().NoError(cache.Close()) })
+	cache := fetchtest.New()
 	f := fetch.New(cache, fetch.Options{Guard: allowLoopback, Interval: time.Millisecond})
 
 	result, err := crawl.Crawl(

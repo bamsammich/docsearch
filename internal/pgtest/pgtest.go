@@ -20,10 +20,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // the driver the server and worker use
 	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/exec"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -55,6 +57,9 @@ const (
 
 // DB is one database, and the two ways into it.
 type DB struct {
+	// container is kept so a caller can run a tool the image carries, which
+	// is how the schema snapshot reaches pg_dump.
+	container testcontainers.Container
 	// Owner is connected as the role that owns the schema.
 	Owner *sql.DB
 	// App is connected as the role a request uses.
@@ -138,6 +143,7 @@ func start(t TestingT, withExtension bool) *DB {
 		withExtension)
 
 	db := &DB{OwnerDSN: dsn(OwnerRole, database), AppDSN: dsn(AppRole, database)}
+	db.container = container
 	db.Owner = open(t, db.OwnerDSN)
 	db.App = open(t, db.AppDSN)
 	return db
@@ -255,4 +261,26 @@ func quote(s string) string {
 		out += string(r)
 	}
 	return out + "'"
+}
+
+// Run executes a command inside the container and returns what it printed.
+//
+// For the tools the image carries and docsearch does not reimplement, pg_dump
+// above all: the schema snapshot is Postgres describing its own shape, which
+// is worth more than a renderer of our own reading the catalog.
+func (db *DB) Run(ctx context.Context, command ...string) (string, error) {
+	// Multiplexed, or Docker's stream framing arrives interleaved with the
+	// output as binary headers.
+	code, output, err := db.container.Exec(ctx, command, exec.Multiplexed())
+	if err != nil {
+		return "", fmt.Errorf("run %s: %w", command[0], err)
+	}
+	printed, err := io.ReadAll(output)
+	if err != nil {
+		return "", fmt.Errorf("read what %s printed: %w", command[0], err)
+	}
+	if code != 0 {
+		return "", fmt.Errorf("%s exited %d: %s", command[0], code, printed)
+	}
+	return string(printed), nil
 }

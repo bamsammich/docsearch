@@ -28,6 +28,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/site"
 	"github.com/bamsammich/docsearch/internal/site/crawl"
 	"github.com/bamsammich/docsearch/internal/site/fetch"
+	"github.com/bamsammich/docsearch/internal/site/fetch/fetchtest"
 	"github.com/bamsammich/docsearch/internal/urlguard"
 )
 
@@ -99,16 +100,10 @@ var _ = Describe("Site parity with the Python pipeline", func() {
 
 // crawlFixture crawls a served fixture and builds its extraction.
 func crawlFixture(seed string) (*domain.Extraction, error) {
-	cache, err := fetch.OpenSQLiteCache(
-		context.Background(),
-		filepath.Join(GinkgoT().TempDir(), "cache.db"),
+	fetcher := fetch.New(
+		fetchtest.New(),
+		fetch.Options{Guard: loopbackGuard, Interval: time.Millisecond},
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { Expect(cache.Close()).To(Succeed()) }()
-
-	fetcher := fetch.New(cache, fetch.Options{Guard: loopbackGuard, Interval: time.Millisecond})
 	result, err := crawl.Crawl(context.Background(), fetcher, seed, crawl.Options{Revalidate: true})
 	if err != nil {
 		return nil, err

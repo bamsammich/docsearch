@@ -563,8 +563,8 @@ only irreplaceable data. `docsearch-data` can be treated as a cache.
 
 ```bash
 go test ./...                                    # every package, and the integration suites
-go run ./cmd/docsearch-eval --db var/docsearch.db  # retrieval evaluation
-go run ./cmd/docsearch-eval --db PATH --self-label # measure any corpus, no query set
+go run ./cmd/docsearch-eval --dsn "$DOCSEARCH_DSN"             # retrieval evaluation
+go run ./cmd/docsearch-eval --dsn DSN --self-label             # measure any corpus, no query set
 ```
 
 `--self-label` builds each query from a chunk's own heading and body and asks

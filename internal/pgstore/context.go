@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/bamsammich/docsearch/internal/pgsession"
-	"github.com/bamsammich/docsearch/internal/store/pgdbgen"
+	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
 )
 
 // ContextChunk is a neighbouring chunk returned by get_context.

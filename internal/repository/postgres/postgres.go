@@ -18,12 +18,10 @@ import (
 	"slices"
 	"strings"
 
-	_ "modernc.org/sqlite" // pure-Go driver; the server opens the same file
-
 	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/pgsession"
+	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
-	"github.com/bamsammich/docsearch/internal/store/pgdbgen"
 )
 
 // timeFormat is how the Python pipeline writes a timestamp, and what every

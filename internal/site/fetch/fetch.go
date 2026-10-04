@@ -383,15 +383,18 @@ func (f *Fetcher) readRobots(
 ) (string, error) {
 	// Not routed through Fetch: asking robots.txt whether robots.txt may be
 	// fetched does not terminate.
-	body, reachable := f.fetchRobots(ctx, u.Scheme+"://"+u.Host+"/robots.txt")
+	body, reachable, err := f.fetchRobots(ctx, u.Scheme+"://"+u.Host+"/robots.txt")
+	if err != nil {
+		return "", err
+	}
 	if !reachable {
 		if hit {
 			return stored.Body, nil
 		}
 		return disallowAll, nil
 	}
-	err := f.cache.PutRobots(ctx, u.Hostname(), &RobotsFile{Body: body, FetchedAt: now()})
-	if err != nil {
+	if err := f.cache.PutRobots(ctx,
+		u.Hostname(), &RobotsFile{Body: body, FetchedAt: now()}); err != nil {
 		return "", err
 	}
 	return body, nil
@@ -408,18 +411,25 @@ func (f *Fetcher) readRobots(
 //
 // reachable is false only for a server or network error, section 2.3.1.4,
 // where the file is undefined rather than absent.
-func (f *Fetcher) fetchRobots(ctx context.Context, raw string) (string, bool) {
+//
+// A cancelled context is neither, so it comes back as an error. Reading it as
+// an unreachable host would answer a cancelled crawl with a complete disallow
+// and tell the operator robots.txt refused them.
+func (f *Fetcher) fetchRobots(ctx context.Context, raw string) (string, bool, error) {
 	res, err := f.request(ctx, raw, nil)
 	if err != nil {
-		return "", false
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", false, ctxErr
+		}
+		return "", false, nil
 	}
 	if res.Status >= http.StatusInternalServerError {
-		return "", false
+		return "", false, nil
 	}
 	if res.Status != http.StatusOK {
-		return "", true
+		return "", true, nil
 	}
-	return string(res.Body), true
+	return string(res.Body), true, nil
 }
 
 // conditional asks the server for the body only if it changed, which is

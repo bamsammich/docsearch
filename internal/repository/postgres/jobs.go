@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/bamsammich/docsearch/internal/pgsession"
+	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
 	"github.com/bamsammich/docsearch/internal/service/job"
 	"github.com/bamsammich/docsearch/internal/service/worker"
-	"github.com/bamsammich/docsearch/internal/store/pgdbgen"
 )
 
 // Jobs is the ingest queue, in the same database the documents are in.

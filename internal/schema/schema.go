@@ -1,17 +1,12 @@
 // Package schema creates a docsearch index and brings an existing one up to
 // date.
 //
-// Migrations run through goose, which numbers and orders them, records what
-// it applied, and does the same on both engines. Version 5 is the floor: the
-// baseline is the schema docsearch started from, written once per dialect
-// under migrations/, and every later change is its own numbered file.
+// Migrations run through goose, which numbers and orders them and records
+// what it applied. Version 5 is the floor: the baseline is the schema
+// docsearch started from, and every later change is its own numbered file.
 // Versions 1 to 4 are history rather than migrations, since the DDL that
-// produced them was never kept.
-//
-// Two dialects, for the length of phase 04 only. Postgres is where a
-// deployment is going, and the packages that read and write an index move
-// there one step at a time; a step that left them without a way to build a
-// database would not ship. The SQLite half goes with the last of them.
+// produced them was never kept, and the first four happened on SQLite, which
+// phase 04 replaced.
 //
 // Nothing here creates a database, its roles or pg_textsearch. A migration
 // runs as a role that owns the schema and nothing more, which is what
@@ -41,7 +36,7 @@ import (
 // migrations are the numbered migrations, carried inside the binary so a
 // deployment is one file.
 //
-//go:embed migrations/sqlite/*.sql migrations/postgres/*.sql
+//go:embed migrations/postgres/*.sql
 var migrations embed.FS
 
 // Version is bumped whenever the schema changes in a way a reader must know
@@ -53,20 +48,6 @@ var migrations embed.FS
 // numbers, is invisible to any structural check while silently changing what
 // queries return.
 const Version = 9
-
-// SQLiteVersion is frozen. The SQLite half of this package exists to keep
-// the packages phase 04 has yet to move buildable, and takes no further
-// migrations: a schema change goes to Postgres, which is where a deployment
-// is. Step 4g deletes the SQLite half entirely.
-const SQLiteVersion = 5
-
-// VersionFor is the version a database of one dialect must be at.
-func VersionFor(dialect Dialect) int {
-	if dialect == SQLite {
-		return SQLiteVersion
-	}
-	return Version
-}
 
 // History is readable, so a version mismatch can be diagnosed without
 // reading the git log.
@@ -87,16 +68,6 @@ var History = map[int]string{
 		"per user like every other tenant table",
 }
 
-// Dialect is the SQL a database speaks, and which migrations apply to it.
-type Dialect string
-
-const (
-	// SQLite is a v1 index, and every package phase 04 has yet to move.
-	SQLite Dialect = "sqlite"
-	// Postgres is where a deployment is going.
-	Postgres Dialect = "postgres"
-)
-
 // The tables this package names. Written once, so a typo cannot reach a
 // PRAGMA that would then report a column missing from a table that does not
 // exist.
@@ -105,7 +76,6 @@ const (
 	tableDocuments  = "documents"
 	tableJobs       = "ingest_jobs"
 	tableChunks     = "chunks"
-	tableChunksFTS  = "chunks_fts"
 	tablePages      = "pages"
 	tableIndexTerms = "index_terms"
 	tableResponses  = "responses"
@@ -115,25 +85,22 @@ const (
 // RequiredTables are what the readiness gate and the CLI check for to decide
 // the schema is present.
 //
-// chunks_fts is one of them on SQLite only: the full-text index is a virtual
-// table there, and on Postgres step 4d makes it an index on chunks, which is
-// not a table any check can look for.
-//
-// The Postgres list also covers the crawl cache, which is worker-only and
-// holds nothing a search reads. A database missing it is still a database a
-// migration left half applied, and the probe exists to say so.
-func RequiredTables(dialect Dialect) []string {
-	required := []string{
+// Searching needs no table of its own: the BM25 index version 7 declares is
+// an index on chunks, which is not something a check can look for. The crawl
+// cache is here although it is worker-only and holds nothing a search reads,
+// because a database missing it is one a migration left half applied, and
+// the probe exists to say so.
+func RequiredTables() []string {
+	return []string{
+		tableUsers,
 		tableDocuments,
 		tableJobs,
 		tableChunks,
 		tablePages,
 		tableIndexTerms,
+		tableResponses,
+		tableRobots,
 	}
-	if dialect == SQLite {
-		return append(required, tableChunksFTS)
-	}
-	return append(required, tableUsers, tableResponses, tableRobots)
 }
 
 // ErrTooNew reports an index written by a newer build. Nothing here can know
@@ -186,31 +153,26 @@ func Create(ctx context.Context, db *sql.DB) error {
 // Migrate brings a database up to Version. It is idempotent, and the only
 // thing in the system that writes the version.
 func Migrate(ctx context.Context, db *sql.DB) (*Result, error) {
-	dialect, err := DialectOf(ctx, db)
-	if err != nil {
-		return nil, err
-	}
-	if err := RequireExtensions(ctx, dialect, db); err != nil {
+	if err := RequireExtensions(ctx, db); err != nil {
 		return nil, err
 	}
 	before, recorded, err := Recorded(ctx, db)
 	if err != nil {
 		return nil, err
 	}
-	target := VersionFor(dialect)
-	if recorded && before > target {
-		return nil, &ErrTooNew{Found: before, Supported: target}
+	if recorded && before > Version {
+		return nil, &ErrTooNew{Found: before, Supported: Version}
 	}
 	if err := up(ctx, db); err != nil {
 		return nil, err
 	}
-	if err := verify(ctx, db, target); err != nil {
+	if err := verify(ctx, db, Version); err != nil {
 		return nil, err
 	}
-	if err := stamp(ctx, dialect, db, target); err != nil {
+	if err := stamp(ctx, db, Version); err != nil {
 		return nil, err
 	}
-	return &Result{From: before, To: target, FromRecorded: recorded}, nil
+	return &Result{From: before, To: Version, FromRecorded: recorded}, nil
 }
 
 // verify refuses to let a stamp claim what the schema does not hold.
@@ -229,7 +191,7 @@ func verify(ctx context.Context, db *sql.DB, target int) error {
 
 // up applies every migration the database has yet to see.
 func up(ctx context.Context, db *sql.DB) error {
-	provider, err := Provider(ctx, db)
+	provider, err := Provider(db)
 	if err != nil {
 		return err
 	}
@@ -245,48 +207,18 @@ func up(ctx context.Context, db *sql.DB) error {
 // it again against a real database. Nothing in the running system rolls a
 // migration back: an index is regenerable, so a bad migration is answered by
 // rebuilding rather than by undoing.
-func Provider(ctx context.Context, db *sql.DB) (*goose.Provider, error) {
-	dialect, err := DialectOf(ctx, db)
+func Provider(db *sql.DB) (*goose.Provider, error) {
+	// goose reads from the root of the filesystem it is given, and the
+	// migrations are embedded under a directory of their own.
+	rooted, err := fs.Sub(migrations, "migrations/postgres")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read the migrations: %w", err)
 	}
-	return ProviderFor(dialect, db)
-}
-
-// ProviderFor is goose over one dialect's migrations.
-func ProviderFor(dialect Dialect, db *sql.DB) (*goose.Provider, error) {
-	// goose reads from the root of the filesystem it is given, and each
-	// dialect's migrations are embedded under a directory of their own.
-	rooted, err := fs.Sub(migrations, "migrations/"+string(dialect))
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, rooted)
 	if err != nil {
-		return nil, fmt.Errorf("read the %s migrations: %w", dialect, err)
-	}
-	engine := goose.DialectPostgres
-	if dialect == SQLite {
-		engine = goose.DialectSQLite3
-	}
-	provider, err := goose.NewProvider(engine, db, rooted)
-	if err != nil {
-		return nil, fmt.Errorf("read the %s migrations: %w", dialect, err)
+		return nil, fmt.Errorf("read the migrations: %w", err)
 	}
 	return provider, nil
-}
-
-// DialectOf asks a database which SQL it speaks.
-//
-// Asked rather than configured, so that every caller of Create and Migrate
-// keeps working while the packages that open a database move engine one step
-// at a time. Each probe is a function the other engine does not have.
-func DialectOf(ctx context.Context, db *sql.DB) (Dialect, error) {
-	var answer string
-	if err := db.QueryRowContext(ctx, `SELECT sqlite_version()`).Scan(&answer); err == nil {
-		return SQLite, nil
-	}
-	if err := db.QueryRowContext(ctx, `SELECT version()`).Scan(&answer); err == nil {
-		return Postgres, nil
-	}
-	return "", errors.New(
-		"cannot tell what this database is: it answers neither sqlite_version() nor version()")
 }
 
 // Extensions are what a cluster installs before docsearch connects.
@@ -308,11 +240,8 @@ func (e *ErrMissingExtension) Error() string {
 //
 // Checked before a migration rather than at the first query that needs one,
 // because a failure here names what to do and a failure there names an
-// operator that does not exist. SQLite has none to check.
-func RequireExtensions(ctx context.Context, dialect Dialect, db *sql.DB) error {
-	if dialect != Postgres {
-		return nil
-	}
+// operator that does not exist.
+func RequireExtensions(ctx context.Context, db *sql.DB) error {
 	for _, name := range Extensions {
 		var present bool
 		err := db.QueryRowContext(ctx,
@@ -330,20 +259,15 @@ func RequireExtensions(ctx context.Context, dialect Dialect, db *sql.DB) error {
 // Check reports whether a database is at the version this build requires,
 // without changing it.
 func Check(ctx context.Context, db *sql.DB) error {
-	dialect, err := DialectOf(ctx, db)
-	if err != nil {
-		return err
-	}
 	found, recorded, err := Recorded(ctx, db)
 	if err != nil {
 		return err
 	}
-	target := VersionFor(dialect)
 	switch {
-	case recorded && found > target:
-		return &ErrTooNew{Found: found, Supported: target}
-	case !recorded || found != target:
-		return &ErrOutdated{Found: found, Supported: target, Recorded: recorded}
+	case recorded && found > Version:
+		return &ErrTooNew{Found: found, Supported: Version}
+	case !recorded || found != Version:
+		return &ErrOutdated{Found: found, Supported: Version, Recorded: recorded}
 	}
 	return nil
 }
@@ -370,16 +294,12 @@ func Recorded(ctx context.Context, db *sql.DB) (int, bool, error) {
 // database that only says it migrated, and the failure surfaces later as a
 // query error rather than at the gate.
 func Problems(ctx context.Context, db *sql.DB) ([]string, error) {
-	dialect, err := DialectOf(ctx, db)
-	if err != nil {
-		return nil, err
-	}
-	present, err := tables(ctx, dialect, db)
+	present, err := tables(ctx, db)
 	if err != nil {
 		return nil, err
 	}
 	var problems []string
-	for _, table := range RequiredTables(dialect) {
+	for _, table := range RequiredTables() {
 		if !present[table] {
 			problems = append(problems, "table "+table+" is missing")
 		}
@@ -392,15 +312,12 @@ func Problems(ctx context.Context, db *sql.DB) ([]string, error) {
 // goose keeps its own record of which migrations ran. This one answers a
 // different question, which a reader asks before it trusts the shape: what
 // version does this database claim to be.
-func stamp(ctx context.Context, dialect Dialect, db *sql.DB, version int) error {
+func stamp(ctx context.Context, db *sql.DB, version int) error {
 	if _, err := db.ExecContext(ctx, `DELETE FROM schema_version`); err != nil {
 		return fmt.Errorf("clear the recorded version: %w", err)
 	}
-	insert := `INSERT INTO schema_version (version, applied_at) VALUES ($1, now())`
-	if dialect == SQLite {
-		insert = `INSERT INTO schema_version (version, applied_at) VALUES (?, datetime('now'))`
-	}
-	_, err := db.ExecContext(ctx, insert, version)
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO schema_version (version, applied_at) VALUES ($1, now())`, version)
 	if err != nil {
 		return fmt.Errorf("record version %d: %w", version, err)
 	}
@@ -408,13 +325,10 @@ func stamp(ctx context.Context, dialect Dialect, db *sql.DB, version int) error 
 }
 
 // tables is every table and view the database holds.
-func tables(ctx context.Context, dialect Dialect, db *sql.DB) (map[string]bool, error) {
-	listing := `SELECT table_name FROM information_schema.tables
-		  WHERE table_schema = current_schema()`
-	if dialect == SQLite {
-		listing = `SELECT name FROM sqlite_master WHERE type IN ('table','view')`
-	}
-	rows, err := db.QueryContext(ctx, listing)
+func tables(ctx context.Context, db *sql.DB) (map[string]bool, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT table_name FROM information_schema.tables
+		  WHERE table_schema = current_schema()`)
 	if err != nil {
 		return nil, fmt.Errorf("read the table list: %w", err)
 	}

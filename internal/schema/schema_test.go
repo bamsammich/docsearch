@@ -126,39 +126,20 @@ func (s *SchemaSuite) TestAMissingTableStopsTheStamp() {
 	s.Contains(problems, "table pages is missing")
 }
 
-// Each dialect's migrations must reach the version that dialect declares.
-// A migration added without the bump would leave a server serving a shape it
-// says it was not built for.
-//
-// The two numbers differ while phase 04 runs: Postgres advances, and SQLite
-// is frozen because the SQLite half exists only to keep the packages not yet
-// moved buildable. A new SQLite migration fails here, which is the intended
-// answer: a schema change goes to Postgres.
-func TestEveryDialectReachesItsVersion(t *testing.T) {
-	dialects, err := os.ReadDir("migrations")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(dialects) == 0 {
-		t.Fatal("no dialects under migrations/")
-	}
-	for _, entry := range dialects {
-		if !entry.IsDir() {
-			t.Fatalf("migrations/%s is not a dialect directory", entry.Name())
-		}
-		dialect := schema.Dialect(entry.Name())
-		want := schema.VersionFor(dialect)
-		if got := highestMigration(t, entry.Name()); got != want {
-			t.Errorf("the highest %s migration is %d but %s wants version %d",
-				dialect, got, dialect, want)
-		}
+// The migrations must reach the version the package declares. A migration
+// added without the bump would leave a server serving a shape it says it was
+// not built for.
+func TestTheMigrationsReachTheDeclaredVersion(t *testing.T) {
+	if got := highestMigration(t); got != schema.Version {
+		t.Errorf("the highest migration is %d but the package wants version %d",
+			got, schema.Version)
 	}
 }
 
-// highestMigration is the last version one dialect's migrations reach.
-func highestMigration(t *testing.T, dialect string) int {
+// highestMigration is the last version the migrations reach.
+func highestMigration(t *testing.T) int {
 	t.Helper()
-	entries, err := os.ReadDir(filepath.Join("migrations", dialect))
+	entries, err := os.ReadDir(filepath.Join("migrations", "postgres"))
 	if err != nil {
 		t.Fatal(err)
 	}
