@@ -52,7 +52,7 @@ var migrations embed.FS
 // section did when it began holding section numbers rather than page
 // numbers, is invisible to any structural check while silently changing what
 // queries return.
-const Version = 8
+const Version = 9
 
 // SQLiteVersion is frozen. The SQLite half of this package exists to keep
 // the packages phase 04 has yet to move buildable, and takes no further
@@ -83,6 +83,8 @@ var History = map[int]string{
 		"partitioned by owner, and row-level security on all five",
 	7: "chunks are searchable: one BM25 index over the heading twice then the body",
 	8: "the readiness probe may read schema_version, which version 6 left ungranted",
+	9: "the crawl's response cache moves into the database: responses and robots, " +
+		"per user like every other tenant table",
 }
 
 // Dialect is the SQL a database speaks, and which migrations apply to it.
@@ -106,6 +108,8 @@ const (
 	tableChunksFTS  = "chunks_fts"
 	tablePages      = "pages"
 	tableIndexTerms = "index_terms"
+	tableResponses  = "responses"
+	tableRobots     = "robots"
 )
 
 // RequiredTables are what the readiness gate and the CLI check for to decide
@@ -114,6 +118,10 @@ const (
 // chunks_fts is one of them on SQLite only: the full-text index is a virtual
 // table there, and on Postgres step 4d makes it an index on chunks, which is
 // not a table any check can look for.
+//
+// The Postgres list also covers the crawl cache, which is worker-only and
+// holds nothing a search reads. A database missing it is still a database a
+// migration left half applied, and the probe exists to say so.
 func RequiredTables(dialect Dialect) []string {
 	required := []string{
 		tableDocuments,
@@ -125,7 +133,7 @@ func RequiredTables(dialect Dialect) []string {
 	if dialect == SQLite {
 		return append(required, tableChunksFTS)
 	}
-	return append(required, tableUsers)
+	return append(required, tableUsers, tableResponses, tableRobots)
 }
 
 // ErrTooNew reports an index written by a newer build. Nothing here can know

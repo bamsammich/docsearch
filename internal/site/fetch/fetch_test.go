@@ -27,8 +27,12 @@ type FetchSuite struct {
 	// robotsBody is served at /robots.txt; "" answers 404.
 	robotsBody string
 	// etag is served with /page.html and revalidated against.
-	etag     string
-	requests atomic.Int64
+	etag string
+	// robotsStatus answers /robots.txt with that status instead of a body,
+	// for the cases about what each class of answer means. A 3xx carries a
+	// Location, so a redirect is a redirect rather than a bare status.
+	robotsStatus int
+	requests     atomic.Int64
 }
 
 func TestFetch(t *testing.T) { suite.Run(t, new(FetchSuite)) }
@@ -36,16 +40,10 @@ func TestFetch(t *testing.T) { suite.Run(t, new(FetchSuite)) }
 func (s *FetchSuite) SetupTest() {
 	s.requests.Store(0)
 	s.robotsBody = ""
+	s.robotsStatus = 0
 	s.etag = ""
 	mux := http.NewServeMux()
-	mux.HandleFunc("/robots.txt", func(w http.ResponseWriter, _ *http.Request) {
-		s.requests.Add(1)
-		if s.robotsBody == "" {
-			http.Error(w, "not found", http.StatusNotFound)
-			return
-		}
-		s.write(w, s.robotsBody)
-	})
+	mux.HandleFunc("/robots.txt", s.serveRobots)
 	mux.HandleFunc("/page.html", func(w http.ResponseWriter, r *http.Request) {
 		s.requests.Add(1)
 		if s.etag != "" {
@@ -73,6 +71,24 @@ func (s *FetchSuite) SetupTest() {
 	s.T().Cleanup(s.server.Close)
 }
 
+// serveRobots answers /robots.txt with whatever the case asked for: a chosen
+// status, a body, or the 404 that means the host serves none.
+func (s *FetchSuite) serveRobots(w http.ResponseWriter, _ *http.Request) {
+	s.requests.Add(1)
+	if s.robotsStatus != 0 {
+		if s.robotsStatus/100 == 3 {
+			w.Header().Set("Location", "/elsewhere/robots.txt")
+		}
+		w.WriteHeader(s.robotsStatus)
+		return
+	}
+	if s.robotsBody == "" {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	s.write(w, s.robotsBody)
+}
+
 func (s *FetchSuite) write(w http.ResponseWriter, body string) {
 	_, err := w.Write([]byte(body))
 	s.Require().NoError(err)
@@ -81,9 +97,20 @@ func (s *FetchSuite) write(w http.ResponseWriter, body string) {
 // fetcher returns a fetcher with its own cache, and a guard that approves
 // the test server's loopback address.
 func (s *FetchSuite) fetcher(opts fetch.Options) *fetch.Fetcher {
+	return fetcherOn(s.cache(), opts)
+}
+
+// cache opens a cache file the case keeps a handle on, so it can plant a
+// stored copy or read one back.
+func (s *FetchSuite) cache() *fetch.SQLiteCache {
 	cache, err := fetch.OpenSQLiteCache(s.T().Context(), filepath.Join(s.T().TempDir(), "cache.db"))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { s.Require().NoError(cache.Close()) })
+	return cache
+}
+
+// fetcherOn builds a fetcher over a cache the case already holds.
+func fetcherOn(cache fetch.Cache, opts fetch.Options) *fetch.Fetcher {
 	if opts.Guard == nil {
 		opts.Guard = allowLoopback
 	}
@@ -91,6 +118,22 @@ func (s *FetchSuite) fetcher(opts fetch.Options) *fetch.Fetcher {
 		opts.Interval = time.Millisecond
 	}
 	return fetch.New(cache, opts)
+}
+
+// host is the key a stored robots.txt sits under: the server's name without
+// its port.
+func (s *FetchSuite) host() string {
+	u, err := url.Parse(s.server.URL)
+	s.Require().NoError(err)
+	return u.Hostname()
+}
+
+// storedRobots plants a copy of a host's robots.txt read at a chosen time, so
+// a case can decide whether the crawler reads it again.
+func (s *FetchSuite) storedRobots(cache fetch.Cache, body string, age time.Duration) {
+	s.Require().NoError(cache.PutRobots(s.T().Context(), s.host(), &fetch.RobotsFile{
+		Body: body, FetchedAt: time.Now().UTC().Add(-age),
+	}))
 }
 
 // allowLoopback approves every URL, at the address it names.
@@ -267,4 +310,72 @@ func (s *FetchSuite) TestTheConnectionGoesToTheAddressTheGuardApproved() {
 	_, err := f.Fetch(s.T().Context(), s.server.URL+"/page.html", true)
 	s.Require().ErrorIs(err, fetch.ErrFetch)
 	s.Zero(s.requests.Load())
+}
+
+// RFC 9309 section 2.4: a cached robots.txt may decide what the crawler
+// fetches for 24 hours, so a host that tightens its rules is obeyed the next
+// day rather than never.
+func (s *FetchSuite) TestARobotsFileOlderThanADayIsReadAgain() {
+	cache := s.cache()
+	s.storedRobots(cache, "User-agent: *\n", 25*time.Hour)
+	s.robotsBody = "User-agent: *\nDisallow: /private/\n"
+
+	_, err := fetcherOn(cache, fetch.Options{}).Fetch(
+		s.T().Context(), s.server.URL+"/private/secret.html", true)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "robots.txt disallows",
+		"the rules the host serves now, not the ones it served yesterday")
+}
+
+func (s *FetchSuite) TestARobotsFileWithinADayIsNotReadAgain() {
+	cache := s.cache()
+	s.storedRobots(cache, "User-agent: *\n", time.Hour)
+	// The host has changed its mind, and is not asked.
+	s.robotsBody = "User-agent: *\nDisallow: /private/\n"
+
+	before := s.requests.Load()
+	got, err := fetcherOn(cache, fetch.Options{}).Fetch(
+		s.T().Context(), s.server.URL+"/private/secret.html", true)
+	s.Require().NoError(err)
+	s.Equal(http.StatusOK, got.Status)
+	s.Equal(before+1, s.requests.Load(), "one request for the page, none for robots.txt")
+}
+
+// RFC 9309 section 2.3.1.4: a robots.txt that answers a server error is
+// undefined, and an undefined robots.txt is a complete disallow. Reading it
+// as permission, which is what an empty body means, would crawl a host that
+// never said it could be crawled.
+func (s *FetchSuite) TestAnUnreachableRobotsFileDisallowsEverything() {
+	s.robotsStatus = http.StatusInternalServerError
+
+	_, err := s.fetcher(fetch.Options{}).Fetch(
+		s.T().Context(), s.server.URL+"/page.html", true)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "robots.txt disallows")
+}
+
+// The same section allows a copy past its age where the host cannot be
+// reached, which is what keeps one server error from stopping a crawl the
+// host's own rules allow.
+func (s *FetchSuite) TestAnUnreachableRobotsFileKeepsTheStoredCopy() {
+	cache := s.cache()
+	s.storedRobots(cache, "User-agent: *\n", 25*time.Hour)
+	s.robotsStatus = http.StatusInternalServerError
+
+	got, err := fetcherOn(cache, fetch.Options{}).Fetch(
+		s.T().Context(), s.server.URL+"/page.html", true)
+	s.Require().NoError(err)
+	s.Equal(http.StatusOK, got.Status)
+}
+
+// A host that moved its robots.txt is not a host that disallowed everything.
+// Following the redirect is its own step; reading one as undefined would
+// refuse every site that serves the file from somewhere else.
+func (s *FetchSuite) TestARedirectedRobotsFileDoesNotStopTheCrawl() {
+	s.robotsStatus = http.StatusMovedPermanently
+
+	got, err := s.fetcher(fetch.Options{}).Fetch(
+		s.T().Context(), s.server.URL+"/page.html", true)
+	s.Require().NoError(err)
+	s.Equal(http.StatusOK, got.Status)
 }

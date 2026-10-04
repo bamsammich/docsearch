@@ -92,6 +92,26 @@ type Page struct {
 	UserID string
 }
 
+type Response struct {
+	UserID       string
+	Url          string
+	FinalUrl     string
+	Status       int32
+	ContentType  sql.NullString
+	Etag         sql.NullString
+	LastModified sql.NullString
+	Body         []byte
+	Sha256       string
+	FetchedAt    time.Time
+}
+
+type Robot struct {
+	UserID    string
+	Host      string
+	Body      string
+	FetchedAt time.Time
+}
+
 type SchemaVersion struct {
 	Version   int32
 	AppliedAt time.Time
