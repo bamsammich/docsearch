@@ -32,14 +32,6 @@ func (s *MigrationSuite) SetupTest() {
 	s.db = pgtest.Start(s.T()).Owner
 }
 
-// up applies every migration the database has yet to see.
-func (s *MigrationSuite) up() {
-	provider, err := schema.ProviderFor(schema.Postgres, s.db)
-	s.Require().NoError(err)
-	_, err = provider.Up(s.T().Context())
-	s.Require().NoError(err)
-}
-
 // upTo applies the migrations through one version, for a case that needs the
 // shape a later migration changes.
 func (s *MigrationSuite) upTo(version int) {
@@ -179,6 +171,29 @@ func (s *MigrationSuite) TestBaselineGoesDownAndUpAgain() {
 	s.Equal(2, s.count(`SELECT COUNT(*) FROM chunks`))
 }
 
+// ownedLibrary is the same rows, written after migration 6 has given every
+// row an owner: FORCE binds even the owner, so a seed names its user.
+func (s *MigrationSuite) ownedLibrary(userID string) {
+	pgtest.WriteAs(s.T(), s.db, userID, func(tx *sql.Tx) {
+		for _, statement := range []string{
+			`INSERT INTO documents
+			   (user_id, doc_id, title, format, source_path, source_kind, sha256,
+			    status, chunk_count)
+			 VALUES ($1, 'guide', 'Operator Guide', 'markdown', '/library/guide.md',
+			         'file', 'abc123', 'ready', 2)`,
+			`INSERT INTO chunks (user_id, doc_id, ordinal, section, heading_path, text)
+			 VALUES ($1, 'guide', 0, '1', 'Operator Guide > Install',
+			         'Unpack the archive and run the installer.')`,
+			`INSERT INTO chunks (user_id, doc_id, ordinal, section, heading_path, text)
+			 VALUES ($1, 'guide', 1, '2', 'Operator Guide > Usage',
+			         'Point the tool at a description file.')`,
+		} {
+			_, err := tx.ExecContext(s.T().Context(), statement, userID)
+			s.Require().NoError(err)
+		}
+	})
+}
+
 // -- 00006_users ----------------------------------------------------------
 
 func (s *MigrationSuite) TestUsersUpGivesTheRowsAlreadyThereAnOwner() {
@@ -187,7 +202,7 @@ func (s *MigrationSuite) TestUsersUpGivesTheRowsAlreadyThereAnOwner() {
 	s.upTo(5)
 	s.library()
 
-	s.up()
+	s.upTo(6)
 
 	pgtest.ReadAs(s.T(), s.db, "default", func(tx *sql.Tx) {
 		var chunks, documents int
@@ -204,7 +219,7 @@ func (s *MigrationSuite) TestUsersUpMovesChunksIntoAPartition() {
 	s.upTo(5)
 	s.library()
 
-	s.up()
+	s.upTo(6)
 
 	pgtest.ReadAs(s.T(), s.db, "default", func(tx *sql.Tx) {
 		var partition string
@@ -219,7 +234,7 @@ func (s *MigrationSuite) TestUsersUpKeepsNumberingChunksWhereItLeftOff() {
 	// where they got to or the next chunk collides with one that came across.
 	s.upTo(5)
 	s.library()
-	s.up()
+	s.upTo(6)
 
 	pgtest.WriteAs(s.T(), s.db, "default", func(tx *sql.Tx) {
 		_, err := tx.ExecContext(s.T().Context(),
@@ -240,7 +255,7 @@ func (s *MigrationSuite) TestUsersUpKeepsNumberingChunksWhereItLeftOff() {
 func (s *MigrationSuite) TestUsersDownReturnsToOneLibrary() {
 	s.upTo(5)
 	s.library()
-	s.up()
+	s.upTo(6)
 
 	s.down()
 
@@ -255,14 +270,94 @@ func (s *MigrationSuite) TestUsersDownReturnsToOneLibrary() {
 func (s *MigrationSuite) TestUsersGoesDownAndUpAgain() {
 	s.upTo(5)
 	s.library()
-	s.up()
+	s.upTo(6)
 	s.down()
-	s.up()
+	s.upTo(6)
 
 	pgtest.ReadAs(s.T(), s.db, "default", func(tx *sql.Tx) {
 		var chunks int
 		s.Require().NoError(tx.QueryRowContext(s.T().Context(),
 			`SELECT COUNT(*) FROM chunks`).Scan(&chunks))
 		s.Equal(2, chunks, "the rows survive a round trip through both shapes")
+	})
+}
+
+// -- 00007_search ---------------------------------------------------------
+
+func (s *MigrationSuite) TestSearchUpGivesEveryPartitionItsOwnIndex() {
+	// Declared on the parent, so each user's statistics cover that user's
+	// rows: BM25 reads its inverse document frequency from the index it
+	// searches.
+	s.upTo(6)
+	s.exec(`INSERT INTO users (user_id) VALUES ('second')`)
+	s.exec(`CREATE TABLE chunks_second PARTITION OF chunks FOR VALUES IN ('second')`)
+
+	s.upTo(7)
+
+	s.Equal(2, s.count(
+		`SELECT COUNT(*) FROM pg_index
+		   JOIN pg_class ON pg_class.oid = pg_index.indexrelid
+		  WHERE pg_get_indexdef(pg_index.indexrelid) LIKE '%bm25%'
+		    AND pg_class.relname <> 'chunks_bm25'`),
+		"one index per partition, beside the parent's own")
+}
+
+func (s *MigrationSuite) TestSearchFindsAChunkByItsHeadingAndBody() {
+	s.upTo(6)
+	s.ownedLibrary("default")
+
+	s.upTo(7)
+
+	pgtest.ReadAs(s.T(), s.db, "default", func(tx *sql.Tx) {
+		var heading string
+		s.Require().NoError(tx.QueryRowContext(s.T().Context(),
+			`SELECT heading_path FROM chunks
+			  ORDER BY (heading_path || ' ' || heading_path || ' ' || text)
+			          <@> to_bm25query('installer', 'chunks_bm25')
+			  LIMIT 1`).Scan(&heading))
+		s.Contains(heading, "Install")
+	})
+}
+
+func (s *MigrationSuite) TestSearchReturnsOnlyWhatMatches() {
+	// Where the index drives the query, the operator yields matching rows
+	// alone, as FTS5's MATCH did. Where it does not, which Postgres chooses
+	// for a table small enough to scan, the score is computed standalone for
+	// every row and non-matches come back at zero. A fresh library is
+	// exactly that small, so the store drops non-matches from the candidates
+	// the limit already bounded, and the answer is the same under either
+	// plan.
+	s.upTo(6)
+	s.ownedLibrary("default")
+	s.upTo(7)
+
+	pgtest.ReadAs(s.T(), s.db, "default", func(tx *sql.Tx) {
+		var found int
+		s.Require().NoError(tx.QueryRowContext(s.T().Context(),
+			`SELECT COUNT(*) FROM (
+			   SELECT (heading_path || ' ' || heading_path || ' ' || text)
+			            <@> to_bm25query('installer', 'chunks_bm25') AS score
+			     FROM chunks
+			    ORDER BY (heading_path || ' ' || heading_path || ' ' || text)
+			            <@> to_bm25query('installer', 'chunks_bm25')
+			    LIMIT 80) candidates
+			  WHERE score < 0`,
+		).Scan(&found))
+		s.Equal(1, found, "one chunk mentions the installer")
+	})
+}
+
+func (s *MigrationSuite) TestSearchDownLeavesTheChunks() {
+	s.upTo(6)
+	s.ownedLibrary("default")
+	s.upTo(7)
+
+	s.down()
+
+	pgtest.ReadAs(s.T(), s.db, "default", func(tx *sql.Tx) {
+		var chunks int
+		s.Require().NoError(tx.QueryRowContext(s.T().Context(),
+			`SELECT COUNT(*) FROM chunks`).Scan(&chunks))
+		s.Equal(2, chunks, "an index is regenerable; the rows are not")
 	})
 }

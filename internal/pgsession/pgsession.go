@@ -1,17 +1,7 @@
-package postgres
-
-import (
-	"context"
-	"database/sql"
-	"errors"
-	"fmt"
-	"math"
-
-	"github.com/bamsammich/docsearch/internal/store/pgdbgen"
-)
-
-// Nothing in this package touches the database outside a transaction that
-// has named its user.
+// Package pgsession is how every Postgres statement in docsearch names the
+// user it belongs to.
+//
+// Nothing outside this package should touch the database except through it.
 //
 // The policies read app.user_id, and SET LOCAL lasts for one transaction, so
 // a statement run on a bare connection matches no rows at all. Wrapping even
@@ -24,9 +14,20 @@ import (
 // hands out whichever pooled connection is free, so a session variable set
 // for one request would still be set when the next request borrowed that
 // connection.
+package pgsession
 
-// session opens a transaction scoped to userID and runs work in it.
-func session(
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"math"
+
+	"github.com/bamsammich/docsearch/internal/store/pgdbgen"
+)
+
+// Run opens a transaction scoped to userID and runs work in it.
+func Run(
 	ctx context.Context,
 	db *sql.DB,
 	q *pgdbgen.Queries,
@@ -38,10 +39,10 @@ func session(
 		return fmt.Errorf("begin: %w", err)
 	}
 	if err := setUser(ctx, tx, userID); err != nil {
-		return errors.Join(err, rollback(tx))
+		return errors.Join(err, Rollback(tx))
 	}
 	if err := work(q.WithTx(tx)); err != nil {
-		return errors.Join(err, rollback(tx))
+		return errors.Join(err, Rollback(tx))
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit: %w", err)
@@ -76,9 +77,9 @@ func quoteLiteral(s string) string {
 	return string(append(out, '\''))
 }
 
-// rollback reports a rollback that itself failed, and says nothing about one
+// Rollback reports a rollback that itself failed, and says nothing about one
 // the driver already performed.
-func rollback(tx *sql.Tx) error {
+func Rollback(tx *sql.Tx) error {
 	err := tx.Rollback()
 	if err == nil || errors.Is(err, sql.ErrTxDone) {
 		return nil
@@ -86,15 +87,15 @@ func rollback(tx *sql.Tx) error {
 	return fmt.Errorf("roll back: %w", err)
 }
 
-// read runs one statement in a transaction scoped to userID and answers
-// with what the statement produced.
+// Read runs one statement in a transaction scoped to userID and answers with
+// what the statement produced.
 //
-// Reads go through session() like writes, so there is one path to the
-// database and no rollback whose failure nobody is told about. A read-only
-// transaction costs the same round trip either way.
+// A read opens a transaction exactly as a write does, so there is one path to
+// the database and no rollback whose failure nobody is told about. The round
+// trip costs the same either way.
 //
 //nolint:ireturn // the return is whatever the statement returns; ireturn reads every type parameter as an interface.
-func read[T any](
+func Read[T any](
 	ctx context.Context,
 	db *sql.DB,
 	q *pgdbgen.Queries,
@@ -102,7 +103,7 @@ func read[T any](
 	statement func(*pgdbgen.Queries) (T, error),
 ) (T, error) {
 	var out T
-	err := session(ctx, db, q, userID, func(q *pgdbgen.Queries) error {
+	err := Run(ctx, db, q, userID, func(q *pgdbgen.Queries) error {
 		var readErr error
 		out, readErr = statement(q)
 		return readErr
@@ -110,12 +111,12 @@ func read[T any](
 	return out, err
 }
 
-// narrow fits a Go int into the int32 a Postgres integer column takes.
+// Narrow fits a Go int into the int32 a Postgres integer column takes.
 //
 // Clamped rather than wrapped: a progress count or an attempt ceiling past
 // two billion is a caller's mistake, and a wrapped negative would read as a
 // job that had never been tried.
-func narrow(v int) int32 {
+func Narrow(v int) int32 {
 	switch {
 	case v > math.MaxInt32:
 		return math.MaxInt32
@@ -123,4 +124,50 @@ func narrow(v int) int32 {
 		return math.MinInt32
 	}
 	return int32(v)
+}
+
+// Query runs one statement whose rows are scanned inside the transaction
+// that named the user, for the two searches whose SQL is assembled rather
+// than generated.
+//
+// The scan happens before the transaction closes, because a *sql.Rows from a
+// finished transaction yields nothing. A read commits nothing, so the happy
+// path rolls back and reports a rollback that genuinely failed.
+func Query(
+	ctx context.Context,
+	db *sql.DB,
+	userID, statement string,
+	args []any,
+	scan func(*sql.Rows) error,
+) error {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	if err := setUser(ctx, tx, userID); err != nil {
+		return errors.Join(err, Rollback(tx))
+	}
+	if err := scanRows(ctx, tx, statement, args, scan); err != nil {
+		return errors.Join(err, Rollback(tx))
+	}
+	return Rollback(tx)
+}
+
+// scanRows runs the statement and hands its rows to scan.
+func scanRows(
+	ctx context.Context,
+	tx *sql.Tx,
+	statement string,
+	args []any,
+	scan func(*sql.Rows) error,
+) error {
+	rows, err := tx.QueryContext(ctx, statement, args...)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	if err := scan(rows); err != nil {
+		return err
+	}
+	return rows.Err()
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/bamsammich/docsearch/internal/domain"
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/service/document"
 	"github.com/bamsammich/docsearch/internal/store/pgdbgen"
 )
@@ -33,7 +34,7 @@ func NewDocuments(db *sql.DB, userID string) *Documents {
 // Get is one document whatever its status, because verification has to be
 // able to look at a document that never became ready.
 func (d *Documents) Get(ctx context.Context, docID string) (*document.Document, error) {
-	row, err := read(ctx, d.db, d.q, d.userID,
+	row, err := pgsession.Read(ctx, d.db, d.q, d.userID,
 		func(q *pgdbgen.Queries) (pgdbgen.DocumentByIDRow, error) {
 			return q.DocumentByID(ctx, docID)
 		})
@@ -58,7 +59,7 @@ func (d *Documents) Get(ctx context.Context, docID string) (*document.Document, 
 
 // List is every ready document.
 func (d *Documents) List(ctx context.Context) ([]document.Document, error) {
-	rows, err := read(ctx, d.db, d.q, d.userID,
+	rows, err := pgsession.Read(ctx, d.db, d.q, d.userID,
 		func(q *pgdbgen.Queries) ([]pgdbgen.ListReadyDocumentsRow, error) {
 			return q.ListReadyDocuments(ctx)
 		})
@@ -84,7 +85,7 @@ func (d *Documents) List(ctx context.Context) ([]document.Document, error) {
 
 // Chunks are a document's chunks in ordinal order.
 func (d *Documents) Chunks(ctx context.Context, docID string) ([]domain.Chunk, error) {
-	rows, err := read(ctx, d.db, d.q, d.userID,
+	rows, err := pgsession.Read(ctx, d.db, d.q, d.userID,
 		func(q *pgdbgen.Queries) ([]pgdbgen.DocumentChunksRow, error) {
 			return q.DocumentChunks(ctx, docID)
 		})
@@ -116,7 +117,7 @@ func (d *Documents) Chunks(ctx context.Context, docID string) ([]domain.Chunk, e
 
 // IndexTermSections are the distinct sections a back-of-book index points at.
 func (d *Documents) IndexTermSections(ctx context.Context, docID string) ([]string, error) {
-	sections, err := read(ctx, d.db, d.q, d.userID,
+	sections, err := pgsession.Read(ctx, d.db, d.q, d.userID,
 		func(q *pgdbgen.Queries) ([]string, error) {
 			return q.IndexTermSections(ctx, docID)
 		})
@@ -129,7 +130,7 @@ func (d *Documents) IndexTermSections(ctx context.Context, docID string) ([]stri
 // IndexTermCount is how many entries a back-of-book index holds, which is
 // more than the number of sections they point at.
 func (d *Documents) IndexTermCount(ctx context.Context, docID string) (int, error) {
-	count, err := read(ctx, d.db, d.q, d.userID,
+	count, err := pgsession.Read(ctx, d.db, d.q, d.userID,
 		func(q *pgdbgen.Queries) (int64, error) {
 			return q.IndexTermCount(ctx, docID)
 		})
@@ -145,7 +146,7 @@ func (d *Documents) SectionHasChunks(
 	ctx context.Context,
 	docID, section string,
 ) (bool, error) {
-	found, err := read(ctx, d.db, d.q, d.userID, func(q *pgdbgen.Queries) (bool, error) {
+	found, err := pgsession.Read(ctx, d.db, d.q, d.userID, func(q *pgdbgen.Queries) (bool, error) {
 		return q.SectionHasChunks(ctx, pgdbgen.SectionHasChunksParams{
 			DocID: docID,
 			// One placeholder, used twice in the clause: the subtree test
@@ -161,7 +162,7 @@ func (d *Documents) SectionHasChunks(
 
 // Delete removes every trace of a document, in one transaction.
 func (d *Documents) Delete(ctx context.Context, docID string) error {
-	return session(ctx, d.db, d.q, d.userID, func(q *pgdbgen.Queries) error {
+	return pgsession.Run(ctx, d.db, d.q, d.userID, func(q *pgdbgen.Queries) error {
 		return deleteRows(ctx, q, docID)
 	})
 }
