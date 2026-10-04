@@ -21,6 +21,7 @@ import (
 	_ "modernc.org/sqlite" // pure-Go driver; the server opens the same file
 
 	"github.com/bamsammich/docsearch/internal/domain"
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 	"github.com/bamsammich/docsearch/internal/store/pgdbgen"
 )
@@ -77,7 +78,7 @@ func (r *Repository) ReadyWithDigest(
 	ctx context.Context,
 	digest string,
 ) (*ingest.Existing, error) {
-	row, err := read(ctx, r.db, r.q, r.userID,
+	row, err := pgsession.Read(ctx, r.db, r.q, r.userID,
 		func(q *pgdbgen.Queries) (pgdbgen.ReadyDocumentWithDigestRow, error) {
 			return q.ReadyDocumentWithDigest(ctx, digest)
 		})
@@ -87,9 +88,15 @@ func (r *Repository) ReadyWithDigest(
 	if err != nil {
 		return nil, fmt.Errorf("read the document with hash %s: %w", digest, err)
 	}
-	chunks, err := read(ctx, r.db, r.q, r.userID, func(q *pgdbgen.Queries) (int64, error) {
-		return q.CountDocumentChunks(ctx, row.DocID)
-	})
+	chunks, err := pgsession.Read(
+		ctx,
+		r.db,
+		r.q,
+		r.userID,
+		func(q *pgdbgen.Queries) (int64, error) {
+			return q.CountDocumentChunks(ctx, row.DocID)
+		},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("count the chunks of %s: %w", row.DocID, err)
 	}
@@ -101,9 +108,15 @@ func (r *Repository) ReadyWithDigest(
 }
 
 func (r *Repository) DocIDForIdentity(ctx context.Context, identity string) (string, error) {
-	docID, err := read(ctx, r.db, r.q, r.userID, func(q *pgdbgen.Queries) (string, error) {
-		return q.DocIDForSourcePath(ctx, identity)
-	})
+	docID, err := pgsession.Read(
+		ctx,
+		r.db,
+		r.q,
+		r.userID,
+		func(q *pgdbgen.Queries) (string, error) {
+			return q.DocIDForSourcePath(ctx, identity)
+		},
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
@@ -116,9 +129,15 @@ func (r *Repository) DocIDForIdentity(ctx context.Context, identity string) (str
 // DocIDsWithPrefix escapes the prefix, so a title slugifying to something
 // holding a percent sign does not match every identifier in the index.
 func (r *Repository) DocIDsWithPrefix(ctx context.Context, prefix string) ([]string, error) {
-	ids, err := read(ctx, r.db, r.q, r.userID, func(q *pgdbgen.Queries) ([]string, error) {
-		return q.DocIDsWithPrefix(ctx, likePrefix(prefix))
-	})
+	ids, err := pgsession.Read(
+		ctx,
+		r.db,
+		r.q,
+		r.userID,
+		func(q *pgdbgen.Queries) ([]string, error) {
+			return q.DocIDsWithPrefix(ctx, likePrefix(prefix))
+		},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("read identifiers beginning %q: %w", prefix, err)
 	}
@@ -192,7 +211,7 @@ func writePages(
 		err := q.UpsertPage(ctx, pgdbgen.UpsertPageParams{
 			UserID: userID,
 			DocID:  docID,
-			Page:   narrow(page),
+			Page:   pgsession.Narrow(page),
 			Text:   pages[page],
 		})
 		if err != nil {
@@ -230,7 +249,7 @@ func (r *Repository) MarkReady(ctx context.Context, ready ingest.Ready) error {
 	return r.inTx(ctx, func(q *pgdbgen.Queries) error {
 		warnings := nullString(string(ready.Warnings))
 		err := q.MarkDocumentReady(ctx, pgdbgen.MarkDocumentReadyParams{
-			ChunkCount: sql.NullInt32{Int32: narrow(ready.ChunkCount), Valid: true},
+			ChunkCount: sql.NullInt32{Int32: pgsession.Narrow(ready.ChunkCount), Valid: true},
 			IngestedAt: sql.NullTime{Time: ready.IngestedAt.UTC(), Valid: true},
 			Warnings:   warnings,
 			DocID:      ready.DocID,
@@ -277,7 +296,20 @@ func deleteRows(ctx context.Context, q *pgdbgen.Queries, docID string) error {
 
 // inTx runs write inside one transaction that names this repository's user.
 func (r *Repository) inTx(ctx context.Context, write func(*pgdbgen.Queries) error) error {
-	return session(ctx, r.db, r.q, r.userID, write)
+	return pgsession.Run(ctx, r.db, r.q, r.userID, write)
+}
+
+// withoutNUL drops a code point Postgres text cannot hold.
+//
+// SQLite stored one silently, and one chunk in a real corpus carries one, so
+// an ingest that passed it through would fail on the insert rather than on
+// the document that produced it. Dropping the byte loses nothing a search
+// could have matched.
+func withoutNUL(s string) string {
+	if !strings.ContainsRune(s, 0) {
+		return s
+	}
+	return strings.ReplaceAll(s, "\x00", "")
 }
 
 // chunkParams is one chunk as its row.
@@ -285,17 +317,17 @@ func chunkParams(userID, docID string, c domain.Chunk) pgdbgen.InsertChunkParams
 	return pgdbgen.InsertChunkParams{
 		UserID:           userID,
 		DocID:            docID,
-		Ordinal:          narrow(c.Ordinal),
+		Ordinal:          pgsession.Narrow(c.Ordinal),
 		Section:          nullStringOf(c.Section),
 		PageStart:        nullInt32(c.PageStart),
 		PageEnd:          nullInt32(c.PageEnd),
 		PrintedPageStart: nullInt32(c.PrintedPageStart),
-		ImageCount:       narrow(c.ImageCount),
+		ImageCount:       pgsession.Narrow(c.ImageCount),
 		Kind:             c.Kind.String(),
 		Url:              nullStringOf(c.URL),
 		Fragment:         nullStringOf(c.Fragment),
-		HeadingPath:      c.HeadingPath,
-		Text:             c.Text,
+		HeadingPath:      withoutNUL(c.HeadingPath),
+		Text:             withoutNUL(c.Text),
 	}
 }
 
@@ -310,7 +342,7 @@ func nullInt32(v *int) sql.NullInt32 {
 	if v == nil {
 		return sql.NullInt32{}
 	}
-	return sql.NullInt32{Int32: narrow(*v), Valid: true}
+	return sql.NullInt32{Int32: pgsession.Narrow(*v), Valid: true}
 }
 
 func nullStringOf(v *string) sql.NullString {

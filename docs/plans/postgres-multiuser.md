@@ -136,7 +136,22 @@ is bound when a repository is constructed rather than passed per call, which
 keeps the service ports unchanged until 4f threads an owner down. Session-level
 `SET` was rejected: `database/sql` hands out pooled connections, so a variable
 set for one request would still be set when another borrowed that connection.
-| 4d | search on `pg_textsearch`, built from one expression index, scoring a scoped query through the per-document loop, with NUL stripped at ingest | `docsearch-eval` on a Postgres index the Go worker wrote, held to the spike's labelled and self-label figures |
+| 4d | search on `pg_textsearch`, built from one expression index, scoring a scoped query through the per-document loop, and the rest of the read layer beside it | the search suite against a container: the cross-document merge, a scoped query, the relevance transform and the keyword-reference penalty, plus `docsearch-eval` held to the spike's figures, which needs a real library and so is run by hand |
+
+Three things about the query shape came out of 4d, each from an `EXPLAIN`
+rather than from reasoning about one. The `ORDER BY` has to repeat the indexed
+expression verbatim or the planner ignores the index and scores every row
+standalone. Joining `documents` for the title defeats it the same way, so
+search reads `chunks` alone and the title and the ready check come from one
+lookup per document instead of one per result. And a table small enough to
+scan is scanned, which hands back rows that matched nothing, so the outer
+query drops a score of zero.
+
+Migration 8 is a correction rather than a feature: migration 6 granted the
+five tenant tables to the app role and left `schema_version` out, so the
+readiness probe read every database as unversioned. Ranking itself is
+untouched -- the store asks `pg_textsearch` for the scores the spike
+measured, and nothing here changes how they are compared.
 | 4e | the response cache on Postgres, per user, behind the `fetch.Cache` interface it already has | the cache suite against a container, and a crawl resumed after the process that started it exits |
 | 4f | a user on every request: the service layer takes an owner, both API doors supply the built-in one, and every transaction opens with `SET LOCAL app.user_id` | a unit test per service that a call without an owner is refused rather than defaulted |
 | 4g | the isolation test in CI, and SQLite out of the tree: the driver, the FTS5 schema, the SQLite migrations and the file paths go | the isolation test as described, plus a deployment that starts with no SQLite file present |

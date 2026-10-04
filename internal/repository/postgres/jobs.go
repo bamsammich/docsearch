@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/service/job"
 	"github.com/bamsammich/docsearch/internal/service/worker"
 	"github.com/bamsammich/docsearch/internal/store/pgdbgen"
@@ -47,7 +48,7 @@ func (j *Jobs) Claim(
 		var claimErr error
 		row, claimErr = q.ClaimJob(ctx, pgdbgen.ClaimJobParams{
 			LeaseSeconds: lease.Seconds(),
-			MaxAttempts:  narrow(maxAttempts),
+			MaxAttempts:  pgsession.Narrow(maxAttempts),
 		})
 		return claimErr
 	})
@@ -75,8 +76,8 @@ func (j *Jobs) RecordProgress(
 	err := j.inTx(ctx, func(q *pgdbgen.Queries) error {
 		return q.RecordJobProgress(ctx, pgdbgen.RecordJobProgressParams{
 			Phase:        nullString(phase),
-			ProgressCur:  sql.NullInt32{Int32: narrow(cur), Valid: true},
-			ProgressTot:  sql.NullInt32{Int32: narrow(tot), Valid: true},
+			ProgressCur:  sql.NullInt32{Int32: pgsession.Narrow(cur), Valid: true},
+			ProgressTot:  sql.NullInt32{Int32: pgsession.Narrow(tot), Valid: true},
 			LeaseSeconds: lease.Seconds(),
 			ID:           id,
 		})
@@ -101,9 +102,15 @@ func (j *Jobs) RecordDocID(ctx context.Context, id int64, docID string) error {
 }
 
 func (j *Jobs) CancelRequested(ctx context.Context, id int64) (bool, error) {
-	requested, err := read(ctx, j.db, j.q, j.userID, func(q *pgdbgen.Queries) (bool, error) {
-		return q.JobCancelRequested(ctx, id)
-	})
+	requested, err := pgsession.Read(
+		ctx,
+		j.db,
+		j.q,
+		j.userID,
+		func(q *pgdbgen.Queries) (bool, error) {
+			return q.JobCancelRequested(ctx, id)
+		},
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		// The row is gone, so nothing is waiting for the job either.
 		return true, nil
@@ -192,7 +199,7 @@ func dropPartial(ctx context.Context, q *pgdbgen.Queries, id int64) error {
 
 // inTx runs write inside one transaction that names this queue's user.
 func (j *Jobs) inTx(ctx context.Context, write func(*pgdbgen.Queries) error) error {
-	return session(ctx, j.db, j.q, j.userID, write)
+	return pgsession.Run(ctx, j.db, j.q, j.userID, write)
 }
 
 // Add puts one source on the queue and returns its id and its position.
@@ -243,10 +250,10 @@ func (j *Jobs) rows(
 	includeCompleted bool,
 	limit int,
 ) ([]pgdbgen.IngestJob, error) {
-	rows, err := read(ctx, j.db, j.q, j.userID,
+	rows, err := pgsession.Read(ctx, j.db, j.q, j.userID,
 		func(q *pgdbgen.Queries) ([]pgdbgen.IngestJob, error) {
 			if includeCompleted {
-				return q.RecentJobs(ctx, narrow(limit))
+				return q.RecentJobs(ctx, pgsession.Narrow(limit))
 			}
 			return q.ActiveJobs(ctx)
 		})
@@ -261,9 +268,15 @@ func (j *Jobs) rows(
 
 // RequestCancel asks a job to stop and reports what it reads as now.
 func (j *Jobs) RequestCancel(ctx context.Context, id int64) (string, error) {
-	status, err := read(ctx, j.db, j.q, j.userID, func(q *pgdbgen.Queries) (string, error) {
-		return q.JobStatus(ctx, id)
-	})
+	status, err := pgsession.Read(
+		ctx,
+		j.db,
+		j.q,
+		j.userID,
+		func(q *pgdbgen.Queries) (string, error) {
+			return q.JobStatus(ctx, id)
+		},
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", fmt.Errorf("%w: job %d", ErrNotFound, id)
 	}

@@ -52,7 +52,7 @@ var migrations embed.FS
 // section did when it began holding section numbers rather than page
 // numbers, is invisible to any structural check while silently changing what
 // queries return.
-const Version = 6
+const Version = 8
 
 // SQLiteVersion is frozen. The SQLite half of this package exists to keep
 // the packages phase 04 has yet to move buildable, and takes no further
@@ -81,6 +81,8 @@ var History = map[int]string{
 		"carry the address a chunk was read from, so a result can be cited",
 	6: "every row belongs to a user: user_id on each tenant table, chunks " +
 		"partitioned by owner, and row-level security on all five",
+	7: "chunks are searchable: one BM25 index over the heading twice then the body",
+	8: "the readiness probe may read schema_version, which version 6 left ungranted",
 }
 
 // Dialect is the SQL a database speaks, and which migrations apply to it.
