@@ -22,10 +22,11 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
       -trimpath -ldflags="-s -w" \
       -o /out/docsearch-worker ./cmd/docsearch-worker
 
-# The CLI rides along for `docsearch migrate`, which every deployment runs
-# before anything serves: the compose file as its own service, Kubernetes as
-# an init container, systemd from ExecStartPre. All three invoke it from this
-# image, so leaving it out stops the deployment at its first step.
+# The CLI rides along for `docsearch migrate`, which runs before anything
+# serves. The compose file runs it as its own service and Kubernetes as an
+# init container, both from this image, so leaving it out stops either
+# deployment at its first step. A systemd host runs its own copy and needs
+# nothing from here.
 RUN CGO_ENABLED=0 GOOS=linux go build \
       -trimpath -ldflags="-s -w" \
       -o /out/docsearch ./cmd/docsearch

@@ -8,16 +8,16 @@ Wants=docsearch-worker.service
 
 [Service]
 Type=simple
-Environment=DOCSEARCH_DB=%h/.local/share/docsearch/docsearch.db
 Environment=DOCSEARCH_ROOT=%h/Documents/library
 Environment=DOCSEARCH_ADDR=127.0.0.1:8765
 Environment=DOCSEARCH_ALLOWED_ORIGINS=https://claude.ai
-# The token lives in a mode-0600 file, not in this unit, so it stays out of
-# `systemctl cat` and out of the process environment listing.
+# The token and the DSN live in a mode-0600 file, not in this unit, so
+# neither reaches `systemctl cat` or the process environment listing. Both
+# are credentials: the DSN carries the database password.
 EnvironmentFile=%h/.config/docsearch/token.env
 
 ExecStart=%h/.local/bin/docsearch-server \
-  --db ${DOCSEARCH_DB} \
+  --dsn ${DOCSEARCH_DSN} \
   --root ${DOCSEARCH_ROOT} \
   --addr ${DOCSEARCH_ADDR} \
   --allowed-origins ${DOCSEARCH_ALLOWED_ORIGINS}
