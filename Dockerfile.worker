@@ -22,10 +22,19 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
       -trimpath -ldflags="-s -w" \
       -o /out/docsearch-worker ./cmd/docsearch-worker
 
+# The CLI rides along for `docsearch migrate`, which every deployment runs
+# before anything serves: the compose file as its own service, Kubernetes as
+# an init container, systemd from ExecStartPre. All three invoke it from this
+# image, so leaving it out stops the deployment at its first step.
+RUN CGO_ENABLED=0 GOOS=linux go build \
+      -trimpath -ldflags="-s -w" \
+      -o /out/docsearch ./cmd/docsearch
+
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/docsearch-worker /usr/local/bin/docsearch-worker
+COPY --from=build /out/docsearch /usr/local/bin/docsearch
 USER nonroot:nonroot
-# Database path and library roots come from the ConfigMap. The library is
+# The database and the library roots come from the ConfigMap. The library is
 # mounted at the same path the server sees, so a job's source_path resolves
 # in both.
 #
