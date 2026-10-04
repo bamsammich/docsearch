@@ -11,6 +11,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/api/docsearch/document/v1/documentv1connect"
 	typev1 "github.com/bamsammich/docsearch/internal/api/docsearch/type/v1"
 	"github.com/bamsammich/docsearch/internal/domain"
+	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/service/document"
 )
 
@@ -24,9 +25,16 @@ type Documents interface {
 	Remove(ctx context.Context, docID string) error
 }
 
+// DocumentsFor builds the document service for the user a request acts for.
+//
+// A factory rather than a service, because row-level security scopes a
+// statement by the user its transaction named, so there is one service per
+// user and the server is built before any request names one.
+type DocumentsFor func(user string) (Documents, error)
+
 // DocumentServer implements the generated document handler.
 type DocumentServer struct {
-	documents Documents
+	documents DocumentsFor
 	// notFound recognises a document the index does not hold, so a caller
 	// asking about one gets NotFound rather than Internal. The repository
 	// owns the error; this only has to be told which it is.
@@ -37,7 +45,7 @@ type DocumentServer struct {
 // handler. notFound is the sentinel the repository returns for a document
 // that is not there.
 func NewDocumentServer(
-	documents Documents,
+	documents DocumentsFor,
 	notFound error,
 	opts ...connect.HandlerOption,
 ) (string, http.Handler) {
@@ -51,7 +59,11 @@ func (s *DocumentServer) List(
 	ctx context.Context,
 	_ *connect.Request[documentv1.ListRequest],
 ) (*connect.Response[documentv1.ListResponse], error) {
-	docs, err := s.documents.List(ctx)
+	documents, err := s.forOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	docs, err := documents.List(ctx)
 	if err != nil {
 		return nil, s.asConnectError(err)
 	}
@@ -70,7 +82,11 @@ func (s *DocumentServer) Verify(
 		return nil, connect.NewError(
 			connect.CodeInvalidArgument, errors.New("doc_id names the document to verify"))
 	}
-	report, err := s.documents.Verify(ctx, req.Msg.GetDocId())
+	documents, err := s.forOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	report, err := documents.Verify(ctx, req.Msg.GetDocId())
 	if err != nil {
 		return nil, s.asConnectError(err)
 	}
@@ -88,7 +104,11 @@ func (s *DocumentServer) Inspect(
 			connect.CodeInvalidArgument,
 			errors.New("target names the file or site to inspect"))
 	}
-	report, err := s.documents.Inspect(ctx, req.Msg.GetTarget())
+	documents, err := s.forOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	report, err := documents.Inspect(ctx, req.Msg.GetTarget())
 	if err != nil {
 		return nil, s.asConnectError(err)
 	}
@@ -105,7 +125,11 @@ func (s *DocumentServer) Remove(
 		return nil, connect.NewError(
 			connect.CodeInvalidArgument, errors.New("doc_id names the document to remove"))
 	}
-	if err := s.documents.Remove(ctx, req.Msg.GetDocId()); err != nil {
+	documents, err := s.forOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := documents.Remove(ctx, req.Msg.GetDocId()); err != nil {
 		return nil, s.asConnectError(err)
 	}
 	return connect.NewResponse(&documentv1.RemoveResponse{}), nil
@@ -240,3 +264,21 @@ const (
 	_ = uint8(typev1.Level_LEVEL_WARN - typev1.Level(domain.LevelWarn))
 	_ = uint8(typev1.Level_LEVEL_BLOCKED - typev1.Level(domain.LevelBlocked))
 )
+
+// forOwner is the document service of the user a request acts for.
+//
+// A request that named none is refused rather than served the built-in
+// library, which is the whole point of asking.
+//
+//nolint:ireturn // a factory for a port returns that port; a concrete type here would defeat it.
+func (s *DocumentServer) forOwner(ctx context.Context) (Documents, error) {
+	user, err := owner.From(ctx)
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	documents, err := s.documents(user)
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	return documents, nil
+}

@@ -40,16 +40,19 @@ type Options struct {
 
 // Source is one site, crawled through a fetch cache.
 type Source struct {
-	result    *crawl.Result
-	cachePath string
-	seed      string
-	digest    string
-	opts      Options
+	result *crawl.Result
+	// cache belongs to the user the crawl is for, and to whoever opened it:
+	// a Postgres cache is a view on a pool the server holds open, so closing
+	// it here would close the pool.
+	cache  fetch.Cache
+	seed   string
+	digest string
+	opts   Options
 }
 
-// New crawls seed, caching responses at cachePath.
-func New(seed, cachePath string, opts Options) *Source {
-	return &Source{seed: seed, cachePath: cachePath, opts: opts}
+// New crawls seed, reading and writing responses through cache.
+func New(seed string, cache fetch.Cache, opts Options) *Source {
+	return &Source{seed: seed, cache: cache, opts: opts}
 }
 
 func (*Source) Kind() domain.SourceKind { return domain.SourceKindSite }
@@ -79,18 +82,12 @@ func (s *Source) Acquire(ctx context.Context, progress ingest.Progress) error {
 		return fmt.Errorf("refused %s: %w", s.seed, err)
 	}
 
-	cache, err := fetch.OpenSQLiteCache(ctx, s.cachePath)
-	if err != nil {
-		return fmt.Errorf("open the fetch cache: %w", err)
-	}
-	defer func() { _ = cache.Close() }()
-
-	fetcher := fetch.New(cache, fetch.Options{
+	fetcher := fetch.New(s.cache, fetch.Options{
 		Guard:        s.opts.Guard,
 		Interval:     s.opts.Interval,
 		IgnoreRobots: s.opts.IgnoreRobots,
 	})
-	s.result, err = crawl.Crawl(ctx, fetcher, s.seed, crawl.Options{
+	result, err := crawl.Crawl(ctx, fetcher, s.seed, crawl.Options{
 		Progress:   crawlProgress(progress),
 		MaxPages:   s.opts.MaxPages,
 		LinkDepth:  s.opts.LinkDepth,
@@ -99,6 +96,7 @@ func (s *Source) Acquire(ctx context.Context, progress ingest.Progress) error {
 	if err != nil {
 		return err
 	}
+	s.result = result
 	s.digest = digestOf(s.result)
 	return nil
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/api/docsearch/document/v1/documentv1connect"
 	typev1 "github.com/bamsammich/docsearch/internal/api/docsearch/type/v1"
 	"github.com/bamsammich/docsearch/internal/domain"
+	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/service/document"
 )
 
@@ -36,9 +37,11 @@ func TestDocumentAPI(t *testing.T) { suite.Run(t, new(DocumentAPISuite)) }
 func (s *DocumentAPISuite) SetupTest() {
 	s.documents = mocks.NewMockDocuments(s.T())
 
-	path, handler := connectapi.NewDocumentServer(s.documents, errNotFound)
+	path, handler := connectapi.NewDocumentServer(
+		func(string) (connectapi.Documents, error) { return s.documents, nil },
+		errNotFound)
 	mux := http.NewServeMux()
-	mux.Handle(path, handler)
+	mux.Handle(path, owner.Middleware(owner.Builtin, handler))
 	server := httptest.NewServer(mux)
 	s.T().Cleanup(server.Close)
 
@@ -203,4 +206,22 @@ func (s *DocumentAPISuite) TestAFailureNobodyAnticipatedStaysInternal() {
 	_, err := s.client.List(s.T().Context(), connect.NewRequest(&documentv1.ListRequest{}))
 	s.Require().Error(err)
 	s.Equal(connect.CodeInternal, connect.CodeOf(err))
+}
+
+// A handler mounted outside the middleware refuses rather than reading the
+// built-in library.
+func (s *DocumentAPISuite) TestAListWithNoOwnerIsRefused() {
+	path, handler := connectapi.NewDocumentServer(
+		func(string) (connectapi.Documents, error) {
+			s.FailNow("the handler asked for a library without a user")
+			return nil, nil
+		}, errNotFound)
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+	server := httptest.NewServer(mux)
+	s.T().Cleanup(server.Close)
+
+	_, err := documentv1connect.NewDocumentServiceClient(server.Client(), server.URL).
+		List(s.T().Context(), connect.NewRequest(&documentv1.ListRequest{}))
+	s.Require().ErrorContains(err, "no owner")
 }

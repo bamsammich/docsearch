@@ -1,10 +1,11 @@
 # docsearch
 
-Local document search over an MCP server. Documents are ingested into one
-SQLite database by a background worker; a Go server reads that database and
+Local document search over an MCP server. Documents are ingested into a
+Postgres database by a background worker; a Go server reads that database and
 exposes search, navigation and retrieval tools over MCP Streamable HTTP.
 
-No vector database, no embeddings, no external services. SQLite FTS5 with BM25.
+No vector database, no embeddings, no external services. BM25 over
+`pg_textsearch`.
 [An embedding reranker was measured and rejected](docs/research/embedding-rerank-probe.md).
 
 **v2 is in progress on the [`v2` branch](https://github.com/bamsammich/docsearch/tree/v2):**
@@ -36,7 +37,7 @@ the mise registry — install it from your package manager.
 ## Ingesting
 
 ```bash
-docsearch migrate [--check] [--db PATH]            # bring the schema up to date
+docsearch migrate [--check] [--dsn DSN]            # bring the schema up to date
 docsearch inspect <target>                         # what structure does it offer?
 docsearch add     <target> [--title T]             # synchronous; file, directory or URL
 docsearch enqueue <target> [--title T]             # queue for the worker
@@ -180,11 +181,9 @@ Run it as a startup precondition of the **worker**, which is the sole writer:
 | launchd | `migrate && exec worker` in the agent's shell wrapper — launchd has no `ExecStartPre` |
 | Kubernetes | an `initContainer` in `deploy/k8s/deployment.yaml` |
 
-Same command in both, because there is nothing to orchestrate: SQLite is one
-file with one writer, and `replicas: 1` with `strategy: Recreate` already
-guarantees no second writer exists. A migration that cannot be applied exits
-nonzero and the worker does not start — a worker writing through a schema it
-does not match is worse than a worker that is down.
+Same command everywhere, run before anything serves. A migration that cannot
+be applied exits nonzero and the worker does not start. A worker writing
+through a schema it does not match is worse than a worker that is down.
 
 Not every schema change can be applied in place. The change from page
 references to section references in `index_terms` is not recoverable without
@@ -194,8 +193,13 @@ index is fully regenerable**, which is what makes refusing the right answer.
 ## Running the worker
 
 ```bash
-docsearch-worker --db var/docsearch.db --root ~/Documents/library
+docsearch-worker --dsn "$DOCSEARCH_DSN" --root ~/Documents/library
 ```
+
+One worker serves one library, named by `--user` and defaulting to the
+built-in user a single-library deployment runs as. A job, the document it
+produces and the responses it crawled all belong to the same library, so a
+worker that claimed across users would have nowhere to put the result.
 
 Jobs are claimed under a lease. A worker killed mid-job leaves an expired
 lease, and the next worker reclaims and restarts the job with no intervention.
@@ -211,7 +215,8 @@ an in-flight job can checkpoint or roll back instead of being killed mid-write.
 | | flag | environment |
 |---|---|---|
 | bind address | `--addr` | `DOCSEARCH_ADDR` |
-| database | `--db` | `DOCSEARCH_DB` |
+| database | `--dsn` | `DOCSEARCH_DSN` |
+| worker's library | `--user` (worker only) | `DOCSEARCH_USER` |
 | library roots | `--root` (repeatable) | `DOCSEARCH_ROOT` (`:`-separated) |
 | bearer token | — | `DOCSEARCH_TOKEN` |
 | Origin allowlist | `--allowed-origins` | `DOCSEARCH_ALLOWED_ORIGINS` |
@@ -352,30 +357,24 @@ and `--root` is that same path. `add_document` takes a filesystem path from the
 MCP client, which is a process on the *host*; mounting the library at
 `/library` would reject every path a client can actually name.
 
-**The database is a named volume, not a bind mount.** SQLite in WAL mode needs
-real file locking, and the macOS bind-mount path is not something to bet a
-single-writer database on. It lives on ext4 inside the Linux VM, which also
-means it is not directly readable from the host — `scripts/docsearch-db` opens
-it read-only, and `scripts/docsearch-db --backup out.db` copies it out through
-`.backup` rather than `cp`, so the snapshot is consistent across the WAL while
-the worker is mid-transaction.
+**Postgres runs as its own service**, on the image that ships `pg_textsearch`
+with the library preloaded, and its data lives in a named volume on ext4
+inside the Linux VM. `deploy/docker/initdb/00-roles.sql` does the three
+things docsearch cannot do for itself: `CREATE EXTENSION` is superuser-only,
+`CREATE ROLE` needs `CREATEROLE`, and the database has to exist before
+anything can be migrated into it. Postgres runs that file once, on an empty
+data directory.
 
-Migration runs in its own service for the reason the systemd unit runs it from
-`ExecStartPre`: the worker is the only writer, so it races nothing there. Both
-real services gate on `service_completed_successfully`, so a migration that
-cannot be applied means neither ever starts.
+Two roles, because two jobs need different privileges. `docsearch_owner`
+owns every table and runs migrations; `docsearch_app` owns nothing and
+reaches rows only through the policies, which is what a request runs as.
+Neither is a superuser and neither may bypass row-level security, so the
+owner is bound by the policies too.
 
-Moving an existing installation across: stop the agents first — a clean
-shutdown checkpoints the WAL into the main file — then copy it in.
-
-```bash
-launchctl bootout gui/$(id -u)/com.bamsammich.docsearch-server
-launchctl bootout gui/$(id -u)/com.bamsammich.docsearch-worker
-docker volume create docsearch_data
-docker run --rm -v docsearch_data:/data -v "$HOME/.local/share/docsearch:/src:ro" \
-  alpine:3.20 sh -c 'cp /src/docsearch.db* /data/ && chown -R 65532:65532 /data'
-scripts/docsearch-up
-```
+Migration runs in its own service for the reason the systemd unit runs it
+from `ExecStartPre`. Both real services gate on
+`service_completed_successfully`, so a migration that cannot be applied
+means neither ever starts.
 
 No client configuration changes: the container publishes the same
 `127.0.0.1:8765` and reads the same token file, so the bridge in
@@ -383,18 +382,22 @@ No client configuration changes: the container publishes the same
 
 ## Deployment
 
-`deploy/k8s/` — one Deployment, `replicas: 1`, `strategy: Recreate`. SQLite
-permits a single writer and the server writes `ingest_jobs`; a rolling update
-would briefly run two writers against one file.
+`deploy/k8s/` holds one Deployment, `replicas: 1`, `strategy: Recreate`. One
+worker serves one library, so a second replica would claim the same queue;
+`FOR UPDATE SKIP LOCKED` makes two workers safe, which turns the replica
+count into a throughput decision rather than a correctness one.
 
-Server and worker are two containers in one Pod because they share the database
-volume, and an RWO volume attaches to one node. Exposed over Tailscale, never
-an Ingress.
+Server and worker are two containers in one Pod because they share the
+library volume, and an RWO claim attaches to one node. Exposed over
+Tailscale, never an Ingress.
 
-The database must sit on a **block-backed** volume with a local filesystem
-(Ceph RBD). SQLite locking is unreliable over NFS and CephFS, and WAL needs
-shared-memory support they do not provide correctly. This fails by corrupting
-under concurrency, not by erroring.
+Postgres is operated by the cluster, with its own storage and its own
+backups. `deploy/k8s/config.yaml` carries a placeholder secret holding both
+connection strings; a cluster operator that already issues Postgres
+credentials, such as CloudNativePG, generates one of its own, and the
+Deployment points at that instead. The database needs `pg_textsearch`, which
+only a superuser can install: `docs/plans/postgres-multiuser.md` carries the
+full privilege boundary.
 
 `deploy/systemd/` has units for running both processes on a single host. The
 code does not know which deployment shape it is in.
@@ -548,10 +551,10 @@ hits, never primary retrieval, with displacement count as a release gate.
 
 ## Backups
 
-**The SQLite index is fully regenerable from the library volume.** Every chunk,
-FTS row, page and index term is derived from the source documents by
-`docsearch ingest`. Losing `docsearch.db` costs the time to re-ingest, nothing
-more.
+**The index is fully regenerable from the library volume.** Every chunk,
+search row, page and index term is derived from the source documents by
+`docsearch ingest`, and the crawl cache holds responses a crawl can fetch
+again. Losing the database costs the time to re-ingest, nothing more.
 
 The volume that needs backing up is **`docsearch-library`**, which holds the
 only irreplaceable data. `docsearch-data` can be treated as a cache.

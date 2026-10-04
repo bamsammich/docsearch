@@ -31,7 +31,7 @@ func validCfg(t *testing.T) *Config {
 	root := t.TempDir()
 	return &Config{
 		Addr:         "127.0.0.1:8765",
-		DBPath:       filepath.Join(root, "d.db"),
+		DSN:          "postgres://docsearch@localhost/docsearch",
 		LibraryRoots: []string{root},
 		BearerToken:  "tok",
 	}

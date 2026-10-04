@@ -20,7 +20,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"testing"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // the driver the server and worker use
@@ -66,13 +65,27 @@ type DB struct {
 	AppDSN   string
 }
 
+// TestingT is the part of *testing.T these helpers use.
+//
+// An interface rather than the type, because the end-to-end suite runs under
+// ginkgo, and GinkgoT cannot satisfy testing.TB: the interface has an
+// unexported method only the standard library can implement.
+type TestingT interface {
+	Helper()
+	Context() context.Context
+	Cleanup(func())
+	Errorf(format string, args ...any)
+	Fatalf(format string, args ...any)
+	Logf(format string, args ...any)
+}
+
 // Start brings up a database with the extension installed and both roles
 // created, and closes everything when the test ends.
 //
 // One container per call. Sharing one across a suite would let a leftover
 // table from one case decide another, and the image starts in about two
 // seconds.
-func Start(t *testing.T) *DB {
+func Start(t TestingT) *DB {
 	t.Helper()
 	return start(t, true)
 }
@@ -80,12 +93,12 @@ func Start(t *testing.T) *DB {
 // StartWithoutExtension is the same database with the extension left out,
 // for the tests that prove docsearch says which extension is missing rather
 // than failing on the first query that needs it.
-func StartWithoutExtension(t *testing.T) *DB {
+func StartWithoutExtension(t TestingT) *DB {
 	t.Helper()
 	return start(t, false)
 }
 
-func start(t *testing.T, withExtension bool) *DB {
+func start(t TestingT, withExtension bool) *DB {
 	t.Helper()
 	ctx := context.Background()
 
@@ -132,7 +145,7 @@ func start(t *testing.T, withExtension bool) *DB {
 
 // provision is the cluster's half: the roles, the database and the
 // extension, none of which docsearch has the privileges to create.
-func provision(t *testing.T, superuserDSN, databaseDSN string, withExtension bool) {
+func provision(t TestingT, superuserDSN, databaseDSN string, withExtension bool) {
 	t.Helper()
 	cluster := open(t, superuserDSN)
 	for _, statement := range []string{
@@ -163,7 +176,7 @@ func provision(t *testing.T, superuserDSN, databaseDSN string, withExtension boo
 	}
 }
 
-func open(t *testing.T, dsn string) *sql.DB {
+func open(t TestingT, dsn string) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -183,7 +196,7 @@ func open(t *testing.T, dsn string) *sql.DB {
 // a user is named. Rolling back is what lets a case assert that a statement
 // was refused: a refused statement aborts its transaction, and a commit
 // afterwards would fail for that reason rather than the one under test.
-func ReadAs(t *testing.T, db *sql.DB, userID string, fn func(tx *sql.Tx)) {
+func ReadAs(t TestingT, db *sql.DB, userID string, fn func(tx *sql.Tx)) {
 	t.Helper()
 	tx := begin(t, db, userID)
 	defer func() {
@@ -196,7 +209,7 @@ func ReadAs(t *testing.T, db *sql.DB, userID string, fn func(tx *sql.Tx)) {
 
 // WriteAs runs fn in a transaction that names the user, then commits, so
 // what it wrote is there for the rest of the case.
-func WriteAs(t *testing.T, db *sql.DB, userID string, fn func(tx *sql.Tx)) {
+func WriteAs(t TestingT, db *sql.DB, userID string, fn func(tx *sql.Tx)) {
 	t.Helper()
 	tx := begin(t, db, userID)
 	committed := false
@@ -217,7 +230,7 @@ func WriteAs(t *testing.T, db *sql.DB, userID string, fn func(tx *sql.Tx)) {
 
 // begin opens a transaction and names the user it belongs to, which is what
 // every request does before it reads or writes anything.
-func begin(t *testing.T, db *sql.DB, userID string) *sql.Tx {
+func begin(t TestingT, db *sql.DB, userID string) *sql.Tx {
 	t.Helper()
 	tx, err := db.BeginTx(t.Context(), nil)
 	if err != nil {

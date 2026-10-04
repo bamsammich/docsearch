@@ -1,11 +1,13 @@
 // Command docsearch-worker runs queued ingests.
 //
-// It shares the database with the MCP server, which reads documents while
-// this writes them, so both open it with the same pragmas.
+// It shares the database with the server, which reads documents while this
+// writes them. One worker serves one library: a job, the document it
+// produces and the responses it crawled all belong to the same user.
 package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"os"
@@ -14,14 +16,17 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib" // the driver the library is read through
 	"github.com/urfave/cli/v3"
 
 	"github.com/bamsammich/docsearch/internal/adapter"
 	"github.com/bamsammich/docsearch/internal/adapter/pdf"
 	"github.com/bamsammich/docsearch/internal/config"
-	"github.com/bamsammich/docsearch/internal/repository/sqlite"
+	"github.com/bamsammich/docsearch/internal/owner"
+	"github.com/bamsammich/docsearch/internal/repository/postgres"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 	"github.com/bamsammich/docsearch/internal/service/worker"
+	"github.com/bamsammich/docsearch/internal/site/fetch/pgcache"
 	"github.com/bamsammich/docsearch/internal/source"
 	"github.com/bamsammich/docsearch/internal/source/site"
 )
@@ -49,18 +54,21 @@ func command() *cli.Command {
 		SliceFlagSeparator: string(filepath.ListSeparator),
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:    "db",
-				Usage:   "path to the SQLite database",
-				Sources: cli.EnvVars(config.EnvDB),
+				Name:    "dsn",
+				Usage:   "Postgres `DSN` of the database holding every library",
+				Sources: cli.EnvVars(config.EnvDSN),
+			},
+			&cli.StringFlag{
+				Name: "user",
+				Usage: "the `USER` whose queue this worker claims from. One worker " +
+					"serves one library, because a job writes into one.",
+				Value:   owner.Builtin,
+				Sources: cli.EnvVars(config.EnvUser),
 			},
 			&cli.StringSliceFlag{
 				Name:    "root",
 				Usage:   "library `ROOT`; the only paths a job may name. Repeat for more than one.",
 				Sources: cli.EnvVars(config.EnvRoot),
-			},
-			&cli.StringFlag{
-				Name:  "fetch-cache",
-				Usage: "where a crawl's responses are stored (default: beside the database)",
 			},
 			&cli.DurationFlag{
 				Name:  "lease",
@@ -91,30 +99,38 @@ func command() *cli.Command {
 	}
 }
 
-func run(ctx context.Context, cmd *cli.Command) error {
-	dbPath := cmd.String("db")
-	roots := cmd.StringSlice("root")
-	if dbPath == "" {
-		return fmt.Errorf("no database: pass --db or set %s", config.EnvDB)
-	}
-	if len(roots) == 0 {
+// required names whichever setting the operator left out, rather than
+// failing later on a connection string nobody passed.
+func required(dsn string, roots []string, user string) error {
+	switch {
+	case dsn == "":
+		return fmt.Errorf("no database: pass --dsn or set %s", config.EnvDSN)
+	case len(roots) == 0:
 		return fmt.Errorf("no library root: pass --root or set %s", config.EnvRoot)
+	case user == "":
+		return fmt.Errorf("no user: pass --user or set %s", config.EnvUser)
 	}
+	return nil
+}
 
-	cachePath := cmd.String("fetch-cache")
-	if cachePath == "" {
-		// Raw HTTP responses, kept apart from the search index, beside the
-		// database, which is where the operator already grants write access.
-		cachePath = filepath.Join(filepath.Dir(dbPath), "fetch-cache.db")
+func run(ctx context.Context, cmd *cli.Command) error {
+	dsn := cmd.String("dsn")
+	roots := cmd.StringSlice("root")
+	user := cmd.String("user")
+	if err := required(dsn, roots, user); err != nil {
+		return err
 	}
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-	db, err := sqlite.Open(dbPath)
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
-		return err
+		return fmt.Errorf("open database: %w", err)
 	}
 	defer func() { _ = db.Close() }()
+	if err := db.Ping(); err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
 
 	extractor, err := pdf.New()
 	if err != nil {
@@ -126,10 +142,13 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		}
 	}()
 
+	// Every one of the three reads and writes as the same user, because a
+	// job, the document it produces and the responses it crawled all belong
+	// to one library.
 	service := worker.New(
-		sqlite.NewJobs(db),
-		ingest.New(sqlite.New(db), time.Now),
-		source.New(adapter.New(extractor), roots, cachePath, site.Options{}),
+		postgres.NewJobs(db, user),
+		ingest.New(postgres.New(db, user), time.Now),
+		source.New(adapter.New(extractor), roots, pgcache.New(db, user), site.Options{}),
 		worker.Options{
 			Log:         log,
 			Lease:       cmd.Duration("lease"),
@@ -146,8 +165,7 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	log.Info("worker started",
-		"database", dbPath, "roots", roots, "fetch cache", cachePath)
+	log.Info("worker started", "roots", roots, "user", user)
 	if err := service.Run(ctx); err != nil {
 		return err
 	}

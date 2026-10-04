@@ -127,8 +127,11 @@ func main() {
 	qPath := flag.String("queries", "tests/retrieval/queries.json", "committed query set")
 	dump := flag.String("dump-candidates", "", "write top-N BM25 candidates as JSON here")
 	dumpN := flag.Int("dump-n", 50, "candidates per query when dumping")
-	selfLabel := flag.Bool("self-label", false,
-		"probe retrieval using queries generated from the index itself, needing no committed query set")
+	selfLabel := flag.Bool(
+		"self-label",
+		false,
+		"probe retrieval using queries generated from the index itself, needing no committed query set",
+	)
 	flag.Parse()
 
 	// Runs against any index without an authored query set, so it is resolved
@@ -459,10 +462,14 @@ func crossDoc(ctx context.Context, st *store.Store, f file, queries []string) {
 		}
 		if smallest != "" && len(unscoped) > 0 && total > 0 {
 			small := counts[smallest]
-			fmt.Printf("  -> %s holds %d/%d unscoped slots (%.0f%%) while being %.0f%% of the index\n",
-				f.label(smallest), small, len(unscoped),
+			fmt.Printf(
+				"  -> %s holds %d/%d unscoped slots (%.0f%%) while being %.0f%% of the index\n",
+				f.label(smallest),
+				small,
+				len(unscoped),
 				100*float64(small)/float64(len(unscoped)),
-				100*float64(sizes[smallest])/float64(total))
+				100*float64(sizes[smallest])/float64(total),
+			)
 		}
 
 		for _, a := range f.aliases() {

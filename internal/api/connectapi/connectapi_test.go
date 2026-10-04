@@ -17,6 +17,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1/ingestv1connect"
 	typev1 "github.com/bamsammich/docsearch/internal/api/docsearch/type/v1"
 	"github.com/bamsammich/docsearch/internal/domain"
+	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 )
 
@@ -36,12 +37,11 @@ func (s *APISuite) SetupTest() {
 	s.ingester = mocks.NewMockIngester(s.T())
 	s.sources = mocks.NewMockSources(s.T())
 
-	path, handler := connectapi.NewServer(s.ingester, s.sources)
-	mux := http.NewServeMux()
-	mux.Handle(path, handler)
-	server := httptest.NewServer(mux)
-	s.T().Cleanup(server.Close)
-
+	path, handler := connectapi.NewServer(
+		func(string) (connectapi.Ingester, connectapi.Sources, error) {
+			return s.ingester, s.sources, nil
+		})
+	server := s.mount(path, handler, true)
 	s.client = ingestv1connect.NewIngestServiceClient(server.Client(), server.URL)
 }
 
@@ -209,4 +209,38 @@ func (s *APISuite) TestTheRequestsOptionsReachTheIngest() {
 	s.Require().NoError(err)
 	s.Equal("Widget Docs", seen.Title)
 	s.False(revalidate, "a re-chunk without requests is the caller's to ask for")
+}
+
+// mount serves one handler, behind the middleware that names a user where
+// the real server puts it. named false leaves the middleware out, which is
+// how a handler reached by another route would see a request.
+func (s *APISuite) mount(path string, handler http.Handler, named bool) *httptest.Server {
+	if named {
+		handler = owner.Middleware(owner.Builtin, handler)
+	}
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+	server := httptest.NewServer(mux)
+	s.T().Cleanup(server.Close)
+	return server
+}
+
+// A handler mounted outside the middleware refuses rather than reading the
+// built-in library, which is the failure multi-user isolation exists to
+// prevent.
+func (s *APISuite) TestAnIngestWithNoOwnerIsRefused() {
+	path, handler := connectapi.NewServer(
+		func(string) (connectapi.Ingester, connectapi.Sources, error) {
+			s.FailNow("the handler asked for a library without a user")
+			return nil, nil, nil
+		})
+	server := s.mount(path, handler, false)
+	client := ingestv1connect.NewIngestServiceClient(server.Client(), server.URL)
+
+	stream, err := client.Ingest(s.T().Context(),
+		connect.NewRequest(&ingestv1.IngestRequest{Source: "/library/a.pdf"}))
+	s.Require().NoError(err)
+	for stream.Receive() { //nolint:revive // the error arrives once the stream drains
+	}
+	s.Require().ErrorContains(stream.Err(), "no owner")
 }

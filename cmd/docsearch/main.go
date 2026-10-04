@@ -15,10 +15,12 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"connectrpc.com/connect"
+	_ "github.com/jackc/pgx/v5/stdlib" // the driver a Postgres database is migrated through
 	"github.com/urfave/cli/v3"
-	_ "modernc.org/sqlite" // the driver an index is written with
+	_ "modernc.org/sqlite" // the driver a SQLite index is written with
 
 	"github.com/bamsammich/docsearch/internal/config"
 	"github.com/bamsammich/docsearch/internal/schema"
@@ -85,9 +87,10 @@ func migrateCommand() *cli.Command {
 			"the only writer.",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:    "db",
-				Usage:   "path to the SQLite database",
-				Sources: cli.EnvVars(config.EnvDB),
+				Name: "dsn",
+				Usage: "the database to migrate: a Postgres `DSN`, or a path to " +
+					"a SQLite file while both dialects live",
+				Sources: cli.EnvVars(config.EnvDSN, config.EnvDB),
 			},
 			&cli.BoolFlag{
 				Name:  "check",
@@ -99,9 +102,9 @@ func migrateCommand() *cli.Command {
 }
 
 func migrate(ctx context.Context, cmd *cli.Command) error {
-	path := cmd.String("db")
+	path := cmd.String("dsn")
 	if path == "" {
-		return fmt.Errorf("no database: pass --db or set %s", config.EnvDB)
+		return fmt.Errorf("no database: pass --dsn or set %s", config.EnvDSN)
 	}
 
 	checking := cmd.Bool("check")
@@ -134,6 +137,12 @@ func migrate(ctx context.Context, cmd *cli.Command) error {
 // did, since a fresh index needs no migration and --check has nothing to
 // report about a file that does not exist.
 func creating(ctx context.Context, path string, checking bool) (bool, error) {
+	if remote(path) {
+		// The cluster provisions a Postgres database, along with the roles
+		// and the extension no migration has the privileges to create. Goose
+		// runs against whatever is there.
+		return false, nil
+	}
 	fresh, err := absent(path)
 	if err != nil || !fresh {
 		return false, err
@@ -176,12 +185,21 @@ func create(ctx context.Context, path string) error {
 // report says where the index stands and refuses where it is not current.
 func report(path string, target, found int, recorded bool) error {
 	fmt.Printf("database %s: schema %s, build requires %d\n",
-		path, at(found, recorded), target)
+		label(path), at(found, recorded), target)
 	if recorded && found == target {
 		fmt.Println("up to date")
 		return nil
 	}
 	return errors.New("migration needed: run `docsearch migrate`")
+}
+
+// label is what a database is called in output. A DSN can carry a password,
+// so a remote one is never printed.
+func label(path string) string {
+	if remote(path) {
+		return "(postgres)"
+	}
+	return path
 }
 
 // upgrade migrates the index and says what changed, naming every version it
@@ -206,22 +224,38 @@ func upgrade(ctx context.Context, db *sql.DB, target, found int, recorded bool) 
 
 // open connects to the index, creating the file only where the caller meant
 // to.
+// remote reports whether a target names a Postgres database rather than a
+// file on disk.
+func remote(target string) bool {
+	return strings.HasPrefix(target, "postgres://") ||
+		strings.HasPrefix(target, "postgresql://")
+}
+
 func open(path string, fresh bool) (*sql.DB, error) {
+	if remote(path) {
+		return dial("pgx", path, "the database")
+	}
 	if fresh {
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return nil, fmt.Errorf("create %s: %w", filepath.Dir(path), err)
 		}
 	}
-	db, err := sql.Open("sqlite", path+
+	return dial("sqlite", path+
 		"?_pragma=busy_timeout(5000)"+
 		"&_pragma=journal_mode(WAL)"+
 		"&_pragma=foreign_keys(ON)"+
-		"&_time_format=sqlite")
+		"&_time_format=sqlite", path)
+}
+
+// dial opens a database and proves it answers, naming it as called rather
+// than as addressed: a DSN can carry a password.
+func dial(driver, target, called string) (*sql.DB, error) {
+	db, err := sql.Open(driver, target)
 	if err != nil {
-		return nil, fmt.Errorf("open %s: %w", path, err)
+		return nil, fmt.Errorf("open %s: %w", called, err)
 	}
 	if err := db.Ping(); err != nil {
-		return nil, errors.Join(fmt.Errorf("open %s: %w", path, err), db.Close())
+		return nil, errors.Join(fmt.Errorf("open %s: %w", called, err), db.Close())
 	}
 	return db, nil
 }

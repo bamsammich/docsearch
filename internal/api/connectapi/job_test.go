@@ -16,6 +16,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1/ingestv1connect"
 	typev1 "github.com/bamsammich/docsearch/internal/api/docsearch/type/v1"
 	"github.com/bamsammich/docsearch/internal/domain"
+	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 	"github.com/bamsammich/docsearch/internal/service/job"
 )
@@ -35,9 +36,10 @@ func TestJobAPI(t *testing.T) { suite.Run(t, new(JobAPISuite)) }
 func (s *JobAPISuite) SetupTest() {
 	s.jobs = mocks.NewMockJobs(s.T())
 
-	path, handler := connectapi.NewJobServer(s.jobs, errNoJob)
+	path, handler := connectapi.NewJobServer(
+		func(string) (connectapi.Jobs, error) { return s.jobs, nil }, errNoJob)
 	mux := http.NewServeMux()
-	mux.Handle(path, handler)
+	mux.Handle(path, owner.Middleware(owner.Builtin, handler))
 	server := httptest.NewServer(mux)
 	s.T().Cleanup(server.Close)
 
@@ -167,4 +169,22 @@ func (s *JobAPISuite) TestAJobTheQueueDoesNotHoldIsNotFound() {
 		connect.NewRequest(&ingestv1.CancelJobRequest{JobId: 404}))
 	s.Require().Error(err)
 	s.Equal(connect.CodeNotFound, connect.CodeOf(err))
+}
+
+// A handler mounted outside the middleware refuses rather than reading the
+// built-in queue.
+func (s *JobAPISuite) TestListingJobsWithNoOwnerIsRefused() {
+	path, handler := connectapi.NewJobServer(
+		func(string) (connectapi.Jobs, error) {
+			s.FailNow("the handler asked for a queue without a user")
+			return nil, nil
+		}, errNoJob)
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+	server := httptest.NewServer(mux)
+	s.T().Cleanup(server.Close)
+
+	_, err := ingestv1connect.NewJobServiceClient(server.Client(), server.URL).
+		ListJobs(s.T().Context(), connect.NewRequest(&ingestv1.ListJobsRequest{}))
+	s.Require().ErrorContains(err, "no owner")
 }

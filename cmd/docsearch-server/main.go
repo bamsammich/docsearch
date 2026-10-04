@@ -55,9 +55,9 @@ func command() *cli.Command {
 				Sources: cli.EnvVars(config.EnvAddr),
 			},
 			&cli.StringFlag{
-				Name:    "db",
-				Usage:   "path to the SQLite database",
-				Sources: cli.EnvVars(config.EnvDB),
+				Name:    "dsn",
+				Usage:   "Postgres `DSN` of the database holding every library",
+				Sources: cli.EnvVars(config.EnvDSN),
 			},
 			&cli.StringSliceFlag{
 				Name:    "root",
@@ -97,7 +97,7 @@ func origins(list string) []string {
 func run(_ context.Context, cmd *cli.Command) error {
 	cfg := config.Config{
 		Addr:         cmd.String("addr"),
-		DBPath:       cmd.String("db"),
+		DSN:          cmd.String("dsn"),
 		LibraryRoots: cmd.StringSlice("root"),
 		// The token is read from the environment alone, deliberately not
 		// from a flag: an argument is visible to every process on the host

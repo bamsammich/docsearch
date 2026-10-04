@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/bamsammich/docsearch/internal/domain"
+	"github.com/bamsammich/docsearch/internal/site/fetch"
 	"github.com/bamsammich/docsearch/internal/source/site"
 	"github.com/bamsammich/docsearch/internal/urlguard"
 )
@@ -23,7 +24,17 @@ type SiteSuite struct{ suite.Suite }
 func TestSite(t *testing.T) { suite.Run(t, new(SiteSuite)) }
 
 func (s *SiteSuite) source(seed string, opts site.Options) *site.Source {
-	return site.New(seed, filepath.Join(s.T().TempDir(), "cache.db"), opts)
+	return site.New(seed, s.cache(), opts)
+}
+
+// cache is a crawl cache in a file, which is all a source needs: whose
+// library it belongs to is decided by whoever opened it.
+func (s *SiteSuite) cache() *fetch.SQLiteCache {
+	cache, err := fetch.OpenSQLiteCache(s.T().Context(),
+		filepath.Join(s.T().TempDir(), "cache.db"))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { s.Require().NoError(cache.Close()) })
+	return cache
 }
 
 func (s *SiteSuite) TestTheSeedIsCheckedAgainstTheGuardBeforeAnythingIsFetched() {

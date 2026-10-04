@@ -15,8 +15,9 @@ type Config struct {
 	// LibraryRoots are the directories add_document will accept a path
 	// inside. Which directories are ingestable is an operator decision: no
 	// tool parameter widens the set, and a caller cannot add to it.
-	LibraryRoots    []string
-	DBPath          string
+	LibraryRoots []string
+	// DSN addresses the Postgres database holding every library.
+	DSN             string
 	BearerToken     string
 	AllowedOrigins  []string
 	AllowPublicBind bool
@@ -24,9 +25,15 @@ type Config struct {
 }
 
 const (
-	EnvToken   = "DOCSEARCH_TOKEN" //nolint:gosec // name of a variable, not a credential
-	EnvDB      = "DOCSEARCH_DB"
-	EnvRoot    = "DOCSEARCH_ROOT"
+	EnvToken = "DOCSEARCH_TOKEN" //nolint:gosec // name of a variable, not a credential
+	// EnvDSN addresses the Postgres database the server and the worker read.
+	EnvDSN = "DOCSEARCH_DSN"
+	// EnvDB is the SQLite file the migrate command still takes, which step
+	// 4g of docs/plans/postgres-multiuser.md removes along with the dialect.
+	EnvDB   = "DOCSEARCH_DB"
+	EnvRoot = "DOCSEARCH_ROOT"
+	// EnvUser names the library a worker claims jobs from.
+	EnvUser    = "DOCSEARCH_USER"
 	EnvOrigins = "DOCSEARCH_ALLOWED_ORIGINS"
 	EnvAddr    = "DOCSEARCH_ADDR"
 	// EnvServer is where docsearch finds docsearch-server. Every command but
@@ -46,8 +53,8 @@ func (c *Config) Validate() error {
 	if c.BearerToken == "" {
 		return fmt.Errorf("no bearer token: set %s", EnvToken)
 	}
-	if c.DBPath == "" {
-		return errors.New("no database path: set --db or " + EnvDB)
+	if c.DSN == "" {
+		return errors.New("no database: set --dsn or " + EnvDSN)
 	}
 	if len(c.LibraryRoots) == 0 {
 		return errors.New("no library root: set --root or " + EnvRoot)
