@@ -39,15 +39,24 @@ CREATE TABLE IF NOT EXISTS robots (
 
 // Response is one stored HTTP response.
 type Response struct {
+	FetchedAt    time.Time
 	URL          string
 	FinalURL     string
 	ContentType  string
 	ETag         string
 	LastModified string
 	SHA256       string
-	FetchedAt    string
 	Body         []byte
 	Status       int
+}
+
+// RobotsFile is a host's robots.txt and when the host last served it.
+//
+// The age is what decides whether the copy may still say what the crawler
+// fetches: RFC 9309 section 2.4 allows a cached copy for at most 24 hours.
+type RobotsFile struct {
+	FetchedAt time.Time
+	Body      string
 }
 
 // Cache holds the raw responses a crawl fetched, apart from the search
@@ -66,9 +75,9 @@ type Cache interface {
 	Touch(ctx context.Context, url string) error
 	// Robots is the stored robots.txt for a host, and whether one was
 	// stored. An empty body means the host serves none, which is permission.
-	Robots(ctx context.Context, host string) (string, bool, error)
+	Robots(ctx context.Context, host string) (*RobotsFile, bool, error)
 	// PutRobots stores a host's robots.txt.
-	PutRobots(ctx context.Context, host, body string) error
+	PutRobots(ctx context.Context, host string, r *RobotsFile) error
 }
 
 // SQLiteCache is a Cache in one SQLite file, the shape the Python worker
@@ -147,14 +156,23 @@ func (c *SQLiteCache) Get(ctx context.Context, url string) (*Response, bool, err
 		r                          Response
 		contentType, etag, lastMod sql.NullString
 	)
+	var fetchedAt string
 	err := row.Scan(&r.URL, &r.FinalURL, &r.Status, &contentType, &etag, &lastMod,
-		&r.Body, &r.SHA256, &r.FetchedAt)
+		&r.Body, &r.SHA256, &fetchedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, nil
 	}
 	if err != nil {
 		return nil, false, fmt.Errorf("read %s from cache: %w", url, err)
 	}
+	stamp, err := time.Parse(timeFormat, fetchedAt)
+	if err != nil {
+		// A row whose age cannot be read counts as a miss. The cache is
+		// regenerable, so the cost is one request, where refusing to open
+		// the file would cost the whole crawl.
+		return nil, false, nil
+	}
+	r.FetchedAt = stamp
 	r.ContentType, r.ETag, r.LastModified = contentType.String, etag.String, lastMod.String
 	return &r, true, nil
 }
@@ -169,7 +187,7 @@ func (c *SQLiteCache) Put(ctx context.Context, r *Response) error {
 		last_modified=excluded.last_modified, body=excluded.body, sha256=excluded.sha256,
 		fetched_at=excluded.fetched_at`,
 		r.URL, r.FinalURL, r.Status, nullable(r.ContentType), nullable(r.ETag),
-		nullable(r.LastModified), r.Body, r.SHA256, r.FetchedAt)
+		nullable(r.LastModified), r.Body, r.SHA256, r.FetchedAt.UTC().Format(timeFormat))
 	if err != nil {
 		return fmt.Errorf("store %s in cache: %w", r.URL, err)
 	}
@@ -187,23 +205,30 @@ func (c *SQLiteCache) Touch(ctx context.Context, url string) error {
 
 // Robots is the stored robots.txt for host, and whether one was stored. An
 // empty body means the host serves none, which is permission.
-func (c *SQLiteCache) Robots(ctx context.Context, host string) (string, bool, error) {
-	var body string
-	err := c.db.QueryRowContext(ctx, "SELECT body FROM robots WHERE host = ?", host).Scan(&body)
+func (c *SQLiteCache) Robots(ctx context.Context, host string) (*RobotsFile, bool, error) {
+	var body, fetchedAt string
+	err := c.db.QueryRowContext(ctx,
+		"SELECT body, fetched_at FROM robots WHERE host = ?", host).Scan(&body, &fetchedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", false, nil
+		return nil, false, nil
 	}
 	if err != nil {
-		return "", false, fmt.Errorf("read robots for %s: %w", host, err)
+		return nil, false, fmt.Errorf("read robots for %s: %w", host, err)
 	}
-	return body, true, nil
+	stamp, err := time.Parse(timeFormat, fetchedAt)
+	if err != nil {
+		// Unreadable age, so the copy cannot be trusted to be current: a
+		// miss, and one request to replace it.
+		return nil, false, nil
+	}
+	return &RobotsFile{Body: body, FetchedAt: stamp}, true, nil
 }
 
 // PutRobots stores a host's robots.txt.
-func (c *SQLiteCache) PutRobots(ctx context.Context, host, body string) error {
+func (c *SQLiteCache) PutRobots(ctx context.Context, host string, r *RobotsFile) error {
 	_, err := c.db.ExecContext(ctx, `INSERT INTO robots (host, body, fetched_at) VALUES (?,?,?)
 		ON CONFLICT(host) DO UPDATE SET body=excluded.body, fetched_at=excluded.fetched_at`,
-		host, body, now())
+		host, r.Body, r.FetchedAt.UTC().Format(timeFormat))
 	if err != nil {
 		return fmt.Errorf("store robots for %s: %w", host, err)
 	}
@@ -219,7 +244,12 @@ func nullable(s string) any {
 	return s
 }
 
-// now is the timestamp format the Python cache writes.
-func now() string {
-	return time.Now().UTC().Format("2006-01-02T15:04:05Z")
+// timeFormat is how a timestamp reads in the TEXT columns of a cache file.
+// Nothing outside SQLiteCache sees it: a Response and a RobotsFile carry an
+// instant, and the file's own column is the only place a format is needed.
+const timeFormat = "2006-01-02T15:04:05Z"
+
+// now is when a response or a robots.txt was read from the host.
+func now() time.Time {
+	return time.Now().UTC()
 }

@@ -361,3 +361,64 @@ func (s *MigrationSuite) TestSearchDownLeavesTheChunks() {
 		s.Equal(2, chunks, "an index is regenerable; the rows are not")
 	})
 }
+
+// -- 00009_fetch_cache ----------------------------------------------------
+
+func (s *MigrationSuite) TestCacheUpHoldsAResponseAndWhatRobotsSaid() {
+	s.upTo(9)
+
+	pgtest.WriteAs(s.T(), s.db, "default", func(tx *sql.Tx) {
+		_, err := tx.ExecContext(s.T().Context(),
+			`INSERT INTO responses
+			   (user_id, url, final_url, status, content_type, body, sha256, fetched_at)
+			 VALUES ('default', 'https://example.com/a', 'https://example.com/a', 200,
+			         'text/html', $1, 'abc', now())`, []byte("<p>hi</p>"))
+		s.Require().NoError(err)
+		_, err = tx.ExecContext(s.T().Context(),
+			`INSERT INTO robots (user_id, host, body, fetched_at)
+			 VALUES ('default', 'example.com', 'User-agent: *', now())`)
+		s.Require().NoError(err)
+	})
+
+	pgtest.ReadAs(s.T(), s.db, "default", func(tx *sql.Tx) {
+		var body []byte
+		s.Require().NoError(tx.QueryRowContext(s.T().Context(),
+			`SELECT body FROM responses WHERE url = 'https://example.com/a'`).Scan(&body))
+		s.Equal("<p>hi</p>", string(body), "a body survives the round trip as bytes")
+	})
+}
+
+func (s *MigrationSuite) TestCacheUpRefusesAResponseWithNoOwner() {
+	// The cache is not exempt from the rule the rest of the schema follows:
+	// a row names a user that exists, or it does not land.
+	s.upTo(9)
+
+	pgtest.ReadAs(s.T(), s.db, "ghost", func(tx *sql.Tx) {
+		_, err := tx.ExecContext(s.T().Context(),
+			`INSERT INTO responses
+			   (user_id, url, final_url, status, body, sha256, fetched_at)
+			 VALUES ('ghost', 'https://example.com/a', 'https://example.com/a', 200,
+			         $1, 'abc', now())`, []byte("x"))
+		s.Require().Error(err)
+	})
+}
+
+func (s *MigrationSuite) TestCacheDownTakesTheTablesWithIt() {
+	// Dropping a cache costs bandwidth and nothing else, which is why a
+	// rollback empties it rather than keeping the rows somewhere.
+	s.upTo(9)
+	s.down()
+
+	s.False(s.tableExists("responses"))
+	s.False(s.tableExists("robots"))
+	s.True(s.tableExists("chunks"), "the index is not the cache")
+}
+
+func (s *MigrationSuite) TestCacheGoesDownAndUpAgain() {
+	s.upTo(9)
+	s.down()
+	s.upTo(9)
+
+	s.True(s.tableExists("responses"))
+	s.True(s.tableExists("robots"))
+}

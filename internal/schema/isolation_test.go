@@ -45,25 +45,39 @@ func (s *IsolationSuite) exec(statement string, args ...any) {
 	s.Require().NoError(err)
 }
 
-// library writes one document and one chunk for a user. The write names the
-// user because FORCE binds the owner too.
+// library writes one document, one chunk, and the crawl cache behind them for
+// a user. The write names the user because FORCE binds the owner too.
 func (s *IsolationSuite) library(userID, docID, text string) {
 	pgtest.WriteAs(s.T(), s.db.Owner, userID, func(tx *sql.Tx) {
-		_, err := tx.ExecContext(s.T().Context(),
+		s.write(tx,
 			`INSERT INTO documents
 			   (user_id, doc_id, title, format, source_path, sha256, status)
 			 VALUES ($1, $2, 'A Manual', 'pdf', '/library/manual.pdf', 'abc', 'ready')`,
 			userID, docID)
-		s.Require().NoError(err)
-		_, err = tx.ExecContext(s.T().Context(),
+		s.write(tx,
 			`INSERT INTO chunks (user_id, doc_id, ordinal, heading_path, text)
 			 VALUES ($1, $2, 0, '4. Dimmer curves', $3)`, userID, docID, text)
-		s.Require().NoError(err)
+		s.write(tx,
+			`INSERT INTO responses
+			   (user_id, url, final_url, status, body, sha256, fetched_at)
+			 VALUES ($1, $2, $2, 200, $3, 'abc', now())`,
+			userID, "https://example.com/"+docID, []byte(text))
+		s.write(tx,
+			`INSERT INTO robots (user_id, host, body, fetched_at)
+			 VALUES ($1, 'example.com', $2, now())`, userID, userID+" asked")
 	})
 }
 
+// write runs one statement inside a transaction a caller opened.
+func (s *IsolationSuite) write(tx *sql.Tx, statement string, args ...any) {
+	_, err := tx.ExecContext(s.T().Context(), statement, args...)
+	s.Require().NoError(err)
+}
+
 func (s *IsolationSuite) TestASessionThatNamesNoUserSeesNothing() {
-	for _, table := range []string{"documents", "chunks", "pages", "index_terms", "ingest_jobs"} {
+	for _, table := range []string{
+		"documents", "chunks", "pages", "index_terms", "ingest_jobs", "responses", "robots",
+	} {
 		var n int
 		err := s.db.App.QueryRowContext(s.T().Context(),
 			`SELECT COUNT(*) FROM `+table).Scan(&n) //nolint:gosec // a constant from this list

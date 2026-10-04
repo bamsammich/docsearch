@@ -321,37 +321,105 @@ func (f *Fetcher) Robots(ctx context.Context, raw string) (string, error) {
 	return f.robotsFor(ctx, u)
 }
 
-// robotsFor reads a host's robots.txt, from memory, then the cache, then
-// the host. A host that will not serve one has disallowed nothing: absent
-// is permission, per the standard.
+// robotsMaxAge is how long a stored robots.txt may go on deciding what the
+// crawler fetches.
+//
+// RFC 9309 section 2.4: a crawler SHOULD NOT use a cached copy for more than
+// 24 hours unless the file is unreachable. A cache in a container-local file
+// was cleared by every restart, which kept the bound by accident. Kept in a
+// database it survives, so the age is checked.
+const robotsMaxAge = 24 * time.Hour
+
+// disallowAll is an undefined robots.txt, written in the language the parser
+// already reads.
+//
+// RFC 9309 section 2.3.1.4: where the file is unreachable it is undefined,
+// and a crawler MUST assume a complete disallow. Written as a rule rather
+// than carried as a flag, so robotsFor has one kind of answer to return and
+// the parser stays the only thing that reads rules.
+const disallowAll = "User-agent: *\nDisallow: /\n"
+
+// robotsFor reads a host's robots.txt, from memory, then the cache, then the
+// host.
+//
+// A host with no robots.txt has disallowed nothing, and a host that cannot be
+// reached has allowed nothing. fetchRobots says which of the two an answer
+// is, and readRobots decides what to do about it.
 func (f *Fetcher) robotsFor(ctx context.Context, u *url.URL) (string, error) {
 	host := u.Hostname()
 	if body, ok := f.robots[host]; ok {
 		return body, nil
 	}
-	body, ok, err := f.cache.Robots(ctx, host)
+	stored, hit, err := f.cache.Robots(ctx, host)
 	if err != nil {
 		return "", err
 	}
-	if !ok {
-		// Not routed through Fetch: asking robots.txt whether robots.txt may
-		// be fetched does not terminate.
-		body = f.fetchRobots(ctx, u.Scheme+"://"+u.Host+"/robots.txt")
-		if err := f.cache.PutRobots(ctx, host, body); err != nil {
-			return "", err
-		}
+	if hit && time.Since(stored.FetchedAt) < robotsMaxAge {
+		f.robots[host] = stored.Body
+		return stored.Body, nil
 	}
+	body, err := f.readRobots(ctx, u, stored, hit)
+	if err != nil {
+		return "", err
+	}
+	// Held for the life of this fetcher, so one crawl asks a host once. A
+	// complete disallow is held too: a host answering 500 is not asked again
+	// by the crawl that found it broken.
 	f.robots[host] = body
 	return body, nil
 }
 
-// fetchRobots reads a host's robots.txt, or "" when it does not serve one.
-func (f *Fetcher) fetchRobots(ctx context.Context, raw string) string {
-	res, err := f.request(ctx, raw, nil)
-	if err != nil || res.Status != http.StatusOK {
-		return ""
+// readRobots reads a host's robots.txt again and stores what came back.
+//
+// An unreachable host keeps whatever copy there is, however old, which RFC
+// 9309 section 2.3.1.4 permits for exactly this case. The alternative is
+// worse: an undefined robots.txt disallows everything, so one 500 would stop
+// a crawl the host's own rules allow.
+func (f *Fetcher) readRobots(
+	ctx context.Context,
+	u *url.URL,
+	stored *RobotsFile,
+	hit bool,
+) (string, error) {
+	// Not routed through Fetch: asking robots.txt whether robots.txt may be
+	// fetched does not terminate.
+	body, reachable := f.fetchRobots(ctx, u.Scheme+"://"+u.Host+"/robots.txt")
+	if !reachable {
+		if hit {
+			return stored.Body, nil
+		}
+		return disallowAll, nil
 	}
-	return string(res.Body)
+	err := f.cache.PutRobots(ctx, u.Hostname(), &RobotsFile{Body: body, FetchedAt: now()})
+	if err != nil {
+		return "", err
+	}
+	return body, nil
+}
+
+// fetchRobots reads a host's robots.txt, and reports whether the host
+// answered for it at all.
+//
+// An empty body is a file the host does not have, which disallows nothing:
+// RFC 9309 section 2.3.1.3 says a crawler may access anything where the
+// status is in the 400s. A redirect is read the same way, which the standard
+// allows only past five hops; following them is its own step, and reading one
+// as undefined would refuse every host that merely moved the file.
+//
+// reachable is false only for a server or network error, section 2.3.1.4,
+// where the file is undefined rather than absent.
+func (f *Fetcher) fetchRobots(ctx context.Context, raw string) (string, bool) {
+	res, err := f.request(ctx, raw, nil)
+	if err != nil {
+		return "", false
+	}
+	if res.Status >= http.StatusInternalServerError {
+		return "", false
+	}
+	if res.Status != http.StatusOK {
+		return "", true
+	}
+	return string(res.Body), true
 }
 
 // conditional asks the server for the body only if it changed, which is

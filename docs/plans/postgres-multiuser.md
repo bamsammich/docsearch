@@ -152,7 +152,54 @@ five tenant tables to the app role and left `schema_version` out, so the
 readiness probe read every database as unversioned. Ranking itself is
 untouched -- the store asks `pg_textsearch` for the scores the spike
 measured, and nothing here changes how they are compared.
-| 4e | the response cache on Postgres, per user, behind the `fetch.Cache` interface it already has | the cache suite against a container, and a crawl resumed after the process that started it exits |
+| 4e | the response cache on Postgres, per user, behind the `fetch.Cache` interface it already has, and a stored `robots.txt` that expires | the cache suite against a container, covering refetch, revalidation, isolation between two users, and a restart; the fetcher suite for each class of answer a `robots.txt` request can get |
+
+A crawl cache in a local file is the piece a container takes away. Surviving a
+restart is most of what the cache is for: a cancelled crawl resumes through
+it, refreshes send conditional requests from it, and re-chunking makes no
+requests at all. Migration 9 puts `responses` and `robots` in
+the database, under the same policy as everything else.
+
+`robots` is per user as well, although a robots.txt is public and identical
+for everybody. Which hosts someone crawled is not public, and one request per
+user per host is cheaper than an exception to the isolation rule. Neither
+table is partitioned, unlike `chunks`: a cache holds one crawl's responses
+rather than a library's lifetime, so a second user needs a `users` row and
+nothing else.
+
+Keeping the cache turned up a bug that the move would have made permanent.
+Nothing read `fetched_at` on either table, so a `robots.txt` was fetched once
+per host and obeyed forever. A container-local file was cleared by every
+restart, which kept the copy fresh by accident; in Postgres it survives. RFC
+9309 section 2.4 allows a cached copy for at most 24 hours, so `robotsFor`
+checks the age and reads the file again past a day.
+
+Expiry forces a second question, because a refresh can fail, and the answer
+the code gave was wrong. `fetchRobots` returned an empty body for every
+non-200, and an empty `robots.txt` disallows nothing, so a host answering 500
+granted the crawler everything. RFC 9309 draws the line between two cases:
+
+| answer | what it means | what the crawler does |
+|---|---|---|
+| 400-499 | unavailable, section 2.3.1.3 | may access anything |
+| 500-599 or a network error | undefined, section 2.3.1.4 | complete disallow, or the stored copy where one exists |
+
+A complete disallow is expressed as `User-agent: *` and `Disallow: /` rather
+than as a flag, so one answer flows out of `robotsFor` and the parser stays
+the only thing that reads rules. An unreachable host keeps whatever copy is
+stored, however old, which the same section permits: one server error should
+not stop a crawl the host's own rules allow.
+
+Redirects are still not followed for `robots.txt`, and a redirect is read as
+unavailable. Section 2.3.1.2 permits that only past five hops, so the gap is
+real; closing it means routing each hop through the guard, which is its own
+step. Reading a redirect as undefined instead would refuse every host that
+serves the file from somewhere else.
+
+The worker still opens the SQLite cache. `site.Source` opens one from a path
+of its own, so switching it means handing it a `fetch.Cache` instead, and the
+cache needs an owner that no request carries until 4f. `internal/site/fetch/pgcache`
+is complete and tested ahead of the wiring that 4f rewrites anyway.
 | 4f | a user on every request: the service layer takes an owner, both API doors supply the built-in one, and every transaction opens with `SET LOCAL app.user_id` | a unit test per service that a call without an owner is refused rather than defaulted |
 | 4g | the isolation test in CI, and SQLite out of the tree: the driver, the FTS5 schema, the SQLite migrations and the file paths go | the isolation test as described, plus a deployment that starts with no SQLite file present |
 
