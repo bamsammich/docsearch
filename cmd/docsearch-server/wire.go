@@ -8,10 +8,10 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"path/filepath"
 	"slices"
 	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib" // the driver every library is read through
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
@@ -21,15 +21,11 @@ import (
 	"github.com/bamsammich/docsearch/internal/api/connectapi"
 	"github.com/bamsammich/docsearch/internal/config"
 	"github.com/bamsammich/docsearch/internal/httpx"
+	"github.com/bamsammich/docsearch/internal/library"
 	"github.com/bamsammich/docsearch/internal/mcpserver"
-	"github.com/bamsammich/docsearch/internal/repository/sqlite"
-	"github.com/bamsammich/docsearch/internal/service/document"
-	docingest "github.com/bamsammich/docsearch/internal/service/ingest"
-	"github.com/bamsammich/docsearch/internal/service/inspect"
-	"github.com/bamsammich/docsearch/internal/service/job"
-	"github.com/bamsammich/docsearch/internal/source"
+	"github.com/bamsammich/docsearch/internal/owner"
+	"github.com/bamsammich/docsearch/internal/repository/postgres"
 	"github.com/bamsammich/docsearch/internal/source/site"
-	"github.com/bamsammich/docsearch/internal/store"
 )
 
 // routeGroup is the fx value group every mounted service joins. Written
@@ -55,14 +51,10 @@ func serve(cfg config.Config, log *slog.Logger) error {
 		fx.WithLogger(fxLogger),
 		fx.StopTimeout(shutdownGrace),
 		fx.Provide(
-			newStore,
-			newIndex,
+			newPool,
 			newExtractor,
 			newFormats,
-			newSources,
-			newDocuments,
-			newJobs,
-			newIngester,
+			newLibraries,
 			grouped(newMCPRoute),
 			grouped(newIngestRoute),
 			grouped(newDocumentRoute),
@@ -109,25 +101,17 @@ func fxLogger(log *slog.Logger) fxevent.Logger {
 	return fxLog
 }
 
-// newStore opens the index as the MCP tools read it.
-func newStore(lc fx.Lifecycle, cfg config.Config) (*store.Store, error) {
-	st, err := store.Open(cfg.DBPath)
+// newPool opens the database every library lives in.
+//
+// One pool for the process, because a pool is a property of the process. Which
+// library a statement reads is decided per transaction, by the user it names.
+func newPool(lc fx.Lifecycle, cfg config.Config) (*sql.DB, error) {
+	db, err := sql.Open("pgx", cfg.DSN)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
-	lc.Append(fx.Hook{OnStop: func(context.Context) error { return st.Close() }})
-	return st, nil
-}
-
-// newIndex opens the index a second time, for writing.
-//
-// internal/store opens it as the server reads it, and a writer needs
-// _txlock=immediate, which is a property of the connection rather than of a
-// statement.
-func newIndex(lc fx.Lifecycle, cfg config.Config) (*sql.DB, error) {
-	db, err := sqlite.Open(cfg.DBPath)
-	if err != nil {
-		return nil, err
+	if err := db.Ping(); err != nil {
+		return nil, errors.Join(fmt.Errorf("open database: %w", err), db.Close())
 	}
 	lc.Append(fx.Hook{OnStop: func(context.Context) error { return db.Close() }})
 	return db, nil
@@ -148,30 +132,18 @@ func newFormats(extractor *pdf.Extractor) *adapter.Registry {
 	return adapter.New(extractor)
 }
 
-// newSources reads files under the library roots and crawls sites through a
-// fetch cache beside the index.
-func newSources(cfg config.Config, formats *adapter.Registry) *source.Registry {
-	cachePath := filepath.Join(filepath.Dir(cfg.DBPath), "fetch-cache.db")
-	return source.New(formats, cfg.LibraryRoots, cachePath, site.Options{})
-}
-
-func newDocuments(
+// newLibraries builds each user's view of the database.
+//
+// Every route below asks it for the view of whoever a request named, which is
+// why no route takes a service: a service belongs to one user, and the server
+// is built before any request arrives.
+func newLibraries(
+	cfg config.Config,
 	db *sql.DB,
 	extractor *pdf.Extractor,
 	formats *adapter.Registry,
-) *document.Service {
-	return document.New(
-		sqlite.NewDocuments(db),
-		inspect.New(extractor, formats, nil),
-	)
-}
-
-func newJobs(db *sql.DB, sources *source.Registry) *job.Service {
-	return job.New(sqlite.NewJobs(db), sources)
-}
-
-func newIngester(db *sql.DB) *docingest.Service {
-	return docingest.New(sqlite.New(db), time.Now)
+) *library.Libraries {
+	return library.New(db, extractor, formats, cfg.LibraryRoots, site.Options{}, time.Now)
 }
 
 // route is one mounted service: the path it answers on, and the handler.
@@ -206,9 +178,9 @@ func grouped(constructor any) any {
 //
 // GET and DELETE return 405 in this mode; that is the SDK's contract, not a
 // limitation we impose.
-func newMCPRoute(cfg config.Config, st *store.Store, log *slog.Logger) route {
+func newMCPRoute(cfg config.Config, libs *library.Libraries, log *slog.Logger) route {
 	srv := mcpserver.New(mcpserver.Deps{
-		Store:        st,
+		Stores:       libs.Store,
 		LibraryRoots: cfg.LibraryRoots,
 		Log:          log,
 	})
@@ -221,16 +193,34 @@ func newMCPRoute(cfg config.Config, st *store.Store, log *slog.Logger) route {
 	}
 }
 
-func newIngestRoute(ingester *docingest.Service, sources *source.Registry) route {
-	return mount(connectapi.NewServer(ingester, sources))
+// newIngestRoute wires the two halves an ingest needs, both of them the
+// asking user's: the service that writes the library, and the sources that
+// crawl through that user's cache.
+func newIngestRoute(libs *library.Libraries) route {
+	return mount(connectapi.NewServer(
+		func(user string) (connectapi.Ingester, connectapi.Sources, error) {
+			ingester, err := libs.Ingester(user)
+			if err != nil {
+				return nil, nil, err
+			}
+			sources, err := libs.Sources(user)
+			if err != nil {
+				return nil, nil, err
+			}
+			return ingester, sources, nil
+		}))
 }
 
-func newDocumentRoute(documents *document.Service) route {
-	return mount(connectapi.NewDocumentServer(documents, sqlite.ErrNotFound))
+func newDocumentRoute(libs *library.Libraries) route {
+	return mount(connectapi.NewDocumentServer(
+		func(user string) (connectapi.Documents, error) { return libs.Documents(user) },
+		postgres.ErrNotFound))
 }
 
-func newJobRoute(jobs *job.Service) route {
-	return mount(connectapi.NewJobServer(jobs, sqlite.ErrNotFound))
+func newJobRoute(libs *library.Libraries) route {
+	return mount(connectapi.NewJobServer(
+		func(user string) (connectapi.Jobs, error) { return libs.Jobs(user) },
+		postgres.ErrNotFound))
 }
 
 // mount names what a handler constructor returns as a pair, so that a list of
@@ -242,11 +232,20 @@ func mount(path string, handler http.Handler) route {
 // newMux puts every route behind the same token and origin checks, because a
 // second way in with its own idea of who may use it is how one of them ends
 // up wrong.
-func newMux(routes []route, cfg config.Config, st *store.Store, log *slog.Logger) *http.ServeMux {
+func newMux(
+	routes []route,
+	cfg config.Config,
+	libs *library.Libraries,
+	log *slog.Logger,
+) *http.ServeMux {
 	mux := http.NewServeMux()
 	for _, r := range routes {
+		// The owner is named inside the token check, so an unauthenticated
+		// request never reaches a handler holding a user. Phase 04 serves one
+		// library, and an identity provider replaces the argument here.
 		mux.Handle(r.path, httpx.RequireAllowedOrigin(cfg.AllowedOrigins,
-			httpx.RequireBearer(cfg.BearerToken, r.handler)))
+			httpx.RequireBearer(cfg.BearerToken,
+				owner.Middleware(owner.Builtin, r.handler))))
 	}
 
 	// Liveness: the process is up. Deliberately says nothing else.
@@ -259,7 +258,7 @@ func newMux(routes []route, cfg config.Config, st *store.Store, log *slog.Logger
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
-		if err := st.Ready(ctx); err != nil {
+		if err := libs.Ready(ctx); err != nil {
 			// Names schema versions and table names only -- never document
 			// titles, paths or counts. This endpoint has no auth.
 			log.Error("readiness check failed", "error", err)
@@ -298,7 +297,7 @@ func newServer(
 				return fmt.Errorf("listen on %s: %w", cfg.Addr, err)
 			}
 			log.Info("docsearch-server listening",
-				"addr", listener.Addr().String(), "db", cfg.DBPath,
+				"addr", listener.Addr().String(),
 				"roots", cfg.LibraryRoots, "allowed_origins", cfg.AllowedOrigins,
 				"routes", mountedPaths(routes))
 			go serveUntilStopped(srv, listener, log, shutdown)

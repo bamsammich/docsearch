@@ -30,22 +30,25 @@ name: docsearch
 # every colon below, or add_document starts rejecting valid paths.
 
 services:
-  # The named volume starts life root-owned -- Docker only copies ownership
-  # from the image when the mount point exists there, and neither image creates
-  # /data. Both real services run as uid 65532, so one root container fixes the
-  # ownership before anything tries to write. Idempotent; costs a container
-  # start per `up`.
-  init:
-    build:
-      context: ../..
-      dockerfile: Dockerfile.worker
-    image: docsearch-worker:local
-    user: "0:0"
-    entrypoint: ["sh", "-c"]
-    command: ["mkdir -p /data && chown -R 65532:65532 /data"]
+  # The database every library lives in, on the image that ships
+  # pg_textsearch with the library preloaded. Nothing in this repository
+  # installs the extension: CREATE EXTENSION is superuser-only, so the
+  # cluster does it, which is what initdb/00-roles.sql is.
+  db:
+    image: timescale/timescaledb-ha:pg17
+    environment:
+      POSTGRES_PASSWORD: docsearch
     volumes:
-      - data:/data
-    restart: "no"
+      - pgdata:/home/postgres/pgdata
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # Named database and role, because the default entrypoint answers
+      # ready on the bootstrap database before initdb has run.
+      test: ["CMD-SHELL", "pg_isready -U docsearch_owner -d docsearch"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
 
   # Migration runs here and nowhere else, for the same reason the systemd unit
   # runs it from ExecStartPre: the worker is the only writer, so this is the
@@ -62,12 +65,12 @@ services:
       dockerfile: Dockerfile.worker
     image: docsearch-worker:local
     entrypoint: ["docsearch"]
-    command: ["migrate", "--db", "/data/docsearch.db"]
-    volumes:
-      - data:/data
+    command: ["migrate"]
+    environment:
+      DOCSEARCH_DSN: postgres://docsearch_owner:docsearch@db:5432/docsearch?sslmode=disable
     depends_on:
-      init:
-        condition: service_completed_successfully
+      db:
+        condition: service_healthy
     restart: "no"
 
   server:
@@ -80,11 +83,15 @@ services:
     # machine can reach it -- but the server cannot know that, hence the
     # explicit --allow-public-bind and the warning it logs at startup.
     command:
-      - --db=/data/docsearch.db
       - --root=${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}
       - --addr=0.0.0.0:8765
       - --allow-public-bind
       - --allowed-origins=https://claude.ai,https://app.claude.ai
+    # Requests run as the restricted role, never as the owner the migrations
+    # ran under: policies bind the owner too, but a request has no business
+    # holding the privileges that can change a table.
+    environment:
+      DOCSEARCH_DSN: postgres://docsearch_app:docsearch@db:5432/docsearch?sslmode=disable
     # The token stays in its 0600 file and never enters this world-readable
     # compose file, matching what the launchd wrapper did with `set -a`.
     env_file:
@@ -92,7 +99,6 @@ services:
     ports:
       - "127.0.0.1:8765:8765"
     volumes:
-      - data:/data
       # The server only validates paths; it never reads document bytes.
       - ${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}:${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}:ro
     depends_on:
@@ -105,12 +111,19 @@ services:
       context: ../..
       dockerfile: Dockerfile.worker
     image: docsearch-worker:local
-    command: ["--db", "/data/docsearch.db", "--root", "${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}"]
+    command: ["--root", "${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}"]
+    environment:
+      DOCSEARCH_DSN: postgres://docsearch_app:docsearch@db:5432/docsearch?sslmode=disable
+      # One worker serves one library. A deployment with accounts runs one
+      # per user, or a worker that loops over them, which phase 04 does not
+      # need and so does not build.
+      DOCSEARCH_USER: default
     volumes:
-      - data:/data
       # Read-write: the worker is what actually opens the documents.
       - ${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}:${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}
     depends_on:
+      db:
+        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     # The worker checkpoints or rolls back its partial rows on SIGTERM. A large
@@ -120,8 +133,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  # A Docker-managed volume, not a bind mount: SQLite in WAL mode needs real
-  # file locking, and locking over the macOS virtiofs bind-mount path is not
-  # something to bet a single-writer database on. This lives on ext4 inside the
-  # Linux VM. Reach it with `scripts/docsearch-db`.
-  data:
+  # A Docker-managed volume, not a bind mount: a database wants real file
+  # locking, and locking over the macOS virtiofs bind-mount path is not
+  # something to bet one on. This lives on ext4 inside the Linux VM.
+  pgdata:

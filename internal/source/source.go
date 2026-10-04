@@ -16,6 +16,7 @@ import (
 
 	"github.com/bamsammich/docsearch/internal/libroot"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
+	"github.com/bamsammich/docsearch/internal/site/fetch"
 	"github.com/bamsammich/docsearch/internal/source/file"
 	"github.com/bamsammich/docsearch/internal/source/site"
 )
@@ -26,24 +27,25 @@ type Registry struct {
 	// Roots bound which files may be read. A target outside every root is
 	// refused, so a caller cannot name a path the operator never offered.
 	roots []string
-	// CachePath is where a crawl's responses are stored, shared by every
-	// site ingest so a re-crawl resumes rather than starting over.
-	cachePath string
-	site      site.Options
+	// cache holds a crawl's responses, shared by every site ingest a
+	// registry builds so that a re-crawl resumes rather than starting over.
+	// A registry serves one user, because a cache does.
+	cache fetch.Cache
+	site  site.Options
 }
 
 // New builds sources that read files under roots through extractor, and
-// crawl sites through the cache at cachePath.
+// crawl sites through cache.
 func New(
 	extractor ingest.Extractor,
 	roots []string,
-	cachePath string,
+	cache fetch.Cache,
 	siteOptions site.Options,
 ) *Registry {
 	return &Registry{
 		extractor: extractor,
 		roots:     roots,
-		cachePath: cachePath,
+		cache:     cache,
 		site:      siteOptions,
 	}
 }
@@ -54,12 +56,12 @@ func New(
 //nolint:ireturn // a factory for a port returns that port; naming a concrete type here would defeat it.
 func (r *Registry) For(target string, revalidate bool) (ingest.Source, error) {
 	if IsURL(target) {
-		if r.cachePath == "" {
+		if r.cache == nil {
 			return nil, fmt.Errorf("%s: a site ingest needs a fetch cache", target)
 		}
 		options := r.site
 		options.Revalidate = revalidate
-		return site.New(target, r.cachePath, options), nil
+		return site.New(target, r.cache, options), nil
 	}
 	resolved, err := libroot.Resolve(r.roots, target)
 	if err != nil {

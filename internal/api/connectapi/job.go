@@ -10,6 +10,7 @@ import (
 	ingestv1 "github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1"
 	"github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1/ingestv1connect"
 	typev1 "github.com/bamsammich/docsearch/internal/api/docsearch/type/v1"
+	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 	"github.com/bamsammich/docsearch/internal/service/job"
 )
@@ -22,16 +23,19 @@ type Jobs interface {
 	Cancel(ctx context.Context, id int64) (string, error)
 }
 
+// JobsFor builds the queue of the user a request acts for.
+type JobsFor func(user string) (Jobs, error)
+
 // JobServer implements the generated job handler.
 type JobServer struct {
-	jobs Jobs
+	jobs JobsFor
 	// notFound recognises a job the queue does not hold.
 	notFound error
 }
 
 // NewJobServer returns the path to mount the handler on, and the handler.
 func NewJobServer(
-	jobs Jobs,
+	jobs JobsFor,
 	notFound error,
 	opts ...connect.HandlerOption,
 ) (string, http.Handler) {
@@ -55,7 +59,11 @@ func (s *JobServer) Enqueue(
 			connect.CodeInvalidArgument,
 			errors.New("source names the file, directory or site to queue"))
 	}
-	queued, err := s.jobs.Enqueue(ctx, req.Msg.GetSource(), req.Msg.GetTitle())
+	queue, err := s.forOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	queued, err := queue.Enqueue(ctx, req.Msg.GetSource(), req.Msg.GetTitle())
 	if err != nil {
 		return nil, s.asConnectError(err)
 	}
@@ -79,7 +87,11 @@ func (s *JobServer) ListJobs(
 	ctx context.Context,
 	req *connect.Request[ingestv1.ListJobsRequest],
 ) (*connect.Response[ingestv1.ListJobsResponse], error) {
-	jobs, err := s.jobs.List(
+	queue, err := s.forOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	jobs, err := queue.List(
 		ctx, req.Msg.GetIncludeCompleted(), int(req.Msg.GetLimit()))
 	if err != nil {
 		return nil, s.asConnectError(err)
@@ -99,7 +111,11 @@ func (s *JobServer) CancelJob(
 		return nil, connect.NewError(
 			connect.CodeInvalidArgument, errors.New("job_id names the job to cancel"))
 	}
-	status, err := s.jobs.Cancel(ctx, req.Msg.GetJobId())
+	queue, err := s.forOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	status, err := queue.Cancel(ctx, req.Msg.GetJobId())
 	if err != nil {
 		return nil, s.asConnectError(err)
 	}
@@ -140,4 +156,19 @@ func jobMessage(j job.Job) *ingestv1.Job {
 		CreatedAt:       j.CreatedAt,
 		UpdatedAt:       j.UpdatedAt,
 	}
+}
+
+// forOwner is the queue of the user a request acts for.
+//
+//nolint:ireturn // a factory for a port returns that port; a concrete type here would defeat it.
+func (s *JobServer) forOwner(ctx context.Context) (Jobs, error) {
+	user, err := owner.From(ctx)
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	jobs, err := s.jobs(user)
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	return jobs, nil
 }

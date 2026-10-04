@@ -4,13 +4,15 @@ metadata:
   name: docsearch
   labels: { app.kubernetes.io/name: docsearch }
 spec:
-  # SQLite permits a single writer and the server writes ingest_jobs.
-  # Horizontal scaling is not available here; this is a hard constraint, not a
-  # starting point.
+  # One replica, because one worker serves one library and a second would
+  # claim the same queue. FOR UPDATE SKIP LOCKED makes two workers safe, so
+  # raising this is a decision about ingest throughput rather than a
+  # correctness question the database leaves open.
   replicas: 1
   strategy:
-    # Recreate, never RollingUpdate: a rolling update briefly runs two Pods,
-    # and two writers against one SQLite file corrupts it.
+    # Recreate while the Pod holds the library volume read-write: an RWO
+    # claim attaches to one node, so a rolling update would deadlock waiting
+    # for the old Pod to let go.
     type: Recreate
   selector:
     matchLabels: { app.kubernetes.io/name: docsearch }
@@ -26,16 +28,18 @@ spec:
         fsGroup: 65532
         seccompProfile: { type: RuntimeDefault }
 
-      # Migration runs to completion before either container starts. There is
-      # nothing to orchestrate: SQLite is one file with one writer, and
-      # replicas:1 with strategy Recreate already guarantees no second writer
-      # exists anywhere. So this is the same idempotent command the systemd
-      # unit runs from ExecStartPre, at the equivalent point in the lifecycle.
+      # Migration runs to completion before either container starts, as the
+      # same idempotent command the systemd unit runs from ExecStartPre.
       #
-      # Running it here rather than inside the worker also removes the startup
+      # Running it here rather than inside the worker removes the startup
       # race: the server's readiness probe asserts the schema version, and
-      # without this it can assert against a database the worker has not
-      # migrated yet, flapping the Pod until the worker happens to win.
+      # without this it can assert against a database nothing has migrated
+      # yet, flapping the Pod until the worker happens to win.
+      #
+      # It connects as the owning role, which is the only one that may change
+      # a table. The cluster creates both roles, the database and the
+      # extension; docs/plans/postgres-multiuser.md says why none of the
+      # three is something docsearch can do for itself.
       #
       # A migration that cannot be applied exits nonzero, the init container
       # backs off and retries, and the Pod never reaches Ready. That is the
@@ -44,9 +48,10 @@ spec:
       initContainers:
         - name: migrate
           image: ghcr.io/bamsammich/docsearch-worker:latest
-          command: ["docsearch", "migrate", "--db=/data/docsearch.db"]
-          volumeMounts:
-            - { name: data, mountPath: /data }
+          command: ["docsearch", "migrate"]
+          env:
+            - name: DOCSEARCH_DSN
+              valueFrom: { secretKeyRef: { name: docsearch-db, key: ownerDSN } }
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -56,13 +61,13 @@ spec:
             limits: { memory: 128Mi }
 
       containers:
-        # Both containers are in ONE Pod because they share the database
-        # volume. An RWO volume attaches to a single node, so they must be
-        # co-located; separate Deployments could not both mount it.
+        # Both containers are in ONE Pod because they share the library
+        # volume. An RWO claim attaches to a single node, so they must be
+        # co-located; separate Deployments could not both mount it. The
+        # database is no longer a reason: it is reachable over the network.
         - name: server
           image: ghcr.io/bamsammich/docsearch-server:latest
           args:
-            - --db=/data/docsearch.db
             - --root=/library
             - --addr=$(DOCSEARCH_ADDR)
             - --allowed-origins=$(DOCSEARCH_ALLOWED_ORIGINS)
@@ -73,10 +78,13 @@ spec:
               valueFrom: { configMapKeyRef: { name: docsearch-config, key: allowedOrigins } }
             - name: DOCSEARCH_TOKEN
               valueFrom: { secretKeyRef: { name: docsearch-token, key: token } }
+            # The restricted role, never the owner: a request has no business
+            # holding privileges that can change a table.
+            - name: DOCSEARCH_DSN
+              valueFrom: { secretKeyRef: { name: docsearch-db, key: appDSN } }
           ports:
             - { name: mcp, containerPort: 8765 }
           volumeMounts:
-            - { name: data, mountPath: /data }
             # The server only validates paths; it never reads document bytes.
             - { name: library, mountPath: /library, readOnly: true }
           livenessProbe:
@@ -98,9 +106,16 @@ spec:
 
         - name: worker
           image: ghcr.io/bamsammich/docsearch-worker:latest
-          args: ["--db=/data/docsearch.db", "--root=/library"]
+          args: ["--root=/library"]
+          env:
+            - name: DOCSEARCH_DSN
+              valueFrom: { secretKeyRef: { name: docsearch-db, key: appDSN } }
+            # One worker serves one library. A deployment with accounts runs
+            # one per user, which phase 04 does not need and so does not
+            # build.
+            - name: DOCSEARCH_USER
+              value: default
           volumeMounts:
-            - { name: data, mountPath: /data }
             # Read-write: the worker is what actually opens the documents.
             - { name: library, mountPath: /library }
             - { name: tmp, mountPath: /tmp }
@@ -115,8 +130,6 @@ spec:
             capabilities: { drop: ["ALL"] }
 
       volumes:
-        - name: data
-          persistentVolumeClaim: { claimName: docsearch-data }
         - name: library
           persistentVolumeClaim: { claimName: docsearch-library }
         - name: tmp

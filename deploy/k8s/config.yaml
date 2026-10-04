@@ -26,6 +26,22 @@ stringData:
   # Replace before applying. Generate with:  openssl rand -base64 48
   token: "CHANGE-ME-generate-a-real-token"
 ---
+# Two connection strings, because two roles do different jobs. The owner may
+# change a table and runs migrations; a request runs as the restricted role,
+# which owns nothing and reaches rows only through the policies.
+#
+# A cluster operator that already issues Postgres credentials, such as
+# CloudNativePG, generates a secret of its own. Point the Deployment at that
+# one and delete this.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: docsearch-db
+type: Opaque
+stringData:
+  ownerDSN: "postgres://docsearch_owner:CHANGE-ME@postgres:5432/docsearch"
+  appDSN: "postgres://docsearch_app:CHANGE-ME@postgres:5432/docsearch"
+---
 # Exposed over Tailscale, never an Ingress. The tool surface includes a
 # filesystem path parameter; it must not have a public listener.
 apiVersion: v1

@@ -200,8 +200,40 @@ The worker still opens the SQLite cache. `site.Source` opens one from a path
 of its own, so switching it means handing it a `fetch.Cache` instead, and the
 cache needs an owner that no request carries until 4f. `internal/site/fetch/pgcache`
 is complete and tested ahead of the wiring that 4f rewrites anyway.
-| 4f | a user on every request: the service layer takes an owner, both API doors supply the built-in one, and every transaction opens with `SET LOCAL app.user_id` | a unit test per service that a call without an owner is refused rather than defaulted |
-| 4g | the isolation test in CI, and SQLite out of the tree: the driver, the FTS5 schema, the SQLite migrations and the file paths go | the isolation test as described, plus a deployment that starts with no SQLite file present |
+| 4f | a user on every request, and both binaries on Postgres: the doors resolve an owner and ask for that user's services, and the worker claims one library's queue | a refusal case per door for a request that named no user, plus the end-to-end suite rebuilt on a container |
+| 4g | the isolation test in CI, and SQLite out of the tree: the driver, the FTS5 schema, the SQLite migrations and the remaining file paths go | the isolation test as described, plus a deployment that starts with no SQLite file present |
+
+4f took the Postgres switch that 4g was going to make. Threading an owner
+through a door that then reads SQLite is theatre, because the SQLite store
+has no user to thread it to, so the two had to happen together. 4g keeps the
+deletion: `internal/store`, `internal/repository/sqlite`, the SQLite
+migrations, `scripts/docsearch-db`, which opens a volume the compose file no
+longer mounts, and `docsearch-eval`, which still reads a file.
+
+The owner travels in the request context. `internal/owner` puts it there and
+`owner.From` takes it out, refusing where nothing named one. A parameter
+would have been plainer, and the MCP door rules it out: a tool handler
+receives a context and its decoded arguments, with no access to the request,
+and one mechanism has to serve both doors.
+
+What a door holds is a factory rather than a service. A service is built for
+one user, the server is built before any request arrives, and the repository
+already took its user at construction, which 4c chose for this reason.
+`internal/library` is the only place that builds one, so adding a dependency
+to a door does not spread knowledge of multi-tenancy across the service
+layer, which still knows nothing about it.
+
+| decision | why |
+|---|---|
+| one worker, one library | a job, the document it produces and the responses it crawled belong to the same user; `--user` names which, defaulting to the built-in one |
+| `site.Source` takes a cache | it used to open one from a path, and a crawl now reads the asking user's |
+| `--dsn` replaces `--db` | the server and the worker address a database rather than a file; `migrate` takes either while both dialects live |
+| `library.Ready` takes no user | the readiness probe answers before anyone has signed in, and neither table it reads carries a policy |
+
+The end-to-end suite runs against a container now, which is what makes the
+switch a tested claim rather than a compiling one. Two of its assertions
+changed because a Postgres column is typed: `permanent` reads back as `true`
+where SQLite stored `1`.
 
 ## What the code assumes, and what a deployment provides
 

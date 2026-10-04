@@ -23,6 +23,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1/ingestv1connect"
 	typev1 "github.com/bamsammich/docsearch/internal/api/docsearch/type/v1"
 	"github.com/bamsammich/docsearch/internal/domain"
+	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 )
 
@@ -41,20 +42,25 @@ type Sources interface {
 	For(source string, revalidate bool) (ingest.Source, error)
 }
 
+// IngesterFor builds the ingest service of the user a request acts for, and
+// the sources that user may read.
+//
+// Both belong to one user: an ingest writes into a library, and a crawl
+// reads and writes the cache of whoever asked for it.
+type IngesterFor func(user string) (Ingester, Sources, error)
+
 // Server implements the generated handler.
 type Server struct {
-	ingester Ingester
-	sources  Sources
+	ingester IngesterFor
 }
 
 // NewServer returns the path to mount the handler on, and the handler.
 func NewServer(
-	ingester Ingester,
-	sources Sources,
+	ingester IngesterFor,
 	opts ...connect.HandlerOption,
 ) (string, http.Handler) {
 	return ingestv1connect.NewIngestServiceHandler(
-		&Server{ingester: ingester, sources: sources},
+		&Server{ingester: ingester},
 		opts...,
 	)
 }
@@ -73,7 +79,15 @@ func (s *Server) Ingest(
 			errors.New("source names the file or site to read, and was empty"),
 		)
 	}
-	source, err := s.sources.For(msg.GetSource(), msg.GetRevalidate())
+	user, err := owner.From(ctx)
+	if err != nil {
+		return asConnectError(err)
+	}
+	ingester, sources, err := s.ingester(user)
+	if err != nil {
+		return asConnectError(err)
+	}
+	source, err := sources.For(msg.GetSource(), msg.GetRevalidate())
 	if err != nil {
 		return asConnectError(err)
 	}
@@ -83,7 +97,7 @@ func (s *Server) Ingest(
 	ctx, hungUp := context.WithCancel(ctx)
 	defer hungUp()
 
-	result, err := s.ingester.Run(ctx, source, ingest.Options{
+	result, err := ingester.Run(ctx, source, ingest.Options{
 		Title:    msg.GetTitle(),
 		Progress: sendProgress(ctx, stream, hungUp),
 	})
