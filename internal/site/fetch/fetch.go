@@ -400,14 +400,19 @@ func (f *Fetcher) readRobots(
 	return body, nil
 }
 
-// fetchRobots reads a host's robots.txt, and reports whether the host
-// answered for it at all.
+// fetchRobots reads a host's robots.txt, following redirects, and reports
+// whether the host answered for it at all.
 //
-// An empty body is a file the host does not have, which disallows nothing:
-// RFC 9309 section 2.3.1.3 says a crawler may access anything where the
-// status is in the 400s. A redirect is read the same way, which the standard
-// allows only past five hops; following them is its own step, and reading one
-// as undefined would refuse every host that merely moved the file.
+// Redirects are followed because a host that moved its robots.txt still has
+// one, and RFC 9309 section 2.3.1.2 asks a crawler to follow at least five
+// consecutive hops, across authorities included. Each hop goes through the
+// guard, so a redirect cannot walk the crawler onto an address the operator
+// refused. Past the limit the standard permits treating the file as
+// unavailable, which is what the loop falls out to.
+//
+// An empty body with reachable true is a file the host does not have, which
+// disallows nothing: section 2.3.1.3 says a crawler may access anything where
+// the status is in the 400s.
 //
 // reachable is false only for a server or network error, section 2.3.1.4,
 // where the file is undefined rather than absent.
@@ -416,20 +421,42 @@ func (f *Fetcher) readRobots(
 // an unreachable host would answer a cancelled crawl with a complete disallow
 // and tell the operator robots.txt refused them.
 func (f *Fetcher) fetchRobots(ctx context.Context, raw string) (string, bool, error) {
-	res, err := f.request(ctx, raw, nil)
-	if err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return "", false, ctxErr
+	current := raw
+	for range f.maxRedirects + 1 {
+		res, err := f.request(ctx, current, nil)
+		if err != nil {
+			// ctx.Err() is nil where the host simply did not answer, which
+			// leaves the file undefined rather than the crawl cancelled.
+			return "", false, ctx.Err()
 		}
-		return "", false, nil
+		if !isRedirect(res.Status) {
+			body, reachable := readRobots(res)
+			return body, reachable, nil
+		}
+		// A redirect nobody can resolve leaves a file nobody can read, which
+		// is unavailable rather than undefined: the host answered.
+		next, err := redirectTo(current, res.Location)
+		if err != nil {
+			return "", true, nil
+		}
+		current = next
 	}
-	if res.Status >= http.StatusInternalServerError {
-		return "", false, nil
+	return "", true, nil
+}
+
+// readRobots classifies the response that ended a robots.txt chain.
+//
+// 2xx is the file itself. A server error leaves it undefined, section
+// 2.3.1.4, which is the only answer that is not reachable. Anything else is
+// unavailable, section 2.3.1.3, and disallows nothing.
+func readRobots(res *response) (string, bool) {
+	switch {
+	case res.Status == http.StatusOK:
+		return string(res.Body), true
+	case res.Status >= http.StatusInternalServerError:
+		return "", false
 	}
-	if res.Status != http.StatusOK {
-		return "", true, nil
-	}
-	return string(res.Body), true, nil
+	return "", true
 }
 
 // conditional asks the server for the body only if it changed, which is

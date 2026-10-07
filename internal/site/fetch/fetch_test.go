@@ -28,9 +28,11 @@ type FetchSuite struct {
 	robotsBody string
 	// etag is served with /page.html and revalidated against.
 	etag string
+	// robotsRedirect is where /robots.txt redirects to. Setting it implies a
+	// redirect; "none" sends one with no Location at all.
+	robotsRedirect string
 	// robotsStatus answers /robots.txt with that status instead of a body,
-	// for the cases about what each class of answer means. A 3xx carries a
-	// Location, so a redirect is a redirect rather than a bare status.
+	// for the cases about what each class of answer means.
 	robotsStatus int
 	requests     atomic.Int64
 }
@@ -41,9 +43,21 @@ func (s *FetchSuite) SetupTest() {
 	s.requests.Store(0)
 	s.robotsBody = ""
 	s.robotsStatus = 0
+	s.robotsRedirect = ""
 	s.etag = ""
 	mux := http.NewServeMux()
 	mux.HandleFunc("/robots.txt", s.serveRobots)
+	// Where a redirected robots.txt lands, serving rules of its own so a
+	// case can tell a followed redirect from an ignored one.
+	mux.HandleFunc("/elsewhere/robots.txt", func(w http.ResponseWriter, _ *http.Request) {
+		s.requests.Add(1)
+		s.write(w, "User-agent: *\nDisallow: /private/\n")
+	})
+	// A chain that never arrives, for the hop limit.
+	mux.HandleFunc("/hop/", func(w http.ResponseWriter, r *http.Request) {
+		s.requests.Add(1)
+		http.Redirect(w, r, "/hop/"+r.URL.Path, http.StatusFound)
+	})
 	mux.HandleFunc("/page.html", func(w http.ResponseWriter, r *http.Request) {
 		s.requests.Add(1)
 		if s.etag != "" {
@@ -75,18 +89,34 @@ func (s *FetchSuite) SetupTest() {
 // status, a body, or the 404 that means the host serves none.
 func (s *FetchSuite) serveRobots(w http.ResponseWriter, _ *http.Request) {
 	s.requests.Add(1)
-	if s.robotsStatus != 0 {
-		if s.robotsStatus/100 == 3 {
-			w.Header().Set("Location", "/elsewhere/robots.txt")
-		}
+	switch {
+	case s.robotsRedirect != "" || s.robotsStatus/100 == 3:
+		s.redirectRobots(w)
+	case s.robotsStatus != 0:
 		w.WriteHeader(s.robotsStatus)
-		return
-	}
-	if s.robotsBody == "" {
+	case s.robotsBody == "":
 		http.Error(w, "not found", http.StatusNotFound)
-		return
+	default:
+		s.write(w, s.robotsBody)
 	}
-	s.write(w, s.robotsBody)
+}
+
+// redirectRobots answers with a redirect: to robotsRedirect where a case
+// named one, to the moved file otherwise, and with no Location at all for
+// "none".
+func (s *FetchSuite) redirectRobots(w http.ResponseWriter) {
+	destination := s.robotsRedirect
+	if destination == "" {
+		destination = "/elsewhere/robots.txt"
+	}
+	if destination != "none" {
+		w.Header().Set("Location", destination)
+	}
+	status := s.robotsStatus
+	if status == 0 {
+		status = http.StatusMovedPermanently
+	}
+	w.WriteHeader(status)
 }
 
 func (s *FetchSuite) write(w http.ResponseWriter, body string) {
@@ -365,11 +395,43 @@ func (s *FetchSuite) TestAnUnreachableRobotsFileKeepsTheStoredCopy() {
 	s.Equal(http.StatusOK, got.Status)
 }
 
-// A host that moved its robots.txt is not a host that disallowed everything.
-// Following the redirect is its own step; reading one as undefined would
-// refuse every site that serves the file from somewhere else.
-func (s *FetchSuite) TestARedirectedRobotsFileDoesNotStopTheCrawl() {
+// RFC 9309 section 2.3.1.2: a crawler follows at least five consecutive
+// redirects to reach a robots.txt. A host that moved the file still has one,
+// and its rules still bind.
+func (s *FetchSuite) TestARedirectedRobotsFileIsFollowedAndObeyed() {
 	s.robotsStatus = http.StatusMovedPermanently
+	f := s.fetcher(fetch.Options{})
+
+	// The file it redirects to disallows /private/, so reaching those rules
+	// is the only way the fetch is refused.
+	_, err := f.Fetch(s.T().Context(), s.server.URL+"/private/secret.html", true)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "robots.txt disallows")
+
+	// Everything the moved file does not disallow is still fetchable, so the
+	// redirect is followed rather than read as a blanket refusal.
+	got, err := f.Fetch(s.T().Context(), s.server.URL+"/page.html", true)
+	s.Require().NoError(err)
+	s.Equal(http.StatusOK, got.Status)
+}
+
+// Past the hop limit the same section permits treating the file as
+// unavailable, which disallows nothing. A chain that never arrives must not
+// stop the crawl, and must not loop either.
+func (s *FetchSuite) TestARobotsRedirectChainThatNeverArrivesIsUnavailable() {
+	s.robotsRedirect = "/hop/a"
+
+	got, err := s.fetcher(fetch.Options{}).Fetch(
+		s.T().Context(), s.server.URL+"/page.html", true)
+	s.Require().NoError(err)
+	s.Equal(http.StatusOK, got.Status)
+}
+
+// A redirect carrying no Location is a file nobody can read. The host
+// answered, so it is unavailable rather than undefined.
+func (s *FetchSuite) TestARobotsRedirectWithNoLocationIsUnavailable() {
+	s.robotsStatus = http.StatusFound
+	s.robotsRedirect = "none"
 
 	got, err := s.fetcher(fetch.Options{}).Fetch(
 		s.T().Context(), s.server.URL+"/page.html", true)
