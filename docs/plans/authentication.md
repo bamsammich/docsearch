@@ -98,6 +98,19 @@ The row migration 6 created is the account a single-library deployment
 already uses, and the first account to sign in claims it rather than starting
 an empty library beside it, which is what the phase 04 comment promised.
 
+Which pair gets stored depends on what step 5a returns, and the two answers
+are not interchangeable.
+
+| authorization server | what `issuer` and `subject` hold |
+|---|---|
+| the operator's provider | the `iss` and `sub` claims of the token itself |
+| docsearch | the provider's `iss` and `sub`, read once at first sign-in, because the token docsearch mints carries its own issuer and a subject that is already the `user_id` |
+
+Storing docsearch's own issuer in the second case would make every account
+look like it came from one provider, which is the collision the pair exists
+to prevent. So step 5b writes whichever the spike settled, and writing it
+before 5a answers would be guessing.
+
 Creating a user creates a chunk partition, which no request path does today.
 Phase 05 is where account creation becomes a real operation, so the partition
 is created with the row, in one transaction, or a document lands nowhere a
@@ -128,7 +141,7 @@ the mode list did, not because anyone has asked for it.
 | step | what lands | how it is checked |
 |---|---|---|
 | 5a | the spike that settles whether claude.ai and an OIDC provider need docsearch to be an authorization server at all | a written finding under `docs/research/`, naming what was exercised against both |
-| 5b | `users` gains an issuer and a subject, and creating an account creates its partition | the migration applied and rolled back with two accounts present; a second account's library is invisible to the first, through the same isolation suite phase 04 built |
+| 5b | `users` gains an issuer and a subject, holding whichever identity 5a settled, and creating an account creates its partition | the migration applied and rolled back with two accounts present; two accounts from different providers sharing a subject stay apart; a second account's library is invisible to the first, through the same isolation suite phase 04 built |
 | 5c | modes `none` and `token`, named and selected by configuration, resolving to the built-in user | the suite that covers today's behaviour, now asserting which mode produced it |
 | 5d | the resource server: protected resource metadata, the 401 and 403 shapes, and the audience check | a token for another audience refused, one missing a scope answered 403, and the metadata fetched by a client |
 | 5e | `oidc` against a real provider, with the account created on first sign-in | the end-to-end suite signing in as two accounts and reading two libraries |
@@ -137,8 +150,8 @@ the mode list did, not because anyone has asked for it.
 
 Steps 5b through 5d are worth doing whatever 5a returns. A resource server
 validates tokens from someone, and a user needs an identity, in both
-answers.
-Only 5f depends on the spike.
+answers. Only 5f depends on the spike for whether it happens at all, and 5b
+depends on it for what it stores.
 
 ## Not settled by this plan
 
