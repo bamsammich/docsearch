@@ -116,7 +116,7 @@ Phase 05 is where account creation becomes a real operation, so the partition
 is created with the row, in one transaction, or a document lands nowhere a
 search will look.
 
-## Four modes, and only one of them is new work
+## Four modes, and only `oidc` has to be built
 
 | mode | what it does | who it is for |
 |---|---|---|
@@ -128,13 +128,14 @@ search will look.
 `none` and `token` are the behaviour that ships today, named. Keeping them is
 not compatibility theatre: a deployment with one library should not be made
 to run an identity provider, and phase 04's `owner.Builtin` is already the
-account they resolve to.
+account they resolve to. So `oidc` is the only mode this phase has to build,
+and `password` is the only one it might not build at all.
 
 `password` is the mode that looks small and is not. Holding a password means
 a hashing choice, a reset path, a lockout policy and a session store, none of
-which docsearch is better at than a provider. It lands last, and only if
-someone wants a deployment without a provider; the plan carries it because
-the mode list did, not because anyone has asked for it.
+which docsearch is better at than a provider. It lands in step 5f, beside the
+authorization server, because both make docsearch issue credentials of its
+own and neither is worth building alone.
 
 ## Steps
 
@@ -145,13 +146,20 @@ the mode list did, not because anyone has asked for it.
 | 5c | modes `none` and `token`, named and selected by configuration, resolving to the built-in user | the suite that covers today's behaviour, now asserting which mode produced it |
 | 5d | the resource server: protected resource metadata, the 401 and 403 shapes, and the audience check | a token for another audience refused, one missing a scope answered 403, and the metadata fetched by a client |
 | 5e | `oidc` against a real provider, with the account created on first sign-in | the end-to-end suite signing in as two accounts and reading two libraries |
-| 5f | whatever 5a says is still needed of an authorization server | the grant the spike exercised, end to end |
-| 5g | `password`, if it is still wanted | sign-in, reset and lockout, each as its own case |
+| 5f | docsearch issuing its own credentials, covering both reasons it might have to: a provider that can bind no audience, and the `password` mode | the grant the spike exercised, end to end; sign-in, reset and lockout each as its own case where `password` is in scope |
 
 Steps 5b through 5d are worth doing whatever 5a returns. A resource server
 validates tokens from someone, and a user needs an identity, in both
-answers. Only 5f depends on the spike for whether it happens at all, and 5b
-depends on it for what it stores.
+answers. Step 5b depends on the spike for what it stores, and 5f for whether
+it happens at all.
+
+5f is one step rather than two because its two triggers want the same
+machinery. A provider that can bind no audience forces docsearch to mint
+tokens audienced to itself, and the `password` mode forces docsearch to hold
+a credential and issue something against it. Both make docsearch an issuer,
+and an issuer built twice is an issuer with two sets of bugs. Deciding them
+together also makes the cheaper answer visible: if neither trigger fires, the
+machinery is never written.
 
 ## Not settled by this plan
 
