@@ -235,6 +235,11 @@ came back as a complete disallow: the operator who stopped an ingest was
 told robots.txt refused them. The SQLite cache hid it by failing on the
 cancelled context first.
 
+The last gap 4e left closed after the phase. `fetchRobots` now follows up to
+`maxRedirects` hops to reach a robots.txt, each one through the guard, and
+falls out to unavailable past the limit, which section 2.3.1.2 permits. A
+host that moved the file has one, and its rules bind.
+
 4f took the Postgres switch that 4g was going to make. Threading an owner
 through a door that then reads SQLite is theatre, because the SQLite store
 has no user to thread it to, so the two had to happen together. 4g keeps the
