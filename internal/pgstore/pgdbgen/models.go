@@ -120,4 +120,6 @@ type SchemaVersion struct {
 type User struct {
 	UserID    string
 	CreatedAt time.Time
+	Issuer    sql.NullString
+	Subject   sql.NullString
 }

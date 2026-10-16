@@ -116,6 +116,26 @@ Phase 05 is where account creation becomes a real operation, so the partition
 is created with the row, in one transaction, or a document lands nowhere a
 search will look.
 
+Step 5b found that the role a request runs as can do neither part of it.
+Phase 04 granted that role no `CREATE` on the schema and only `SELECT` on
+`users`, so it is refused both the row and the partition, which is the right
+answer to the question phase 04 was asking and the wrong shape for creating
+an account. A `SECURITY DEFINER` function owned by the schema owner is the
+narrow way through. A request asks for that one operation, the function runs
+it with the owner's rights, and `EXECUTE` is granted to the request role
+while `PUBLIC` is revoked. Its `search_path` is pinned, because
+a definer function that resolves names through the caller's path runs the
+caller's code with the owner's rights.
+
+Three constraints came with the columns. An identity is whole or absent, so
+an issuer without a subject is refused rather than passing an index that
+only sees the pair. The unique index is `NULLS NOT DISTINCT`, which allows
+exactly one account with no identity, the built-in one, where the default
+would allow any number of accounts nobody can sign in to. And a `user_id` is
+checked against an identifier-safe pattern, because it becomes part of a
+table name, so a bad one is refused at the row rather than discovered when
+the DDL fails.
+
 ## Four modes, and only `oidc` has to be built
 
 | mode | what it does | who it is for |

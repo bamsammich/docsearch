@@ -30,11 +30,13 @@ func (s *IsolationSuite) SetupTest() {
 	s.db = pgtest.Start(s.T())
 	s.Require().NoError(schema.Create(s.T().Context(), s.db.Owner))
 
-	// Two libraries. The second user needs a partition, which is what
-	// creating a user does once there is a service to do it.
-	s.exec(`INSERT INTO users (user_id) VALUES ('second')`)
-	s.exec(`CREATE TABLE chunks_second PARTITION OF chunks FOR VALUES IN ('second')`)
-	s.exec(`GRANT SELECT, INSERT, UPDATE, DELETE ON chunks_second TO ` + pgtest.AppRole)
+	// Two libraries. create_account makes the row, the partition and the
+	// grant together, which is the only way an account arrives: a chunk for
+	// a user with no partition is refused.
+	//
+	// The second account carries an identity because the built-in one does
+	// not, and version 10 allows exactly one account without one.
+	s.exec(`SELECT create_account('second', 'https://issuer.example', 'subject-2')`)
 
 	s.library("default", "shared-manual", "the dimmer curve is set per channel")
 	s.library("second", "shared-manual", "a different document under the same id")
@@ -165,9 +167,11 @@ func (s *IsolationSuite) TestEachUsersChunksLiveInTheirOwnPartition() {
 }
 
 func (s *IsolationSuite) TestAChunkForAUserWithNoPartitionIsRefused() {
-	// A partition is created with the user. Without one the insert fails
-	// rather than landing somewhere a search will not look.
-	s.exec(`INSERT INTO users (user_id) VALUES ('third')`)
+	// A partition is created with the user, so this row is made the long way
+	// rather than through create_account, which would make one. It carries an
+	// identity because only the built-in account may go without.
+	s.exec(`INSERT INTO users (user_id, issuer, subject)
+		VALUES ('third', 'https://issuer.example', 'subject-3')`)
 
 	_, err := s.db.Owner.ExecContext(s.T().Context(),
 		`INSERT INTO chunks (user_id, doc_id, ordinal, heading_path, text)

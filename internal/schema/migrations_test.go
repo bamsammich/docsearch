@@ -2,6 +2,7 @@ package schema_test
 
 import (
 	"database/sql"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -23,13 +24,24 @@ import (
 // deployment lacks fails here instead of on the cluster.
 type MigrationSuite struct {
 	suite.Suite
+	// pg carries both roles, because version 10 draws a line between what
+	// the schema owner may do and what a request may ask for.
+	pg *pgtest.DB
 	db *sql.DB
 }
 
 func TestMigrations(t *testing.T) { suite.Run(t, new(MigrationSuite)) }
 
 func (s *MigrationSuite) SetupTest() {
-	s.db = pgtest.Start(s.T()).Owner
+	s.pg = pgtest.Start(s.T())
+	s.db = s.pg.Owner
+}
+
+// appCannot reports whether the role a request runs as is refused a
+// statement. Used for the privileges version 10 deliberately withholds.
+func (s *MigrationSuite) appCannot(statement string) bool {
+	_, err := s.pg.App.ExecContext(s.T().Context(), statement)
+	return err != nil
 }
 
 // upTo applies the migrations through one version, for a case that needs the
@@ -421,4 +433,124 @@ func (s *MigrationSuite) TestCacheGoesDownAndUpAgain() {
 
 	s.True(s.tableExists("responses"))
 	s.True(s.tableExists("robots"))
+}
+
+// -- 00010_user_identity --------------------------------------------------
+
+func (s *MigrationSuite) TestIdentityUpKeepsTheBuiltInAccountWorking() {
+	// The built-in account has no identity and must survive the migration
+	// that adds one, because a single-library deployment is already using it.
+	s.upTo(10)
+
+	s.Equal(1, s.count(
+		`SELECT COUNT(*) FROM users WHERE user_id = 'default'
+		   AND issuer IS NULL AND subject IS NULL`))
+}
+
+// Two providers can both call someone 'alice'. The pair is the account, so
+// one subject under two issuers is two accounts.
+func (s *MigrationSuite) TestIdentityUpSeparatesOneSubjectAcrossTwoIssuers() {
+	s.upTo(10)
+
+	s.exec(`SELECT create_account('a', 'https://one.example', 'alice')`)
+	s.exec(`SELECT create_account('b', 'https://two.example', 'alice')`)
+
+	s.Equal(2, s.count(`SELECT COUNT(*) FROM users WHERE subject = 'alice'`))
+}
+
+func (s *MigrationSuite) TestIdentityUpRefusesTheSameIdentityTwice() {
+	s.upTo(10)
+	s.exec(`SELECT create_account('a', 'https://one.example', 'alice')`)
+
+	_, err := s.db.ExecContext(s.T().Context(),
+		`SELECT create_account('b', 'https://one.example', 'alice')`)
+	s.Require().Error(err, "one identity reaching two accounts is the hole the index closes")
+}
+
+func (s *MigrationSuite) TestIdentityUpRefusesHalfAnIdentity() {
+	s.upTo(10)
+
+	_, err := s.db.ExecContext(s.T().Context(),
+		`SELECT create_account('a', 'https://one.example', NULL)`)
+	s.Require().Error(err, "an issuer with no subject names nobody")
+}
+
+// Exactly one account may go without an identity, which is the built-in one.
+// A second would be an account nobody could ever sign in to.
+func (s *MigrationSuite) TestIdentityUpRefusesASecondAccountWithNoIdentity() {
+	s.upTo(10)
+
+	_, err := s.db.ExecContext(s.T().Context(), `SELECT create_account('a')`)
+	s.Require().Error(err)
+}
+
+func (s *MigrationSuite) TestIdentityUpRefusesAUserIdThatIsNotIdentifierSafe() {
+	// The id becomes part of a table name, so it is checked at the row
+	// rather than discovered when the DDL fails.
+	s.upTo(10)
+
+	for _, id := range []string{"has space", "Upper", `quote"inside`, strings.Repeat("x", 41)} {
+		_, err := s.db.ExecContext(s.T().Context(),
+			`SELECT create_account($1, 'https://one.example', $1)`, id)
+		s.Require().Error(err, id)
+	}
+}
+
+func (s *MigrationSuite) TestIdentityUpCreatesThePartitionWithTheAccount() {
+	s.upTo(10)
+	s.exec(`SELECT create_account('a', 'https://one.example', 'alice')`)
+
+	s.True(s.tableExists("chunks_a"))
+	// The partition is what makes the account writable: without one a chunk
+	// for that user is refused.
+	pgtest.WriteAs(s.T(), s.db, "a", func(tx *sql.Tx) {
+		for _, statement := range []string{
+			`INSERT INTO documents
+			   (user_id, doc_id, title, format, source_path, sha256, status)
+			 VALUES ('a', 'guide', 'T', 'pdf', '/x', 'abc', 'ready')`,
+			`INSERT INTO chunks (user_id, doc_id, ordinal, heading_path, text)
+			 VALUES ('a', 'guide', 0, 'H', 'body')`,
+		} {
+			_, err := tx.ExecContext(s.T().Context(), statement)
+			s.Require().NoError(err)
+		}
+	})
+}
+
+// The role a request runs as cannot create an account by hand, and does not
+// need to: the function is granted to it and nothing else is.
+func (s *MigrationSuite) TestIdentityUpLetsTheRequestRoleCreateAnAccountOnlyThroughTheFunction() {
+	s.upTo(10)
+
+	s.True(s.appCannot(`INSERT INTO users (user_id, issuer, subject)
+		VALUES ('a', 'https://one.example', 'alice')`),
+		"a request may not write the users table")
+	s.True(s.appCannot(`CREATE TABLE chunks_a PARTITION OF chunks FOR VALUES IN ('a')`),
+		"a request may not create a partition")
+
+	_, err := s.pg.App.ExecContext(s.T().Context(),
+		`SELECT create_account('a', 'https://one.example', 'alice')`)
+	s.Require().NoError(err, "the one operation it may ask for")
+	s.True(s.tableExists("chunks_a"))
+}
+
+func (s *MigrationSuite) TestIdentityDownRemovesWhatItAdded() {
+	s.upTo(10)
+	s.down()
+
+	s.Equal(0, s.count(
+		`SELECT COUNT(*) FROM information_schema.columns
+		  WHERE table_name = 'users' AND column_name IN ('issuer', 'subject')`))
+	s.Equal(0, s.count(
+		`SELECT COUNT(*) FROM pg_proc WHERE proname = 'create_account'`))
+	s.Equal(1, s.count(`SELECT COUNT(*) FROM users`), "the account itself stays")
+}
+
+func (s *MigrationSuite) TestIdentityGoesDownAndUpAgain() {
+	s.upTo(10)
+	s.down()
+	s.upTo(10)
+
+	s.exec(`SELECT create_account('a', 'https://one.example', 'alice')`)
+	s.True(s.tableExists("chunks_a"))
 }

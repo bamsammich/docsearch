@@ -118,7 +118,12 @@ func (s *CacheSuite) TestRobotsIsStoredPerHost() {
 // the other's row for the same URL.
 func (s *CacheSuite) TestOneUsersCacheIsInvisibleToAnother() {
 	ctx := s.T().Context()
-	_, err := s.pg.Owner.ExecContext(ctx, `INSERT INTO users (user_id) VALUES ('second')`)
+	// Version 10 allows one account without an identity, the built-in one,
+	// so a second account carries a pair. The cache tables are not
+	// partitioned, so the row is all this needs.
+	_, err := s.pg.Owner.ExecContext(ctx,
+		`INSERT INTO users (user_id, issuer, subject)
+		 VALUES ('second', 'https://issuer.example', 'subject-2')`)
 	s.Require().NoError(err)
 
 	mine, theirs := s.cache(builtinUser), s.cache("second")
