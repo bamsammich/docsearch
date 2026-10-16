@@ -27,6 +27,27 @@ CREATE SCHEMA public;
 COMMENT ON SCHEMA public IS 'standard public schema';
 
 
+--
+-- Name: create_account(text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.create_account(new_user_id text, new_issuer text DEFAULT NULL::text, new_subject text DEFAULT NULL::text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  partition_name text := 'chunks_' || new_user_id;
+BEGIN
+  INSERT INTO users (user_id, issuer, subject)
+    VALUES (new_user_id, new_issuer, new_subject);
+  EXECUTE format('CREATE TABLE %I PARTITION OF chunks FOR VALUES IN (%L)',
+                 partition_name, new_user_id);
+  EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO docsearch_app',
+                 partition_name);
+END;
+$$;
+
+
 
 --
 -- Name: chunks; Type: TABLE; Schema: public; Owner: -
@@ -257,7 +278,11 @@ CREATE TABLE public.schema_version (
 
 CREATE TABLE public.users (
     user_id text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    issuer text,
+    subject text,
+    CONSTRAINT users_id_is_identifier_safe CHECK ((user_id ~ '^[a-z0-9_-]{1,40}$'::text)),
+    CONSTRAINT users_identity_whole CHECK (((issuer IS NULL) = (subject IS NULL)))
 );
 
 
@@ -408,6 +433,13 @@ CREATE INDEX idx_index_terms ON public.index_terms USING btree (doc_id, term);
 --
 
 CREATE INDEX idx_jobs_status ON public.ingest_jobs USING btree (status, created_at);
+
+
+--
+-- Name: users_identity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX users_identity ON public.users USING btree (issuer, subject) NULLS NOT DISTINCT;
 
 
 --
