@@ -24,6 +24,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/bamsammich/docsearch/internal/config"
+	"github.com/bamsammich/docsearch/internal/owner"
 )
 
 func main() {
@@ -58,6 +59,12 @@ func command() *cli.Command {
 				Name:    "dsn",
 				Usage:   "Postgres `DSN` of the database holding every library",
 				Sources: cli.EnvVars(config.EnvDSN),
+			},
+			&cli.StringFlag{
+				Name:    "auth",
+				Usage:   "how a request's user is decided: one of " + modes(),
+				Value:   owner.Token.String(),
+				Sources: cli.EnvVars(config.EnvAuth),
 			},
 			&cli.StringSliceFlag{
 				Name:    "root",
@@ -94,10 +101,18 @@ func origins(list string) []string {
 	return out
 }
 
+// modes lists the spellings the auth flag accepts, for its own help.
+func modes() string { return strings.Join(owner.Spellings(), ", ") }
+
 func run(_ context.Context, cmd *cli.Command) error {
+	auth, err := owner.ParseMode(cmd.String("auth"))
+	if err != nil {
+		return err
+	}
 	cfg := config.Config{
 		Addr:         cmd.String("addr"),
 		DSN:          cmd.String("dsn"),
+		Auth:         auth,
 		LibraryRoots: cmd.StringSlice("root"),
 		// The token is read from the environment alone, deliberately not
 		// from a flag: an argument is visible to every process on the host

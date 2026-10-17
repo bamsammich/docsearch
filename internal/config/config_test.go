@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/bamsammich/docsearch/internal/owner"
 )
 
 func TestIsLoopbackAddr(t *testing.T) {
@@ -176,5 +178,60 @@ func TestDuplicateRootsCollapseToOne(t *testing.T) {
 	}
 	if len(c.LibraryRoots) != 1 {
 		t.Errorf("LibraryRoots = %v, want one entry", c.LibraryRoots)
+	}
+}
+
+// An unset mode is token, which is what every v1 install already runs: the
+// one thing it must not become is the mode that asks for no credential.
+func TestAnUnsetAuthModeIsToken(t *testing.T) {
+	c := validCfg(t)
+	if err := c.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if c.Auth != owner.Token {
+		t.Errorf("Auth = %v, want token", c.Auth)
+	}
+}
+
+func TestTokenModeNeedsAToken(t *testing.T) {
+	c := validCfg(t)
+	c.Auth = owner.Token
+	c.BearerToken = ""
+	if err := c.Validate(); err == nil {
+		t.Error("token mode with no token should be refused")
+	}
+}
+
+// Mode none asks for no credential, so it needs none configured.
+func TestNoneModeNeedsNoToken(t *testing.T) {
+	c := validCfg(t)
+	c.Auth = owner.None
+	c.BearerToken = ""
+	if err := c.Validate(); err != nil {
+		t.Errorf("Validate() error = %v, want nil", err)
+	}
+}
+
+// --allow-public-bind opts into being reachable, not into serving a library
+// to whoever arrives. Mode none on a public address is an open document
+// store, and no flag says that clearly enough to act on.
+func TestNoneModeIsRefusedOffLoopbackEvenWithTheFlag(t *testing.T) {
+	for _, addr := range []string{"0.0.0.0:8765", ":8765", "192.168.1.5:8765"} {
+		c := validCfg(t)
+		c.Auth = owner.None
+		c.Addr = addr
+		c.AllowPublicBind = true
+		if err := c.Validate(); !errors.Is(err, ErrOpenToTheNetwork) {
+			t.Errorf("Validate() with none on %q error = %v, want ErrOpenToTheNetwork", addr, err)
+		}
+	}
+}
+
+func TestNoneModeIsAllowedOnLoopback(t *testing.T) {
+	c := validCfg(t)
+	c.Auth = owner.None
+	c.Addr = "127.0.0.1:8765"
+	if err := c.Validate(); err != nil {
+		t.Errorf("Validate() error = %v, want nil", err)
 	}
 }
