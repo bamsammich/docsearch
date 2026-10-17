@@ -597,6 +597,31 @@ Reopen only if the corpus changes character or a domain-adapted model appears;
 if reopened, the shape stays sqlite-vec as a reranker over the top ~50 BM25
 hits, never primary retrieval, with displacement count as a release gate.
 
+## Upgrading from v1
+
+v1 kept its index in a SQLite file, and v2 keeps it in Postgres. Nothing in
+the v1 file is copied across: `docsearch import-v1` reads its list of
+documents and queues each one again from the file or site it came from, so
+v2's own pipeline reads every document. Titles are kept. A document v1 never
+finished is skipped and named, so you can add it by hand once you know why it
+failed.
+
+1. Stop v1, and copy its index out of the volume it lives in. The import opens
+   the copy read-only, so v1's file is untouched and you can go back to it.
+2. Start v2 against the same library directory, then run the import:
+
+   ```
+   docsearch import-v1 --dry-run docsearch.db
+   docsearch import-v1 docsearch.db
+   ```
+
+3. Watch the queue with `docsearch jobs` until every job is `ready`.
+
+v1 recorded each file at the path v1's process saw. If v2 sees the library at
+a different path, map one to the other with `--root-map OLD=NEW`, repeated
+for each root. A source v2 refuses is reported and the rest are still queued,
+and the command exits nonzero so a script notices.
+
 ## Backups
 
 **The index is fully regenerable from the library volume.** Every chunk,
