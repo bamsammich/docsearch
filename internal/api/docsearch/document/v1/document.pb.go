@@ -13,6 +13,7 @@ import (
 	v1 "github.com/bamsammich/docsearch/internal/api/docsearch/type/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -41,7 +42,13 @@ type Document struct {
 	ChunkCount *int64     `protobuf:"varint,7,opt,name=chunk_count,json=chunkCount,proto3,oneof" json:"chunk_count,omitempty"`
 	Quality    v1.Quality `protobuf:"varint,8,opt,name=quality,proto3,enum=docsearch.type.v1.Quality" json:"quality,omitempty"`
 	// Warnings are the structure report's notes, as an operator reads them.
-	Warnings      []string `protobuf:"bytes,9,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	Warnings []string `protobuf:"bytes,9,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	// Source is what the document was read from: a path, a site's URL, or an
+	// upload's target. A client that put a document in finds it again by this.
+	Source string `protobuf:"bytes,10,opt,name=source,proto3" json:"source,omitempty"`
+	// IngestedAt is when the document was last read. Unset while its first
+	// ingest is still running.
+	IngestedAt    *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=ingested_at,json=ingestedAt,proto3" json:"ingested_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -135,6 +142,20 @@ func (x *Document) GetQuality() v1.Quality {
 func (x *Document) GetWarnings() []string {
 	if x != nil {
 		return x.Warnings
+	}
+	return nil
+}
+
+func (x *Document) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *Document) GetIngestedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.IngestedAt
 	}
 	return nil
 }
@@ -1068,7 +1089,7 @@ var File_docsearch_document_v1_document_proto protoreflect.FileDescriptor
 
 const file_docsearch_document_v1_document_proto_rawDesc = "" +
 	"\n" +
-	"$docsearch/document/v1/document.proto\x12\x15docsearch.document.v1\x1a\x1edocsearch/type/v1/common.proto\"\xe2\x02\n" +
+	"$docsearch/document/v1/document.proto\x12\x15docsearch.document.v1\x1a\x1edocsearch/type/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb7\x03\n" +
 	"\bDocument\x12\x15\n" +
 	"\x06doc_id\x18\x01 \x01(\tR\x05docId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x16\n" +
@@ -1081,7 +1102,11 @@ const file_docsearch_document_v1_document_proto_rawDesc = "" +
 	"\vchunk_count\x18\a \x01(\x03H\x01R\n" +
 	"chunkCount\x88\x01\x01\x124\n" +
 	"\aquality\x18\b \x01(\x0e2\x1a.docsearch.type.v1.QualityR\aquality\x12\x1a\n" +
-	"\bwarnings\x18\t \x03(\tR\bwarningsB\r\n" +
+	"\bwarnings\x18\t \x03(\tR\bwarnings\x12\x16\n" +
+	"\x06source\x18\n" +
+	" \x01(\tR\x06source\x12;\n" +
+	"\vingested_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"ingestedAtB\r\n" +
 	"\v_page_countB\x0e\n" +
 	"\f_chunk_count\"\x85\x01\n" +
 	"\vTokenSpread\x12\x10\n" +
@@ -1169,56 +1194,58 @@ func file_docsearch_document_v1_document_proto_rawDescGZIP() []byte {
 
 var file_docsearch_document_v1_document_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_docsearch_document_v1_document_proto_goTypes = []any{
-	(*Document)(nil),        // 0: docsearch.document.v1.Document
-	(*TokenSpread)(nil),     // 1: docsearch.document.v1.TokenSpread
-	(*SizedChunk)(nil),      // 2: docsearch.document.v1.SizedChunk
-	(*Measurements)(nil),    // 3: docsearch.document.v1.Measurements
-	(*Finding)(nil),         // 4: docsearch.document.v1.Finding
-	(*VerifyReport)(nil),    // 5: docsearch.document.v1.VerifyReport
-	(*InspectFinding)(nil),  // 6: docsearch.document.v1.InspectFinding
-	(*InspectReport)(nil),   // 7: docsearch.document.v1.InspectReport
-	(*ListRequest)(nil),     // 8: docsearch.document.v1.ListRequest
-	(*ListResponse)(nil),    // 9: docsearch.document.v1.ListResponse
-	(*VerifyRequest)(nil),   // 10: docsearch.document.v1.VerifyRequest
-	(*VerifyResponse)(nil),  // 11: docsearch.document.v1.VerifyResponse
-	(*InspectRequest)(nil),  // 12: docsearch.document.v1.InspectRequest
-	(*InspectResponse)(nil), // 13: docsearch.document.v1.InspectResponse
-	(*RemoveRequest)(nil),   // 14: docsearch.document.v1.RemoveRequest
-	(*RemoveResponse)(nil),  // 15: docsearch.document.v1.RemoveResponse
-	(v1.SourceKind)(0),      // 16: docsearch.type.v1.SourceKind
-	(v1.Quality)(0),         // 17: docsearch.type.v1.Quality
-	(v1.Verdict)(0),         // 18: docsearch.type.v1.Verdict
-	(v1.Level)(0),           // 19: docsearch.type.v1.Level
+	(*Document)(nil),              // 0: docsearch.document.v1.Document
+	(*TokenSpread)(nil),           // 1: docsearch.document.v1.TokenSpread
+	(*SizedChunk)(nil),            // 2: docsearch.document.v1.SizedChunk
+	(*Measurements)(nil),          // 3: docsearch.document.v1.Measurements
+	(*Finding)(nil),               // 4: docsearch.document.v1.Finding
+	(*VerifyReport)(nil),          // 5: docsearch.document.v1.VerifyReport
+	(*InspectFinding)(nil),        // 6: docsearch.document.v1.InspectFinding
+	(*InspectReport)(nil),         // 7: docsearch.document.v1.InspectReport
+	(*ListRequest)(nil),           // 8: docsearch.document.v1.ListRequest
+	(*ListResponse)(nil),          // 9: docsearch.document.v1.ListResponse
+	(*VerifyRequest)(nil),         // 10: docsearch.document.v1.VerifyRequest
+	(*VerifyResponse)(nil),        // 11: docsearch.document.v1.VerifyResponse
+	(*InspectRequest)(nil),        // 12: docsearch.document.v1.InspectRequest
+	(*InspectResponse)(nil),       // 13: docsearch.document.v1.InspectResponse
+	(*RemoveRequest)(nil),         // 14: docsearch.document.v1.RemoveRequest
+	(*RemoveResponse)(nil),        // 15: docsearch.document.v1.RemoveResponse
+	(v1.SourceKind)(0),            // 16: docsearch.type.v1.SourceKind
+	(v1.Quality)(0),               // 17: docsearch.type.v1.Quality
+	(*timestamppb.Timestamp)(nil), // 18: google.protobuf.Timestamp
+	(v1.Verdict)(0),               // 19: docsearch.type.v1.Verdict
+	(v1.Level)(0),                 // 20: docsearch.type.v1.Level
 }
 var file_docsearch_document_v1_document_proto_depIdxs = []int32{
 	16, // 0: docsearch.document.v1.Document.source_kind:type_name -> docsearch.type.v1.SourceKind
 	17, // 1: docsearch.document.v1.Document.quality:type_name -> docsearch.type.v1.Quality
-	1,  // 2: docsearch.document.v1.Measurements.tokens:type_name -> docsearch.document.v1.TokenSpread
-	2,  // 3: docsearch.document.v1.Measurements.longest:type_name -> docsearch.document.v1.SizedChunk
-	2,  // 4: docsearch.document.v1.Measurements.shortest:type_name -> docsearch.document.v1.SizedChunk
-	18, // 5: docsearch.document.v1.Finding.severity:type_name -> docsearch.type.v1.Verdict
-	0,  // 6: docsearch.document.v1.VerifyReport.document:type_name -> docsearch.document.v1.Document
-	3,  // 7: docsearch.document.v1.VerifyReport.measurements:type_name -> docsearch.document.v1.Measurements
-	4,  // 8: docsearch.document.v1.VerifyReport.findings:type_name -> docsearch.document.v1.Finding
-	18, // 9: docsearch.document.v1.VerifyReport.verdict:type_name -> docsearch.type.v1.Verdict
-	19, // 10: docsearch.document.v1.InspectFinding.level:type_name -> docsearch.type.v1.Level
-	6,  // 11: docsearch.document.v1.InspectReport.findings:type_name -> docsearch.document.v1.InspectFinding
-	0,  // 12: docsearch.document.v1.ListResponse.documents:type_name -> docsearch.document.v1.Document
-	5,  // 13: docsearch.document.v1.VerifyResponse.report:type_name -> docsearch.document.v1.VerifyReport
-	7,  // 14: docsearch.document.v1.InspectResponse.report:type_name -> docsearch.document.v1.InspectReport
-	8,  // 15: docsearch.document.v1.DocumentService.List:input_type -> docsearch.document.v1.ListRequest
-	10, // 16: docsearch.document.v1.DocumentService.Verify:input_type -> docsearch.document.v1.VerifyRequest
-	12, // 17: docsearch.document.v1.DocumentService.Inspect:input_type -> docsearch.document.v1.InspectRequest
-	14, // 18: docsearch.document.v1.DocumentService.Remove:input_type -> docsearch.document.v1.RemoveRequest
-	9,  // 19: docsearch.document.v1.DocumentService.List:output_type -> docsearch.document.v1.ListResponse
-	11, // 20: docsearch.document.v1.DocumentService.Verify:output_type -> docsearch.document.v1.VerifyResponse
-	13, // 21: docsearch.document.v1.DocumentService.Inspect:output_type -> docsearch.document.v1.InspectResponse
-	15, // 22: docsearch.document.v1.DocumentService.Remove:output_type -> docsearch.document.v1.RemoveResponse
-	19, // [19:23] is the sub-list for method output_type
-	15, // [15:19] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	18, // 2: docsearch.document.v1.Document.ingested_at:type_name -> google.protobuf.Timestamp
+	1,  // 3: docsearch.document.v1.Measurements.tokens:type_name -> docsearch.document.v1.TokenSpread
+	2,  // 4: docsearch.document.v1.Measurements.longest:type_name -> docsearch.document.v1.SizedChunk
+	2,  // 5: docsearch.document.v1.Measurements.shortest:type_name -> docsearch.document.v1.SizedChunk
+	19, // 6: docsearch.document.v1.Finding.severity:type_name -> docsearch.type.v1.Verdict
+	0,  // 7: docsearch.document.v1.VerifyReport.document:type_name -> docsearch.document.v1.Document
+	3,  // 8: docsearch.document.v1.VerifyReport.measurements:type_name -> docsearch.document.v1.Measurements
+	4,  // 9: docsearch.document.v1.VerifyReport.findings:type_name -> docsearch.document.v1.Finding
+	19, // 10: docsearch.document.v1.VerifyReport.verdict:type_name -> docsearch.type.v1.Verdict
+	20, // 11: docsearch.document.v1.InspectFinding.level:type_name -> docsearch.type.v1.Level
+	6,  // 12: docsearch.document.v1.InspectReport.findings:type_name -> docsearch.document.v1.InspectFinding
+	0,  // 13: docsearch.document.v1.ListResponse.documents:type_name -> docsearch.document.v1.Document
+	5,  // 14: docsearch.document.v1.VerifyResponse.report:type_name -> docsearch.document.v1.VerifyReport
+	7,  // 15: docsearch.document.v1.InspectResponse.report:type_name -> docsearch.document.v1.InspectReport
+	8,  // 16: docsearch.document.v1.DocumentService.List:input_type -> docsearch.document.v1.ListRequest
+	10, // 17: docsearch.document.v1.DocumentService.Verify:input_type -> docsearch.document.v1.VerifyRequest
+	12, // 18: docsearch.document.v1.DocumentService.Inspect:input_type -> docsearch.document.v1.InspectRequest
+	14, // 19: docsearch.document.v1.DocumentService.Remove:input_type -> docsearch.document.v1.RemoveRequest
+	9,  // 20: docsearch.document.v1.DocumentService.List:output_type -> docsearch.document.v1.ListResponse
+	11, // 21: docsearch.document.v1.DocumentService.Verify:output_type -> docsearch.document.v1.VerifyResponse
+	13, // 22: docsearch.document.v1.DocumentService.Inspect:output_type -> docsearch.document.v1.InspectResponse
+	15, // 23: docsearch.document.v1.DocumentService.Remove:output_type -> docsearch.document.v1.RemoveResponse
+	20, // [20:24] is the sub-list for method output_type
+	16, // [16:20] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_docsearch_document_v1_document_proto_init() }

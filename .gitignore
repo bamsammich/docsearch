@@ -6,6 +6,7 @@
 /docsearch-server
 /docsearch-worker
 /docsearch-eval
+/docsearch-sync
 /schema-snapshot
 *.exe
 

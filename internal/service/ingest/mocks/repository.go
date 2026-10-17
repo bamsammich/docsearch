@@ -6,6 +6,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
@@ -176,6 +177,69 @@ func (_c *MockRepository_AddPagesAndTerms_Call) Return(err error) *MockRepositor
 }
 
 func (_c *MockRepository_AddPagesAndTerms_Call) RunAndReturn(run func(ctx context.Context, docID string, pages map[int]string, terms [][2]string) error) *MockRepository_AddPagesAndTerms_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Confirm provides a mock function for the type MockRepository
+func (_mock *MockRepository) Confirm(ctx context.Context, docID string, at time.Time) error {
+	ret := _mock.Called(ctx, docID, at)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Confirm")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, time.Time) error); ok {
+		r0 = returnFunc(ctx, docID, at)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockRepository_Confirm_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Confirm'
+type MockRepository_Confirm_Call struct {
+	*mock.Call
+}
+
+// Confirm is a helper method to define mock.On call
+//   - ctx context.Context
+//   - docID string
+//   - at time.Time
+func (_e *MockRepository_Expecter) Confirm(ctx any, docID any, at any) *MockRepository_Confirm_Call {
+	return &MockRepository_Confirm_Call{Call: _e.mock.On("Confirm", ctx, docID, at)}
+}
+
+func (_c *MockRepository_Confirm_Call) Run(run func(ctx context.Context, docID string, at time.Time)) *MockRepository_Confirm_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 time.Time
+		if args[2] != nil {
+			arg2 = args[2].(time.Time)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRepository_Confirm_Call) Return(err error) *MockRepository_Confirm_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockRepository_Confirm_Call) RunAndReturn(run func(ctx context.Context, docID string, at time.Time) error) *MockRepository_Confirm_Call {
 	_c.Call.Return(run)
 	return _c
 }

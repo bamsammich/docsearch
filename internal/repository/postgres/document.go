@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/pgsession"
@@ -52,6 +53,8 @@ func (d *Documents) Get(ctx context.Context, docID string) (*document.Document, 
 		Format:     row.Format,
 		SourceKind: sourceKind(row.SourceKind),
 		Status:     row.Status,
+		Source:     row.SourcePath,
+		IngestedAt: timeOf(row.IngestedAt),
 	}
 	doc.Quality, doc.Warnings = summarize(row.Warnings)
 	return &doc, nil
@@ -76,6 +79,8 @@ func (d *Documents) List(ctx context.Context) ([]document.Document, error) {
 			Format:     row.Format,
 			SourceKind: sourceKind(row.SourceKind),
 			Status:     "ready",
+			Source:     row.SourcePath,
+			IngestedAt: timeOf(row.IngestedAt),
 		}
 		doc.Quality, doc.Warnings = summarize(row.Warnings)
 		out = append(out, doc)
@@ -169,6 +174,14 @@ func (d *Documents) Delete(ctx context.Context, docID string) error {
 		}
 		return deleteRows(ctx, q, docID)
 	})
+}
+
+// timeOf is a nullable timestamp, zero where it is null.
+func timeOf(t sql.NullTime) time.Time {
+	if !t.Valid {
+		return time.Time{}
+	}
+	return t.Time.UTC()
 }
 
 // summarize reads the grade and the notes out of a stored structure report.

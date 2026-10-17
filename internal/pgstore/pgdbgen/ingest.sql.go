@@ -30,6 +30,20 @@ func (q *Queries) CompleteJob(ctx context.Context, arg CompleteJobParams) error 
 	return err
 }
 
+const confirmDocument = `-- name: ConfirmDocument :exec
+UPDATE documents SET ingested_at = $2 WHERE doc_id = $1
+`
+
+type ConfirmDocumentParams struct {
+	DocID      string
+	IngestedAt sql.NullTime
+}
+
+func (q *Queries) ConfirmDocument(ctx context.Context, arg ConfirmDocumentParams) error {
+	_, err := q.db.ExecContext(ctx, confirmDocument, arg.DocID, arg.IngestedAt)
+	return err
+}
+
 const countDocumentChunks = `-- name: CountDocumentChunks :one
 SELECT COUNT(*) FROM chunks WHERE doc_id = $1
 `
@@ -134,7 +148,8 @@ func (q *Queries) DocIDsWithPrefix(ctx context.Context, docID string) ([]string,
 }
 
 const documentByID = `-- name: DocumentByID :one
-SELECT doc_id, title, format, source_kind, status, page_count, chunk_count, warnings
+SELECT doc_id, title, format, source_kind, status, page_count, chunk_count, warnings,
+       source_path, ingested_at
   FROM documents WHERE doc_id = $1
 `
 
@@ -147,6 +162,8 @@ type DocumentByIDRow struct {
 	PageCount  sql.NullInt32
 	ChunkCount sql.NullInt32
 	Warnings   sql.NullString
+	SourcePath string
+	IngestedAt sql.NullTime
 }
 
 func (q *Queries) DocumentByID(ctx context.Context, docID string) (DocumentByIDRow, error) {
@@ -161,6 +178,8 @@ func (q *Queries) DocumentByID(ctx context.Context, docID string) (DocumentByIDR
 		&i.PageCount,
 		&i.ChunkCount,
 		&i.Warnings,
+		&i.SourcePath,
+		&i.IngestedAt,
 	)
 	return i, err
 }

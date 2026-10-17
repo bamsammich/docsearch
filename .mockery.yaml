@@ -49,3 +49,8 @@ packages:
     interfaces:
       Store:
       Links:
+  github.com/bamsammich/docsearch/internal/docsync:
+    interfaces:
+      Paperless:
+      Library:
+      Uploader:

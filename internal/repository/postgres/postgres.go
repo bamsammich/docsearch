@@ -17,6 +17,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/pgsession"
@@ -70,6 +71,15 @@ func Open(path string) (*sql.DB, error) {
 		return nil, errors.Join(fmt.Errorf("open %s: %w", path, err), db.Close())
 	}
 	return db, nil
+}
+
+// Confirm stamps a document as read at, changing nothing it holds.
+func (r *Repository) Confirm(ctx context.Context, docID string, at time.Time) error {
+	return r.inTx(ctx, func(q *pgdbgen.Queries) error {
+		return q.ConfirmDocument(ctx, pgdbgen.ConfirmDocumentParams{
+			DocID: docID, IngestedAt: sql.NullTime{Time: at, Valid: true},
+		})
+	})
 }
 
 func (r *Repository) ReadyWithDigest(

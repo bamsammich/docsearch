@@ -22,7 +22,8 @@ func (q *Queries) DocumentStatus(ctx context.Context, docID string) (string, err
 }
 
 const listReadyDocuments = `-- name: ListReadyDocuments :many
-SELECT doc_id, title, format, source_kind, page_count, chunk_count, warnings
+SELECT doc_id, title, format, source_kind, page_count, chunk_count, warnings,
+       source_path, ingested_at
   FROM documents
  WHERE status = 'ready'
  ORDER BY doc_id
@@ -36,6 +37,8 @@ type ListReadyDocumentsRow struct {
 	PageCount  sql.NullInt32
 	ChunkCount sql.NullInt32
 	Warnings   sql.NullString
+	SourcePath string
+	IngestedAt sql.NullTime
 }
 
 func (q *Queries) ListReadyDocuments(ctx context.Context) ([]ListReadyDocumentsRow, error) {
@@ -55,6 +58,8 @@ func (q *Queries) ListReadyDocuments(ctx context.Context) ([]ListReadyDocumentsR
 			&i.PageCount,
 			&i.ChunkCount,
 			&i.Warnings,
+			&i.SourcePath,
+			&i.IngestedAt,
 		); err != nil {
 			return nil, err
 		}

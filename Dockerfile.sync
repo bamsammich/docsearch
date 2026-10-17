@@ -1,0 +1,18 @@
+# docsearch-sync, for running beside a Paperless-ngx instance. Pure Go with no
+# cgo, so the binary is static and the runtime image needs no libc.
+FROM golang:1.26-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd ./cmd
+COPY internal ./internal
+RUN CGO_ENABLED=0 GOOS=linux go build \
+      -trimpath -ldflags="-s -w" \
+      -o /out/docsearch-sync ./cmd/docsearch-sync
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/docsearch-sync /usr/local/bin/docsearch-sync
+USER nonroot:nonroot
+# PAPERLESS_URL, DOCSEARCH_SERVER and DOCSEARCH_SYNC_EVERY come from the
+# environment, and both tokens from secrets. Nothing is baked in.
+ENTRYPOINT ["/usr/local/bin/docsearch-sync"]
