@@ -55,3 +55,6 @@ packages:
       Paperless:
       Library:
       Uploader:
+  github.com/bamsammich/docsearch/internal/password:
+    interfaces:
+      Store:
