@@ -223,11 +223,52 @@ an in-flight job can checkpoint or roll back instead of being killed mid-write.
 | Origin allowlist | `--allowed-origins` | `DOCSEARCH_ALLOWED_ORIGINS` |
 | permit public bind | `--allow-public-bind` | `DOCSEARCH_ALLOW_PUBLIC_BIND=true` |
 
-`--auth` is `none` or `token`, and defaults to `token`, which is what a v1
-install already runs. `none` asks for no credential and answers every
+`--auth` is `none`, `token` or `oidc`, and defaults to `token`, which is what
+a v1 install already runs. `none` asks for no credential and answers every
 request as the single built-in user, so it is refused on any address that is
-not loopback, whatever `--allow-public-bind` says. The `password` and `oidc`
-modes are planned and refused by name until they are built.
+not loopback, whatever `--allow-public-bind` says. The `password` mode is
+planned and refused by name until it is built.
+
+### Signing in through your own provider
+
+In `oidc` mode your identity provider is the OAuth authorization server, and
+docsearch reads the tokens it issues. Each identity gets a library of its
+own. Any OIDC provider works; what docsearch needs from it is a token whose
+audience names docsearch.
+
+| | flag | environment |
+|---|---|---|
+| issuer | `--oidc-issuer` | `DOCSEARCH_OIDC_ISSUER` |
+| docsearch's `/mcp` URI | `--oidc-resource` | `DOCSEARCH_OIDC_RESOURCE` |
+| expected audience, if not the URI | `--oidc-audience` | `DOCSEARCH_OIDC_AUDIENCE` |
+| scopes a client should request | `--oidc-scopes-supported` | `DOCSEARCH_OIDC_SCOPES_SUPPORTED` |
+| scopes every token must carry | `--oidc-required-scopes` | `DOCSEARCH_OIDC_REQUIRED_SCOPES` |
+| client ID, to introspect opaque tokens | `--oidc-client-id` | `DOCSEARCH_OIDC_CLIENT_ID` |
+| client secret | — | `DOCSEARCH_OIDC_CLIENT_SECRET` |
+| subject who keeps the existing library | `--oidc-default-owner` | `DOCSEARCH_OIDC_DEFAULT_OWNER` |
+| create accounts on first sign-in | `--oidc-sign-up` | `DOCSEARCH_OIDC_SIGN_UP` |
+| claim every token must carry | `--oidc-required-claim-name` | `DOCSEARCH_OIDC_REQUIRED_CLAIM_NAME` |
+| value that claim must hold | `--oidc-required-claim-value` | `DOCSEARCH_OIDC_REQUIRED_CLAIM_VALUE` |
+
+Scope lists are comma-separated. A signed JWT is checked against the keys the
+issuer publishes. An opaque token is sent back to the issuer for
+introspection, which needs the client ID and secret; without them an opaque
+token is refused.
+
+**Who gets a library** follows what Grafana and Gitea do. Restrict who can
+sign in to docsearch at the provider first. Sign-up starts closed, so an
+identity with no account is refused until you pass `--oidc-sign-up`. A
+required claim, such as `groups` holding `docsearch-users`, is checked on
+every request, so removing someone from the group at the provider removes
+their access here.
+
+**Switching an existing install** keeps its library. Name your own subject
+with `--oidc-default-owner`, and your first sign-in takes the library the
+deployment already holds. Nobody else can claim it.
+
+**The CLI** sends `DOCSEARCH_TOKEN` as its bearer token in every mode. In
+`oidc` mode that is an access token from your provider, and the CLI reads the
+library of the identity the token names.
 
 **The library roots are a security boundary.** `add_document` accepts a target
 that arrives in a tool call, over a network endpoint, and may have been
@@ -258,7 +299,7 @@ error protects; the caller's path is.
 **The server refuses to bind a non-loopback address** without
 `--allow-public-bind`, and logs a warning when you pass it.
 
-**Bearer token on every `/mcp` request**, compared in constant time over
+**Bearer token on every `/mcp` request** in `token` mode, compared in constant time over
 SHA-256 digests — and compared even when the header is absent, so a missing
 token cannot be distinguished from a wrong one by timing.
 

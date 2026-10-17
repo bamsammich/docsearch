@@ -235,3 +235,42 @@ func TestNoneModeIsAllowedOnLoopback(t *testing.T) {
 		t.Errorf("Validate() error = %v, want nil", err)
 	}
 }
+
+// oidcCfg is an oidc deployment with every setting it cannot run without.
+func oidcCfg(t *testing.T) *Config {
+	t.Helper()
+	c := validCfg(t)
+	c.Auth = owner.OIDC
+	c.BearerToken = ""
+	c.OIDC = OIDC{Issuer: "https://issuer.example", Resource: "https://docs.example.com/mcp"}
+	return c
+}
+
+// Mode oidc reads tokens from a provider, so it needs no static token.
+func TestOIDCModeNeedsNoToken(t *testing.T) {
+	if err := oidcCfg(t).Validate(); err != nil {
+		t.Errorf("Validate() error = %v, want nil", err)
+	}
+}
+
+// Each of these could only fail on the first request, so each fails at
+// startup instead.
+func TestAnOIDCConfigurationThatCannotWorkIsRefused(t *testing.T) {
+	cases := map[string]func(*OIDC){
+		"no issuer":                    func(o *OIDC) { o.Issuer = "" },
+		"no resource":                  func(o *OIDC) { o.Resource = "" },
+		"a client ID without a secret": func(o *OIDC) { o.ClientID = "docsearch" },
+		"a secret without a client ID": func(o *OIDC) { o.ClientSecret = "secret" },
+		"a claim name with no value":   func(o *OIDC) { o.RequiredClaimName = "groups" },
+		"a claim value with no name":   func(o *OIDC) { o.RequiredClaimValue = "docsearch-users" },
+	}
+	for name, spoil := range cases {
+		t.Run(name, func(t *testing.T) {
+			c := oidcCfg(t)
+			spoil(&c.OIDC)
+			if err := c.Validate(); err == nil {
+				t.Error("Validate() = nil, want an error")
+			}
+		})
+	}
+}

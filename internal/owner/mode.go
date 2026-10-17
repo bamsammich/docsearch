@@ -4,10 +4,11 @@ import "fmt"
 
 // Mode is how a deployment decides which user a request acts for.
 //
-// Modes are what the phase 05 plan lists, and two of them exist. `none` and
+// Modes are what the phase 05 plan lists, and three of them exist. `none` and
 // `token` both answer with the built-in user, so neither needs an account; a
 // deployment with one library should not be made to run an identity provider
-// to use its own documents.
+// to use its own documents. `oidc` gives each identity a provider vouches for
+// a library of its own.
 type Mode int
 
 // The zero value is deliberately not a mode. An unset mode must not resolve
@@ -50,7 +51,7 @@ func ParseMode(spelling string) (Mode, error) {
 		if spelling != name {
 			continue
 		}
-		if mode == Password || mode == OIDC {
+		if mode == Password {
 			return 0, fmt.Errorf("auth mode %q is planned but not built yet", name)
 		}
 		return mode, nil

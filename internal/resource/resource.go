@@ -30,7 +30,10 @@ import (
 // Claims are what an issuer vouches for about one token, whichever form the
 // token arrived in.
 type Claims struct {
-	Expiry   time.Time
+	Expiry time.Time
+	// Stated is every claim as the issuer stated it, these included, for a
+	// policy that reads a claim docsearch has no field for.
+	Stated   map[string]any
 	Issuer   string
 	Subject  string
 	Audience []string
@@ -80,9 +83,13 @@ type Config struct {
 // metadata: inserted between the host and the resource's path.
 const metadataPrefix = "/.well-known/oauth-protected-resource"
 
-// identityKey is where Verify leaves the identity in TokenInfo.Extra, the one
-// place the SDK carries anything from a verifier to a handler.
-const identityKey = "docsearch.identity"
+// identityKey and statedKey are where Verify leaves the identity and the
+// stated claims in TokenInfo.Extra, the one place the SDK carries anything
+// from a verifier to a handler.
+const (
+	identityKey = "docsearch.identity"
+	statedKey   = "docsearch.stated"
+)
 
 // errUnchecked replaces whatever stopped a token being checked, which can
 // name the issuer's internal addresses and does not belong in a response.
@@ -195,6 +202,7 @@ func (s *Server) Verify(
 		Expiration: claims.Expiry,
 		Extra: map[string]any{
 			identityKey: Identity{Issuer: claims.Issuer, Subject: claims.Subject},
+			statedKey:   claims.Stated,
 		},
 	}, nil
 }
@@ -228,6 +236,20 @@ func IdentityOf(info *auth.TokenInfo) (Identity, error) {
 		return Identity{}, errors.New("token info carries no identity")
 	}
 	return identity, nil
+}
+
+// Stated is the claim called name on a verified token, as the issuer stated
+// it.
+func Stated(info *auth.TokenInfo, name string) (any, bool) {
+	if info == nil {
+		return nil, false
+	}
+	stated, ok := info.Extra[statedKey].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	value, ok := stated[name]
+	return value, ok
 }
 
 // Unintrospected is the opaque Reader for a deployment with no introspection

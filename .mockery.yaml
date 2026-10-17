@@ -39,3 +39,6 @@ packages:
   github.com/bamsammich/docsearch/internal/resource/introspect:
     interfaces:
       Introspector:
+  github.com/bamsammich/docsearch/internal/account:
+    interfaces:
+      Store:
