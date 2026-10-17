@@ -71,6 +71,7 @@ func command() *cli.Command {
 			refreshCommand(),
 			removeCommand(),
 			migrateCommand(),
+			importCommand(),
 		},
 	}
 }
