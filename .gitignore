@@ -1,15 +1,20 @@
 # Build artifacts
 /bin/
+# `go build ./cmd/x` writes the binary into the working directory rather than
+# into /bin, and a Go binary carries the absolute paths it was built from.
+/docsearch
+/docsearch-server
+/docsearch-worker
+/docsearch-eval
+/docsearch-sync
+/schema-snapshot
 *.exe
 
-# Python
-.venv/
+# Compiled Python left over from the pipeline retired in 7h. Nothing here
+# produces bytecode any more, and the caches that survived the deletion
+# embed the absolute path of whoever compiled them.
 __pycache__/
 *.py[cod]
-.mypy_cache/
-.ruff_cache/
-.pytest_cache/
-*.egg-info/
 
 # Runtime state — database, WAL sidecars, ingested library
 /var/
@@ -23,3 +28,5 @@ __pycache__/
 
 # Editor
 .DS_Store
+# Holds absolute paths to whatever is installed on one machine.
+.vscode/

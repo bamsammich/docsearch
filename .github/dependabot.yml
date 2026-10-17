@@ -1,0 +1,8 @@
+# The workflow pins each action to a commit, so without updates those pins
+# would only ever age. Dependabot proposes a bump for each new release.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

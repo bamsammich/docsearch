@@ -1,0 +1,40 @@
+{
+ "blocks": [
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [],
+   "image_count": 0,
+   "locator": {
+    "offset": 0
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Before �A after.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [],
+   "image_count": 0,
+   "locator": {
+    "offset": 18
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Lone � byte and � here.",
+   "url": null
+  }
+ ],
+ "diagnostics": {
+  "structure_source": "none (blank-line paragraphs)"
+ },
+ "format": "text",
+ "index_terms": [],
+ "page_count": null,
+ "pages": {},
+ "title": "invalid"
+}

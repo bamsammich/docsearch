@@ -36,6 +36,19 @@ import (
 // ErrBlocked is returned for every rejected URL, whatever the reason.
 var ErrBlocked = errors.New("url is not permitted")
 
+// ErrUnresolved is a host that did not resolve. It reads exactly as
+// ErrBlocked and wraps it, so no caller can tell the two apart from the
+// message, and a probe learns nothing about which names exist. It is
+// separate only so a worker can retry it: a resolver can fail for a minute,
+// while a refused address is refused every time.
+var ErrUnresolved error = unresolved{}
+
+type unresolved struct{}
+
+func (unresolved) Error() string { return ErrBlocked.Error() }
+
+func (unresolved) Unwrap() error { return ErrBlocked }
+
 // Target is a URL that passed validation, with the addresses it may be dialled
 // at. Connecting to anything else re-opens the rebinding hole this closes.
 type Target struct {
@@ -226,7 +239,7 @@ func Check(ctx context.Context, raw string, res Resolver) (*Target, error) {
 	}
 	addrs, err := res.LookupNetIP(ctx, "ip", host)
 	if err != nil || len(addrs) == 0 {
-		return nil, ErrBlocked
+		return nil, ErrUnresolved
 	}
 	out := make([]netip.Addr, 0, len(addrs))
 	for _, a := range addrs {

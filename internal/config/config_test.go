@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/bamsammich/docsearch/internal/owner"
 )
 
 func TestIsLoopbackAddr(t *testing.T) {
@@ -31,7 +33,7 @@ func validCfg(t *testing.T) *Config {
 	root := t.TempDir()
 	return &Config{
 		Addr:         "127.0.0.1:8765",
-		DBPath:       filepath.Join(root, "d.db"),
+		DSN:          "postgres://docsearch@localhost/docsearch",
 		LibraryRoots: []string{root},
 		BearerToken:  "tok",
 	}
@@ -95,24 +97,6 @@ func TestNonexistentLibraryRootIsRejected(t *testing.T) {
 	c.LibraryRoots = []string{filepath.Join(t.TempDir(), "absent")}
 	if err := c.Validate(); err == nil {
 		t.Error("Validate() = nil, want an error for a nonexistent library root")
-	}
-}
-
-func TestRootsParseFromOnePathList(t *testing.T) {
-	sep := string(filepath.ListSeparator)
-	for _, tc := range []struct {
-		name string
-		in   string
-		want int
-	}{
-		{"single path stays one root", "/a", 1},
-		{"two paths", "/a" + sep + "/b", 2},
-		{"blank entries are dropped", "/a" + sep + sep + " " + sep + "/b", 2},
-		{"empty is no roots", "", 0},
-	} {
-		if got := len(SplitRoots(tc.in)); got != tc.want {
-			t.Errorf("%s: SplitRoots(%q) = %d roots, want %d", tc.name, tc.in, got, tc.want)
-		}
 	}
 }
 
@@ -194,5 +178,99 @@ func TestDuplicateRootsCollapseToOne(t *testing.T) {
 	}
 	if len(c.LibraryRoots) != 1 {
 		t.Errorf("LibraryRoots = %v, want one entry", c.LibraryRoots)
+	}
+}
+
+// An unset mode is token, which is what every v1 install already runs: the
+// one thing it must not become is the mode that asks for no credential.
+func TestAnUnsetAuthModeIsToken(t *testing.T) {
+	c := validCfg(t)
+	if err := c.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if c.Auth != owner.Token {
+		t.Errorf("Auth = %v, want token", c.Auth)
+	}
+}
+
+func TestTokenModeNeedsAToken(t *testing.T) {
+	c := validCfg(t)
+	c.Auth = owner.Token
+	c.BearerToken = ""
+	if err := c.Validate(); err == nil {
+		t.Error("token mode with no token should be refused")
+	}
+}
+
+// Mode none asks for no credential, so it needs none configured.
+func TestNoneModeNeedsNoToken(t *testing.T) {
+	c := validCfg(t)
+	c.Auth = owner.None
+	c.BearerToken = ""
+	if err := c.Validate(); err != nil {
+		t.Errorf("Validate() error = %v, want nil", err)
+	}
+}
+
+// --allow-public-bind opts into being reachable, not into serving a library
+// to whoever arrives. Mode none on a public address is an open document
+// store, and no flag says that clearly enough to act on.
+func TestNoneModeIsRefusedOffLoopbackEvenWithTheFlag(t *testing.T) {
+	for _, addr := range []string{"0.0.0.0:8765", ":8765", "192.168.1.5:8765"} {
+		c := validCfg(t)
+		c.Auth = owner.None
+		c.Addr = addr
+		c.AllowPublicBind = true
+		if err := c.Validate(); !errors.Is(err, ErrOpenToTheNetwork) {
+			t.Errorf("Validate() with none on %q error = %v, want ErrOpenToTheNetwork", addr, err)
+		}
+	}
+}
+
+func TestNoneModeIsAllowedOnLoopback(t *testing.T) {
+	c := validCfg(t)
+	c.Auth = owner.None
+	c.Addr = "127.0.0.1:8765"
+	if err := c.Validate(); err != nil {
+		t.Errorf("Validate() error = %v, want nil", err)
+	}
+}
+
+// oidcCfg is an oidc deployment with every setting it cannot run without.
+func oidcCfg(t *testing.T) *Config {
+	t.Helper()
+	c := validCfg(t)
+	c.Auth = owner.OIDC
+	c.BearerToken = ""
+	c.OIDC = OIDC{Issuer: "https://issuer.example", Resource: "https://docs.example.com/mcp"}
+	return c
+}
+
+// Mode oidc reads tokens from a provider, so it needs no static token.
+func TestOIDCModeNeedsNoToken(t *testing.T) {
+	if err := oidcCfg(t).Validate(); err != nil {
+		t.Errorf("Validate() error = %v, want nil", err)
+	}
+}
+
+// Each of these could only fail on the first request, so each fails at
+// startup instead.
+func TestAnOIDCConfigurationThatCannotWorkIsRefused(t *testing.T) {
+	cases := map[string]func(*OIDC){
+		"no issuer":                    func(o *OIDC) { o.Issuer = "" },
+		"no resource":                  func(o *OIDC) { o.Resource = "" },
+		"a client ID without a secret": func(o *OIDC) { o.ClientID = "docsearch" },
+		"a secret without a client ID": func(o *OIDC) { o.ClientSecret = "secret" },
+		"a claim name with no value":   func(o *OIDC) { o.RequiredClaimName = "groups" },
+		"a claim value with no name":   func(o *OIDC) { o.RequiredClaimValue = "docsearch-users" },
+	}
+	for name, spoil := range cases {
+		t.Run(name, func(t *testing.T) {
+			c := oidcCfg(t)
+			spoil(&c.OIDC)
+			if err := c.Validate(); err == nil {
+				t.Error("Validate() = nil, want an error")
+			}
+		})
 	}
 }

@@ -1,0 +1,10 @@
+# Runs what CI runs, before the push rather than after it. CI has caught an
+# untidied go.sum and a package the local linter skipped from a stale cache;
+# both would have failed here first.
+#
+# Installed by `mise run setup`, which runs `lefthook install`. Skip one push
+# with LEFTHOOK=0.
+pre-push:
+  jobs:
+    - name: check
+      run: mise run check

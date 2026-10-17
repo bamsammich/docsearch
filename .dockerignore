@@ -1,16 +1,9 @@
-# The build context is the repo root for both images. Without this, the ~400MB
-# .venv and the caches ship to the daemon on every build and defeat the layer
-# cache, because their mtimes change constantly.
+# The build context is the repo root for both images. Keeping the runtime
+# state and the fixtures out of it means the layer cache survives an ingest:
+# var changes on every run, and its mtime alone would invalidate the build.
 .git
-.venv
-.mypy_cache
-.pytest_cache
-.ruff_cache
-__pycache__
-*.pyc
 var
 docs
-tests
 testdata
 deploy
 scripts

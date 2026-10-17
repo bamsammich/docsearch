@@ -1,0 +1,35 @@
+{
+ "blocked": false,
+ "findings": [
+  {
+   "detail": "present on 10 of 10 pages; no OCR needed",
+   "label": "text layer",
+   "level": "ok"
+  },
+  {
+   "detail": "absent. The producer toolchain stripped bookmarks, or none were authored, so structure must come from the page content instead.",
+   "label": "outline",
+   "level": "warn"
+  },
+  {
+   "detail": "body text at 10.0pt; heading candidates at 16.0pt",
+   "label": "font hierarchy",
+   "level": "ok"
+  },
+  {
+   "detail": "none reconstructable. Structure will be inferred from font sizes alone, with nothing to validate it against.",
+   "label": "printed contents",
+   "level": "warn"
+  },
+  {
+   "detail": "0 repeated line(s), 0% of the document's token mass. Stripped before chunking; a high share means a large part of the raw text is a running header or footer.",
+   "label": "page furniture",
+   "level": "ok"
+  }
+ ],
+ "format": "pdf",
+ "page_count": 10,
+ "predicted_source": "font_heuristic",
+ "predicted_tier": "inferred, no source to check it against",
+ "text": "file        numbered.pdf\nformat      pdf\npages       10\n\n[  OK   ] text layer\n            present on 10 of 10 pages; no OCR needed\n[ WARN  ] outline\n            absent. The producer toolchain stripped bookmarks, or none were\n            authored, so structure must come from the page content instead.\n[  OK   ] font hierarchy\n            body text at 10.0pt; heading candidates at 16.0pt\n[ WARN  ] printed contents\n            none reconstructable. Structure will be inferred from font sizes alone,\n            with nothing to validate it against.\n[  OK   ] page furniture\n            0 repeated line(s), 0% of the document's token mass. Stripped before\n            chunking; a high share means a large part of the raw text is a running\n            header or footer.\n\nstructure source: font_heuristic (inferred, no source to check it against)"
+}

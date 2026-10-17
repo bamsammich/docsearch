@@ -95,7 +95,13 @@ func TestSymlinkedDirectoryEscapeIsRejected(t *testing.T) {
 	if err := os.Symlink(outsideDir, link); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	if _, err := Resolve([]string{root}, filepath.Join(link, "x.pdf")); !errors.Is(err, ErrOutsideRoot) {
+	if _, err := Resolve(
+		[]string{root},
+		filepath.Join(link, "x.pdf"),
+	); !errors.Is(
+		err,
+		ErrOutsideRoot,
+	) {
 		t.Errorf("error = %v, want ErrOutsideRoot through a symlinked directory", err)
 	}
 }
@@ -157,7 +163,13 @@ func TestEmptyInputsAreRejected(t *testing.T) {
 	if _, err := Resolve(nil, "/tmp/x"); !errors.Is(err, ErrOutsideRoot) {
 		t.Error("empty root should be rejected")
 	}
-	if _, err := Resolve([]string{"relative/root"}, "relative/root/x"); !errors.Is(err, ErrOutsideRoot) {
+	if _, err := Resolve(
+		[]string{"relative/root"},
+		"relative/root/x",
+	); !errors.Is(
+		err,
+		ErrOutsideRoot,
+	) {
 		t.Error("relative root should be rejected")
 	}
 }
@@ -263,5 +275,100 @@ func TestMultiRootRejectionDoesNotDiscloseExistence(t *testing.T) {
 		if msgs[i] != msgs[0] {
 			t.Errorf("error messages differ and leak existence:\n %q\n %q", msgs[0], msgs[i])
 		}
+	}
+}
+
+// A root reached through a symlink is the ordinary case on macOS, where
+// every temporary directory sits under /var, itself a symlink to
+// /private/var. Every test above resolves the root before passing it, which
+// is why none of them caught a root configured as an operator would write it.
+func TestARootReachedThroughASymlinkContainsItsOwnFiles(t *testing.T) {
+	base := t.TempDir()
+	library := filepath.Join(base, "library")
+	if err := os.Mkdir(library, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "configured")
+	if err := os.Symlink(library, link); err != nil {
+		t.Fatal(err)
+	}
+	inside := filepath.Join(link, "manual.pdf")
+	if err := os.WriteFile(inside, []byte("%PDF-1.4"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Resolve([]string{link}, inside)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v, want nil", err)
+	}
+	want, err := filepath.EvalSymlinks(inside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("Resolve() = %q, want %q", got, want)
+	}
+}
+
+// The protection the second check exists for, with a symlinked root: a link
+// inside the root pointing out of it still resolves outside and is refused.
+func TestASymlinkOutOfASymlinkedRootIsStillRejected(t *testing.T) {
+	base := t.TempDir()
+	library := filepath.Join(base, "library")
+	outside := filepath.Join(base, "elsewhere")
+	for _, dir := range []string{library, outside} {
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	secret := filepath.Join(outside, "secret.pdf")
+	if err := os.WriteFile(secret, []byte("%PDF-1.4"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "configured")
+	if err := os.Symlink(library, link); err != nil {
+		t.Fatal(err)
+	}
+	escape := filepath.Join(library, "escape.pdf")
+	if err := os.Symlink(secret, escape); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Resolve([]string{link}, filepath.Join(link, "escape.pdf"))
+	if !errors.Is(err, ErrOutsideRoot) {
+		t.Errorf("Resolve() error = %v, want ErrOutsideRoot", err)
+	}
+}
+
+// A caller that resolved the path before asking is the other half of the
+// symlink problem: the full-stack suite resolves every path it writes, and
+// comparing that against a root spelled as the operator wrote it refused
+// every fixture in the library.
+func TestAResolvedCandidateIsAcceptedUnderAnUnresolvedRoot(t *testing.T) {
+	base := t.TempDir()
+	library := filepath.Join(base, "library")
+	if err := os.Mkdir(library, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "configured")
+	if err := os.Symlink(library, link); err != nil {
+		t.Fatal(err)
+	}
+	inside := filepath.Join(library, "manual.pdf")
+	if err := os.WriteFile(inside, []byte("%PDF-1.4"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := filepath.EvalSymlinks(inside)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The root as configured, the candidate already resolved.
+	got, err := Resolve([]string{link}, resolved)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v, want nil", err)
+	}
+	if got != resolved {
+		t.Errorf("Resolve() = %q, want %q", got, resolved)
 	}
 }

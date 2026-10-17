@@ -1,0 +1,453 @@
+{
+ "blocks": [
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Overview",
+    "Widget Docs"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 0
+   },
+   "printed_page": null,
+   "section": "1",
+   "subdivision": false,
+   "text": "Widget turns a pile of parts into a working assembly, and this manual covers running it.",
+   "url": "{{ORIGIN}}/docs/"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Overview",
+    "Widget Docs",
+    "Before you start"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 89
+   },
+   "printed_page": null,
+   "section": "1",
+   "subdivision": false,
+   "text": "A workstation with four gigabytes of memory and a supported operating system is enough for every task described here.",
+   "url": "{{ORIGIN}}/docs/"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Overview",
+    "Widget Docs",
+    "Before you start"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 207
+   },
+   "printed_page": null,
+   "section": "1",
+   "subdivision": false,
+   "text": "The community forum answers questions this manual does not.",
+   "url": "{{ORIGIN}}/docs/"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Installing",
+    "Install"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 267
+   },
+   "printed_page": null,
+   "section": "2.1",
+   "subdivision": false,
+   "text": "Installation takes a few minutes and needs no administrator rights on any supported platform.",
+   "url": "{{ORIGIN}}/docs/install"
+  },
+  {
+   "figure_only": false,
+   "fragment": "packages",
+   "heading_path": [
+    "Installing",
+    "Install",
+    "Packages"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 361
+   },
+   "printed_page": null,
+   "section": "2.1",
+   "subdivision": false,
+   "text": "Packages are published for every release and are signed with the project key.",
+   "url": "{{ORIGIN}}/docs/install"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Installing",
+    "Install",
+    "Packages",
+    "Verifying a package"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 439
+   },
+   "printed_page": null,
+   "section": "2.1",
+   "subdivision": false,
+   "text": "Check the signature before unpacking anything downloaded over a network you do not control.",
+   "url": "{{ORIGIN}}/docs/install"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Installing",
+    "Linux"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 531
+   },
+   "printed_page": null,
+   "section": "2.2",
+   "subdivision": false,
+   "text": "Every distribution with a package manager can install Widget from the project repository.",
+   "url": "{{ORIGIN}}/docs/install/linux"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Installing",
+    "Linux",
+    "Debian and Ubuntu"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 621
+   },
+   "printed_page": null,
+   "section": "2.2",
+   "subdivision": false,
+   "text": "Add the repository, refresh the package lists and install the widget package.",
+   "url": "{{ORIGIN}}/docs/install/linux"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Installing",
+    "Linux",
+    "Fedora"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 699
+   },
+   "printed_page": null,
+   "section": "2.2",
+   "subdivision": false,
+   "text": "Enable the copr and install the same package by name.",
+   "url": "{{ORIGIN}}/docs/install/linux"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Installing",
+    "macOS"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 753
+   },
+   "printed_page": null,
+   "section": "2.3",
+   "subdivision": false,
+   "text": "The signed disk image installs Widget into the applications folder and registers its command line tool.",
+   "url": "{{ORIGIN}}/docs/install/macos"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Usage"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 857
+   },
+   "printed_page": null,
+   "section": "3",
+   "subdivision": false,
+   "text": "Widget reads an assembly description and writes the parts list it implies.",
+   "url": "{{ORIGIN}}/docs/usage"
+  },
+  {
+   "figure_only": false,
+   "fragment": "running",
+   "heading_path": [
+    "Usage",
+    "Running an assembly"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 932
+   },
+   "printed_page": null,
+   "section": "3",
+   "subdivision": false,
+   "text": "Point the tool at a description file and it prints the result on standard output.",
+   "url": "{{ORIGIN}}/docs/usage"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Usage",
+    "Running an assembly",
+    "Watching for changes"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 1014
+   },
+   "printed_page": null,
+   "section": "3",
+   "subdivision": false,
+   "text": "The watch flag reruns the assembly whenever the description changes on disk.",
+   "url": "{{ORIGIN}}/docs/usage"
+  },
+  {
+   "figure_only": false,
+   "fragment": "profiles",
+   "heading_path": [
+    "Usage",
+    "Profiles"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 1091
+   },
+   "printed_page": null,
+   "section": "3",
+   "subdivision": false,
+   "text": "A profile names the defaults a project uses so nobody has to remember them.",
+   "url": "{{ORIGIN}}/docs/usage"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "API reference"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 1167
+   },
+   "printed_page": null,
+   "section": "4",
+   "subdivision": false,
+   "text": "Every endpoint answers JSON and reports failure with a status code rather than a body field.",
+   "url": "{{ORIGIN}}/docs/api"
+  },
+  {
+   "figure_only": false,
+   "fragment": "assemblies",
+   "heading_path": [
+    "API reference",
+    "Assemblies"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 1260
+   },
+   "printed_page": null,
+   "section": "4",
+   "subdivision": false,
+   "text": "An assembly is created by posting a description and is fetched by its identifier afterwards.",
+   "url": "{{ORIGIN}}/docs/api"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "API reference",
+    "Assemblies",
+    "Creating an assembly"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 1353
+   },
+   "printed_page": null,
+   "section": "4",
+   "subdivision": false,
+   "text": "Post the description as the request body. The response carries the identifier the assembly was given.",
+   "url": "{{ORIGIN}}/docs/api"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "API reference",
+    "Assemblies",
+    "Fetching an assembly"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 1455
+   },
+   "printed_page": null,
+   "section": "4",
+   "subdivision": false,
+   "text": "Get the assembly by identifier. A missing assembly answers 404 with an empty body.",
+   "url": "{{ORIGIN}}/docs/api"
+  },
+  {
+   "figure_only": false,
+   "fragment": "parts",
+   "heading_path": [
+    "API reference",
+    "Parts"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 1538
+   },
+   "printed_page": null,
+   "section": "4",
+   "subdivision": false,
+   "text": "Parts are read only. They are derived from the assembly and cannot be edited on their own.",
+   "url": "{{ORIGIN}}/docs/api"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Questions",
+    "Does Widget run without a network?"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 1629
+   },
+   "printed_page": null,
+   "section": "5",
+   "subdivision": false,
+   "text": "Yes. Nothing in the assembly path makes a request.",
+   "url": "{{ORIGIN}}/docs/faq"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Questions",
+    "Which licence covers Widget?"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 1680
+   },
+   "printed_page": null,
+   "section": "5",
+   "subdivision": false,
+   "text": "The permissive one named in the repository root.",
+   "url": "{{ORIGIN}}/docs/faq"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Changes"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 1729
+   },
+   "printed_page": null,
+   "section": "6",
+   "subdivision": false,
+   "text": "Release notes for every published version, newest first.",
+   "url": "{{ORIGIN}}/docs/changes"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Changes",
+    "Version two"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 1786
+   },
+   "printed_page": null,
+   "section": "6",
+   "subdivision": false,
+   "text": "Profiles were added and the watch flag learned to debounce.",
+   "url": "{{ORIGIN}}/docs/changes"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Changes",
+    "Version one"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 1846
+   },
+   "printed_page": null,
+   "section": "6",
+   "subdivision": false,
+   "text": "The first release anybody outside the project used.",
+   "url": "{{ORIGIN}}/docs/changes"
+  }
+ ],
+ "diagnostics": {
+  "notes": [
+   "robots.txt names 1 sitemap(s)",
+   "sitemap declares 11 URL(s), 10 under the seed",
+   "1 page(s) collapsed into the URL they declare as canonical",
+   "1 of 9 known page(s) could not be fetched (11%)",
+   "sidebar_dom places 100% of the page set",
+   "index_page places 100% of the page set"
+  ],
+  "site": {
+   "canonical_merges": 1,
+   "chrome_blocks_dropped": 56,
+   "chrome_distinct_blocks": 7,
+   "hierarchy_inferred": false,
+   "pages_declared": 9,
+   "pages_fetched": 8,
+   "pages_with_blocks": 8,
+   "placed_by_path": [],
+   "seed": "{{ORIGIN}}/docs/",
+   "unplaced_pages": [],
+   "unreachable": [
+    "{{ORIGIN}}/docs/retired"
+   ],
+   "unreachable_reasons": [
+    "{{ORIGIN}}/docs/retired: HTTP 404"
+   ]
+  },
+  "structure_source": "sidebar_dom"
+ },
+ "format": "site",
+ "index_terms": [],
+ "page_count": null,
+ "pages": {},
+ "title": "Widget Docs"
+}

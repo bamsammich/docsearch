@@ -1,16 +1,21 @@
 # docsearch
 
-Local document search over an MCP server. Documents are ingested into one
-SQLite database by a background worker; a Go server reads that database and
+Local document search over an MCP server. Documents are ingested into a
+Postgres database by a background worker; a Go server reads that database and
 exposes search, navigation and retrieval tools over MCP Streamable HTTP.
 
-No vector database, no embeddings, no external services. SQLite FTS5 with BM25.
+No vector database, no embeddings, no external services. BM25 over
+`pg_textsearch`.
 [An embedding reranker was measured and rejected](docs/research/embedding-rerank-probe.md).
 
-**v2 is in progress on the [`v2` branch](https://github.com/bamsammich/docsearch/tree/v2):**
-a Go rewrite with multi-user storage and pluggable authentication. `main` stays
-v1 and keeps working as documented here until v2 is released with a migration
-path. Pin to the `v1.0.0` tag to stay on v1 regardless.
+**This is v2:** a Go rewrite with multi-user storage on Postgres, pluggable
+authentication, uploads and a Paperless-ngx sync. v1 lives on the
+[`v1` branch](https://github.com/bamsammich/docsearch/tree/v1) and takes
+security fixes only, until six months after `v2.0.0`.
+[Upgrading from v1](#upgrading-from-v1) moves a v1 library across.
+
+docsearch is built from a checkout or from its container images. Its module
+path carries no `/v2`, so `go install ...@latest` still resolves to `v1.0.0`.
 
 ## Three processes
 
@@ -19,17 +24,16 @@ path. Pin to the `v1.0.0` tag to stay on v1 regardless.
 | Ingest worker | daemon | claims queued jobs, extracts, chunks, writes |
 | MCP server | daemon | reads the database, enqueues jobs, reports status |
 | CLI | one-shot | manual ingest, listing, removal, verification |
+| Paperless sync | one-shot or daemon, optional | pushes what a Paperless-ngx user can see; runs beside Paperless |
 
-Ingest never runs inside the server process. Extraction saturates a core for
-minutes and would starve request handling, and the extraction stack is Python
-while the server is Go.
+Ingest never runs inside the server process: extraction saturates a core for
+minutes and would starve request handling.
 
 ## Setup
 
 ```bash
-mise install          # python 3.13, uv, go 1.26, golangci-lint
-uv sync               # python dependencies
-go build -o bin/docsearch-mcp ./cmd/docsearch-mcp
+mise install          # go 1.26, golangci-lint, buf, sqlc, mockery
+mise run build        # docsearch-server, docsearch-worker, docsearch, docsearch-sync
 ```
 
 `pdffonts` (poppler) is useful for inspecting a PDF's text layer and is not in
@@ -38,19 +42,30 @@ the mise registry — install it from your package manager.
 ## Ingesting
 
 ```bash
-docsearch migrate [--check] [--db PATH]            # bring the schema up to date
+docsearch migrate [--check] [--dsn DSN]            # bring the schema up to date
 docsearch inspect <target>                         # what structure does it offer?
 docsearch add     <target> [--title T]             # synchronous; file, directory or URL
 docsearch enqueue <target> [--title T]             # queue for the worker
 docsearch refresh <doc_id> [--from-cache]          # re-crawl an ingested site
-docsearch worker  [--db PATH] [--root PATH]        # run the daemon
-docsearch jobs    [--db PATH]                      # queue state
-docsearch list    [--db PATH]
-docsearch remove  <doc_id> [--db PATH]
-docsearch verify  <doc_id> [--db PATH]             # did it chunk well enough?
+docsearch jobs    [--all] [--limit N]              # queue state
+docsearch cancel  <job_id>                         # ask a job to stop
+docsearch list
+docsearch remove  <doc_id>
+docsearch verify  <doc_id>                         # did it chunk well enough?
 ```
 
 A target is a path or an `http(s)` URL. `ingest` is a second name for `add`.
+
+Every command but `migrate` is a client of `docsearch-server`, which is what
+lets the index sit on another host and what makes one token the only way in.
+`--server` says where it is, `DOCSEARCH_SERVER` is the same setting, and
+`DOCSEARCH_TOKEN` carries the token, which has no flag because an argument is
+visible to every process on the host through `ps`.
+
+`migrate` is the exception: it opens the database directly, because it writes
+the schema the server expects to find and so has to run before the server
+does. `docsearch-worker` is a separate binary for the same reason, and runs
+beside the index it writes.
 
 Three commands answer three different questions, and a document can pass one
 while failing another:
@@ -90,6 +105,67 @@ fixed windows, and it is the failure this command exists to make loud.
 
 A document is invisible to search until its ingest completes. Every read path
 filters `documents.status='ready'`.
+
+## Uploading a file
+
+`add_document` reads files under the library roots, which a remote server
+cannot see on your computer. A file from anywhere else goes through an
+upload. The upload stores the file in your own rows of the database and
+queues it like any other ingest, so a refresh can read it again later.
+
+| caller | how |
+|---|---|
+| an agent in a chat | the `upload_link` tool returns a single-use link; open it in a browser and pick the file |
+| an agent with a shell | `curl -T manual.pdf '<link>?name=manual.pdf'` against that link |
+| a program with a token | `curl -T manual.pdf -H "Authorization: Bearer $DOCSEARCH_TOKEN" '<server>/upload?name=manual.pdf'` |
+
+A link works once and for 15 minutes, and the database keeps only a hash of
+it. The authenticated `PUT /upload` also takes `?key=`: a later upload under
+the same key replaces that document instead of adding a second. Without a
+key, the file's content hash is the key, so uploading the same bytes twice
+gives one document.
+
+`--public-url` (`DOCSEARCH_PUBLIC_URL`) is where a browser reaches the
+server, and links are built on it. It defaults to the origin of
+`--oidc-resource` in `oidc` mode, and to loopback on the listening port
+otherwise. `--upload-max-mb` (`DOCSEARCH_UPLOAD_MAX_MB`) caps a file at 100
+MB unless set.
+
+## Syncing from Paperless-ngx
+
+`docsearch-sync` pushes the documents a Paperless-ngx user can see into a
+docsearch library, and retires them when that user stops seeing them. It runs
+beside Paperless and reaches out to both, so docsearch never needs a way into
+the network Paperless lives on.
+
+Which documents reach docsearch is decided in Paperless. Give a dedicated
+Paperless user view permission on the documents worth searching, usually
+with a workflow that shares chosen document types on consumption, and give
+the sync that user's API token.
+
+```bash
+PAPERLESS_TOKEN=... DOCSEARCH_TOKEN=... \
+  docsearch-sync --paperless-url http://paperless:8000 --server https://docs.example.com
+```
+
+| flag | environment | default |
+|---|---|---|
+| `--paperless-url` | `PAPERLESS_URL` | none |
+| `--server` | `DOCSEARCH_SERVER` | `http://127.0.0.1:8765` |
+| `--key-prefix` | `DOCSEARCH_SYNC_KEY_PREFIX` | `paperless`; use one per Paperless instance |
+| `--every` | `DOCSEARCH_SYNC_EVERY` | `0`, one pass and exit |
+| `--prefer-archive` | `DOCSEARCH_SYNC_PREFER_ARCHIVE` | off |
+| `--allow-empty` | | off |
+| `--dry-run` | | off |
+
+Nothing is kept on disk. A document is pushed when the library lacks it or
+read it before Paperless last changed it, so the library itself is the
+record of what was pushed. The original file is pushed where docsearch reads
+its type, and Paperless's archive copy otherwise; `--prefer-archive` takes
+the archive whenever there is one, which suits a library of scans. A
+Paperless that shows nothing while the library holds documents this sync
+pushed is refused rather than emptied, unless `--allow-empty` says so.
+`Dockerfile.sync` builds an image for it.
 
 ## Ingesting a documentation site
 
@@ -137,10 +213,10 @@ what makes a cancelled crawl resume rather than restart.
 
 **The URL is a security boundary**, held to the standard the library roots are.
 Scheme, host and every resolved address are validated before a request, on
-every redirect hop, and again in the worker — a job row is not proof that
-anything validated it. The rules live in `internal/urlguard` and
-`python/docsearch/urlguard.py` with `testdata/urlguard-addresses.txt` as the
-table both must agree on, because two implementations of one rule drift.
+every redirect hop, and again in the worker: a job row is not proof that
+anything validated it. The rules live in `internal/urlguard`, with
+`testdata/urlguard-addresses.txt` as the
+table it is held to.
 Every rejection returns the same error, so the fetcher cannot be used to map
 an internal network.
 
@@ -171,11 +247,9 @@ Run it as a startup precondition of the **worker**, which is the sole writer:
 | launchd | `migrate && exec worker` in the agent's shell wrapper — launchd has no `ExecStartPre` |
 | Kubernetes | an `initContainer` in `deploy/k8s/deployment.yaml` |
 
-Same command in both, because there is nothing to orchestrate: SQLite is one
-file with one writer, and `replicas: 1` with `strategy: Recreate` already
-guarantees no second writer exists. A migration that cannot be applied exits
-nonzero and the worker does not start — a worker writing through a schema it
-does not match is worse than a worker that is down.
+Same command everywhere, run before anything serves. A migration that cannot
+be applied exits nonzero and the worker does not start. A worker writing
+through a schema it does not match is worse than a worker that is down.
 
 Not every schema change can be applied in place. The change from page
 references to section references in `index_terms` is not recoverable without
@@ -185,8 +259,15 @@ index is fully regenerable**, which is what makes refusing the right answer.
 ## Running the worker
 
 ```bash
-docsearch worker --db var/docsearch.db --root ~/Documents/library
+docsearch-worker --dsn "$DOCSEARCH_DSN" --root ~/Documents/library
 ```
+
+One worker serves every library, taking a job from each account in turn, so
+one library's long queue cannot starve another and an account created by a
+sign-up is served from its first upload. Each job still runs entirely as its
+own library's user: the job, the document it produces and the responses it
+crawled all belong to one library. `--user` pins a worker to a single
+library instead.
 
 Jobs are claimed under a lease. A worker killed mid-job leaves an expired
 lease, and the next worker reclaims and restarts the job with no intervention.
@@ -202,11 +283,94 @@ an in-flight job can checkpoint or roll back instead of being killed mid-write.
 | | flag | environment |
 |---|---|---|
 | bind address | `--addr` | `DOCSEARCH_ADDR` |
-| database | `--db` | `DOCSEARCH_DB` |
+| database | `--dsn` | `DOCSEARCH_DSN` |
+| auth mode | `--auth` | `DOCSEARCH_AUTH` |
+| pin the worker to one library | `--user` (worker only) | `DOCSEARCH_USER` |
 | library roots | `--root` (repeatable) | `DOCSEARCH_ROOT` (`:`-separated) |
 | bearer token | — | `DOCSEARCH_TOKEN` |
 | Origin allowlist | `--allowed-origins` | `DOCSEARCH_ALLOWED_ORIGINS` |
-| permit public bind | `--allow-public-bind` | — |
+| permit public bind | `--allow-public-bind` | `DOCSEARCH_ALLOW_PUBLIC_BIND=true` |
+
+`--auth` is `none`, `token`, `oidc` or `password`, and defaults to `token`,
+which is what a v1 install already runs. `none` asks for no credential and
+answers every request as the single built-in user, so it is refused on any
+address that is not loopback, whatever `--allow-public-bind` says.
+
+### Signing in with accounts docsearch holds
+
+`password` mode is for a deployment with no identity provider. docsearch
+becomes its own OAuth authorization server: Claude, Claude Code and any other
+MCP client discover it, register themselves, and send the person to a
+sign-in page. Each account has a library of its own.
+
+```bash
+docsearch account add alice                 # asks for a password twice
+docsearch account add bob --generate        # makes one up and prints it once
+docsearch account add carol --takes-builtin # carol keeps the existing library
+docsearch account passwd alice              # reset, and lift any lock
+docsearch account unlock alice
+docsearch account remove alice              # ends sign-in; the library stays
+docsearch account list
+```
+
+`docsearch account` connects as the database owner, through `--dsn` or
+`DOCSEARCH_DSN`, the same credential `migrate` uses. Whoever can migrate the
+schema can manage accounts, and nobody else can.
+
+| | |
+|---|---|
+| passwords | argon2id, at least 12 characters |
+| failed sign-ins | five in a row lock the account for 15 minutes |
+| access tokens | ES256 JWTs, valid for an hour |
+| refresh tokens | valid for 30 days, and replaced every time one is used |
+| clients | register themselves (RFC 7591), hold no secret, and must use PKCE |
+
+Set `--public-url` to the address people reach the server at. It is the
+issuer every token names, and the sign-in page lives there. A refused sign-in
+never says whether the username exists. There is no self-service reset,
+since that needs a mail server; `docsearch account passwd` is the reset.
+Removing an account stops its tokens at once rather than when they expire.
+
+### Signing in through your own provider
+
+In `oidc` mode your identity provider is the OAuth authorization server, and
+docsearch reads the tokens it issues. Each identity gets a library of its
+own. Any OIDC provider works; what docsearch needs from it is a token whose
+audience names docsearch.
+
+| | flag | environment |
+|---|---|---|
+| issuer | `--oidc-issuer` | `DOCSEARCH_OIDC_ISSUER` |
+| docsearch's `/mcp` URI | `--oidc-resource` | `DOCSEARCH_OIDC_RESOURCE` |
+| expected audience, if not the URI | `--oidc-audience` | `DOCSEARCH_OIDC_AUDIENCE` |
+| scopes a client should request | `--oidc-scopes-supported` | `DOCSEARCH_OIDC_SCOPES_SUPPORTED` |
+| scopes every token must carry | `--oidc-required-scopes` | `DOCSEARCH_OIDC_REQUIRED_SCOPES` |
+| client ID, to introspect opaque tokens | `--oidc-client-id` | `DOCSEARCH_OIDC_CLIENT_ID` |
+| client secret | — | `DOCSEARCH_OIDC_CLIENT_SECRET` |
+| subject who keeps the existing library | `--oidc-default-owner` | `DOCSEARCH_OIDC_DEFAULT_OWNER` |
+| create accounts on first sign-in | `--oidc-sign-up` | `DOCSEARCH_OIDC_SIGN_UP` |
+| claim every token must carry | `--oidc-required-claim-name` | `DOCSEARCH_OIDC_REQUIRED_CLAIM_NAME` |
+| value that claim must hold | `--oidc-required-claim-value` | `DOCSEARCH_OIDC_REQUIRED_CLAIM_VALUE` |
+
+Scope lists are comma-separated. A signed JWT is checked against the keys the
+issuer publishes. An opaque token is sent back to the issuer for
+introspection, which needs the client ID and secret; without them an opaque
+token is refused.
+
+**Who gets a library** follows what Grafana and Gitea do. Restrict who can
+sign in to docsearch at the provider first. Sign-up starts closed, so an
+identity with no account is refused until you pass `--oidc-sign-up`. A
+required claim, such as `groups` holding `docsearch-users`, is checked on
+every request, so removing someone from the group at the provider removes
+their access here.
+
+**Switching an existing install** keeps its library. Name your own subject
+with `--oidc-default-owner`, and your first sign-in takes the library the
+deployment already holds. Nobody else can claim it.
+
+**The CLI** sends `DOCSEARCH_TOKEN` as its bearer token in every mode. In
+`oidc` mode that is an access token from your provider, and the CLI reads the
+library of the identity the token names.
 
 **The library roots are a security boundary.** `add_document` accepts a target
 that arrives in a tool call, over a network endpoint, and may have been
@@ -237,7 +401,7 @@ error protects; the caller's path is.
 **The server refuses to bind a non-loopback address** without
 `--allow-public-bind`, and logs a warning when you pass it.
 
-**Bearer token on every `/mcp` request**, compared in constant time over
+**Bearer token on every `/mcp` request** in `token` mode, compared in constant time over
 SHA-256 digests — and compared even when the header is absent, so a missing
 token cannot be distinguished from a wrong one by timing.
 
@@ -275,13 +439,13 @@ For a client with native HTTP MCP support:
 and then `[localMcpBridge] no stdio servers connected`. That file takes stdio
 servers only, so the HTTP service is reached through a bridge.
 
-Install `deploy/client/docsearch-mcp-bridge` to `~/.local/bin/`, then:
+Install `deploy/client/docsearch-server-bridge` to `~/.local/bin/`, then:
 
 ```json
 {
   "mcpServers": {
     "docsearch": {
-      "command": "/Users/YOU/.local/bin/docsearch-mcp-bridge",
+      "command": "/Users/YOU/.local/bin/docsearch-server-bridge",
       "args": []
     }
   }
@@ -303,7 +467,7 @@ Confirm with `[LocalMcpServerManager] Connected to docsearch (7 tools)` in
 **macOS:** `deploy/launchd/` — two user agents. Install with:
 
 ```bash
-for f in mcp worker; do
+for f in server worker; do
   sed "s|__HOME__|$HOME|g" deploy/launchd/com.bamsammich.docsearch-$f.plist \
     > ~/Library/LaunchAgents/com.bamsammich.docsearch-$f.plist
   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.bamsammich.docsearch-$f.plist
@@ -313,9 +477,11 @@ done
 Both set `RunAtLoad` and `KeepAlive`, so they start at login and respawn if
 killed. Logs go to `~/Library/Logs/docsearch/`.
 
-launchd has no `EnvironmentFile`, so the server agent sources the token from
-its 0600 file in a shell wrapper — it stays out of the plist and out of
-`launchctl print` output.
+launchd has no `EnvironmentFile`, so both agents source the token and
+`DOCSEARCH_DSN` from their 0600 file in a shell wrapper. Both stay out of the
+plists and out of `launchctl print` output. The agents expect a Postgres
+reachable at that DSN; `deploy/docker/compose.yaml` is the simpler route on
+macOS, since it brings its own.
 
 ### Docker, on the same machine
 
@@ -343,30 +509,24 @@ and `--root` is that same path. `add_document` takes a filesystem path from the
 MCP client, which is a process on the *host*; mounting the library at
 `/library` would reject every path a client can actually name.
 
-**The database is a named volume, not a bind mount.** SQLite in WAL mode needs
-real file locking, and the macOS bind-mount path is not something to bet a
-single-writer database on. It lives on ext4 inside the Linux VM, which also
-means it is not directly readable from the host — `scripts/docsearch-db` opens
-it read-only, and `scripts/docsearch-db --backup out.db` copies it out through
-`.backup` rather than `cp`, so the snapshot is consistent across the WAL while
-the worker is mid-transaction.
+**Postgres runs as its own service**, on the image that ships `pg_textsearch`
+with the library preloaded, and its data lives in a named volume on ext4
+inside the Linux VM. `deploy/docker/initdb/00-roles.sql` does the three
+things docsearch cannot do for itself: `CREATE EXTENSION` is superuser-only,
+`CREATE ROLE` needs `CREATEROLE`, and the database has to exist before
+anything can be migrated into it. Postgres runs that file once, on an empty
+data directory.
 
-Migration runs in its own service for the reason the systemd unit runs it from
-`ExecStartPre`: the worker is the only writer, so it races nothing there. Both
-real services gate on `service_completed_successfully`, so a migration that
-cannot be applied means neither ever starts.
+Two roles, because two jobs need different privileges. `docsearch_owner`
+owns every table and runs migrations; `docsearch_app` owns nothing and
+reaches rows only through the policies, which is what a request runs as.
+Neither is a superuser and neither may bypass row-level security, so the
+owner is bound by the policies too.
 
-Moving an existing installation across: stop the agents first — a clean
-shutdown checkpoints the WAL into the main file — then copy it in.
-
-```bash
-launchctl bootout gui/$(id -u)/com.bamsammich.docsearch-mcp
-launchctl bootout gui/$(id -u)/com.bamsammich.docsearch-worker
-docker volume create docsearch_data
-docker run --rm -v docsearch_data:/data -v "$HOME/.local/share/docsearch:/src:ro" \
-  alpine:3.20 sh -c 'cp /src/docsearch.db* /data/ && chown -R 65532:65532 /data'
-scripts/docsearch-up
-```
+Migration runs in its own service for the reason the systemd unit runs it
+from `ExecStartPre`. Both real services gate on
+`service_completed_successfully`, so a migration that cannot be applied
+means neither ever starts.
 
 No client configuration changes: the container publishes the same
 `127.0.0.1:8765` and reads the same token file, so the bridge in
@@ -374,18 +534,22 @@ No client configuration changes: the container publishes the same
 
 ## Deployment
 
-`deploy/k8s/` — one Deployment, `replicas: 1`, `strategy: Recreate`. SQLite
-permits a single writer and the server writes `ingest_jobs`; a rolling update
-would briefly run two writers against one file.
+`deploy/k8s/` holds one Deployment, `replicas: 1`, `strategy: Recreate`. One
+worker serves one library, so a second replica would claim the same queue;
+`FOR UPDATE SKIP LOCKED` makes two workers safe, which turns the replica
+count into a throughput decision rather than a correctness one.
 
-Server and worker are two containers in one Pod because they share the database
-volume, and an RWO volume attaches to one node. Exposed over Tailscale, never
-an Ingress.
+Server and worker are two containers in one Pod because they share the
+library volume, and an RWO claim attaches to one node. Exposed over
+Tailscale, never an Ingress.
 
-The database must sit on a **block-backed** volume with a local filesystem
-(Ceph RBD). SQLite locking is unreliable over NFS and CephFS, and WAL needs
-shared-memory support they do not provide correctly. This fails by corrupting
-under concurrency, not by erroring.
+Postgres is operated by the cluster, with its own storage and its own
+backups. `deploy/k8s/config.yaml` carries a placeholder secret holding both
+connection strings; a cluster operator that already issues Postgres
+credentials, such as CloudNativePG, generates one of its own, and the
+Deployment points at that instead. The database needs `pg_textsearch`, which
+only a superuser can install: `docs/plans/postgres-multiuser.md` carries the
+full privilege boundary.
 
 `deploy/systemd/` has units for running both processes on a single host. The
 code does not know which deployment shape it is in.
@@ -421,12 +585,12 @@ and a DOCX heading style are all declarations, not inferences.
 
 One module plus one registry entry. The chunker is untouched.
 
-1. Write `python/docsearch/adapters/yourformat.py` exporting
-   `extract(path, progress=None) -> Extraction`.
-2. Emit `Block`s: `heading_path` (full ancestry, root-first), `locator`
-   (`{"page": n}` for paginated formats, `{"offset": n}` otherwise), and `text`.
-   Set `section` only if the format carries authoritative numbering.
-3. Register the suffix in `adapters/__init__.py`.
+1. Write `internal/adapter/yourformat`, exporting an `Extract` that returns
+   a `domain.Extraction`.
+2. Emit `Block`s: `HeadingPath` (full ancestry, root-first), `Locator`
+   (a page for paginated formats, an offset otherwise), and `Text`.
+   Set `Section` only if the format carries authoritative numbering.
+3. Register the suffix in `internal/adapter`.
 
 The chunker reads only the normalized intermediate and never learns which
 adapter produced it. If your format's structure cannot be derived, **raise**
@@ -537,12 +701,37 @@ Reopen only if the corpus changes character or a domain-adapted model appears;
 if reopened, the shape stays sqlite-vec as a reranker over the top ~50 BM25
 hits, never primary retrieval, with displacement count as a release gate.
 
+## Upgrading from v1
+
+v1 kept its index in a SQLite file, and v2 keeps it in Postgres. Nothing in
+the v1 file is copied across: `docsearch import-v1` reads its list of
+documents and queues each one again from the file or site it came from, so
+v2's own pipeline reads every document. Titles are kept. A document v1 never
+finished is skipped and named, so you can add it by hand once you know why it
+failed.
+
+1. Stop v1, and copy its index out of the volume it lives in. The import opens
+   the copy read-only, so v1's file is untouched and you can go back to it.
+2. Start v2 against the same library directory, then run the import:
+
+   ```
+   docsearch import-v1 --dry-run docsearch.db
+   docsearch import-v1 docsearch.db
+   ```
+
+3. Watch the queue with `docsearch jobs` until every job is `ready`.
+
+v1 recorded each file at the path v1's process saw. If v2 sees the library at
+a different path, map one to the other with `--root-map OLD=NEW`, repeated
+for each root. A source v2 refuses is reported and the rest are still queued,
+and the command exits nonzero so a script notices.
+
 ## Backups
 
-**The SQLite index is fully regenerable from the library volume.** Every chunk,
-FTS row, page and index term is derived from the source documents by
-`docsearch ingest`. Losing `docsearch.db` costs the time to re-ingest, nothing
-more.
+**The index is fully regenerable from the library volume.** Every chunk,
+search row, page and index term is derived from the source documents by
+`docsearch ingest`, and the crawl cache holds responses a crawl can fetch
+again. Losing the database costs the time to re-ingest, nothing more.
 
 The volume that needs backing up is **`docsearch-library`**, which holds the
 only irreplaceable data. `docsearch-data` can be treated as a cache.
@@ -550,10 +739,9 @@ only irreplaceable data. `docsearch-data` can be treated as a cache.
 ## Testing
 
 ```bash
-uv run pytest                                    # ingest, chunker, worker, policy
-go test ./...                                    # store, transport, path validation
-go run ./cmd/docsearch-eval --db var/docsearch.db  # retrieval evaluation
-go run ./cmd/docsearch-eval --db PATH --self-label # measure any corpus, no query set
+go test ./...                                    # every package, and the integration suites
+go run ./cmd/docsearch-eval --dsn "$DOCSEARCH_DSN"             # retrieval evaluation
+go run ./cmd/docsearch-eval --dsn DSN --self-label             # measure any corpus, no query set
 ```
 
 `--self-label` builds each query from a chunk's own heading and body and asks
@@ -597,7 +785,7 @@ failure is ranking depth, not absence.
 
 docsearch is released under the [MIT License](LICENSE).
 
-The ingest worker depends on [PyMuPDF](https://github.com/pymupdf/PyMuPDF),
-which is licensed under the AGPL-3.0. Distributing the worker with PyMuPDF, or
-offering a modified version of it as a network service, carries the AGPL's
-obligations for that combined work. v2 plans to replace PyMuPDF with PDFium.
+PDFs are read by [PDFium](https://pdfium.googlesource.com/pdfium/), BSD and
+Apache licensed, through [go-pdfium](https://github.com/klippa-app/go-pdfium)
+in WebAssembly mode, under MIT. v1's worker used PyMuPDF, which is AGPL-3.0;
+v2 carries no AGPL component.

@@ -1,0 +1,61 @@
+{
+ "blocks": [
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Tab Heading　#"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 17
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Line one\f\nstill a line break\nLine two \nafter a line separator\nafter next line",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Tab Heading　#"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 94
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "####### seven hashes is text\n　```\n# fenced after an ideographic space\n```",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Tab Heading　#",
+    "Closing hashes ##"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 194
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "After a no-break-space line.",
+   "url": null
+  }
+ ],
+ "diagnostics": {
+  "structure_source": "atx_headings"
+ },
+ "format": "markdown",
+ "index_terms": [],
+ "page_count": null,
+ "pages": {},
+ "title": "Tab Heading　#"
+}
