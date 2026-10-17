@@ -16,6 +16,7 @@ func (s *ModeSuite) TestTheBuiltModesParse() {
 	for spelling, want := range map[string]owner.Mode{
 		"none":  owner.None,
 		"token": owner.Token,
+		"oidc":  owner.OIDC,
 	} {
 		got, err := owner.ParseMode(spelling)
 		s.Require().NoError(err, spelling)
@@ -28,12 +29,10 @@ func (s *ModeSuite) TestTheBuiltModesParse() {
 // operator who configured it ahead of time learns which it is rather than
 // being told the word is unknown.
 func (s *ModeSuite) TestAPlannedModeIsRefusedByName() {
-	for _, spelling := range []string{"password", "oidc"} {
-		_, err := owner.ParseMode(spelling)
-		s.Require().Error(err, spelling)
-		s.Contains(err.Error(), spelling)
-		s.Contains(err.Error(), "not built yet")
-	}
+	_, err := owner.ParseMode("password")
+	s.Require().Error(err)
+	s.Contains(err.Error(), "password")
+	s.Contains(err.Error(), "not built yet")
 }
 
 func (s *ModeSuite) TestAnUnknownModeListsTheOnesThatExist() {

@@ -115,13 +115,12 @@ Configuring that identifier as the expected audience would accept a token
 minted for any other service registered the same way. The expected audience
 has to be a value only docsearch's tokens carry.
 
-Three limits were found and left:
+Two limits were found and left:
 
 | limit | consequence |
 |---|---|
 | the SDK's 401 and 403 challenges carry no `error` parameter, which RFC 6750 asks for; v1.8.0 is unchanged | a client learns the status and the scope, but not `invalid_token` or `insufficient_scope` by name |
 | an ID token from the same issuer passes when its audience includes the configured value | a provider that puts a project in ID tokens' audience lets one be used as an access token; the `typ` header that would tell them apart is not set consistently across providers |
-| nothing mounts the resource server yet | `oidc` is still refused, so its configuration waits for step 5e, which is when a request can first reach it |
 
 ## A user gains an issuer and a subject
 
@@ -204,14 +203,47 @@ runs, so naming the modes changed no deployment's behaviour.
 elsewhere, not into serving a library to whoever arrives, and the two
 together are an open document store that no flag spells clearly enough to
 act on. A mode the plan names but no step has built is refused by its own
-name rather than as an unknown word, so an operator who configured `oidc`
-early learns which it is.
+name rather than as an unknown word, so an operator who configured
+`password` early learns which it is.
 
 `password` is the mode that looks small and is not. Holding a password means
 a hashing choice, a reset path, a lockout policy and a session store, none of
 which docsearch is better at than a provider. It lands in step 5f, beside the
 authorization server, because both make docsearch issue credentials of its
 own and neither is worth building alone.
+
+## Who gets a library, settled in 5e
+
+Step 5e built `oidc` mode and answered the questions this plan had left to
+it by following what self-hosted applications already do. Grafana and Gitea
+both pair a switch for creating an account on first sign-in with an optional
+claim every sign-in must carry, and both expect the provider to be the first
+gate. docsearch copies the pair.
+
+| setting | default | why |
+|---|---|---|
+| `--oidc-sign-up` | off | a provider that lets anyone register would otherwise hand anyone a library; Gitea starts closed for the same reason |
+| `--oidc-required-claim-name` and `-value` | none | checked on every request rather than at account creation, so revoking the claim at the provider revokes access here |
+| `--oidc-default-owner` | nobody | names who inherits the built-in library |
+
+The built-in library goes to a named identity rather than to whoever signs
+in first. Phase 04 promised the first account would claim it, which is safe
+only while the operator is certain to be first. Migration 11 adds
+`claim_builtin`, a definer function that writes an identity onto the one row
+with none, so the claim is stored once and a second identity finds nothing
+left to take.
+
+The CLI keeps sending `DOCSEARCH_TOKEN` as its bearer token. In `oidc` mode
+the ConnectRPC routes sit behind the same resource server as `/mcp`, so any
+access token the provider issues for docsearch works there, and the CLI reads
+the library of whoever the token names. A device-code sign-in for the CLI is
+a convenience left for later; nothing about the server would change for it.
+
+Still owed is the run against a real provider: register a client, add the
+connector, and capture the token claude.ai presents. That settles what the
+provider puts in `aud`, and the published-identity guess in
+`docs/research/mcp-authorization.md`. It needs an operator with a provider,
+so it is recorded here rather than claimed.
 
 ## Steps
 
@@ -238,19 +270,6 @@ together also makes the cheaper answer visible: if neither trigger fires, the
 machinery is never written.
 
 ## Not settled by this plan
-
-**What a token means for the CLI.** `docsearch` talks ConnectRPC to the
-server with a bearer token today, and nothing about that is an MCP client. A
-human at a terminal is not going through a browser redirect for every
-command, so the CLI keeps the token mode and the plan does not pretend
-otherwise. Whether a signed-in account can mint a token for its own CLI use
-is a question for phase 05 to answer and this plan does not.
-
-**Who may sign in.** A provider can authenticate someone docsearch should
-still refuse, and a claim in the token is the usual way a deployment says
-which accounts it allows. Checking a claim is a small thing to implement and
-a policy question to get wrong, so step 5e names which claim it reads and
-where the check lives, and does not invent a role system inside docsearch.
 
 **What happens to a library when an account goes away.** Deleting a user
 means deleting a partition, and the foreign keys phase 04 added refuse a user

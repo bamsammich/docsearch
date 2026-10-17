@@ -27,6 +27,35 @@ type Config struct {
 	AllowedOrigins  []string
 	AllowPublicBind bool
 	RecentJobWindow int
+	// OIDC is read only in auth mode oidc.
+	OIDC OIDC
+}
+
+// OIDC is how a deployment in auth mode oidc reaches its provider, and who
+// it lets in.
+type OIDC struct {
+	// Issuer is the provider's issuer identifier.
+	Issuer string
+	// Resource is docsearch's /mcp URI as clients address it.
+	Resource string
+	// Audience is the aud value a token must carry, when the provider binds
+	// one of its own instead of Resource.
+	Audience string
+	// ClientID and ClientSecret are docsearch's credentials at the provider,
+	// needed only to introspect opaque tokens.
+	ClientID     string
+	ClientSecret string
+	// DefaultOwner is the subject, at Issuer, who inherits the library the
+	// deployment filled before it had accounts.
+	DefaultOwner string
+	// RequiredClaimName and RequiredClaimValue name a claim every token must
+	// carry.
+	RequiredClaimName  string
+	RequiredClaimValue string
+	ScopesSupported    []string
+	RequiredScopes     []string
+	// SignUp creates an account for an identity that has none.
+	SignUp bool
 }
 
 const (
@@ -49,6 +78,20 @@ const (
 	// EnvServer is where docsearch finds docsearch-server. Every command but
 	// migrate goes through it.
 	EnvServer = "DOCSEARCH_SERVER"
+
+	// The oidc mode's settings. The client secret is read from the
+	// environment alone, as the token is.
+	EnvOIDCIssuer             = "DOCSEARCH_OIDC_ISSUER"
+	EnvOIDCResource           = "DOCSEARCH_OIDC_RESOURCE"
+	EnvOIDCAudience           = "DOCSEARCH_OIDC_AUDIENCE"
+	EnvOIDCScopesSupported    = "DOCSEARCH_OIDC_SCOPES_SUPPORTED"
+	EnvOIDCRequiredScopes     = "DOCSEARCH_OIDC_REQUIRED_SCOPES"
+	EnvOIDCClientID           = "DOCSEARCH_OIDC_CLIENT_ID"
+	EnvOIDCClientSecret       = "DOCSEARCH_OIDC_CLIENT_SECRET" //nolint:gosec // name of a variable, not a credential
+	EnvOIDCDefaultOwner       = "DOCSEARCH_OIDC_DEFAULT_OWNER"
+	EnvOIDCSignUp             = "DOCSEARCH_OIDC_SIGN_UP"
+	EnvOIDCRequiredClaimName  = "DOCSEARCH_OIDC_REQUIRED_CLAIM_NAME"
+	EnvOIDCRequiredClaimValue = "DOCSEARCH_OIDC_REQUIRED_CLAIM_VALUE"
 )
 
 // ErrPublicBind is returned when the configured address is not loopback and
@@ -76,6 +119,11 @@ func (c *Config) Validate() error {
 	}
 	if c.Auth == owner.Token && c.BearerToken == "" {
 		return fmt.Errorf("no bearer token: set %s", EnvToken)
+	}
+	if c.Auth == owner.OIDC {
+		if err := c.OIDC.validate(); err != nil {
+			return err
+		}
 	}
 	if c.DSN == "" {
 		return errors.New("no database: set --dsn or " + EnvDSN)
@@ -129,6 +177,29 @@ func (c *Config) Validate() error {
 	}
 	if c.Auth == owner.None && !IsLoopbackAddr(c.Addr) {
 		return ErrOpenToTheNetwork
+	}
+	return nil
+}
+
+// validate refuses an oidc configuration that could not work, at startup
+// rather than on the first request.
+func (o OIDC) validate() error {
+	if o.Issuer == "" {
+		return errors.New("auth mode oidc needs an issuer: set " + EnvOIDCIssuer)
+	}
+	if o.Resource == "" {
+		return errors.New("auth mode oidc needs docsearch's own /mcp URI: set " + EnvOIDCResource)
+	}
+	if (o.ClientID == "") != (o.ClientSecret == "") {
+		return fmt.Errorf(
+			"introspection needs both %s and %s",
+			EnvOIDCClientID,
+			EnvOIDCClientSecret,
+		)
+	}
+	if (o.RequiredClaimName == "") != (o.RequiredClaimValue == "") {
+		return fmt.Errorf("a required claim needs both %s and %s",
+			EnvOIDCRequiredClaimName, EnvOIDCRequiredClaimValue)
 	}
 	return nil
 }

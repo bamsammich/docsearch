@@ -79,7 +79,12 @@ func (r *Reader) Read(ctx context.Context, token string) (resource.Claims, error
 	if err := verified.Claims(&scope); err != nil {
 		return resource.Claims{}, fmt.Errorf("%w: %w", auth.ErrInvalidToken, err)
 	}
+	stated := map[string]any{}
+	if err := verified.Claims(&stated); err != nil {
+		return resource.Claims{}, fmt.Errorf("%w: %w", auth.ErrInvalidToken, err)
+	}
 	return resource.Claims{
+		Stated:   stated,
 		Issuer:   verified.Issuer,
 		Subject:  verified.Subject,
 		Audience: verified.Audience,

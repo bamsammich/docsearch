@@ -75,6 +75,7 @@ func (r *Reader) Read(ctx context.Context, token string) (resource.Claims, error
 		issuer = r.issuer
 	}
 	return resource.Claims{
+		Stated:   answer.Claims,
 		Issuer:   issuer,
 		Subject:  answer.Subject,
 		Audience: answer.Audience,

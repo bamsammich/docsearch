@@ -47,7 +47,7 @@ var migrations embed.FS
 // section did when it began holding section numbers rather than page
 // numbers, is invisible to any structural check while silently changing what
 // queries return.
-const Version = 10
+const Version = 11
 
 // History is readable, so a version mismatch can be diagnosed without
 // reading the git log.
@@ -68,6 +68,7 @@ var History = map[int]string{
 		"per user like every other tenant table",
 	10: "an account is an issuer and a subject, and create_account makes the row " +
 		"and its chunk partition together",
+	11: "claim_builtin hands the built-in library to the identity an operator names",
 }
 
 // The tables this package names. Written once, so a typo cannot reach a

@@ -48,6 +48,7 @@ func (s *IntrospectSuite) TestReadsWhatTheIssuerSays() {
 		Audience:   oidc.Audience{docsearch},
 		Scope:      oidc.SpaceDelimitedArray{"openid", "docs:read"},
 		Expiration: oidc.FromTime(expiry),
+		Claims:     map[string]any{"groups": []any{"docsearch-users"}},
 	}, nil)
 
 	got, err := s.reader.Read(s.T().Context(), "opaque-1")
@@ -58,6 +59,7 @@ func (s *IntrospectSuite) TestReadsWhatTheIssuerSays() {
 		Audience: []string{docsearch},
 		Scopes:   []string{"openid", "docs:read"},
 		Expiry:   expiry,
+		Stated:   map[string]any{"groups": []any{"docsearch-users"}},
 	}, got)
 }
 

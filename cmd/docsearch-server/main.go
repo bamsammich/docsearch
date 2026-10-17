@@ -48,7 +48,7 @@ func command() *cli.Command {
 		Description: "Serves /mcp for Claude and a typed ConnectRPC API for every other " +
 			"client, from one index and behind one bearer token.",
 		SliceFlagSeparator: string(filepath.ListSeparator),
-		Flags: []cli.Flag{
+		Flags: append([]cli.Flag{
 			&cli.StringFlag{
 				Name:    "addr",
 				Value:   "127.0.0.1:8765",
@@ -85,14 +85,49 @@ func command() *cli.Command {
 				Usage:   "permit binding a non-loopback address",
 				Sources: cli.EnvVars(config.EnvAllowPublicBind),
 			},
-		},
+		}, oidcFlags()...),
 		Action: run,
 	}
 }
 
-// origins splits the allowlist, dropping blanks so that a trailing comma
-// does not become an origin nothing can match.
-func origins(list string) []string {
+// oidcFlags are the settings auth mode oidc reads, and nothing else does.
+//
+// Scopes are comma-separated strings rather than slice flags for the reason
+// origins are: a scope often carries a colon, which is the separator slice
+// flags split on here.
+func oidcFlags() []cli.Flag {
+	text := func(name, env, usage string) cli.Flag {
+		return &cli.StringFlag{Name: name, Usage: usage, Sources: cli.EnvVars(env)}
+	}
+	return []cli.Flag{
+		text("oidc-issuer", config.EnvOIDCIssuer, "the provider's issuer `URL`"),
+		text("oidc-resource", config.EnvOIDCResource,
+			"docsearch's own /mcp `URI`, as clients address it"),
+		text("oidc-audience", config.EnvOIDCAudience,
+			"the aud `VALUE` a token must carry, when the provider binds its own"),
+		text("oidc-scopes-supported", config.EnvOIDCScopesSupported,
+			"comma-separated `SCOPES` a client should request"),
+		text("oidc-required-scopes", config.EnvOIDCRequiredScopes,
+			"comma-separated `SCOPES` every token must carry"),
+		text("oidc-client-id", config.EnvOIDCClientID,
+			"docsearch's client `ID` at the provider, to introspect opaque tokens"),
+		text("oidc-default-owner", config.EnvOIDCDefaultOwner,
+			"the `SUBJECT` who inherits the library made before accounts existed"),
+		text("oidc-required-claim-name", config.EnvOIDCRequiredClaimName,
+			"a `CLAIM` every token must carry, such as groups"),
+		text("oidc-required-claim-value", config.EnvOIDCRequiredClaimValue,
+			"the `VALUE` the required claim must hold"),
+		&cli.BoolFlag{
+			Name:    "oidc-sign-up",
+			Usage:   "create an account for an identity that has none",
+			Sources: cli.EnvVars(config.EnvOIDCSignUp),
+		},
+	}
+}
+
+// commaList splits a comma-separated setting, dropping blanks so that a
+// trailing comma does not become an entry nothing can match.
+func commaList(list string) []string {
 	var out []string
 	for _, origin := range strings.Split(list, ",") {
 		if origin = strings.TrimSpace(origin); origin != "" {
@@ -119,8 +154,21 @@ func run(_ context.Context, cmd *cli.Command) error {
 		// from a flag: an argument is visible to every process on the host
 		// through ps.
 		BearerToken:     os.Getenv(config.EnvToken),
-		AllowedOrigins:  origins(cmd.String("allowed-origins")),
+		AllowedOrigins:  commaList(cmd.String("allowed-origins")),
 		AllowPublicBind: cmd.Bool("allow-public-bind"),
+		OIDC: config.OIDC{
+			Issuer:             cmd.String("oidc-issuer"),
+			Resource:           cmd.String("oidc-resource"),
+			Audience:           cmd.String("oidc-audience"),
+			ClientID:           cmd.String("oidc-client-id"),
+			ClientSecret:       os.Getenv(config.EnvOIDCClientSecret),
+			DefaultOwner:       cmd.String("oidc-default-owner"),
+			RequiredClaimName:  cmd.String("oidc-required-claim-name"),
+			RequiredClaimValue: cmd.String("oidc-required-claim-value"),
+			ScopesSupported:    commaList(cmd.String("oidc-scopes-supported")),
+			RequiredScopes:     commaList(cmd.String("oidc-required-scopes")),
+			SignUp:             cmd.Bool("oidc-sign-up"),
+		},
 	}
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))

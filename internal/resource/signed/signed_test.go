@@ -58,8 +58,13 @@ func (s *SignedSuite) TestReadsWhatTheIssuerSigned() {
 	claims := minted()
 	claims["exp"] = expiry.Unix()
 
+	claims["groups"] = []string{"docsearch-users"}
+
 	got, err := s.reader.Read(s.T().Context(), s.sign(claims))
 	s.Require().NoError(err)
+	// A claim docsearch has no field for still arrives, for a policy to read.
+	s.Equal([]any{"docsearch-users"}, got.Stated["groups"])
+	got.Stated = nil
 	s.Equal(resource.Claims{
 		Issuer:   issuer,
 		Subject:  "subject-1",

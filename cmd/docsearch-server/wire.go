@@ -55,6 +55,7 @@ func serve(cfg config.Config, log *slog.Logger) error {
 			newExtractor,
 			newFormats,
 			newLibraries,
+			newAccess,
 			grouped(newMCPRoute),
 			grouped(newIngestRoute),
 			grouped(newDocumentRoute),
@@ -253,12 +254,15 @@ func newMux(
 	routes []route,
 	cfg config.Config,
 	libs *library.Libraries,
+	guard access,
 	log *slog.Logger,
 ) *http.ServeMux {
 	mux := http.NewServeMux()
 	for _, r := range routes {
-		mux.Handle(r.path, httpx.RequireAllowedOrigin(cfg.AllowedOrigins,
-			authenticated(cfg, r.handler)))
+		mux.Handle(r.path, httpx.RequireAllowedOrigin(cfg.AllowedOrigins, guard.guard(r.handler)))
+	}
+	for _, r := range guard.public {
+		mux.Handle(r.path, r.handler)
 	}
 
 	// Liveness: the process is up. Deliberately says nothing else.

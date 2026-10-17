@@ -28,6 +28,20 @@ COMMENT ON SCHEMA public IS 'standard public schema';
 
 
 --
+-- Name: claim_builtin(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.claim_builtin(new_issuer text, new_subject text) RETURNS text
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  UPDATE users SET issuer = new_issuer, subject = new_subject
+   WHERE issuer IS NULL
+  RETURNING user_id;
+$$;
+
+
+--
 -- Name: create_account(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
