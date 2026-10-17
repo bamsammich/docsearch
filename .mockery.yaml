@@ -33,3 +33,9 @@ packages:
       Jobs:
       Ingester:
       Sources:
+  github.com/bamsammich/docsearch/internal/resource:
+    interfaces:
+      Reader:
+  github.com/bamsammich/docsearch/internal/resource/introspect:
+    interfaces:
+      Introspector:
