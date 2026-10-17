@@ -101,6 +101,31 @@ fixed windows, and it is the failure this command exists to make loud.
 A document is invisible to search until its ingest completes. Every read path
 filters `documents.status='ready'`.
 
+## Uploading a file
+
+`add_document` reads files under the library roots, which a remote server
+cannot see on your computer. A file from anywhere else goes through an
+upload. The upload stores the file in your own rows of the database and
+queues it like any other ingest, so a refresh can read it again later.
+
+| caller | how |
+|---|---|
+| an agent in a chat | the `upload_link` tool returns a single-use link; open it in a browser and pick the file |
+| an agent with a shell | `curl -T manual.pdf '<link>?name=manual.pdf'` against that link |
+| a program with a token | `curl -T manual.pdf -H "Authorization: Bearer $DOCSEARCH_TOKEN" '<server>/upload?name=manual.pdf'` |
+
+A link works once and for 15 minutes, and the database keeps only a hash of
+it. The authenticated `PUT /upload` also takes `?key=`: a later upload under
+the same key replaces that document instead of adding a second. Without a
+key, the file's content hash is the key, so uploading the same bytes twice
+gives one document.
+
+`--public-url` (`DOCSEARCH_PUBLIC_URL`) is where a browser reaches the
+server, and links are built on it. It defaults to the origin of
+`--oidc-resource` in `oidc` mode, and to loopback on the listening port
+otherwise. `--upload-max-mb` (`DOCSEARCH_UPLOAD_MAX_MB`) caps a file at 100
+MB unless set.
+
 ## Ingesting a documentation site
 
 ```bash

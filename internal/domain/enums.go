@@ -23,13 +23,14 @@ const (
 )
 
 // SourceKind says what a document was read from. It is stored on the
-// document so a reader knows what an identity means: a path on disk, or a
-// URL that was crawled.
+// document so a reader knows what an identity means: a path on disk, a URL
+// that was crawled, or a file someone uploaded.
 type SourceKind uint8
 
 const (
 	SourceKindFile SourceKind = iota + 1
 	SourceKindSite
+	SourceKindUpload
 )
 
 // StructureSource is what a document's heading tree was derived from. The set
@@ -81,8 +82,9 @@ var (
 		KindKeywordReference: "keyword-reference",
 	})
 	sourceKindText = newEnumText("source kind", map[SourceKind]string{
-		SourceKindFile: "file",
-		SourceKindSite: FormatSite,
+		SourceKindFile:   "file",
+		SourceKindSite:   FormatSite,
+		SourceKindUpload: "upload",
 	})
 	structureSourceText = newEnumText("structure source", map[StructureSource]string{
 		SourceOutline:       "outline",

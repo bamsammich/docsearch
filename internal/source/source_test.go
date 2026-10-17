@@ -12,6 +12,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/site/fetch/fetchtest"
 	"github.com/bamsammich/docsearch/internal/source"
 	"github.com/bamsammich/docsearch/internal/source/site"
+	uploadmocks "github.com/bamsammich/docsearch/internal/upload/mocks"
 )
 
 // SourceSuite covers which kind of ingest a target names, and which targets
@@ -30,8 +31,22 @@ func (s *SourceSuite) SetupTest() {
 		mocks.NewMockExtractor(s.T()),
 		[]string{s.root},
 		fetchtest.New(),
+		uploadmocks.NewMockStore(s.T()),
 		site.Options{},
 	)
+}
+
+// An upload target reads the uploader's own stored file, and names itself
+// back so a second upload under the key replaces the first.
+func (s *SourceSuite) TestAnUploadTargetBecomesAnUploadIngest() {
+	got, err := s.registry.For("upload:manual-1", true)
+	s.Require().NoError(err)
+	s.Equal(domain.SourceKindUpload, got.Kind())
+	s.Equal("upload:manual-1", got.Identity())
+
+	targets, err := s.registry.Targets("upload:manual-1")
+	s.Require().NoError(err)
+	s.Equal([]string{"upload:manual-1"}, targets)
 }
 
 func (s *SourceSuite) TestAURLBecomesASiteIngest() {
@@ -59,7 +74,8 @@ func (s *SourceSuite) TestAPathOutsideEveryRootIsRefused() {
 
 func (s *SourceSuite) TestASiteNeedsSomewhereToCache() {
 	registry := source.New(
-		mocks.NewMockExtractor(s.T()), []string{s.root}, nil, site.Options{})
+		mocks.NewMockExtractor(s.T()), []string{s.root}, nil,
+		uploadmocks.NewMockStore(s.T()), site.Options{})
 
 	_, err := registry.For("https://example.com/docs/", true)
 	s.Require().ErrorContains(err, "needs a fetch cache")

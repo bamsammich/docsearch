@@ -62,6 +62,33 @@ END;
 $$;
 
 
+--
+-- Name: redeem_upload_link(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.redeem_upload_link(link_hash text) RETURNS text
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  UPDATE upload_links SET used_at = now()
+   WHERE token_hash = link_hash AND used_at IS NULL AND expires_at > now()
+  RETURNING user_id;
+$$;
+
+
+--
+-- Name: upload_link_open(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.upload_link_open(link_hash text) RETURNS boolean
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT EXISTS (SELECT 1 FROM upload_links
+                  WHERE token_hash = link_hash AND used_at IS NULL AND expires_at > now());
+$$;
+
+
 
 --
 -- Name: chunks; Type: TABLE; Schema: public; Owner: -
@@ -287,6 +314,36 @@ CREATE TABLE public.schema_version (
 
 
 --
+-- Name: upload_links; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.upload_links (
+    token_hash text NOT NULL,
+    user_id text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    used_at timestamp with time zone
+);
+
+ALTER TABLE ONLY public.upload_links FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: uploads; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.uploads (
+    user_id text NOT NULL,
+    key text NOT NULL,
+    filename text NOT NULL,
+    sha256 text NOT NULL,
+    content bytea NOT NULL,
+    uploaded_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.uploads FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: users; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -369,6 +426,22 @@ ALTER TABLE ONLY public.responses
 
 ALTER TABLE ONLY public.robots
     ADD CONSTRAINT robots_pkey PRIMARY KEY (user_id, host);
+
+
+--
+-- Name: upload_links upload_links_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.upload_links
+    ADD CONSTRAINT upload_links_pkey PRIMARY KEY (token_hash);
+
+
+--
+-- Name: uploads uploads_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.uploads
+    ADD CONSTRAINT uploads_pkey PRIMARY KEY (user_id, key);
 
 
 --
@@ -533,6 +606,22 @@ ALTER TABLE ONLY public.robots
 
 
 --
+-- Name: upload_links upload_links_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.upload_links
+    ADD CONSTRAINT upload_links_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id);
+
+
+--
+-- Name: uploads uploads_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.uploads
+    ADD CONSTRAINT uploads_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id);
+
+
+--
 -- Name: chunks; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -606,10 +695,31 @@ CREATE POLICY own ON public.robots USING ((user_id = current_setting('app.user_i
 
 
 --
+-- Name: upload_links own; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY own ON public.upload_links USING ((user_id = current_setting('app.user_id'::text, true))) WITH CHECK ((user_id = current_setting('app.user_id'::text, true)));
+
+
+--
+-- Name: uploads own; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY own ON public.uploads USING ((user_id = current_setting('app.user_id'::text, true))) WITH CHECK ((user_id = current_setting('app.user_id'::text, true)));
+
+
+--
 -- Name: pages; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.pages ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: upload_links redeem; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY redeem ON public.upload_links TO docsearch_owner USING (true) WITH CHECK (true);
+
 
 --
 -- Name: responses; Type: ROW SECURITY; Schema: public; Owner: -
@@ -622,6 +732,18 @@ ALTER TABLE public.responses ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.robots ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: upload_links; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.upload_links ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: uploads; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.uploads ENABLE ROW LEVEL SECURITY;
 
 --
 -- PostgreSQL database dump complete

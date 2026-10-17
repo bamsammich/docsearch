@@ -10,12 +10,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/bamsammich/docsearch/internal/libroot"
 	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/pgstore"
+	"github.com/bamsammich/docsearch/internal/upload"
 	"github.com/bamsammich/docsearch/internal/urlguard"
 )
 
@@ -37,10 +39,16 @@ type Deps struct {
 	// resolver; tests supply their own, the same way urlguard's own suite
 	// does, because the guard refuses every address a test server can bind.
 	Resolver urlguard.Resolver
+	// UploadLinks issues a signed link that uploads one file into a user's
+	// library.
+	UploadLinks LinksFor
 }
 
 // StoresFor builds the store one user's library is read through.
 type StoresFor func(user string) (*pgstore.Store, error)
+
+// LinksFor issues a signed upload link for user.
+type LinksFor func(ctx context.Context, user string) (upload.Link, error)
 
 // library is the store of the user a request acts for.
 //
@@ -199,6 +207,19 @@ func New(d Deps) *mcp.Server {
 		Name:        "add_document",
 		Description: describeAddDocument(d.LibraryRoots),
 	}, d.addDocument)
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "upload_link",
+		Description: "Get a single-use link that uploads one file into the library, for a " +
+			"file add_document cannot reach: one on the user's own computer, in a chat " +
+			"attachment, or anywhere outside the library roots.\n\n" +
+			"A tool call cannot carry a file, so the file goes through the link instead. " +
+			"Where you can run a shell, upload it yourself: " +
+			"`curl -T <file> '<url>?name=<file name>'`. Otherwise give the link to the " +
+			"user to open in a browser and pick the file. The link expires after a few " +
+			"minutes and works once. The upload is queued like add_document; check " +
+			"ingest_status afterwards.",
+	}, d.uploadLink)
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "ingest_status",
@@ -566,6 +587,34 @@ func (d Deps) ingestStatus(ctx context.Context, _ *mcp.CallToolRequest,
 		return nil, ingestStatusOutput{}, err
 	}
 	return nil, ingestStatusOutput{Jobs: jobs}, nil
+}
+
+// -- upload_link ----------------------------------------------------------
+
+type uploadLinkInput struct{}
+
+type uploadLinkOutput struct {
+	URL       string `json:"url"`
+	ExpiresAt string `json:"expires_at"`
+	Upload    string `json:"upload"`
+}
+
+func (d Deps) uploadLink(ctx context.Context, _ *mcp.CallToolRequest,
+	_ uploadLinkInput) (*mcp.CallToolResult, uploadLinkOutput, error) {
+	user, err := owner.From(ctx)
+	if err != nil {
+		return nil, uploadLinkOutput{}, err
+	}
+	link, err := d.UploadLinks(ctx, user)
+	if err != nil {
+		return nil, uploadLinkOutput{}, err
+	}
+	return nil, uploadLinkOutput{
+		URL:       link.URL,
+		ExpiresAt: link.Expires.UTC().Format(time.RFC3339),
+		Upload: "curl -T <file> '" + link.URL + "?name=<file name>', " +
+			"or open the URL in a browser and choose the file",
+	}, nil
 }
 
 // -- cancel_ingest --------------------------------------------------------

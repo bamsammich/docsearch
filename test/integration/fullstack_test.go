@@ -41,6 +41,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/site/fetch/pgcache"
 	"github.com/bamsammich/docsearch/internal/source"
 	"github.com/bamsammich/docsearch/internal/source/site"
+	"github.com/bamsammich/docsearch/internal/upload/pgupload"
 )
 
 // index is one database, built by the worker and read back by the server's
@@ -248,7 +249,7 @@ func (i *index) work(jobs int) {
 		postgres.NewJobs(i.db, owner.Builtin),
 		ingest.New(postgres.New(i.db, owner.Builtin), time.Now),
 		source.New(adapter.New(extractor), []string{i.root},
-			pgcache.New(i.db, owner.Builtin), site.Options{}),
+			pgcache.New(i.db, owner.Builtin), pgupload.New(i.db, owner.Builtin), site.Options{}),
 		// The worker logs each job; the suite's own output is the report.
 		worker.Options{
 			Log:  slog.New(slog.NewTextHandler(io.Discard, nil)),

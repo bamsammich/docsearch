@@ -89,6 +89,7 @@ const (
 	SourceKind_SOURCE_KIND_UNSPECIFIED SourceKind = 0
 	SourceKind_SOURCE_KIND_FILE        SourceKind = 1
 	SourceKind_SOURCE_KIND_SITE        SourceKind = 2
+	SourceKind_SOURCE_KIND_UPLOAD      SourceKind = 3
 )
 
 // Enum value maps for SourceKind.
@@ -97,11 +98,13 @@ var (
 		0: "SOURCE_KIND_UNSPECIFIED",
 		1: "SOURCE_KIND_FILE",
 		2: "SOURCE_KIND_SITE",
+		3: "SOURCE_KIND_UPLOAD",
 	}
 	SourceKind_value = map[string]int32{
 		"SOURCE_KIND_UNSPECIFIED": 0,
 		"SOURCE_KIND_FILE":        1,
 		"SOURCE_KIND_SITE":        2,
+		"SOURCE_KIND_UPLOAD":      3,
 	}
 )
 
@@ -255,12 +258,13 @@ const file_docsearch_type_v1_common_proto_rawDesc = "" +
 	"\n" +
 	"QUALITY_OK\x10\x01\x12\x14\n" +
 	"\x10QUALITY_DEGRADED\x10\x02\x12\x12\n" +
-	"\x0eQUALITY_FAILED\x10\x03*U\n" +
+	"\x0eQUALITY_FAILED\x10\x03*m\n" +
 	"\n" +
 	"SourceKind\x12\x1b\n" +
 	"\x17SOURCE_KIND_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10SOURCE_KIND_FILE\x10\x01\x12\x14\n" +
-	"\x10SOURCE_KIND_SITE\x10\x02*`\n" +
+	"\x10SOURCE_KIND_SITE\x10\x02\x12\x16\n" +
+	"\x12SOURCE_KIND_UPLOAD\x10\x03*`\n" +
 	"\aVerdict\x12\x17\n" +
 	"\x13VERDICT_UNSPECIFIED\x10\x00\x12\x10\n" +
 	"\fVERDICT_GOOD\x10\x01\x12\x14\n" +
