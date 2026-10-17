@@ -23,12 +23,13 @@
        that need no migration.
 
        The worker is the only writer, which is what makes this the one correct
-       place to run it. -->
+       place to run it. Both commands read DOCSEARCH_DSN from the token file,
+       which keeps its password out of this plist. -->
   <key>ProgramArguments</key>
   <array>
     <string>/bin/sh</string>
     <string>-c</string>
-    <string>DB="$HOME/.local/share/docsearch/docsearch.db"; "$HOME/.local/bin/docsearch" migrate --db "$DB" &amp;&amp; exec "$HOME/.local/bin/docsearch" worker --db "$DB" --root "$HOME/Documents/docsearch-library"</string>
+    <string>set -a; . "$HOME/.config/docsearch/token.env"; set +a; "$HOME/.local/bin/docsearch" migrate &amp;&amp; exec "$HOME/.local/bin/docsearch-worker" --root "$HOME/Documents/docsearch-library"</string>
   </array>
 
   <key>RunAtLoad</key>

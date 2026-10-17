@@ -17,6 +17,10 @@ data:
   # deliberately; this list constrains browsers only, and exists as a
   # DNS-rebinding defence that applies even on a private network.
   allowedOrigins: "https://claude.ai,https://app.claude.ai"
+
+  # Where a person's browser reaches the server. Upload links are built on
+  # it, so it must be an address the person can open, not the Pod's.
+  publicURL: "https://docsearch.example.com"
 ---
 apiVersion: v1
 kind: Secret
