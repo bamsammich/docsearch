@@ -3,6 +3,7 @@ package worker_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 	"github.com/bamsammich/docsearch/internal/service/worker"
 	"github.com/bamsammich/docsearch/internal/service/worker/mocks"
+	"github.com/bamsammich/docsearch/internal/urlguard"
 )
 
 // WorkerSuite covers what one job's run records, and what it records when
@@ -109,6 +111,41 @@ func (s *WorkerSuite) TestAnUnchangedSourceCompletesTheJobOnItsOwn() {
 	s.jobs.EXPECT().CompleteWithoutDocument(mock.Anything, int64(7), "guide").Return(nil)
 
 	s.Require().NoError(s.run(worker.Options{}))
+}
+
+// An address the guard refuses is refused on every attempt, so retrying
+// only delays the answer. A host that did not resolve may resolve in a
+// minute, and is tried again.
+func (s *WorkerSuite) TestARefusedAddressFailsAtOnceAndAnUnresolvedOneRetries() {
+	cases := map[string]struct {
+		cause     error
+		permanent bool
+	}{
+		"refused by policy": {fmt.Errorf("fetch seed: %w", urlguard.ErrBlocked), true},
+		"did not resolve":   {fmt.Errorf("fetch seed: %w", urlguard.ErrUnresolved), false},
+	}
+	for name, c := range cases {
+		s.Run(name, func() {
+			s.SetupTest()
+			s.claims(&worker.Job{ID: 7, Source: "https://docs.example.com/", Attempts: 1})
+			s.buildsASource()
+			s.neverCancelled()
+			s.ingester.EXPECT().
+				Run(mock.Anything, mock.Anything, mock.Anything).
+				Return(nil, c.cause)
+			s.jobs.EXPECT().
+				Finish(mock.Anything, int64(7), mock.Anything, mock.Anything, c.permanent).
+				Return(nil)
+			s.Require().NoError(s.run(worker.Options{}))
+		})
+	}
+}
+
+// Both read as the same refusal, so the uniform error the tools promise
+// holds whichever one a caller hit.
+func (s *WorkerSuite) TestAnUnresolvedHostReadsAsARefusal() {
+	s.Equal(urlguard.ErrBlocked.Error(), urlguard.ErrUnresolved.Error())
+	s.ErrorIs(urlguard.ErrUnresolved, urlguard.ErrBlocked)
 }
 
 func (s *WorkerSuite) TestARefusedStructureIsNotTriedAgain() {
