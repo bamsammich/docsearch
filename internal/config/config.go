@@ -43,6 +43,9 @@ const (
 	EnvUser    = "DOCSEARCH_USER"
 	EnvOrigins = "DOCSEARCH_ALLOWED_ORIGINS"
 	EnvAddr    = "DOCSEARCH_ADDR"
+	// EnvAllowPublicBind permits a non-loopback address, as
+	// --allow-public-bind does.
+	EnvAllowPublicBind = "DOCSEARCH_ALLOW_PUBLIC_BIND"
 	// EnvServer is where docsearch finds docsearch-server. Every command but
 	// migrate goes through it.
 	EnvServer = "DOCSEARCH_SERVER"

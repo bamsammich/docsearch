@@ -74,6 +74,8 @@ spec:
           env:
             - name: DOCSEARCH_ADDR
               valueFrom: { configMapKeyRef: { name: docsearch-config, key: addr } }
+            - name: DOCSEARCH_ALLOW_PUBLIC_BIND
+              valueFrom: { configMapKeyRef: { name: docsearch-config, key: allowPublicBind } }
             - name: DOCSEARCH_ALLOWED_ORIGINS
               valueFrom: { configMapKeyRef: { name: docsearch-config, key: allowedOrigins } }
             - name: DOCSEARCH_TOKEN

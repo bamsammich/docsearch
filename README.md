@@ -221,7 +221,7 @@ an in-flight job can checkpoint or roll back instead of being killed mid-write.
 | library roots | `--root` (repeatable) | `DOCSEARCH_ROOT` (`:`-separated) |
 | bearer token | — | `DOCSEARCH_TOKEN` |
 | Origin allowlist | `--allowed-origins` | `DOCSEARCH_ALLOWED_ORIGINS` |
-| permit public bind | `--allow-public-bind` | — |
+| permit public bind | `--allow-public-bind` | `DOCSEARCH_ALLOW_PUBLIC_BIND=true` |
 
 `--auth` is `none` or `token`, and defaults to `token`, which is what a v1
 install already runs. `none` asks for no credential and answers every

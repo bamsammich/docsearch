@@ -7,10 +7,11 @@ data:
   # there is no Ingress and no public listener. The server logs a warning for a
   # non-loopback bind, which is correct and expected here.
   #
-  # NOTE: this requires --allow-public-bind on the server args. If you would
-  # rather not grant that, set addr to 127.0.0.1:8765 and run the Tailscale
-  # proxy as a sidecar in this same Pod so it can reach loopback.
+  # NOTE: this requires allowPublicBind below. If you would rather not grant
+  # that, set addr to 127.0.0.1:8765, set allowPublicBind to "false", and run
+  # the Tailscale proxy as a sidecar in this same Pod so it can reach loopback.
   addr: "0.0.0.0:8765"
+  allowPublicBind: "true"
 
   # Origin allowlist. Native MCP clients send no Origin and are allowed
   # deliberately; this list constrains browsers only, and exists as a

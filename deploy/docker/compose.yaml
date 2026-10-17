@@ -81,16 +81,16 @@ services:
     # 0.0.0.0 is the container's network namespace, not the host's. The
     # published port below binds host loopback only, so nothing outside this
     # machine can reach it -- but the server cannot know that, hence the
-    # explicit --allow-public-bind and the warning it logs at startup.
+    # explicit DOCSEARCH_ALLOW_PUBLIC_BIND and the warning it logs at startup.
     command:
       - --root=${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}
       - --addr=0.0.0.0:8765
-      - --allow-public-bind
       - --allowed-origins=https://claude.ai,https://app.claude.ai
     # Requests run as the restricted role, never as the owner the migrations
     # ran under: policies bind the owner too, but a request has no business
     # holding the privileges that can change a table.
     environment:
+      DOCSEARCH_ALLOW_PUBLIC_BIND: "true"
       DOCSEARCH_DSN: postgres://docsearch_app:docsearch@db:5432/docsearch?sslmode=disable
     # The token stays in its 0600 file and never enters this world-readable
     # compose file, matching what the launchd wrapper did with `set -a`.

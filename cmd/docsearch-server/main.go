@@ -81,8 +81,9 @@ func command() *cli.Command {
 				Sources: cli.EnvVars(config.EnvOrigins),
 			},
 			&cli.BoolFlag{
-				Name:  "allow-public-bind",
-				Usage: "permit binding a non-loopback address",
+				Name:    "allow-public-bind",
+				Usage:   "permit binding a non-loopback address",
+				Sources: cli.EnvVars(config.EnvAllowPublicBind),
 			},
 		},
 		Action: run,
