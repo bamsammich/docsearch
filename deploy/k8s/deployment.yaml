@@ -78,6 +78,8 @@ spec:
               valueFrom: { configMapKeyRef: { name: docsearch-config, key: allowPublicBind } }
             - name: DOCSEARCH_ALLOWED_ORIGINS
               valueFrom: { configMapKeyRef: { name: docsearch-config, key: allowedOrigins } }
+            - name: DOCSEARCH_PUBLIC_URL
+              valueFrom: { configMapKeyRef: { name: docsearch-config, key: publicURL } }
             - name: DOCSEARCH_TOKEN
               valueFrom: { secretKeyRef: { name: docsearch-token, key: token } }
             # The restricted role, never the owner: a request has no business

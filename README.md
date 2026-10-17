@@ -8,10 +8,14 @@ No vector database, no embeddings, no external services. BM25 over
 `pg_textsearch`.
 [An embedding reranker was measured and rejected](docs/research/embedding-rerank-probe.md).
 
-**v2 is in progress on the [`v2` branch](https://github.com/bamsammich/docsearch/tree/v2):**
-a Go rewrite with multi-user storage and pluggable authentication. `main` stays
-v1 and keeps working as documented here until v2 is released with a migration
-path. Pin to the `v1.0.0` tag to stay on v1 regardless.
+**This is v2:** a Go rewrite with multi-user storage on Postgres, pluggable
+authentication, uploads and a Paperless-ngx sync. v1 lives on the
+[`v1` branch](https://github.com/bamsammich/docsearch/tree/v1) and takes
+security fixes only, until six months after `v2.0.0`.
+[Upgrading from v1](#upgrading-from-v1) moves a v1 library across.
+
+docsearch is built from a checkout or from its container images. Its module
+path carries no `/v2`, so `go install ...@latest` still resolves to `v1.0.0`.
 
 ## Three processes
 
@@ -20,6 +24,7 @@ path. Pin to the `v1.0.0` tag to stay on v1 regardless.
 | Ingest worker | daemon | claims queued jobs, extracts, chunks, writes |
 | MCP server | daemon | reads the database, enqueues jobs, reports status |
 | CLI | one-shot | manual ingest, listing, removal, verification |
+| Paperless sync | one-shot or daemon, optional | pushes what a Paperless-ngx user can see; runs beside Paperless |
 
 Ingest never runs inside the server process: extraction saturates a core for
 minutes and would starve request handling.
@@ -28,7 +33,7 @@ minutes and would starve request handling.
 
 ```bash
 mise install          # go 1.26, golangci-lint, buf, sqlc, mockery
-mise run build        # docsearch-server, docsearch-worker, docsearch
+mise run build        # docsearch-server, docsearch-worker, docsearch, docsearch-sync
 ```
 
 `pdffonts` (poppler) is useful for inspecting a PDF's text layer and is not in
@@ -428,7 +433,7 @@ Confirm with `[LocalMcpServerManager] Connected to docsearch (7 tools)` in
 **macOS:** `deploy/launchd/` — two user agents. Install with:
 
 ```bash
-for f in mcp worker; do
+for f in server worker; do
   sed "s|__HOME__|$HOME|g" deploy/launchd/com.bamsammich.docsearch-$f.plist \
     > ~/Library/LaunchAgents/com.bamsammich.docsearch-$f.plist
   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.bamsammich.docsearch-$f.plist
@@ -438,9 +443,11 @@ done
 Both set `RunAtLoad` and `KeepAlive`, so they start at login and respawn if
 killed. Logs go to `~/Library/Logs/docsearch/`.
 
-launchd has no `EnvironmentFile`, so the server agent sources the token from
-its 0600 file in a shell wrapper — it stays out of the plist and out of
-`launchctl print` output.
+launchd has no `EnvironmentFile`, so both agents source the token and
+`DOCSEARCH_DSN` from their 0600 file in a shell wrapper. Both stay out of the
+plists and out of `launchctl print` output. The agents expect a Postgres
+reachable at that DSN; `deploy/docker/compose.yaml` is the simpler route on
+macOS, since it brings its own.
 
 ### Docker, on the same machine
 
@@ -744,7 +751,7 @@ failure is ranking depth, not absence.
 
 docsearch is released under the [MIT License](LICENSE).
 
-The ingest worker depends on [PyMuPDF](https://github.com/pymupdf/PyMuPDF),
-which is licensed under the AGPL-3.0. Distributing the worker with PyMuPDF, or
-offering a modified version of it as a network service, carries the AGPL's
-obligations for that combined work. v2 plans to replace PyMuPDF with PDFium.
+PDFs are read by [PDFium](https://pdfium.googlesource.com/pdfium/), BSD and
+Apache licensed, through [go-pdfium](https://github.com/klippa-app/go-pdfium)
+in WebAssembly mode, under MIT. v1's worker used PyMuPDF, which is AGPL-3.0;
+v2 carries no AGPL component.

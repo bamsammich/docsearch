@@ -59,9 +59,10 @@ description = "Run the Go tests"
 run = ["go test ./..."]
 
 [tasks.build]
-description = "Build the server, worker and CLI binaries"
+description = "Build the server, worker, CLI and Paperless sync binaries"
 run = [
   "go build -o bin/docsearch-server ./cmd/docsearch-server",
   "go build -o bin/docsearch-worker ./cmd/docsearch-worker",
   "go build -o bin/docsearch ./cmd/docsearch",
+  "go build -o bin/docsearch-sync ./cmd/docsearch-sync",
 ]
