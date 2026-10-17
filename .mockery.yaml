@@ -33,6 +33,7 @@ packages:
       Jobs:
       Ingester:
       Sources:
+      Accounts:
   github.com/bamsammich/docsearch/internal/resource:
     interfaces:
       Reader:

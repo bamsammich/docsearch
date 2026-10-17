@@ -112,11 +112,8 @@ spec:
           env:
             - name: DOCSEARCH_DSN
               valueFrom: { secretKeyRef: { name: docsearch-db, key: appDSN } }
-            # One worker serves one library. A deployment with accounts runs
-            # one per user, which phase 04 does not need and so does not
-            # build.
-            - name: DOCSEARCH_USER
-              value: default
+            # No DOCSEARCH_USER: the worker takes a job from every account
+            # in turn, so an account created by a sign-up is served at once.
           volumeMounts:
             # Read-write: the worker is what actually opens the documents.
             - { name: library, mountPath: /library }

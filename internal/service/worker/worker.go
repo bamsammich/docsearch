@@ -163,22 +163,33 @@ func (s *Service) Run(ctx context.Context) error {
 
 // step claims one job and runs it, and reports whether the worker is done.
 func (s *Service) step(ctx context.Context) (bool, error) {
-	job, err := s.jobs.Claim(ctx, s.opts.Lease, s.opts.MaxAttempts)
+	worked, err := s.Next(ctx)
 	if err != nil {
-		return false, fmt.Errorf("claim a job: %w", err)
+		return false, err
 	}
-	if job == nil {
+	if !worked {
 		if s.opts.Once {
 			return true, nil
 		}
 		return sleep(ctx, s.opts.Poll) != nil, nil
 	}
+	return s.opts.Once, nil
+}
+
+// Next claims one job and runs it, and reports whether there was one. It
+// never waits on an empty queue, which is what lets one worker take turns
+// across many.
+func (s *Service) Next(ctx context.Context) (bool, error) {
+	job, err := s.jobs.Claim(ctx, s.opts.Lease, s.opts.MaxAttempts)
+	if err != nil {
+		return false, fmt.Errorf("claim a job: %w", err)
+	}
+	if job == nil {
+		return false, nil
+	}
 	s.log.Info("claimed job",
 		"job", job.ID, "attempt", job.Attempts, "source", job.Source)
-	if err := s.execute(ctx, job); err != nil {
-		return false, err
-	}
-	return s.opts.Once, nil
+	return true, s.execute(ctx, job)
 }
 
 // execute runs one job to a terminal state. An error means the queue itself

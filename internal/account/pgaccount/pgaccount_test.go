@@ -72,3 +72,13 @@ func (s *StoreSuite) TestTheBuiltinLibraryIsClaimedOnce() {
 	s.Require().NoError(err)
 	s.False(claimed, "a second identity cannot take the library from the first")
 }
+
+// Users is every account, the built-in one included, for a worker that
+// serves them all.
+func (s *StoreSuite) TestUsersListsEveryAccount() {
+	ctx := s.T().Context()
+	s.Require().NoError(s.store.Create(ctx, "user-a", alice))
+	users, err := s.store.Users(ctx)
+	s.Require().NoError(err)
+	s.Equal([]string{owner.Builtin, "user-a"}, users)
+}

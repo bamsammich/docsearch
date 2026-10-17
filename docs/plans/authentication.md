@@ -239,6 +239,14 @@ access token the provider issues for docsearch works there, and the CLI reads
 the library of whoever the token names. A device-code sign-in for the CLI is
 a convenience left for later; nothing about the server would change for it.
 
+An account made by a sign-up needs a worker to read its uploads, and phase
+04's worker served one library, named at startup. Without a change, a new
+account's jobs would wait for an operator to start a worker for it. The
+worker now lists every account each round and takes at most one job from
+each, so a new account is served from its first upload and one library's
+long queue cannot starve another. `--user` still pins a worker to one
+library.
+
 Still owed is the run against a real provider: register a client, add the
 connector, and capture the token claude.ai presents. That settles what the
 provider puts in `aud`, and the published-identity guess in
