@@ -62,3 +62,12 @@ func (s *Store) Create(ctx context.Context, userID string, identity resource.Ide
 	}
 	return nil
 }
+
+// Users is every account, for a worker that serves them all.
+func (s *Store) Users(ctx context.Context) ([]string, error) {
+	users, err := s.queries.AllAccounts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list accounts: %w", err)
+	}
+	return users, nil
+}

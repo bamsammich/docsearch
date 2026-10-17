@@ -30,6 +30,33 @@ func (q *Queries) AccountByIdentity(ctx context.Context, arg AccountByIdentityPa
 	return user_id, err
 }
 
+const allAccounts = `-- name: AllAccounts :many
+SELECT user_id FROM users ORDER BY user_id
+`
+
+func (q *Queries) AllAccounts(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, allAccounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var user_id string
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const claimBuiltin = `-- name: ClaimBuiltin :one
 SELECT COALESCE(claim_builtin($1::text, $2::text), '')::text
   AS user_id

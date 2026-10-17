@@ -257,10 +257,12 @@ index is fully regenerable**, which is what makes refusing the right answer.
 docsearch-worker --dsn "$DOCSEARCH_DSN" --root ~/Documents/library
 ```
 
-One worker serves one library, named by `--user` and defaulting to the
-built-in user a single-library deployment runs as. A job, the document it
-produces and the responses it crawled all belong to the same library, so a
-worker that claimed across users would have nowhere to put the result.
+One worker serves every library, taking a job from each account in turn, so
+one library's long queue cannot starve another and an account created by a
+sign-up is served from its first upload. Each job still runs entirely as its
+own library's user: the job, the document it produces and the responses it
+crawled all belong to one library. `--user` pins a worker to a single
+library instead.
 
 Jobs are claimed under a lease. A worker killed mid-job leaves an expired
 lease, and the next worker reclaims and restarts the job with no intervention.
@@ -278,7 +280,7 @@ an in-flight job can checkpoint or roll back instead of being killed mid-write.
 | bind address | `--addr` | `DOCSEARCH_ADDR` |
 | database | `--dsn` | `DOCSEARCH_DSN` |
 | auth mode | `--auth` | `DOCSEARCH_AUTH` |
-| worker's library | `--user` (worker only) | `DOCSEARCH_USER` |
+| pin the worker to one library | `--user` (worker only) | `DOCSEARCH_USER` |
 | library roots | `--root` (repeatable) | `DOCSEARCH_ROOT` (`:`-separated) |
 | bearer token | — | `DOCSEARCH_TOKEN` |
 | Origin allowlist | `--allowed-origins` | `DOCSEARCH_ALLOWED_ORIGINS` |

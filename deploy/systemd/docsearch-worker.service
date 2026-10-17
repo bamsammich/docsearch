@@ -8,7 +8,6 @@ Type=simple
 # The DSN carries a password, so it lives in the mode-0600 file beside the
 # token rather than in this unit, which `systemctl cat` prints to anyone.
 Environment=DOCSEARCH_ROOT=%h/Documents/library
-Environment=DOCSEARCH_USER=default
 Environment=DOCSEARCH_LOG_LEVEL=INFO
 EnvironmentFile=%h/.config/docsearch/token.env
 # Migration runs here, before the worker opens the database, because every
@@ -22,8 +21,7 @@ EnvironmentFile=%h/.config/docsearch/token.env
 ExecStartPre=%h/.local/bin/docsearch migrate --dsn ${DOCSEARCH_DSN}
 ExecStart=%h/.local/bin/docsearch-worker \
   --dsn ${DOCSEARCH_DSN} \
-  --root ${DOCSEARCH_ROOT} \
-  --user ${DOCSEARCH_USER}
+  --root ${DOCSEARCH_ROOT}
 
 Restart=on-failure
 RestartSec=5

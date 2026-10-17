@@ -14,3 +14,6 @@ SELECT create_account(sqlc.arg(user_id)::text, sqlc.arg(issuer)::text, sqlc.arg(
 -- name: ClaimBuiltin :one
 SELECT COALESCE(claim_builtin(sqlc.arg(issuer)::text, sqlc.arg(subject)::text), '')::text
   AS user_id;
+
+-- name: AllAccounts :many
+SELECT user_id FROM users ORDER BY user_id;

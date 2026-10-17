@@ -19,10 +19,10 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // the driver the library is read through
 	"github.com/urfave/cli/v3"
 
+	"github.com/bamsammich/docsearch/internal/account/pgaccount"
 	"github.com/bamsammich/docsearch/internal/adapter"
 	"github.com/bamsammich/docsearch/internal/adapter/pdf"
 	"github.com/bamsammich/docsearch/internal/config"
-	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/repository/postgres"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 	"github.com/bamsammich/docsearch/internal/service/worker"
@@ -61,9 +61,9 @@ func command() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name: "user",
-				Usage: "the `USER` whose queue this worker claims from. One worker " +
-					"serves one library, because a job writes into one.",
-				Value:   owner.Builtin,
+				Usage: "serve only this `USER`'s library. Unset, the worker takes a " +
+					"job from every account in turn, so a new account is served from " +
+					"its first upload.",
 				Sources: cli.EnvVars(config.EnvUser),
 			},
 			&cli.StringSliceFlag{
@@ -92,8 +92,9 @@ func command() *cli.Command {
 				Usage: "how many times a job is tried before it is left failed",
 			},
 			&cli.BoolFlag{
-				Name:  "once",
-				Usage: "run one job, or exit on an empty queue",
+				Name: "once",
+				Usage: "with --user, run one job or exit on an empty queue; without it, " +
+					"run until every queue is empty",
 			},
 		},
 		Action: run,
@@ -102,14 +103,12 @@ func command() *cli.Command {
 
 // required names whichever setting the operator left out, rather than
 // failing later on a connection string nobody passed.
-func required(dsn string, roots []string, user string) error {
+func required(dsn string, roots []string) error {
 	switch {
 	case dsn == "":
 		return fmt.Errorf("no database: pass --dsn or set %s", config.EnvDSN)
 	case len(roots) == 0:
 		return fmt.Errorf("no library root: pass --root or set %s", config.EnvRoot)
-	case user == "":
-		return fmt.Errorf("no user: pass --user or set %s", config.EnvUser)
 	}
 	return nil
 }
@@ -118,7 +117,7 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	dsn := cmd.String("dsn")
 	roots := cmd.StringSlice("root")
 	user := cmd.String("user")
-	if err := required(dsn, roots, user); err != nil {
+	if err := required(dsn, roots); err != nil {
 		return err
 	}
 
@@ -143,23 +142,26 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		}
 	}()
 
+	options := worker.Options{
+		Log:         log,
+		Lease:       cmd.Duration("lease"),
+		Poll:        cmd.Duration("poll"),
+		CancelPoll:  cmd.Duration("cancel-poll"),
+		MaxAttempts: cmd.Int("max-attempts"),
+		Once:        cmd.Bool("once"),
+	}
 	// Every one of the three reads and writes as the same user, because a
 	// job, the document it produces and the responses it crawled all belong
 	// to one library.
-	service := worker.New(
-		postgres.NewJobs(db, user),
-		ingest.New(postgres.New(db, user), time.Now),
-		source.New(adapter.New(extractor), roots, pgcache.New(db, user),
-			pgupload.New(db, user), site.Options{}),
-		worker.Options{
-			Log:         log,
-			Lease:       cmd.Duration("lease"),
-			Poll:        cmd.Duration("poll"),
-			CancelPoll:  cmd.Duration("cancel-poll"),
-			MaxAttempts: cmd.Int("max-attempts"),
-			Once:        cmd.Bool("once"),
-		},
-	)
+	library := func(user string) *worker.Service {
+		return worker.New(
+			postgres.NewJobs(db, user),
+			ingest.New(postgres.New(db, user), time.Now),
+			source.New(adapter.New(extractor), roots, pgcache.New(db, user),
+				pgupload.New(db, user), site.Options{}),
+			options,
+		)
+	}
 
 	// A signal stops the worker between jobs rather than during one: an
 	// ingest interrupted part way leaves its lease to expire and is recovered
@@ -167,10 +169,27 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	log.Info("worker started", "roots", roots, "user", user)
-	if err := service.Run(ctx); err != nil {
+	if err := serve(ctx, user, library, db, options, log.With("roots", roots)); err != nil {
 		return err
 	}
 	log.Info("worker stopped")
 	return nil
+}
+
+// serve runs one library's worker when a user is pinned, and otherwise a
+// rotation over every account.
+func serve(
+	ctx context.Context,
+	user string,
+	library func(string) *worker.Service,
+	db *sql.DB,
+	options worker.Options,
+	log *slog.Logger,
+) error {
+	if user != "" {
+		log.Info("worker started", "user", user)
+		return library(user).Run(ctx)
+	}
+	log.Info("worker started", "user", "every account")
+	return worker.NewRotation(pgaccount.New(db), library, options.Poll, options.Once, log).Run(ctx)
 }
