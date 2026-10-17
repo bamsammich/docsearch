@@ -104,3 +104,12 @@ SELECT COUNT(*) FROM index_terms WHERE doc_id = $1;
 SELECT EXISTS(
   SELECT 1 FROM chunks
    WHERE doc_id = $1 AND (chunks.section = $2 OR chunks.section LIKE $2 || '.%'));
+
+-- An uploaded document's bytes go when a person removes the document, so a
+-- removed upload is gone rather than kept where nothing can reach it. Only
+-- removal calls this: cleaning up after a failed ingest must keep the bytes
+-- the retry reads.
+-- name: DeleteDocumentUpload :exec
+DELETE FROM uploads
+ WHERE key = (SELECT substring(source_path FROM 8) FROM documents
+               WHERE doc_id = $1 AND source_kind = 'upload');

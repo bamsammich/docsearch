@@ -160,9 +160,13 @@ func (d *Documents) SectionHasChunks(
 	return found, nil
 }
 
-// Delete removes every trace of a document, in one transaction.
+// Delete removes every trace of a document, in one transaction, and the
+// uploaded file it was read from if it was one.
 func (d *Documents) Delete(ctx context.Context, docID string) error {
 	return pgsession.Run(ctx, d.db, d.q, d.userID, func(q *pgdbgen.Queries) error {
+		if err := q.DeleteDocumentUpload(ctx, docID); err != nil {
+			return fmt.Errorf("delete the upload of %s: %w", docID, err)
+		}
 		return deleteRows(ctx, q, docID)
 	})
 }

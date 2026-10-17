@@ -11,6 +11,8 @@ import (
 	"github.com/bamsammich/docsearch/internal/repository/postgres"
 	"github.com/bamsammich/docsearch/internal/schema"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
+	"github.com/bamsammich/docsearch/internal/upload"
+	"github.com/bamsammich/docsearch/internal/upload/pgupload"
 )
 
 // DocumentsSuite reads back what an ingest wrote, since what the repository
@@ -166,4 +168,28 @@ func (s *DocumentsSuite) TestDeletingADocumentClearsItsChunks() {
 
 	_, err := s.docs.Get(s.T().Context(), "manual")
 	s.Require().ErrorIs(err, postgres.ErrNotFound)
+}
+
+// Removing an uploaded document removes the file it was read from, while a
+// failed ingest's cleanup keeps it for the retry to read.
+func (s *DocumentsSuite) TestRemovingAnUploadedDocumentRemovesItsFile() {
+	ctx := s.T().Context()
+	store := pgupload.New(s.db, builtinID)
+	for _, key := range []string{"kept", "removed"} {
+		s.Require().NoError(store.Put(ctx, upload.File{
+			Key: key, Filename: key + ".pdf", SHA256: key, Content: []byte(key),
+		}))
+		s.Require().NoError(s.write.Create(ctx, ingest.Document{
+			DocID: key, Title: "Manual", Format: "pdf", Identity: upload.Target(key),
+			Digest: key, Kind: domain.SourceKindUpload,
+		}, ""))
+	}
+
+	s.Require().NoError(s.write.Delete(ctx, "kept"))
+	_, err := store.Get(ctx, "kept")
+	s.Require().NoError(err, "cleanup after a failed ingest keeps the file")
+
+	s.Require().NoError(s.docs.Delete(ctx, "removed"))
+	_, err = store.Get(ctx, "removed")
+	s.Require().ErrorIs(err, upload.ErrNotFound)
 }

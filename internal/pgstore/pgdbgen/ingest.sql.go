@@ -80,6 +80,21 @@ func (q *Queries) DeleteDocumentRow(ctx context.Context, docID string) error {
 	return err
 }
 
+const deleteDocumentUpload = `-- name: DeleteDocumentUpload :exec
+DELETE FROM uploads
+ WHERE key = (SELECT substring(source_path FROM 8) FROM documents
+               WHERE doc_id = $1 AND source_kind = 'upload')
+`
+
+// An uploaded document's bytes go when a person removes the document, so a
+// removed upload is gone rather than kept where nothing can reach it. Only
+// removal calls this: cleaning up after a failed ingest must keep the bytes
+// the retry reads.
+func (q *Queries) DeleteDocumentUpload(ctx context.Context, docID string) error {
+	_, err := q.db.ExecContext(ctx, deleteDocumentUpload, docID)
+	return err
+}
+
 const docIDForSourcePath = `-- name: DocIDForSourcePath :one
 SELECT doc_id FROM documents WHERE source_path = $1
 `
