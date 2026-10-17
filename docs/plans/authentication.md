@@ -151,6 +151,20 @@ to run an identity provider, and phase 04's `owner.Builtin` is already the
 account they resolve to. So `oidc` is the only mode this phase has to build,
 and `password` is the only one it might not build at all.
 
+Step 5c settled two things about how a mode is chosen. A `Mode` counts from
+one, so the zero value is not a mode and above all not `none`: a mode nobody
+parsed must not read as the one that asks for no credential. And an unset
+`DOCSEARCH_AUTH` resolves to `token`, which is what every v1 install already
+runs, so naming the modes changed no deployment's behaviour.
+
+`none` is refused on an address that is not loopback, whatever
+`--allow-public-bind` says. That flag opts into being reachable from
+elsewhere, not into serving a library to whoever arrives, and the two
+together are an open document store that no flag spells clearly enough to
+act on. A mode the plan names but no step has built is refused by its own
+name rather than as an unknown word, so an operator who configured `oidc`
+early learns which it is.
+
 `password` is the mode that looks small and is not. Holding a password means
 a hashing choice, a reset path, a lockout policy and a session store, none of
 which docsearch is better at than a provider. It lands in step 5f, beside the

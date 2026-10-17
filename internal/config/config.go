@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/bamsammich/docsearch/internal/owner"
 )
 
 // Config is the fully resolved server configuration.
@@ -17,7 +19,10 @@ type Config struct {
 	// tool parameter widens the set, and a caller cannot add to it.
 	LibraryRoots []string
 	// DSN addresses the Postgres database holding every library.
-	DSN             string
+	DSN string
+	// Auth is how a request's user is decided. Unset reads as token, which
+	// is what every v1 install already runs.
+	Auth            owner.Mode
 	BearerToken     string
 	AllowedOrigins  []string
 	AllowPublicBind bool
@@ -32,6 +37,8 @@ const (
 	// 4g of docs/plans/postgres-multiuser.md removes along with the dialect.
 	EnvDB   = "DOCSEARCH_DB"
 	EnvRoot = "DOCSEARCH_ROOT"
+	// EnvAuth names the authentication mode.
+	EnvAuth = "DOCSEARCH_AUTH"
 	// EnvUser names the library a worker claims jobs from.
 	EnvUser    = "DOCSEARCH_USER"
 	EnvOrigins = "DOCSEARCH_ALLOWED_ORIGINS"
@@ -48,9 +55,23 @@ var ErrPublicBind = errors.New(
 		"includes a filesystem path parameter and this service must not be reachable " +
 		"from outside a trusted network")
 
+// ErrOpenToTheNetwork is returned for auth mode none on an address that is
+// not loopback.
+//
+// --allow-public-bind opts into reaching the server from elsewhere, not into
+// serving a library to whoever arrives. Mode none asks for no credential at
+// all, so the two together are an open document store, and no flag spells
+// that intention clearly enough to act on.
+var ErrOpenToTheNetwork = errors.New(
+	"refusing auth mode none on an address that is not loopback: the mode asks for no " +
+		"credential, so every request would be served. Bind loopback, or run mode token")
+
 // Validate resolves derived values and rejects unsafe combinations.
 func (c *Config) Validate() error {
-	if c.BearerToken == "" {
+	if c.Auth == 0 {
+		c.Auth = owner.Token
+	}
+	if c.Auth == owner.Token && c.BearerToken == "" {
 		return fmt.Errorf("no bearer token: set %s", EnvToken)
 	}
 	if c.DSN == "" {
@@ -102,6 +123,9 @@ func (c *Config) Validate() error {
 
 	if !c.AllowPublicBind && !IsLoopbackAddr(c.Addr) {
 		return ErrPublicBind
+	}
+	if c.Auth == owner.None && !IsLoopbackAddr(c.Addr) {
+		return ErrOpenToTheNetwork
 	}
 	return nil
 }

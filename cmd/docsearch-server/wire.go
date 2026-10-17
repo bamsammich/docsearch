@@ -146,6 +146,23 @@ func newLibraries(
 	return library.New(db, extractor, formats, cfg.LibraryRoots, site.Options{}, time.Now)
 }
 
+// authenticated puts a handler behind the credential its mode asks for, and
+// names the user it acts for.
+//
+// The owner is named inside the credential check, so a request that fails
+// one never reaches a handler holding a user. Both modes answer with the
+// built-in user, which is what makes them modes rather than two code paths:
+// what differs is the credential, not who the library belongs to.
+func authenticated(cfg config.Config, handler http.Handler) http.Handler {
+	named := owner.Middleware(owner.Builtin, handler)
+	if cfg.Auth == owner.None {
+		// Refused above a loopback address, so reaching here means the
+		// operator asked for an unauthenticated server on their own machine.
+		return named
+	}
+	return httpx.RequireBearer(cfg.BearerToken, named)
+}
+
 // route is one mounted service: the path it answers on, and the handler.
 type route struct {
 	handler http.Handler
@@ -240,12 +257,8 @@ func newMux(
 ) *http.ServeMux {
 	mux := http.NewServeMux()
 	for _, r := range routes {
-		// The owner is named inside the token check, so an unauthenticated
-		// request never reaches a handler holding a user. Phase 04 serves one
-		// library, and an identity provider replaces the argument here.
 		mux.Handle(r.path, httpx.RequireAllowedOrigin(cfg.AllowedOrigins,
-			httpx.RequireBearer(cfg.BearerToken,
-				owner.Middleware(owner.Builtin, r.handler))))
+			authenticated(cfg, r.handler)))
 	}
 
 	// Liveness: the process is up. Deliberately says nothing else.

@@ -216,11 +216,18 @@ an in-flight job can checkpoint or roll back instead of being killed mid-write.
 |---|---|---|
 | bind address | `--addr` | `DOCSEARCH_ADDR` |
 | database | `--dsn` | `DOCSEARCH_DSN` |
+| auth mode | `--auth` | `DOCSEARCH_AUTH` |
 | worker's library | `--user` (worker only) | `DOCSEARCH_USER` |
 | library roots | `--root` (repeatable) | `DOCSEARCH_ROOT` (`:`-separated) |
 | bearer token | — | `DOCSEARCH_TOKEN` |
 | Origin allowlist | `--allowed-origins` | `DOCSEARCH_ALLOWED_ORIGINS` |
 | permit public bind | `--allow-public-bind` | — |
+
+`--auth` is `none` or `token`, and defaults to `token`, which is what a v1
+install already runs. `none` asks for no credential and answers every
+request as the single built-in user, so it is refused on any address that is
+not loopback, whatever `--allow-public-bind` says. The `password` and `oidc`
+modes are planned and refused by name until they are built.
 
 **The library roots are a security boundary.** `add_document` accepts a target
 that arrives in a tool call, over a network endpoint, and may have been
