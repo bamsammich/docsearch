@@ -291,11 +291,45 @@ an in-flight job can checkpoint or roll back instead of being killed mid-write.
 | Origin allowlist | `--allowed-origins` | `DOCSEARCH_ALLOWED_ORIGINS` |
 | permit public bind | `--allow-public-bind` | `DOCSEARCH_ALLOW_PUBLIC_BIND=true` |
 
-`--auth` is `none`, `token` or `oidc`, and defaults to `token`, which is what
-a v1 install already runs. `none` asks for no credential and answers every
-request as the single built-in user, so it is refused on any address that is
-not loopback, whatever `--allow-public-bind` says. The `password` mode is
-planned and refused by name until it is built.
+`--auth` is `none`, `token`, `oidc` or `password`, and defaults to `token`,
+which is what a v1 install already runs. `none` asks for no credential and
+answers every request as the single built-in user, so it is refused on any
+address that is not loopback, whatever `--allow-public-bind` says.
+
+### Signing in with accounts docsearch holds
+
+`password` mode is for a deployment with no identity provider. docsearch
+becomes its own OAuth authorization server: Claude, Claude Code and any other
+MCP client discover it, register themselves, and send the person to a
+sign-in page. Each account has a library of its own.
+
+```bash
+docsearch account add alice                 # asks for a password twice
+docsearch account add bob --generate        # makes one up and prints it once
+docsearch account add carol --takes-builtin # carol keeps the existing library
+docsearch account passwd alice              # reset, and lift any lock
+docsearch account unlock alice
+docsearch account remove alice              # ends sign-in; the library stays
+docsearch account list
+```
+
+`docsearch account` connects as the database owner, through `--dsn` or
+`DOCSEARCH_DSN`, the same credential `migrate` uses. Whoever can migrate the
+schema can manage accounts, and nobody else can.
+
+| | |
+|---|---|
+| passwords | argon2id, at least 12 characters |
+| failed sign-ins | five in a row lock the account for 15 minutes |
+| access tokens | ES256 JWTs, valid for an hour |
+| refresh tokens | valid for 30 days, and replaced every time one is used |
+| clients | register themselves (RFC 7591), hold no secret, and must use PKCE |
+
+Set `--public-url` to the address people reach the server at. It is the
+issuer every token names, and the sign-in page lives there. A refused sign-in
+never says whether the username exists. There is no self-service reset,
+since that needs a mail server; `docsearch account passwd` is the reset.
+Removing an account stops its tokens at once rather than when they expire.
 
 ### Signing in through your own provider
 

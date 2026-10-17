@@ -47,7 +47,7 @@ var migrations embed.FS
 // section did when it began holding section numbers rather than page
 // numbers, is invisible to any structural check while silently changing what
 // queries return.
-const Version = 13
+const Version = 14
 
 // History is readable, so a version mismatch can be diagnosed without
 // reading the git log.
@@ -71,6 +71,7 @@ var History = map[int]string{
 	11: "claim_builtin hands the built-in library to the identity an operator names",
 	12: "uploaded files and the single-use links a browser uploads through",
 	13: "password mode: local accounts and the authorization server's state",
+	14: "the authorization server's lists are JSON, readable through database/sql",
 }
 
 // The tables this package names. Written once, so a typo cannot reach a

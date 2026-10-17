@@ -32,11 +32,20 @@ type access struct {
 
 // newAccess is the guard for the configured mode.
 func newAccess(cfg config.Config, db *sql.DB, log *slog.Logger) (access, error) {
-	if cfg.Auth != owner.OIDC {
+	switch cfg.Auth {
+	case owner.Password:
+		return passwordAccess(cfg, db, log)
+	case owner.OIDC:
+		return oidcAccessFor(cfg, db, log)
+	default:
 		return access{guard: func(next http.Handler) http.Handler {
 			return authenticated(cfg, next)
 		}}, nil
 	}
+}
+
+// oidcAccessFor finds the provider and builds the oidc guard.
+func oidcAccessFor(cfg config.Config, db *sql.DB, log *slog.Logger) (access, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), discoveryTimeout)
 	defer cancel()
 	readers, err := discover(ctx, cfg.OIDC)

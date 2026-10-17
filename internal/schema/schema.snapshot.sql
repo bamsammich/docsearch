@@ -277,7 +277,7 @@ CREATE TABLE public.oauth_auth_requests (
 CREATE TABLE public.oauth_clients (
     client_id text NOT NULL,
     client_name text NOT NULL,
-    redirect_uris text[] NOT NULL,
+    redirect_uris jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
@@ -301,8 +301,8 @@ CREATE TABLE public.oauth_refresh_tokens (
     token_hash text NOT NULL,
     client_id text NOT NULL,
     user_id text NOT NULL,
-    scopes text[] NOT NULL,
-    audience text[] NOT NULL,
+    scopes jsonb NOT NULL,
+    audience jsonb NOT NULL,
     auth_time timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL
 );
