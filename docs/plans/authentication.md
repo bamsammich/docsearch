@@ -81,6 +81,48 @@ Writing an OAuth resource server by hand when the SDK ships one tested
 against the specification would be the wrong kind of work. What stays ours is
 the part that is about docsearch: which credential names which user.
 
+Step 5d built that half in `internal/resource`, and found that a token
+reaches a resource server in two forms. A signed JWT can be read locally
+against the keys the issuer publishes. An opaque token can only be read by
+asking the issuer, through introspection as RFC 7662 defines it, and some
+providers issue opaque tokens unless told otherwise. Both are supported, so a
+deployment need not reconfigure its provider to suit docsearch.
+
+| form | read by | library |
+|---|---|---|
+| signed JWT | `internal/resource/signed`, against the issuer's key set | `coreos/go-oidc`, with its client check off because the audience is checked in `resource` |
+| opaque | `internal/resource/introspect`, asking the issuer | `zitadel/oidc`'s resource-server client, a general OIDC library |
+| anything else, with no introspection configured | refused by name | |
+
+Both readers end in the same claims, so the checks that matter are written
+once, in `resource`. A token passes when its issuer is the configured one,
+it names a subject, and its audience holds the configured value, which
+defaults to docsearch's own URI. Only asymmetric signatures are accepted,
+since a key shared with the issuer is one every other client of that issuer
+holds too.
+
+Scopes split in two. `ScopesSupported` is advertised in the metadata, which
+is what a client requests when a challenge names none, and so it is how an
+operator asks for a provider-specific scope that binds the audience.
+`RequiredScopes` must be on every token and are named in every challenge.
+They are separate because a scope that binds an audience is not always
+echoed back in the token's own `scope` claim, and requiring it would refuse
+every token.
+
+Some providers register every dynamic client into one shared project and
+put its identifier in the audience of every token those clients receive.
+Configuring that identifier as the expected audience would accept a token
+minted for any other service registered the same way. The expected audience
+has to be a value only docsearch's tokens carry.
+
+Three limits were found and left:
+
+| limit | consequence |
+|---|---|
+| the SDK's 401 and 403 challenges carry no `error` parameter, which RFC 6750 asks for; v1.8.0 is unchanged | a client learns the status and the scope, but not `invalid_token` or `insufficient_scope` by name |
+| an ID token from the same issuer passes when its audience includes the configured value | a provider that puts a project in ID tokens' audience lets one be used as an access token; the `typ` header that would tell them apart is not set consistently across providers |
+| nothing mounts the resource server yet | `oidc` is still refused, so its configuration waits for step 5e, which is when a request can first reach it |
+
 ## A user gains an issuer and a subject
 
 Phase 04 created `users` with an identifier and a timestamp, and said phase
