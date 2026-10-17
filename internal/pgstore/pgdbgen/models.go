@@ -117,6 +117,22 @@ type SchemaVersion struct {
 	AppliedAt time.Time
 }
 
+type Upload struct {
+	UserID     string
+	Key        string
+	Filename   string
+	Sha256     string
+	Content    []byte
+	UploadedAt time.Time
+}
+
+type UploadLink struct {
+	TokenHash string
+	UserID    string
+	ExpiresAt time.Time
+	UsedAt    sql.NullTime
+}
+
 type User struct {
 	UserID    string
 	CreatedAt time.Time

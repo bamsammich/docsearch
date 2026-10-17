@@ -26,6 +26,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/repository/postgres"
 	"github.com/bamsammich/docsearch/internal/source/site"
+	"github.com/bamsammich/docsearch/internal/upload"
 )
 
 // routeGroup is the fx value group every mounted service joins. Written
@@ -56,10 +57,12 @@ func serve(cfg config.Config, log *slog.Logger) error {
 			newFormats,
 			newLibraries,
 			newAccess,
+			newUploads,
 			grouped(newMCPRoute),
 			grouped(newIngestRoute),
 			grouped(newDocumentRoute),
 			grouped(newJobRoute),
+			grouped(newUploadRoute),
 			fx.Annotate(newMux, fx.ParamTags(routeGroup)),
 			fx.Annotate(newServer, fx.ParamTags("", "", routeGroup)),
 		),
@@ -196,11 +199,17 @@ func grouped(constructor any) any {
 //
 // GET and DELETE return 405 in this mode; that is the SDK's contract, not a
 // limitation we impose.
-func newMCPRoute(cfg config.Config, libs *library.Libraries, log *slog.Logger) route {
+func newMCPRoute(
+	cfg config.Config,
+	libs *library.Libraries,
+	ups uploads,
+	log *slog.Logger,
+) route {
 	srv := mcpserver.New(mcpserver.Deps{
 		Stores:       libs.Store,
 		LibraryRoots: cfg.LibraryRoots,
 		Log:          log,
+		UploadLinks:  ups.issuer.Issue,
 	})
 	return route{
 		path: "/mcp",
@@ -255,6 +264,7 @@ func newMux(
 	cfg config.Config,
 	libs *library.Libraries,
 	guard access,
+	ups uploads,
 	log *slog.Logger,
 ) *http.ServeMux {
 	mux := http.NewServeMux()
@@ -264,6 +274,10 @@ func newMux(
 	for _, r := range guard.public {
 		mux.Handle(r.path, r.handler)
 	}
+	// A signed link is its own credential, and the page it serves posts to
+	// itself from docsearch's own origin, so it sits outside both the guard
+	// and the origin allowlist.
+	mux.Handle(upload.LinkPrefix, ups.doors.Link())
 
 	// Liveness: the process is up. Deliberately says nothing else.
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {

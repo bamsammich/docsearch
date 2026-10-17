@@ -26,6 +26,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/site/fetch/pgcache"
 	"github.com/bamsammich/docsearch/internal/source"
 	"github.com/bamsammich/docsearch/internal/source/site"
+	"github.com/bamsammich/docsearch/internal/upload/pgupload"
 )
 
 // Libraries builds each user's view of one database.
@@ -117,7 +118,8 @@ func (l *Libraries) Sources(user string) (*source.Registry, error) {
 	if err := check(user); err != nil {
 		return nil, err
 	}
-	return source.New(l.formats, l.roots, pgcache.New(l.db, user), l.site), nil
+	return source.New(l.formats, l.roots, pgcache.New(l.db, user),
+		pgupload.New(l.db, user), l.site), nil
 }
 
 // check refuses a view nobody owns.

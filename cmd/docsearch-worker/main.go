@@ -29,6 +29,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/site/fetch/pgcache"
 	"github.com/bamsammich/docsearch/internal/source"
 	"github.com/bamsammich/docsearch/internal/source/site"
+	"github.com/bamsammich/docsearch/internal/upload/pgupload"
 )
 
 func main() {
@@ -148,7 +149,8 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	service := worker.New(
 		postgres.NewJobs(db, user),
 		ingest.New(postgres.New(db, user), time.Now),
-		source.New(adapter.New(extractor), roots, pgcache.New(db, user), site.Options{}),
+		source.New(adapter.New(extractor), roots, pgcache.New(db, user),
+			pgupload.New(db, user), site.Options{}),
 		worker.Options{
 			Log:         log,
 			Lease:       cmd.Duration("lease"),

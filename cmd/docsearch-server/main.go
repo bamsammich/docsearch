@@ -85,6 +85,17 @@ func command() *cli.Command {
 				Usage:   "permit binding a non-loopback address",
 				Sources: cli.EnvVars(config.EnvAllowPublicBind),
 			},
+			&cli.StringFlag{
+				Name:    "public-url",
+				Usage:   "`URL` a browser reaches this server at, for upload links",
+				Sources: cli.EnvVars(config.EnvPublicURL),
+			},
+			&cli.Int64Flag{
+				Name:    "upload-max-mb",
+				Value:   config.DefaultUploadMaxMB,
+				Usage:   "refuse an upload larger than `MB` megabytes",
+				Sources: cli.EnvVars(config.EnvUploadMaxMB),
+			},
 		}, oidcFlags()...),
 		Action: run,
 	}
@@ -156,6 +167,8 @@ func run(_ context.Context, cmd *cli.Command) error {
 		BearerToken:     os.Getenv(config.EnvToken),
 		AllowedOrigins:  commaList(cmd.String("allowed-origins")),
 		AllowPublicBind: cmd.Bool("allow-public-bind"),
+		PublicURL:       cmd.String("public-url"),
+		UploadMaxMB:     cmd.Int64("upload-max-mb"),
 		OIDC: config.OIDC{
 			Issuer:             cmd.String("oidc-issuer"),
 			Resource:           cmd.String("oidc-resource"),

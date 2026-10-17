@@ -45,3 +45,7 @@ packages:
   github.com/bamsammich/docsearch/internal/v1import:
     interfaces:
       Enqueuer:
+  github.com/bamsammich/docsearch/internal/upload:
+    interfaces:
+      Store:
+      Links:

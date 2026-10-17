@@ -19,6 +19,8 @@ import (
 	"github.com/bamsammich/docsearch/internal/site/fetch"
 	"github.com/bamsammich/docsearch/internal/source/file"
 	"github.com/bamsammich/docsearch/internal/source/site"
+	"github.com/bamsammich/docsearch/internal/source/uploaded"
+	"github.com/bamsammich/docsearch/internal/upload"
 )
 
 // Registry builds a source from a target.
@@ -31,21 +33,26 @@ type Registry struct {
 	// registry builds so that a re-crawl resumes rather than starting over.
 	// A registry serves one user, because a cache does.
 	cache fetch.Cache
-	site  site.Options
+	// uploads holds the files this user uploaded, read by an `upload:`
+	// target. Like the cache, it belongs to one user.
+	uploads upload.Store
+	site    site.Options
 }
 
-// New builds sources that read files under roots through extractor, and
-// crawl sites through cache.
+// New builds sources that read files under roots through extractor, crawl
+// sites through cache, and read uploaded files from uploads.
 func New(
 	extractor ingest.Extractor,
 	roots []string,
 	cache fetch.Cache,
+	uploads upload.Store,
 	siteOptions site.Options,
 ) *Registry {
 	return &Registry{
 		extractor: extractor,
 		roots:     roots,
 		cache:     cache,
+		uploads:   uploads,
 		site:      siteOptions,
 	}
 }
@@ -55,6 +62,9 @@ func New(
 //
 //nolint:ireturn // a factory for a port returns that port; naming a concrete type here would defeat it.
 func (r *Registry) For(target string, revalidate bool) (ingest.Source, error) {
+	if key, ok := upload.KeyOf(target); ok {
+		return uploaded.New(key, r.uploads, r.extractor), nil
+	}
 	if IsURL(target) {
 		if r.cache == nil {
 			return nil, fmt.Errorf("%s: a site ingest needs a fetch cache", target)
@@ -85,12 +95,8 @@ func IsURL(target string) bool {
 // document per file: the site model applies to a crawled site, not to any
 // directory that happens to hold Markdown.
 func (r *Registry) Targets(target string) ([]string, error) {
-	if IsURL(target) {
-		source, err := r.For(target, true)
-		if err != nil {
-			return nil, err
-		}
-		return []string{source.Identity()}, nil
+	if one, ok, err := r.single(target); ok {
+		return one, err
 	}
 
 	resolved, err := libroot.Resolve(r.roots, target)
@@ -113,6 +119,22 @@ func (r *Registry) Targets(target string) ([]string, error) {
 		return nil, fmt.Errorf("no supported files under %s", target)
 	}
 	return found, nil
+}
+
+// single answers a target that is one document whatever it holds: an
+// upload, or a site. ok is false for a path, which may be a directory.
+func (r *Registry) single(target string) ([]string, bool, error) {
+	if _, ok := upload.KeyOf(target); ok {
+		return []string{target}, true, nil
+	}
+	if !IsURL(target) {
+		return nil, false, nil
+	}
+	source, err := r.For(target, true)
+	if err != nil {
+		return nil, true, err
+	}
+	return []string{source.Identity()}, true, nil
 }
 
 // supportedUnder is every file beneath a directory an adapter can read,

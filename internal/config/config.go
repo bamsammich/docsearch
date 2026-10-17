@@ -4,6 +4,8 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,6 +31,11 @@ type Config struct {
 	RecentJobWindow int
 	// OIDC is read only in auth mode oidc.
 	OIDC OIDC
+	// PublicURL is where a person's browser reaches this server, which is
+	// what a signed upload link is built on.
+	PublicURL string
+	// UploadMaxMB refuses a larger upload before it is stored.
+	UploadMaxMB int64
 }
 
 // OIDC is how a deployment in auth mode oidc reaches its provider, and who
@@ -92,7 +99,16 @@ const (
 	EnvOIDCSignUp             = "DOCSEARCH_OIDC_SIGN_UP"
 	EnvOIDCRequiredClaimName  = "DOCSEARCH_OIDC_REQUIRED_CLAIM_NAME"
 	EnvOIDCRequiredClaimValue = "DOCSEARCH_OIDC_REQUIRED_CLAIM_VALUE"
+
+	// EnvPublicURL is where a browser reaches the server.
+	EnvPublicURL = "DOCSEARCH_PUBLIC_URL"
+	// EnvUploadMaxMB caps an upload's size.
+	EnvUploadMaxMB = "DOCSEARCH_UPLOAD_MAX_MB"
 )
+
+// DefaultUploadMaxMB is large enough for the biggest manual docsearch has
+// read, and small enough that one upload cannot fill a database by accident.
+const DefaultUploadMaxMB = 100
 
 // ErrPublicBind is returned when the configured address is not loopback and
 // the operator has not explicitly opted in.
@@ -124,6 +140,12 @@ func (c *Config) Validate() error {
 		if err := c.OIDC.validate(); err != nil {
 			return err
 		}
+	}
+	if err := c.resolvePublicURL(); err != nil {
+		return err
+	}
+	if c.UploadMaxMB <= 0 {
+		c.UploadMaxMB = DefaultUploadMaxMB
 	}
 	if c.DSN == "" {
 		return errors.New("no database: set --dsn or " + EnvDSN)
@@ -179,6 +201,41 @@ func (c *Config) Validate() error {
 		return ErrOpenToTheNetwork
 	}
 	return nil
+}
+
+// resolvePublicURL settles where a browser reaches the server when nobody
+// said, and refuses a setting that is not an absolute URL.
+func (c *Config) resolvePublicURL() error {
+	if c.PublicURL == "" {
+		derived, err := c.defaultPublicURL()
+		if err != nil {
+			return err
+		}
+		c.PublicURL = derived
+	}
+	parsed, err := url.Parse(c.PublicURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("%s must be an absolute URL, not %q", EnvPublicURL, c.PublicURL)
+	}
+	return nil
+}
+
+// defaultPublicURL is, in oidc mode, the origin clients already address
+// /mcp at. Otherwise it is loopback on the listening port, which is right for
+// the one machine a server without accounts is meant for.
+func (c *Config) defaultPublicURL() (string, error) {
+	if c.Auth == owner.OIDC {
+		resource, err := url.Parse(c.OIDC.Resource)
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", EnvOIDCResource, err)
+		}
+		return resource.Scheme + "://" + resource.Host, nil
+	}
+	_, port, err := net.SplitHostPort(c.Addr)
+	if err != nil {
+		return "", fmt.Errorf("listen address %q: %w", c.Addr, err)
+	}
+	return "http://127.0.0.1:" + port, nil
 }
 
 // validate refuses an oidc configuration that could not work, at startup

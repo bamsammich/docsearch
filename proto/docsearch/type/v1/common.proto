@@ -22,6 +22,7 @@ enum SourceKind {
   SOURCE_KIND_UNSPECIFIED = 0;
   SOURCE_KIND_FILE = 1;
   SOURCE_KIND_SITE = 2;
+  SOURCE_KIND_UPLOAD = 3;
 }
 
 // Verdict is how usable a document's chunks are.
