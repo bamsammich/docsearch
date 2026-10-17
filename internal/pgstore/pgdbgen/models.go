@@ -6,6 +6,7 @@ package pgdbgen
 
 import (
 	"database/sql"
+	"encoding/json"
 	"time"
 )
 
@@ -85,11 +86,53 @@ type IngestJob struct {
 	UserID      string
 }
 
+type OauthAuthRequest struct {
+	ID        string
+	ClientID  string
+	Request   json.RawMessage
+	UserID    sql.NullString
+	AuthTime  sql.NullTime
+	CodeHash  sql.NullString
+	CreatedAt time.Time
+}
+
+type OauthClient struct {
+	ClientID     string
+	ClientName   string
+	RedirectUris []string
+	CreatedAt    time.Time
+}
+
+type OauthKey struct {
+	KeyID      string
+	PrivateKey []byte
+	CreatedAt  time.Time
+}
+
+type OauthRefreshToken struct {
+	TokenHash string
+	ClientID  string
+	UserID    string
+	Scopes    []string
+	Audience  []string
+	AuthTime  time.Time
+	ExpiresAt time.Time
+}
+
 type Page struct {
 	DocID  string
 	Page   int32
 	Text   string
 	UserID string
+}
+
+type PasswordAccount struct {
+	Username       string
+	UserID         string
+	PasswordHash   string
+	FailedAttempts int32
+	LockedUntil    sql.NullTime
+	CreatedAt      time.Time
 }
 
 type Response struct {

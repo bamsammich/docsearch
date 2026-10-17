@@ -5,6 +5,7 @@ go 1.26.1
 require (
 	connectrpc.com/connect v1.21.0
 	github.com/PuerkitoBio/goquery v1.13.0
+	github.com/alexedwards/argon2id v1.0.0
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/jackc/pgx/v5 v5.11.0
@@ -21,6 +22,7 @@ require (
 	github.com/zitadel/oidc/v3 v3.51.16
 	go.uber.org/fx v1.24.0
 	golang.org/x/net v0.59.0
+	golang.org/x/term v0.47.0
 	golang.org/x/text v0.43.0
 	google.golang.org/protobuf v1.36.12
 	modernc.org/sqlite v1.60.1
@@ -103,7 +105,7 @@ require (
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.51.0 // indirect
 	modernc.org/libc v1.77.1 // indirect
