@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/bamsammich/docsearch/internal/service/ingest"
+	"github.com/bamsammich/docsearch/internal/urlguard"
 )
 
 const (
@@ -353,12 +354,20 @@ func (s *Service) fail(ctx context.Context, job *Job, cause error, permanent boo
 
 // permanent reports whether a failure would recur on every attempt.
 //
-// A refused structure and an unreadable format are both facts about the
-// document, so the next attempt would read the same bytes and refuse them
-// again. Everything else is treated as the moment rather than the document.
+// A refused structure, an unreadable format and an address the guard
+// refuses are all facts about the target, so the next attempt would meet the
+// same refusal. Everything else is treated as the moment rather than the
+// target, a host that did not resolve included.
 func permanent(err error) bool {
 	var structure *ingest.StructureError
-	return errors.As(err, &structure) || errors.Is(err, ingest.ErrUnsupportedFormat)
+	return errors.As(err, &structure) || errors.Is(err, ingest.ErrUnsupportedFormat) ||
+		refused(err)
+}
+
+// refused is an address the guard refuses by policy, which it will refuse on
+// every attempt. A host that did not resolve is worth another try.
+func refused(err error) bool {
+	return errors.Is(err, urlguard.ErrBlocked) && !errors.Is(err, urlguard.ErrUnresolved)
 }
 
 // quality is the grade a finished ingest earned, for the log.
