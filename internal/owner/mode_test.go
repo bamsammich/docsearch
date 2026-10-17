@@ -14,25 +14,16 @@ func TestMode(t *testing.T) { suite.Run(t, new(ModeSuite)) }
 
 func (s *ModeSuite) TestTheBuiltModesParse() {
 	for spelling, want := range map[string]owner.Mode{
-		"none":  owner.None,
-		"token": owner.Token,
-		"oidc":  owner.OIDC,
+		"none":     owner.None,
+		"token":    owner.Token,
+		"oidc":     owner.OIDC,
+		"password": owner.Password,
 	} {
 		got, err := owner.ParseMode(spelling)
 		s.Require().NoError(err, spelling)
 		s.Equal(want, got, spelling)
 		s.Equal(spelling, got.String(), "a mode reports back the spelling it was written as")
 	}
-}
-
-// A mode the plan names but no step has built is refused by name, so an
-// operator who configured it ahead of time learns which it is rather than
-// being told the word is unknown.
-func (s *ModeSuite) TestAPlannedModeIsRefusedByName() {
-	_, err := owner.ParseMode("password")
-	s.Require().Error(err)
-	s.Contains(err.Error(), "password")
-	s.Contains(err.Error(), "not built yet")
 }
 
 func (s *ModeSuite) TestAnUnknownModeListsTheOnesThatExist() {

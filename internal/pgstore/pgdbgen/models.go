@@ -99,7 +99,7 @@ type OauthAuthRequest struct {
 type OauthClient struct {
 	ClientID     string
 	ClientName   string
-	RedirectUris []string
+	RedirectUris json.RawMessage
 	CreatedAt    time.Time
 }
 
@@ -113,8 +113,8 @@ type OauthRefreshToken struct {
 	TokenHash string
 	ClientID  string
 	UserID    string
-	Scopes    []string
-	Audience  []string
+	Scopes    json.RawMessage
+	Audience  json.RawMessage
 	AuthTime  time.Time
 	ExpiresAt time.Time
 }

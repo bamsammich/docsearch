@@ -202,15 +202,15 @@ runs, so naming the modes changed no deployment's behaviour.
 `--allow-public-bind` says. That flag opts into being reachable from
 elsewhere, not into serving a library to whoever arrives, and the two
 together are an open document store that no flag spells clearly enough to
-act on. A mode the plan names but no step has built is refused by its own
-name rather than as an unknown word, so an operator who configured
-`password` early learns which it is.
+act on. Until 5f, a mode the plan named but no step had built was refused by
+its own name rather than as an unknown word; with `password` built, every
+mode the plan names exists.
 
 `password` is the mode that looks small and is not. Holding a password means
 a hashing choice, a reset path, a lockout policy and a session store, none of
-which docsearch is better at than a provider. It lands in step 5f, beside the
+which docsearch is better at than a provider. It landed in step 5f, with the
 authorization server, because both make docsearch issue credentials of its
-own and neither is worth building alone.
+own. Refresh tokens replaced the session store.
 
 ## Who gets a library, settled in 5e
 
@@ -252,6 +252,39 @@ connector, and capture the token claude.ai presents. That settles what the
 provider puts in `aud`, and the published-identity guess in
 `docs/research/mcp-authorization.md`. It needs an operator with a provider,
 so it is recorded here rather than claimed.
+
+## Password mode, built in 5f
+
+Step 5f was to be built only when a trigger fired, and one did: a
+deployment for people with no identity provider of their own. docsearch is
+therefore its own authorization server in `password` mode, which is the
+heavier answer this plan first proposed and step 5a showed `oidc` did not
+need.
+
+| piece | where |
+|---|---|
+| accounts and the sign-in policy | `internal/password`, `docsearch account` |
+| the protocol: authorization code with PKCE, refresh, JWT access tokens, revocation | zitadel/oidc's OpenID Provider, under `/oauth/` |
+| client registration, the sign-in page, RFC 8414 metadata | `internal/authserver` |
+| verifying tokens | the 5d resource server, against docsearch's own key set |
+
+No existing tool did local password sign-in for an MCP server. The proxies
+that add OAuth to one, such as mcp-auth-proxy, defer sign-in to an external
+provider, and pairing one with a provider that holds passwords would be two
+more services for every deployment, which is what password mode exists to
+avoid.
+
+Three decisions the provider left to docsearch:
+
+| decision | why |
+|---|---|
+| every client is public, and a registration asking for a secret is registered without one | docsearch issues no secrets, and RFC 7591 lets a server replace what it does not support |
+| a request with no scope gets `docsearch`, and every request gets `offline_access` | the provider refuses an empty scope and issues refresh tokens only for `offline_access`, and an MCP client may ask for neither |
+| a token's subject is the user, checked against the account on every request | no mapping to keep, and removing an account stops its tokens at once |
+
+Left for later: a `docsearch login` for the CLI, which still sends
+`DOCSEARCH_TOKEN`; rotating the signing key; and pruning clients that
+registered and never signed in.
 
 ## Steps
 
