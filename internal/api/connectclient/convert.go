@@ -2,6 +2,9 @@ package connectclient
 
 import (
 	"math"
+	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	documentv1 "github.com/bamsammich/docsearch/internal/api/docsearch/document/v1"
 	ingestv1 "github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1"
@@ -40,7 +43,17 @@ func documentOf(d *documentv1.Document) document.Document {
 		SourceKind: enumOf[domain.SourceKind](int32(d.GetSourceKind())),
 		Quality:    enumOf[domain.Quality](int32(d.GetQuality())),
 		Warnings:   d.GetWarnings(),
+		Source:     d.GetSource(),
+		IngestedAt: timeOf(d.GetIngestedAt()),
 	}
+}
+
+// timeOf reads an unset timestamp as the zero time, as the server sent it.
+func timeOf(t *timestamppb.Timestamp) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return t.AsTime()
 }
 
 func verifyReportOf(r *documentv1.VerifyReport) *document.VerifyReport {

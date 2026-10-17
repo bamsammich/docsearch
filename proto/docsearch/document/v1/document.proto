@@ -5,6 +5,7 @@ syntax = "proto3";
 package docsearch.document.v1;
 
 import "docsearch/type/v1/common.proto";
+import "google/protobuf/timestamp.proto";
 
 // Document is one document the index holds.
 message Document {
@@ -22,6 +23,12 @@ message Document {
   docsearch.type.v1.Quality quality = 8;
   // Warnings are the structure report's notes, as an operator reads them.
   repeated string warnings = 9;
+  // Source is what the document was read from: a path, a site's URL, or an
+  // upload's target. A client that put a document in finds it again by this.
+  string source = 10;
+  // IngestedAt is when the document was last read. Unset while its first
+  // ingest is still running.
+  google.protobuf.Timestamp ingested_at = 11;
 }
 
 // TokenSpread is the distribution of a document's chunk sizes.

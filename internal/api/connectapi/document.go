@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	documentv1 "github.com/bamsammich/docsearch/internal/api/docsearch/document/v1"
 	"github.com/bamsammich/docsearch/internal/api/docsearch/document/v1/documentv1connect"
@@ -156,7 +158,17 @@ func documentMessage(doc document.Document) *documentv1.Document {
 		ChunkCount: optionalInt(doc.ChunkCount),
 		Quality:    typev1.Quality(doc.Quality),
 		Warnings:   doc.Warnings,
+		Source:     doc.Source,
+		IngestedAt: timestampOf(doc.IngestedAt),
 	}
+}
+
+// timestampOf leaves a zero time unset rather than sending the epoch.
+func timestampOf(t time.Time) *timestamppb.Timestamp {
+	if t.IsZero() {
+		return nil
+	}
+	return timestamppb.New(t)
 }
 
 // verifyMessage is a verification report as a caller sees it.

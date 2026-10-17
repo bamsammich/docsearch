@@ -1,5 +1,6 @@
 -- name: ListReadyDocuments :many
-SELECT doc_id, title, format, source_kind, page_count, chunk_count, warnings
+SELECT doc_id, title, format, source_kind, page_count, chunk_count, warnings,
+       source_path, ingested_at
   FROM documents
  WHERE status = 'ready'
  ORDER BY doc_id;

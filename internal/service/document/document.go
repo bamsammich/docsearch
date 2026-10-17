@@ -10,19 +10,27 @@ package document
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/bamsammich/docsearch/internal/domain"
 )
 
 // Document is one document the index holds.
 type Document struct {
+	// IngestedAt is when the document was last read; zero while the first
+	// ingest is still running.
+	IngestedAt time.Time
 	PageCount  *int
 	ChunkCount *int
 	DocID      string
 	Title      string
 	Format     string
 	Status     string
-	Warnings   []string
+	// Source is what the document was read from: a path, a site's URL, or
+	// an upload's target. A client that put a document in finds it again by
+	// this.
+	Source   string
+	Warnings []string
 	// SourceKind is unset where the index holds a kind this build does not
 	// know, which is a database from a newer build rather than a defect.
 	SourceKind domain.SourceKind

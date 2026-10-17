@@ -1,5 +1,5 @@
-# The MCP server. Pure-Go SQLite driver means CGO_ENABLED=0 and a static
-# binary, so the runtime image needs no libc and no FTS5 build tag.
+# The MCP server. Pure Go with no cgo, so the binary is static and the
+# runtime image needs no libc.
 FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./

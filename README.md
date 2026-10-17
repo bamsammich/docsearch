@@ -126,6 +126,42 @@ server, and links are built on it. It defaults to the origin of
 otherwise. `--upload-max-mb` (`DOCSEARCH_UPLOAD_MAX_MB`) caps a file at 100
 MB unless set.
 
+## Syncing from Paperless-ngx
+
+`docsearch-sync` pushes the documents a Paperless-ngx user can see into a
+docsearch library, and retires them when that user stops seeing them. It runs
+beside Paperless and reaches out to both, so docsearch never needs a way into
+the network Paperless lives on.
+
+Which documents reach docsearch is decided in Paperless. Give a dedicated
+Paperless user view permission on the documents worth searching, usually
+with a workflow that shares chosen document types on consumption, and give
+the sync that user's API token.
+
+```bash
+PAPERLESS_TOKEN=... DOCSEARCH_TOKEN=... \
+  docsearch-sync --paperless-url http://paperless:8000 --server https://docs.example.com
+```
+
+| flag | environment | default |
+|---|---|---|
+| `--paperless-url` | `PAPERLESS_URL` | none |
+| `--server` | `DOCSEARCH_SERVER` | `http://127.0.0.1:8765` |
+| `--key-prefix` | `DOCSEARCH_SYNC_KEY_PREFIX` | `paperless`; use one per Paperless instance |
+| `--every` | `DOCSEARCH_SYNC_EVERY` | `0`, one pass and exit |
+| `--prefer-archive` | `DOCSEARCH_SYNC_PREFER_ARCHIVE` | off |
+| `--allow-empty` | | off |
+| `--dry-run` | | off |
+
+Nothing is kept on disk. A document is pushed when the library lacks it or
+read it before Paperless last changed it, so the library itself is the
+record of what was pushed. The original file is pushed where docsearch reads
+its type, and Paperless's archive copy otherwise; `--prefer-archive` takes
+the archive whenever there is one, which suits a library of scans. A
+Paperless that shows nothing while the library holds documents this sync
+pushed is refused rather than emptied, unless `--allow-empty` says so.
+`Dockerfile.sync` builds an image for it.
+
 ## Ingesting a documentation site
 
 ```bash

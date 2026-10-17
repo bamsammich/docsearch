@@ -178,6 +178,8 @@ type Ready struct {
 type Repository interface {
 	// ReadyWithDigest is the ready document holding these bytes, or nil.
 	ReadyWithDigest(ctx context.Context, digest string) (*Existing, error)
+	// Confirm stamps a document as read at, without changing what it holds.
+	Confirm(ctx context.Context, docID string, at time.Time) error
 	// DocIDForIdentity is the document already read from this path or URL,
 	// or "" where the index holds none.
 	DocIDForIdentity(ctx context.Context, identity string) (string, error)
@@ -257,10 +259,8 @@ func (s *Service) Run(ctx context.Context, src Source, opts Options) (*Result, e
 		return nil, ErrCancelled
 	}
 
-	if same, err := s.repo.ReadyWithDigest(ctx, src.Digest()); err != nil {
-		return nil, fmt.Errorf("look up content hash: %w", err)
-	} else if same != nil {
-		return unchanged(same), nil
+	if result, err := s.alreadyHeld(ctx, src.Digest()); err != nil || result != nil {
+		return result, err
 	}
 
 	// Replacement is keyed on identity rather than on the title's slug: a
@@ -416,6 +416,26 @@ func (s *Service) uniqueDocID(ctx context.Context, title, replacing string) (str
 		return "", fmt.Errorf("look up identifiers beginning %q: %w", base, err)
 	}
 	return nextFree(base, taken), nil
+}
+
+// alreadyHeld is the result for bytes the index already holds, or nil when
+// it holds none.
+//
+// Reading the same bytes again is still a read, and a client that asks
+// whether docsearch holds the latest copy decides by when it was last read.
+// Left unstamped, a sync would push the same document every time.
+func (s *Service) alreadyHeld(ctx context.Context, digest string) (*Result, error) {
+	same, err := s.repo.ReadyWithDigest(ctx, digest)
+	if err != nil {
+		return nil, fmt.Errorf("look up content hash: %w", err)
+	}
+	if same == nil {
+		return nil, nil //nolint:nilnil // no document holds these bytes, which is not a failure
+	}
+	if err := s.repo.Confirm(ctx, same.DocID, s.now()); err != nil {
+		return nil, fmt.Errorf("confirm %s: %w", same.DocID, err)
+	}
+	return unchanged(same), nil
 }
 
 // unchanged is the result for bytes the index already holds.

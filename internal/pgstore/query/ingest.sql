@@ -87,7 +87,8 @@ SELECT ordinal, section, page_start, page_end, printed_page_start,
  ORDER BY ordinal;
 
 -- name: DocumentByID :one
-SELECT doc_id, title, format, source_kind, status, page_count, chunk_count, warnings
+SELECT doc_id, title, format, source_kind, status, page_count, chunk_count, warnings,
+       source_path, ingested_at
   FROM documents WHERE doc_id = $1;
 
 -- name: IndexTermSections :many
@@ -113,3 +114,6 @@ SELECT EXISTS(
 DELETE FROM uploads
  WHERE key = (SELECT substring(source_path FROM 8) FROM documents
                WHERE doc_id = $1 AND source_kind = 'upload');
+
+-- name: ConfirmDocument :exec
+UPDATE documents SET ingested_at = $2 WHERE doc_id = $1;

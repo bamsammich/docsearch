@@ -105,10 +105,14 @@ func (s *IngestSuite) TestADocumentIsWrittenThenMadeVisible() {
 	s.Contains(string(published.Warnings), `"quality":"ok"`)
 }
 
+// Bytes already indexed are not read again, but the read is still stamped:
+// a client deciding whether docsearch holds the latest copy decides by when
+// it was last read.
 func (s *IngestSuite) TestBytesAlreadyIndexedAreNotIngestedAgain() {
 	s.acquires("abc123", "/library/copy.md")
 	s.repo.EXPECT().ReadyWithDigest(mock.Anything, "abc123").
 		Return(&ingest.Existing{DocID: "operator-guide", Title: "Operator Guide", ChunkCount: 7}, nil)
+	s.repo.EXPECT().Confirm(mock.Anything, "operator-guide", stamped).Return(nil)
 
 	result, err := s.service().Run(s.T().Context(), s.source, ingest.Options{})
 	s.Require().NoError(err)
