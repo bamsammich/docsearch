@@ -9,6 +9,7 @@ import (
 // storedReport is the part of a persisted StructureReport a caller is shown.
 type storedReport struct {
 	Quality              string   `json:"quality"`
+	StructureSource      string   `json:"structure_source"`
 	InTOCNotInBody       []string `json:"in_toc_not_in_body"`
 	InBodyNotInTOC       []string `json:"in_body_not_in_toc"`
 	DetectedMoreThanOnce []string `json:"detected_more_than_once"`
@@ -60,6 +61,20 @@ func Summary(stored string) (Quality, []string) {
 	// Already phrased for a caller, so they pass through whole rather than
 	// being summarised into a count of opaque identifiers.
 	return quality, append(notes, report.Notes...)
+}
+
+// StoredSource reads which structure source a stored report recorded, or
+// SourceUnknown where it recorded none or cannot be read.
+func StoredSource(stored string) StructureSource {
+	var report storedReport
+	if err := json.Unmarshal([]byte(stored), &report); err != nil {
+		return SourceUnknown
+	}
+	source, err := ParseStructureSource(report.StructureSource)
+	if err != nil {
+		return SourceUnknown
+	}
+	return source
 }
 
 // note renders one finding, naming at most shownPerFinding of its subjects.

@@ -244,7 +244,7 @@
  "findings": [
   {
    "code": "unaddressable",
-   "detail": "30 chunks share only 1 distinct heading paths (0.03 per chunk). Consecutive chunks inherit one heading, which happens when boundaries came from the token budget rather than from the document -- structure was not derived and the text was cut into fixed windows. `section_filter` cannot separate them and `outline` describes the document in 1 entries. 30 chunks carry no heading at all and cannot be reached by heading, filtered, or described in an outline.",
+   "detail": "30 of 30 chunks (100%) carry no heading at all, so their boundaries came from the token budget rather than from the document. They cannot be reached by heading or filtered, and `outline` cannot describe them.",
    "severity": "unusable"
   }
  ]

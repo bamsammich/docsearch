@@ -67,6 +67,17 @@ const (
 	SourceUnknown
 )
 
+// MarkedUp reports a source that read each heading from the document's own
+// markup: a Markdown `#`, an HTML `h1` to `h6`, a Word heading style. Such a
+// source reads every heading written in the syntax it parses, so a run of
+// chunks under one heading path is a section its author wrote long. The
+// others declare a subset, as an outline or a table of contents does, or
+// infer headings from type sizes or addresses, and a long run under one of
+// theirs can hold headings they missed.
+func (s StructureSource) MarkedUp() bool {
+	return s == SourceATXHeadings || s == SourceHTMLNesting || s == SourceHeadingStyles
+}
+
 // The text each value persists as. Written out rather than derived from the
 // constant names: these strings reach documents.warnings and the extraction
 // JSON the Python pipeline is held to, so a generator's spelling rule has no

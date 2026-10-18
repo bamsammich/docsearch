@@ -88,12 +88,14 @@ func (s *DocumentsSuite) TestEveryColumnSurvivesTheRoundTrip() {
 
 func (s *DocumentsSuite) TestADocumentCarriesItsGradeAndNotes() {
 	s.ingested("manual", []domain.Chunk{chunkAt(0, "1", 1)},
-		`{"quality":"degraded","notes":["boundaries came from the token budget"]}`)
+		`{"quality":"degraded","notes":["boundaries came from the token budget"],`+
+			`"structure_source":"font_heuristic"}`)
 
 	doc, err := s.docs.Get(s.T().Context(), "manual")
 	s.Require().NoError(err)
 	s.Equal(domain.QualityDegraded, doc.Quality)
 	s.Equal([]string{"boundaries came from the token budget"}, doc.Warnings)
+	s.Equal(domain.SourceFontHeuristic, doc.StructureSource)
 	s.Equal(6, *doc.PageCount)
 }
 
@@ -105,6 +107,7 @@ func (s *DocumentsSuite) TestAnUnreadableReportLeavesTheDocumentReadable() {
 	s.Require().NoError(err)
 	s.Equal("manual", doc.DocID)
 	s.Equal(domain.Quality(0), doc.Quality, "unset rather than a grade nobody chose")
+	s.Equal(domain.SourceUnknown, doc.StructureSource)
 }
 
 func (s *DocumentsSuite) TestADocumentTheIndexDoesNotHoldIsNamed() {

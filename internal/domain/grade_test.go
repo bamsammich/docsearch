@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,8 +12,10 @@ import (
 	"github.com/bamsammich/docsearch/internal/domain"
 )
 
-// GradeSuite holds the grader to what docsearch.verify.grade produces, on
-// the distributions the Python tests exercise.
+// GradeSuite holds the grader to the distributions the Python tests
+// exercised. Each golden began as what docsearch.verify.grade produced; the
+// unaddressable details in budget-sliced and headless were rewritten when
+// long sections under markup headings stopped counting as a defect.
 //
 // Detail strings are compared too. The detail is what an operator reads, so
 // a divergence in a percentage or a thousands separator is a divergence in
@@ -39,13 +42,43 @@ type goldenFinding struct {
 	Detail   string `json:"detail"`
 }
 
-// golden is one distribution and what Python made of it.
+// golden is one distribution and what grading makes of it. The structure
+// source is absent from every Python golden, which graded as though the
+// source could have missed headings.
 type golden struct {
-	Chunks   []goldenChunk   `json:"chunks"`
-	Findings []goldenFinding `json:"findings"`
+	StructureSource string          `json:"structure_source"`
+	Chunks          []goldenChunk   `json:"chunks"`
+	Findings        []goldenFinding `json:"findings"`
 }
 
-func (s *GradeSuite) TestEveryDistributionGradesAsPythonGradesIt() {
+// facts are the golden's chunks as the grader reads them.
+func (g golden) facts() []domain.ChunkFacts {
+	chunks := make([]domain.ChunkFacts, len(g.Chunks))
+	for i, c := range g.Chunks {
+		chunks[i] = domain.ChunkFacts{
+			Text:        c.Text,
+			HeadingPath: c.HeadingPath,
+			Tokens:      c.Tokens,
+			ImageCount:  c.ImageCount,
+			Depth:       c.Depth,
+			Numbered:    c.Numbered,
+		}
+	}
+	return chunks
+}
+
+// sourceOf is the structure source a golden names, SourceUnknown where it
+// names none.
+func (s *GradeSuite) sourceOf(g golden) domain.StructureSource {
+	if g.StructureSource == "" {
+		return domain.SourceUnknown
+	}
+	source, err := domain.ParseStructureSource(g.StructureSource)
+	s.Require().NoError(err)
+	return source
+}
+
+func (s *GradeSuite) TestEveryDistributionGradesAsItsGoldenSays() {
 	dir := filepath.Join("..", "..", "testdata", "grading")
 	entries, err := os.ReadDir(dir)
 	s.Require().NoError(err)
@@ -58,19 +91,7 @@ func (s *GradeSuite) TestEveryDistributionGradesAsPythonGradesIt() {
 			var want golden
 			s.Require().NoError(json.Unmarshal(raw, &want))
 
-			chunks := make([]domain.ChunkFacts, len(want.Chunks))
-			for i, c := range want.Chunks {
-				chunks[i] = domain.ChunkFacts{
-					Text:        c.Text,
-					HeadingPath: c.HeadingPath,
-					Tokens:      c.Tokens,
-					ImageCount:  c.ImageCount,
-					Depth:       c.Depth,
-					Numbered:    c.Numbered,
-				}
-			}
-
-			got := domain.Grade(chunks)
+			got := domain.Grade(want.facts(), s.sourceOf(want))
 			s.Require().Len(got, len(want.Findings))
 			for i, finding := range got {
 				s.Equal(want.Findings[i].Code, finding.Code)
@@ -79,6 +100,88 @@ func (s *GradeSuite) TestEveryDistributionGradesAsPythonGradesIt() {
 			}
 		})
 	}
+}
+
+// paperFacts is a paper whose every heading is a path: twenty sections, two
+// the token budget split five ways and a reference list of twelve.
+func paperFacts() []domain.ChunkFacts {
+	return factsIn([]int{2, 1, 1, 1, 5, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 5, 2, 2, 12})
+}
+
+// factsIn is a document with the given number of well-sized chunks under
+// each of its headings in turn.
+func factsIn(counts []int) []domain.ChunkFacts {
+	var facts []domain.ChunkFacts
+	for i, n := range counts {
+		for range n {
+			facts = append(facts, domain.ChunkFacts{
+				HeadingPath: fmt.Sprintf("Paper > Section %d", i+1),
+				Tokens:      600,
+				Depth:       2,
+			})
+		}
+	}
+	return facts
+}
+
+func codesOf(findings []domain.Finding) []string {
+	codes := make([]string, len(findings))
+	for i, f := range findings {
+		codes[i] = f.Code
+	}
+	return codes
+}
+
+// Few paths per chunk mean missed headings only where a source could miss
+// them. Under markup headings the paper's long sections are no defect.
+func (s *GradeSuite) TestLongSectionsAreUnaddressableOnlyUnderHeadingsThatCanMissSome() {
+	tests := []struct {
+		want   []string
+		source domain.StructureSource
+	}{
+		{source: domain.SourceATXHeadings, want: []string{}},
+		{source: domain.SourceHTMLNesting, want: []string{}},
+		{source: domain.SourceHeadingStyles, want: []string{}},
+		{source: domain.SourceFontHeuristic, want: []string{"unaddressable"}},
+		{source: domain.SourceOutline, want: []string{"unaddressable"}},
+		{source: domain.SourceUnknown, want: []string{"unaddressable"}},
+	}
+	for _, tt := range tests {
+		s.Run(tt.source.String(), func() {
+			s.Equal(tt.want, codesOf(domain.Grade(paperFacts(), tt.source)))
+		})
+	}
+}
+
+func (s *GradeSuite) TestTheFindingNamesTheSourceThatCouldMissHeadings() {
+	findings := domain.Grade(paperFacts(), domain.SourceFontHeuristic)
+	s.Require().Len(findings, 1)
+	s.Equal(domain.VerdictDegraded, findings[0].Severity)
+	s.Contains(
+		findings[0].Detail,
+		"44 chunks share only 20 distinct heading paths (0.45 per chunk)",
+	)
+	s.Contains(findings[0].Detail, "under headings from structure source `font_heuristic`")
+}
+
+// A document under one heading path is not divided by its markup either.
+func (s *GradeSuite) TestAMarkupDocumentUnderOneHeadingIsUnaddressable() {
+	findings := domain.Grade(factsIn([]int{30}), domain.SourceATXHeadings)
+	s.Require().Len(findings, 1)
+	s.Equal("unaddressable", findings[0].Code)
+	s.Equal(domain.VerdictUnusable, findings[0].Severity, "one path for 30 chunks")
+	s.Contains(
+		findings[0].Detail,
+		"30 of 30 chunks (100%) share one heading path, 'Paper > Section 1'",
+	)
+}
+
+func (s *GradeSuite) TestOneSectionHoldingMostOfAMarkupDocumentIsUnaddressable() {
+	findings := domain.Grade(factsIn([]int{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 18}),
+		domain.SourceATXHeadings)
+	s.Require().Len(findings, 1)
+	s.Equal(domain.VerdictDegraded, findings[0].Severity, "13 paths for 30 chunks")
+	s.Contains(findings[0].Detail, "18 of 30 chunks (60%) share one heading path")
 }
 
 func (s *GradeSuite) TestTheVerdictIsTheWorstFinding() {

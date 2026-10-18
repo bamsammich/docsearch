@@ -35,6 +35,9 @@ type Document struct {
 	// know, which is a database from a newer build rather than a defect.
 	SourceKind domain.SourceKind
 	Quality    domain.Quality
+	// StructureSource is what ingest derived the headings from, which
+	// verification needs to read what its heading paths mean.
+	StructureSource domain.StructureSource
 }
 
 // Repository is what the index can be asked. The port is declared here
@@ -227,7 +230,7 @@ func (s *Service) Verify(ctx context.Context, docID string) (*VerifyReport, erro
 	for i, c := range chunks {
 		facts[i] = domain.FactsOf(c)
 	}
-	report.Findings = domain.Grade(facts)
+	report.Findings = domain.Grade(facts, doc.StructureSource)
 	report.Verdict = domain.GradeVerdict(report.Findings)
 
 	unjoinable, err := s.unjoinableSections(ctx, docID)

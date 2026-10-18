@@ -284,7 +284,7 @@
  "findings": [
   {
    "code": "unaddressable",
-   "detail": "35 chunks share only 5 distinct heading paths (0.14 per chunk). Consecutive chunks inherit one heading, which happens when boundaries came from the token budget rather than from the document -- structure was not derived and the text was cut into fixed windows. `section_filter` cannot separate them and `outline` describes the document in 5 entries.",
+   "detail": "35 chunks share only 5 distinct heading paths (0.14 per chunk), under headings from a source that was not recorded, which can miss headings. Where it missed one, consecutive chunks inherit the heading before it and their boundaries came from the token budget rather than from the document. `section_filter` cannot separate them and `outline` describes the document in 5 entries.",
    "severity": "unusable"
   }
  ]

@@ -38,7 +38,7 @@ const chapterCost = costOf("flat_hierarchy");
 // Ingest warnings and index problems that restate a block. The wording is
 // the server's: StructureReport.Notes in internal/domain/structure.go, and
 // the problems in internal/service/document/document.go.
-const aboutHeadings = /distinct heading path|no heading path/;
+const aboutHeadings = /distinct heading path|no heading path|share one heading path/;
 const aboutUnclaimedPages = /claimed by no chunk/;
 
 export function findingsOf(input: FindingsInput): Findings {

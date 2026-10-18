@@ -103,6 +103,14 @@ four of them headless. `section_filter` cannot separate those and `outline`
 describes the whole document in ten entries. That is silent degradation to
 fixed windows, and it is the failure this command exists to make loud.
 
+A long section is not that failure. The token budget splits it, and every
+piece keeps the section's heading path, so a paper with twenty Markdown
+headings can arrive as 44 chunks under 20 paths and lose nothing. Few paths
+per chunk count against a document only when its headings came from a source
+that can miss some: a PDF's type sizes, an outline, a table of contents, a
+site's URLs. Headings read from Markdown, HTML or Word markup count against
+it only when one path holds half the document or more.
+
 A document is invisible to search until its ingest completes. Every read path
 filters `documents.status='ready'`.
 
