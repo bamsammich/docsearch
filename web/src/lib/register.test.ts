@@ -39,8 +39,38 @@ describe("registeredClient", () => {
     let n = 0;
     const fetcher = (async () => new Response(JSON.stringify({ client_id: `c-${++n}` }))) as typeof fetch;
     await registeredClient("https://d", "https://d", fetcher, storage);
-    forgetClient("https://d", storage);
+    forgetClient("https://d", "https://d", storage);
     expect(await registeredClient("https://d", "https://d", fetcher, storage)).toBe("c-2");
+  });
+
+  it("keeps one client per origin against the same issuer", async () => {
+    const storage = memory();
+    const redirects: string[] = [];
+    let n = 0;
+    const fetcher = (async (_url: string, init?: RequestInit) => {
+      redirects.push(...(JSON.parse(String(init?.body)) as { redirect_uris: string[] }).redirect_uris);
+      return new Response(JSON.stringify({ client_id: `c-${++n}` }));
+    }) as typeof fetch;
+    const issuer = "https://docs.example.org";
+
+    expect(await registeredClient(issuer, "https://docs.example.org", fetcher, storage)).toBe("c-1");
+    expect(await registeredClient(issuer, "http://127.0.0.1:8080", fetcher, storage)).toBe("c-2");
+    expect(await registeredClient(issuer, "https://docs.example.org", fetcher, storage)).toBe("c-1");
+    expect(await registeredClient(issuer, "http://127.0.0.1:8080", fetcher, storage)).toBe("c-2");
+    expect(redirects).toEqual(["https://docs.example.org/", "http://127.0.0.1:8080/"]);
+
+    forgetClient(issuer, "http://127.0.0.1:8080", storage);
+    expect(await registeredClient(issuer, "https://docs.example.org", fetcher, storage)).toBe("c-1");
+    expect(await registeredClient(issuer, "http://127.0.0.1:8080", fetcher, storage)).toBe("c-3");
+  });
+
+  it("drops a client stored without its origin and registers anew", async () => {
+    const storage = memory();
+    storage.setItem("docsearch.client:https://d", "stale");
+    const fetcher = (async () => new Response(JSON.stringify({ client_id: "fresh" }))) as typeof fetch;
+
+    expect(await registeredClient("https://d", "http://127.0.0.1:8080", fetcher, storage)).toBe("fresh");
+    expect(storage.getItem("docsearch.client:https://d")).toBeNull();
   });
 
   it("reports a refused registration with the server's words", async () => {
