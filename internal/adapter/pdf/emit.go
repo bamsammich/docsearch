@@ -160,15 +160,21 @@ func (s *blockSink) enterAll(headings []placement) {
 func emitOutlinePage(sink *blockSink, lines []Line, pno int, pending []placement,
 	boiler boilerplate, tops []float64,
 ) ([]placement, int) {
-	next := 0
+	next, wrapped := 0, 0
 	for _, ln := range lines {
 		consumed := false
 		for len(pending) > 0 && pending[0].y <= ln.Y0 {
 			sink.enter(pending[0].section)
-			consumed = consumed || pending[0].matched
+			if pending[0].matched {
+				consumed, wrapped = true, pending[0].wrapped
+			}
 			pending = pending[1:]
 		}
 		if consumed || boiler.matches(ln.Text) {
+			continue
+		}
+		if wrapped > 0 {
+			wrapped--
 			continue
 		}
 		next = sink.buf.countImagesAbove(tops, next, ln.Y0)

@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -30,6 +31,9 @@ type headingScan struct {
 	headings     []bodyHeading
 	// rejected lists candidates refused by the ordering rule, "p12:1".
 	rejected []string
+	// lists are the pages, 1-based, whose numbered lines were read as a
+	// numbered list rather than as section headings.
+	lists []int
 }
 
 // findBodyHeadings locates numbered section headings in the body, after the
@@ -48,19 +52,70 @@ func findBodyHeadings(
 	tocPageMax int,
 ) headingScan {
 	s := headingScanner{
-		headingScan: headingScan{subdivisions: map[pagePoint]bool{}, rejected: []string{}},
-		sizes:       headingSizes,
-		boiler:      boiler,
+		headingScan: headingScan{
+			subdivisions: map[pagePoint]bool{}, rejected: []string{}, lists: []int{},
+		},
+		sizes:  headingSizes,
+		boiler: boiler,
 	}
 	for pno, p := range pages {
 		if pno <= tocPageMax {
 			continue
+		}
+		s.onList = s.numberedList(p.Lines)
+		if s.onList {
+			s.lists = append(s.lists, pno+1)
 		}
 		for i := 0; i < len(p.Lines); i++ {
 			i = s.line(pno, p.Lines, i)
 		}
 	}
 	return s.headingScan
+}
+
+// A numbered list set at a heading size reads, line by line, exactly like
+// section numbering: safety instructions "1." to "18." at a size above the
+// body become eighteen sections, the last of which annexes the rest of the
+// book. What gives a list away is its items, which are sentences where a
+// section's are titles. A page with at least minListItems numbered lines,
+// most of which read as sentences, is a list.
+const (
+	minListItems = 3
+	// maxTitleWords is the longest a numbered heading's title runs before
+	// it reads as running text.
+	maxTitleWords = 10
+)
+
+// sentenceEnd is the end of a sentence: a full stop, question or
+// exclamation mark, closing any quote or bracket, then the next sentence or
+// the end of the line.
+var sentenceEnd = regexp.MustCompile(`[.!?]["”’)]?(\s+\p{Lu}|\s*$)`)
+
+// readsAsSentence reports whether a numbered line's text after the number
+// is running text rather than a title.
+func readsAsSentence(title string) bool {
+	return sentenceEnd.MatchString(pystr.Strip(title)) ||
+		len(strings.Fields(title)) > maxTitleWords
+}
+
+// numberedList reports whether a page's numbered heading-size lines are a
+// numbered list.
+func (s *headingScanner) numberedList(lines []Line) bool {
+	numbered, sentences := 0, 0
+	for _, ln := range lines {
+		if !slices.Contains(s.sizes, ln.Size) || s.boiler.matches(ln.Text) {
+			continue
+		}
+		m := sectionLine.FindStringSubmatch(ln.Text)
+		if m == nil {
+			continue
+		}
+		numbered++
+		if readsAsSentence(m[2]) {
+			sentences++
+		}
+	}
+	return sentences >= minListItems && 2*sentences > numbered
 }
 
 // headingScanner reads a document's lines in order, remembering the last
@@ -70,6 +125,9 @@ type headingScanner struct {
 	boiler boilerplate
 	sizes  []float64
 	last   []int
+	// onList is whether the page being read is a numbered list, whose
+	// numbered lines are body text.
+	onList bool
 }
 
 // line considers lines[i] as a heading and returns the index of the last
@@ -82,6 +140,9 @@ func (s *headingScanner) line(pno int, lines []Line, i int) int {
 	m := sectionLine.FindStringSubmatch(ln.Text)
 	if m == nil {
 		s.subdivisions[pagePoint{page: pno, y: pystr.Round(ln.Y0, 1)}] = true
+		return i
+	}
+	if s.onList {
 		return i
 	}
 	key := sectionKey(m[1])

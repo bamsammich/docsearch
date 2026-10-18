@@ -154,6 +154,9 @@ type placement struct {
 	title   string
 	page    int
 	y       float64
+	// wrapped is how many lines after the matched one carry the rest of a
+	// title set over several lines. They are the heading, not text.
+	wrapped int
 	// matched is true when the title was found among the page's lines; an
 	// unmatched entry sits at the top of its page, y -1.
 	matched bool
