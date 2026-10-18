@@ -276,11 +276,14 @@ func (r *Repository) MarkReady(ctx context.Context, ready ingest.Ready) error {
 		if ready.JobID == nil {
 			return nil
 		}
-		return q.CompleteJob(ctx, pgdbgen.CompleteJobParams{
+		// A worker that lost its job publishes nothing: the rollback takes
+		// the swap with it, and the worker now holding the job finishes it.
+		return fenced(q.CompleteJob(ctx, pgdbgen.CompleteJobParams{
 			DocID:    nullString(published),
 			Warnings: warnings,
 			ID:       *ready.JobID,
-		})
+			Attempt:  pgsession.Narrow(ready.JobAttempt),
+		}))
 	})
 }
 

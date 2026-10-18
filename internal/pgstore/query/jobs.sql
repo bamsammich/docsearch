@@ -32,5 +32,13 @@ SELECT * FROM ingest_jobs
 -- name: JobStatus :one
 SELECT status FROM ingest_jobs WHERE id = $1;
 
+-- A queued job is cancelled on the spot, since no worker holds it to notice
+-- a request; a running one is asked, and its worker stops at the next
+-- checkpoint. A job already finished is left as it ended.
 -- name: RequestJobCancel :exec
-UPDATE ingest_jobs SET cancel_req = true, updated_at = now() WHERE id = $1;
+UPDATE ingest_jobs
+   SET status = CASE WHEN status = 'queued' THEN 'cancelled' ELSE status END,
+       error = CASE WHEN status = 'queued' THEN 'cancelled at operator request' ELSE error END,
+       cancel_req = (status = 'running'),
+       updated_at = now()
+ WHERE id = $1 AND status IN ('queued', 'running');

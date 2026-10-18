@@ -11,6 +11,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/pgtest"
 	"github.com/bamsammich/docsearch/internal/repository/postgres"
 	"github.com/bamsammich/docsearch/internal/schema"
+	"github.com/bamsammich/docsearch/internal/service/ingest"
 	"github.com/bamsammich/docsearch/internal/service/worker"
 )
 
@@ -141,15 +142,85 @@ func (s *JobsSuite) TestAJobAtItsAttemptCeilingIsNotClaimed() {
 	s.Nil(none)
 }
 
-func (s *JobsSuite) TestACancelledJobIsNotClaimed() {
+// A queued job no worker holds is cancelled on the spot, so it leaves the
+// queue rather than sitting in it forever and counting in every position.
+func (s *JobsSuite) TestACancelledQueuedJobLeavesTheQueue() {
 	id := s.queued("/library/guide.md")
 	status, err := s.jobs.RequestCancel(s.T().Context(), id)
 	s.Require().NoError(err)
-	s.Equal("cancelling", status)
+	s.Equal("cancelled", status)
 
 	claimed, err := s.jobs.Claim(s.T().Context(), lease, 3)
 	s.Require().NoError(err)
 	s.Nil(claimed)
+	active, err := s.jobs.List(s.T().Context(), false, 10)
+	s.Require().NoError(err)
+	s.Empty(active)
+	_, position, err := s.jobs.Add(s.T().Context(), "/library/next.md", "")
+	s.Require().NoError(err)
+	s.Equal(1, position)
+}
+
+// A job whose worker died on its last attempt is failed by the next claim,
+// rather than reading as running forever.
+func (s *JobsSuite) TestAJobStrandedOnItsLastAttemptIsFailed() {
+	s.queued("/library/guide.md")
+	for range 3 {
+		claimed, err := s.jobs.Claim(s.T().Context(), -time.Second, 3)
+		s.Require().NoError(err)
+		s.Require().NotNil(claimed)
+	}
+	none, err := s.jobs.Claim(s.T().Context(), lease, 3)
+	s.Require().NoError(err)
+	s.Nil(none)
+
+	all, err := s.jobs.List(s.T().Context(), true, 10)
+	s.Require().NoError(err)
+	s.Require().Len(all, 1)
+	s.Equal("failed", all[0].Status)
+}
+
+// A running job whose worker died with a cancel request waiting is
+// cancelled by the next claim.
+func (s *JobsSuite) TestADeadWorkersCancelledJobIsCancelled() {
+	id := s.queued("/library/guide.md")
+	_, err := s.jobs.Claim(s.T().Context(), -time.Second, 3)
+	s.Require().NoError(err)
+	_, err = s.jobs.RequestCancel(s.T().Context(), id)
+	s.Require().NoError(err)
+	_, err = s.jobs.Claim(s.T().Context(), lease, 3)
+	s.Require().NoError(err)
+
+	all, err := s.jobs.List(s.T().Context(), true, 10)
+	s.Require().NoError(err)
+	s.Equal("cancelled", all[0].Status)
+}
+
+// A worker whose lease lapsed and whose job was reclaimed changes nothing:
+// every write it makes reports the job lost, and the new owner's run
+// stands.
+func (s *JobsSuite) TestAStaleWorkerCannotTouchAReclaimedJob() {
+	ctx := s.T().Context()
+	id := s.queued("/library/guide.md")
+	stale := postgres.NewJobs(s.db.App, builtinID)
+	_, err := stale.Claim(ctx, -time.Second, 3)
+	s.Require().NoError(err)
+	owner := postgres.NewJobs(s.db.App, builtinID)
+	reclaimed, err := owner.Claim(ctx, time.Hour, 3)
+	s.Require().NoError(err)
+	s.Require().NotNil(reclaimed)
+
+	s.Require().
+		ErrorIs(stale.Finish(ctx, id, worker.Requeued, "timeout", false), ingest.ErrLostClaim)
+	s.Require().ErrorIs(stale.RenewLease(ctx, id, time.Hour), ingest.ErrLostClaim)
+	s.Require().
+		ErrorIs(stale.RecordProgress(ctx, id, "chunk", 1, 2, time.Hour), ingest.ErrLostClaim)
+	s.Require().ErrorIs(stale.Cancel(ctx, id), ingest.ErrLostClaim)
+
+	none, err := postgres.NewJobs(s.db.App, builtinID).Claim(ctx, time.Hour, 3)
+	s.Require().NoError(err)
+	s.Nil(none, "the job is still the new owner's, not back on the queue")
+	s.Require().NoError(owner.RenewLease(ctx, id, time.Hour))
 }
 
 func (s *JobsSuite) TestACancelRequestIsVisibleToTheWorkerRunningTheJob() {

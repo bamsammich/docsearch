@@ -185,9 +185,17 @@ func (q *Queries) RecentJobs(ctx context.Context, limit int32) ([]IngestJob, err
 }
 
 const requestJobCancel = `-- name: RequestJobCancel :exec
-UPDATE ingest_jobs SET cancel_req = true, updated_at = now() WHERE id = $1
+UPDATE ingest_jobs
+   SET status = CASE WHEN status = 'queued' THEN 'cancelled' ELSE status END,
+       error = CASE WHEN status = 'queued' THEN 'cancelled at operator request' ELSE error END,
+       cancel_req = (status = 'running'),
+       updated_at = now()
+ WHERE id = $1 AND status IN ('queued', 'running')
 `
 
+// A queued job is cancelled on the spot, since no worker holds it to notice
+// a request; a running one is asked, and its worker stops at the next
+// checkpoint. A job already finished is left as it ended.
 func (q *Queries) RequestJobCancel(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, requestJobCancel, id)
 	return err

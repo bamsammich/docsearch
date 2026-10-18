@@ -119,6 +119,36 @@ func (s *PlanSuite) TestOnlyThisSyncsVanishedDocumentsAreRetired() {
 		got[1])
 }
 
+// A document docsearch refused is not pushed again until Paperless changes
+// it: the same file would be refused the same way.
+func (s *PlanSuite) TestARefusedDocumentWaitsForAChange() {
+	refused := []job.Job{{Source: "upload:paperless-7", Status: "failed", Permanent: true,
+		UpdatedAt: tuesday.Format(time.RFC3339)}}
+	got := docsync.Plan([]paperless.Document{manual(7, monday)}, nil, refused, options())
+	s.Equal(docsync.Skip, got[0].Kind)
+	s.Equal("refused last time, and unchanged since", got[0].Reason)
+
+	changed := docsync.Plan(
+		[]paperless.Document{manual(7, tuesday.Add(time.Hour))},
+		nil,
+		refused,
+		options(),
+	)
+	s.Equal(docsync.Push, changed[0].Kind)
+}
+
+// Only a source's latest job counts: an old failure followed by a job now
+// running is a source being read.
+func (s *PlanSuite) TestOnlyTheLatestJobForASourceCounts() {
+	jobs := []job.Job{
+		{Source: "upload:paperless-7", Status: "running"},
+		{Source: "upload:paperless-7", Status: "failed", Permanent: true,
+			UpdatedAt: tuesday.Format(time.RFC3339)},
+	}
+	got := docsync.Plan([]paperless.Document{manual(7, monday)}, nil, jobs, options())
+	s.Equal("already being read", got[0].Reason)
+}
+
 // Retiring a document whose job is still queued would delete the upload the
 // job is about to read, so it waits for the next sync.
 func (s *PlanSuite) TestADocumentBeingReadIsNotRetired() {
@@ -149,7 +179,7 @@ func (s *RunSuite) syncer(opts docsync.Options) *docsync.Syncer {
 func (s *RunSuite) sees(shown []paperless.Document, have []document.Document) {
 	s.paperless.EXPECT().List(mock.Anything).Return(shown, nil)
 	s.library.EXPECT().List(mock.Anything).Return(have, nil)
-	s.library.EXPECT().Jobs(mock.Anything, false, 0).Return(nil, nil)
+	s.library.EXPECT().Jobs(mock.Anything, true, mock.Anything).Return(nil, nil)
 }
 
 func (s *RunSuite) TestRunPushesAndRetires() {

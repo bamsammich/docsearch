@@ -3,6 +3,11 @@
 -- Crash recovery rests on the lease. A claimed job carries lease_until, and
 -- the claim takes back any running job whose lease has expired, so a worker
 -- killed mid-job is recovered by the next one without intervention.
+--
+-- Every write a worker makes to its job is fenced by the attempt it claimed:
+-- it matches only while the job is still running under that attempt. A worker
+-- whose lease lapsed, and whose job another worker reclaimed, then changes
+-- nothing, and learns so from the rows affected.
 
 -- Claims one job.
 --
@@ -41,18 +46,38 @@ RETURNING *;
 
 -- Every progress write renews the lease: a job that is visibly advancing must
 -- never be reclaimed out from under the worker running it.
--- name: RecordJobProgress :exec
+-- name: RecordJobProgress :execrows
 UPDATE ingest_jobs
    SET phase = $1, progress_cur = $2, progress_tot = $3,
        lease_until = now() + make_interval(secs => sqlc.arg(lease_seconds)), updated_at = now()
- WHERE id = sqlc.arg(id);
+ WHERE id = sqlc.arg(id) AND attempts = sqlc.arg(attempt) AND status = 'running';
+
+-- The worker renews the lease on its own schedule as well, because a long
+-- extraction reports no progress until it is done.
+-- name: RenewJobLease :execrows
+UPDATE ingest_jobs
+   SET lease_until = now() + make_interval(secs => sqlc.arg(lease_seconds))
+ WHERE id = sqlc.arg(id) AND attempts = sqlc.arg(attempt) AND status = 'running';
 
 -- Recorded while the ingest runs, so a job that dies mid-write still says
 -- which document it was writing.
--- name: RecordJobDocID :exec
+-- name: RecordJobDocID :execrows
 UPDATE ingest_jobs
    SET doc_id = $1, updated_at = now()
- WHERE id = $2;
+ WHERE id = sqlc.arg(id) AND attempts = sqlc.arg(attempt) AND status = 'running';
+
+-- A job no worker will ever finish: its lease expired on its last attempt,
+-- or while a cancel request waited for a worker that had died. The claim
+-- passes both over, so without this they would read as running forever.
+-- name: SweepStrandedJobs :many
+UPDATE ingest_jobs
+   SET status = CASE WHEN cancel_req THEN 'cancelled' ELSE 'failed' END,
+       error = CASE WHEN cancel_req THEN 'cancelled at operator request'
+                    ELSE 'the worker running it stopped on its last attempt' END,
+       phase = NULL, lease_until = NULL, updated_at = now()
+ WHERE status = 'running' AND lease_until < now()
+   AND (cancel_req OR attempts >= sqlc.arg(max_attempts)::int)
+RETURNING id;
 
 -- name: JobCancelRequested :one
 SELECT cancel_req FROM ingest_jobs WHERE id = $1;
@@ -60,11 +85,11 @@ SELECT cancel_req FROM ingest_jobs WHERE id = $1;
 -- name: JobDocID :one
 SELECT doc_id FROM ingest_jobs WHERE id = $1;
 
--- name: CancelJob :exec
+-- name: CancelJob :execrows
 UPDATE ingest_jobs
    SET status = 'cancelled', phase = NULL, lease_until = NULL,
        error = 'cancelled at operator request', updated_at = now()
- WHERE id = $1;
+ WHERE id = sqlc.arg(id) AND attempts = sqlc.arg(attempt) AND status = 'running';
 
 -- attempts is left at its true value. A status of 'failed' is already
 -- unclaimable, since the claim considers only 'queued' and lease-expired
@@ -72,17 +97,17 @@ UPDATE ingest_jobs
 -- and would make a job that failed deterministically on its first attempt
 -- indistinguishable from one that genuinely exhausted three. The permanent
 -- flag carries that distinction instead.
--- name: FinishJob :exec
+-- name: FinishJob :execrows
 UPDATE ingest_jobs
    SET status = $1, phase = NULL, error = $2, permanent = $3,
        lease_until = NULL, updated_at = now()
- WHERE id = $4;
+ WHERE id = sqlc.arg(id) AND attempts = sqlc.arg(attempt) AND status = 'running';
 
 -- Completes a job whose ingest wrote nothing, which is what an unchanged
 -- source produces: the transaction that would have completed the job
 -- alongside the document never ran, because no document was written.
--- name: CompleteJobWithoutDocument :exec
+-- name: CompleteJobWithoutDocument :execrows
 UPDATE ingest_jobs
    SET status = 'done', phase = NULL, doc_id = $1, error = NULL,
        lease_until = NULL, updated_at = now()
- WHERE id = $2;
+ WHERE id = sqlc.arg(id) AND attempts = sqlc.arg(attempt) AND status = 'running';

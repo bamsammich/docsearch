@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/bamsammich/docsearch/internal/pgsession"
@@ -26,6 +27,44 @@ type Jobs struct {
 	// once, because a repository serves one request and a request belongs
 	// to one user.
 	userID string
+	// held is the job this handle last claimed and the attempt it claimed it
+	// as. Every write a worker makes to its job is fenced by that attempt,
+	// so a worker whose job was reclaimed changes nothing. A worker runs one
+	// job at a time, so one is all a handle holds.
+	held claim
+	mu   sync.Mutex
+}
+
+// statusQueued is a job waiting for a worker.
+const statusQueued = "queued"
+
+// claim is a job and the attempt it was claimed as.
+type claim struct {
+	id      int64
+	attempt int32
+}
+
+// attemptOf is the attempt this handle claimed job id as, or 0 for a job it
+// does not hold, which no fenced write will match.
+func (j *Jobs) attemptOf(id int64) int32 {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.held.id != id {
+		return 0
+	}
+	return j.held.attempt
+}
+
+// fenced turns a fenced write's rows affected into ErrLostClaim when it
+// matched nothing.
+func fenced(rows int64, err error) error {
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ingest.ErrLostClaim
+	}
+	return nil
 }
 
 // NewJobs reads and writes one user's queue through db.
@@ -44,6 +83,9 @@ func (j *Jobs) Claim(
 	lease time.Duration,
 	maxAttempts int,
 ) (*worker.Job, error) {
+	if err := j.sweep(ctx, maxAttempts); err != nil {
+		return nil, err
+	}
 	var row pgdbgen.IngestJob
 	err := j.inTx(ctx, func(q *pgdbgen.Queries) error {
 		var claimErr error
@@ -59,12 +101,37 @@ func (j *Jobs) Claim(
 	if err != nil {
 		return nil, fmt.Errorf("claim: %w", err)
 	}
+	j.mu.Lock()
+	j.held = claim{id: row.ID, attempt: row.Attempts}
+	j.mu.Unlock()
 	return &worker.Job{
 		Title:    row.Title.String,
 		Source:   row.SourcePath,
 		ID:       row.ID,
 		Attempts: int(row.Attempts),
 	}, nil
+}
+
+// sweep ends the jobs no worker will ever finish, removing what they half
+// wrote, so a crash on a job's last attempt does not leave it running
+// forever.
+func (j *Jobs) sweep(ctx context.Context, maxAttempts int) error {
+	err := j.inTx(ctx, func(q *pgdbgen.Queries) error {
+		stranded, err := q.SweepStrandedJobs(ctx, pgsession.Narrow(maxAttempts))
+		if err != nil {
+			return err
+		}
+		for _, id := range stranded {
+			if err := dropPartial(ctx, q, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("sweep stranded jobs: %w", err)
+	}
+	return nil
 }
 
 func (j *Jobs) RecordProgress(
@@ -75,13 +142,14 @@ func (j *Jobs) RecordProgress(
 	lease time.Duration,
 ) error {
 	err := j.inTx(ctx, func(q *pgdbgen.Queries) error {
-		return q.RecordJobProgress(ctx, pgdbgen.RecordJobProgressParams{
+		return fenced(q.RecordJobProgress(ctx, pgdbgen.RecordJobProgressParams{
 			Phase:        nullString(phase),
 			ProgressCur:  sql.NullInt32{Int32: pgsession.Narrow(cur), Valid: true},
 			ProgressTot:  sql.NullInt32{Int32: pgsession.Narrow(tot), Valid: true},
 			LeaseSeconds: lease.Seconds(),
 			ID:           id,
-		})
+			Attempt:      j.attemptOf(id),
+		}))
 	})
 	if err != nil {
 		return fmt.Errorf("write progress for job %d: %w", id, err)
@@ -89,12 +157,26 @@ func (j *Jobs) RecordProgress(
 	return nil
 }
 
+// RenewLease extends the lease on a job this handle holds.
+func (j *Jobs) RenewLease(ctx context.Context, id int64, lease time.Duration) error {
+	err := j.inTx(ctx, func(q *pgdbgen.Queries) error {
+		return fenced(q.RenewJobLease(ctx, pgdbgen.RenewJobLeaseParams{
+			LeaseSeconds: lease.Seconds(), ID: id, Attempt: j.attemptOf(id),
+		}))
+	})
+	if err != nil {
+		return fmt.Errorf("renew the lease on job %d: %w", id, err)
+	}
+	return nil
+}
+
 func (j *Jobs) RecordDocID(ctx context.Context, id int64, docID string) error {
 	err := j.inTx(ctx, func(q *pgdbgen.Queries) error {
-		return q.RecordJobDocID(ctx, pgdbgen.RecordJobDocIDParams{
-			DocID: nullString(docID),
-			ID:    id,
-		})
+		return fenced(q.RecordJobDocID(ctx, pgdbgen.RecordJobDocIDParams{
+			DocID:   nullString(docID),
+			ID:      id,
+			Attempt: j.attemptOf(id),
+		}))
 	})
 	if err != nil {
 		return fmt.Errorf("record the document of job %d: %w", id, err)
@@ -129,7 +211,7 @@ func (j *Jobs) Cancel(ctx context.Context, id int64) error {
 		if err := dropPartial(ctx, q, id); err != nil {
 			return err
 		}
-		return q.CancelJob(ctx, id)
+		return fenced(q.CancelJob(ctx, pgdbgen.CancelJobParams{ID: id, Attempt: j.attemptOf(id)}))
 	})
 }
 
@@ -142,7 +224,7 @@ func (j *Jobs) Finish(
 	reason string,
 	permanent bool,
 ) error {
-	status := "queued"
+	status := statusQueued
 	if outcome == worker.Failed {
 		status = "failed"
 	}
@@ -150,21 +232,23 @@ func (j *Jobs) Finish(
 		if err := dropPartial(ctx, q, id); err != nil {
 			return err
 		}
-		return q.FinishJob(ctx, pgdbgen.FinishJobParams{
+		return fenced(q.FinishJob(ctx, pgdbgen.FinishJobParams{
 			Status:    status,
 			Error:     nullString(reason),
 			Permanent: permanent,
 			ID:        id,
-		})
+			Attempt:   j.attemptOf(id),
+		}))
 	})
 }
 
 func (j *Jobs) CompleteWithoutDocument(ctx context.Context, id int64, docID string) error {
 	err := j.inTx(ctx, func(q *pgdbgen.Queries) error {
-		return q.CompleteJobWithoutDocument(ctx, pgdbgen.CompleteJobWithoutDocumentParams{
-			DocID: nullString(docID),
-			ID:    id,
-		})
+		return fenced(q.CompleteJobWithoutDocument(ctx, pgdbgen.CompleteJobWithoutDocumentParams{
+			DocID:   nullString(docID),
+			ID:      id,
+			Attempt: j.attemptOf(id),
+		}))
 	})
 	if err != nil {
 		return fmt.Errorf("complete job %d: %w", id, err)
@@ -291,13 +375,18 @@ func (j *Jobs) RequestCancel(ctx context.Context, id int64) (string, error) {
 	}
 	// A job that already finished is not cancelled. Marking one would leave
 	// a cancel request nothing ever reads.
-	if status != "queued" && status != "running" {
+	if status != statusQueued && status != "running" {
 		return status, nil
 	}
 	if err := j.inTx(ctx, func(q *pgdbgen.Queries) error {
 		return q.RequestJobCancel(ctx, id)
 	}); err != nil {
 		return "", fmt.Errorf("cancel job %d: %w", id, err)
+	}
+	// A queued job is cancelled on the spot; a running one is asked, and
+	// stops at its worker's next checkpoint.
+	if status == statusQueued {
+		return "cancelled", nil
 	}
 	return "cancelling", nil
 }

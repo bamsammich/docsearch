@@ -372,3 +372,50 @@ func TestAResolvedCandidateIsAcceptedUnderAnUnresolvedRoot(t *testing.T) {
 		t.Errorf("Resolve() = %q, want %q", got, resolved)
 	}
 }
+
+// A path a root would hold but that is not there right now, or whose root is
+// not mounted, is ErrMissing so a worker can retry it. It reads exactly as a
+// path outside every root, so a caller learns nothing about which files
+// exist.
+func TestAMissingPathInsideARootIsDistinguishedOnlyForTheWorker(t *testing.T) {
+	root := t.TempDir()
+	cases := map[string]struct {
+		candidate string
+		roots     []string
+		missing   bool
+	}{
+		"a missing file inside a root": {filepath.Join(root, "gone.pdf"), []string{root}, true},
+		"a root that is not mounted": {
+			filepath.Join(
+				root,
+				"unmounted",
+				"a.pdf",
+			),
+			[]string{filepath.Join(root, "unmounted")},
+			true,
+		},
+		"a path outside every root":   {"/etc/passwd", []string{root}, false},
+		"a traversal out of the root": {filepath.Join(root, "..", "x.pdf"), []string{root}, false},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := Resolve(c.roots, c.candidate)
+			assertRefusal(t, err, c.missing)
+		})
+	}
+}
+
+// assertRefusal checks a refusal is the uniform one, and whether it is the
+// kind a worker retries.
+func assertRefusal(t *testing.T, err error, missing bool) {
+	t.Helper()
+	if !errors.Is(err, ErrOutsideRoot) {
+		t.Fatalf("Resolve() error = %v, want ErrOutsideRoot", err)
+	}
+	if got := errors.Is(err, ErrMissing); got != missing {
+		t.Errorf("errors.Is(err, ErrMissing) = %v, want %v", got, missing)
+	}
+	if err.Error() != ErrOutsideRoot.Error() {
+		t.Errorf("message %q differs from the uniform refusal", err.Error())
+	}
+}

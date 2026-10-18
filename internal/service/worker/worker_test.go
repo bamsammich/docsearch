@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/bamsammich/docsearch/internal/libroot"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 	"github.com/bamsammich/docsearch/internal/service/worker"
 	"github.com/bamsammich/docsearch/internal/service/worker/mocks"
@@ -33,6 +34,9 @@ func (s *WorkerSuite) SetupTest() {
 	s.jobs = mocks.NewMockJobs(s.T())
 	s.ingester = mocks.NewMockIngester(s.T())
 	s.sources = mocks.NewMockSources(s.T())
+	// The watcher renews the lease every poll; a case about losing the job
+	// builds its own queue.
+	s.jobs.EXPECT().RenewLease(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 }
 
 // run works one job and returns.
@@ -188,6 +192,50 @@ func (s *WorkerSuite) TestAFinishedJobIsNotCancelledAfterTheFact() {
 
 	s.Require().NoError(s.run(worker.Options{}))
 	s.jobs.AssertNotCalled(s.T(), "Cancel", mock.Anything, mock.Anything)
+}
+
+// A worker whose job another worker took over stops, and writes nothing
+// more to the job: finishing, failing or cancelling it would overwrite the
+// worker that now owns it.
+func (s *WorkerSuite) TestAWorkerThatLostItsJobWritesNothingMore() {
+	s.jobs = mocks.NewMockJobs(s.T())
+	s.claims(&worker.Job{ID: 7, Source: "/library/guide.md", Attempts: 1})
+	s.buildsASource()
+	s.jobs.EXPECT().RenewLease(mock.Anything, int64(7), mock.Anything).Return(ingest.ErrLostClaim)
+	s.jobs.EXPECT().CancelRequested(mock.Anything, mock.Anything).Return(false, nil).Maybe()
+	s.ingester.EXPECT().Run(mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(ctx context.Context, _ ingest.Source, _ ingest.Options) (*ingest.Result, error) {
+			<-ctx.Done()
+			return nil, ingest.ErrCancelled
+		})
+
+	s.Require().NoError(s.run(worker.Options{}))
+	s.jobs.AssertNotCalled(s.T(), "Cancel", mock.Anything, mock.Anything)
+	s.jobs.AssertNotCalled(s.T(), "Finish", mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything)
+}
+
+// A file inside a root that is not there yet, such as on a volume that has
+// not mounted, is tried again; a path outside every root is not.
+func (s *WorkerSuite) TestAMissingFileIsRetriedAndAnOutsideOneIsNot() {
+	cases := map[string]struct {
+		cause     error
+		permanent bool
+	}{
+		"missing inside a root": {libroot.ErrMissing, false},
+		"outside every root":    {libroot.ErrOutsideRoot, true},
+	}
+	for name, c := range cases {
+		s.Run(name, func() {
+			s.SetupTest()
+			s.claims(&worker.Job{ID: 7, Source: "/library/guide.md", Attempts: 1})
+			s.sources.EXPECT().For(mock.Anything, mock.Anything).Return(nil, c.cause)
+			s.jobs.EXPECT().
+				Finish(mock.Anything, int64(7), mock.Anything, mock.Anything, c.permanent).
+				Return(nil)
+			s.Require().NoError(s.run(worker.Options{}))
+		})
+	}
 }
 
 func (s *WorkerSuite) TestARefusedStructureIsNotTriedAgain() {
