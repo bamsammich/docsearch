@@ -147,19 +147,14 @@ func (r *StructureReport) MeasureChunks(chunks []Chunk) {
 	r.Chunks = len(chunks)
 	paths := map[string]int{}
 	r.HeadlessChunks = 0
-	r.LargestSectionChunks = 0
-	r.LargestSectionPath = ""
 	for _, c := range chunks {
 		paths[c.HeadingPath]++
-		if paths[c.HeadingPath] > r.LargestSectionChunks {
-			r.LargestSectionChunks = paths[c.HeadingPath]
-			r.LargestSectionPath = c.HeadingPath
-		}
 		if pystr.Strip(c.HeadingPath) == "" {
 			r.HeadlessChunks++
 		}
 	}
 	r.DistinctHeadingPaths = len(paths)
+	r.LargestSectionPath, r.LargestSectionChunks = largestSection(chunks, paths)
 
 	stride := max(1, len(chunks)/uncalibratedSamples)
 	var sample []string
@@ -167,6 +162,21 @@ func (r *StructureReport) MeasureChunks(chunks []Chunk) {
 		sample = append(sample, chunks[i].Text)
 	}
 	r.UncalibratedScriptShare = round3(UncalibratedLetterShare(strings.Join(sample, "\n")))
+}
+
+// largestSection is the heading path holding the most chunks and its count,
+// the first in document order where two hold as many. Counted before it is
+// chosen: the first path to reach a count is not the first in the document
+// when a section's chunks are scattered.
+func largestSection(chunks []Chunk, perPath map[string]int) (string, int) {
+	var path string
+	most := 0
+	for _, c := range chunks {
+		if perPath[c.HeadingPath] > most {
+			path, most = c.HeadingPath, perPath[c.HeadingPath]
+		}
+	}
+	return path, most
 }
 
 // Validatable reports whether the source is a parsed declaration that can be
