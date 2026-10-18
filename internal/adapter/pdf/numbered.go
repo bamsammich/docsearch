@@ -23,7 +23,15 @@ func (n numbered) blocks(diagnostics map[string]any) ([]domain.Block, [][2]strin
 	scan := findBodyHeadings(n.pages, n.headingSizes, n.boiler, n.tocPageMax)
 	diagnostics["body_headings_found"] = len(scan.headings)
 	diagnostics["candidates_rejected_by_ordering"] = scan.rejected
+	if len(scan.lists) > 0 {
+		// Recorded only where a list was found, so a document without one
+		// reports exactly what it did before lists were looked for.
+		diagnostics["numbered_list_pages"] = scan.lists
+	}
 	diagnostics["cross_validation"] = crossValidation(n.titles, scan.headings)
+	if blocks, ok := n.titled(scan, diagnostics); ok {
+		return blocks, [][2]string{}
+	}
 
 	sectionTitles := maps.Clone(n.titles)
 	for _, h := range scan.headings {
@@ -52,6 +60,24 @@ func (n numbered) blocks(diagnostics map[string]any) ([]domain.Block, [][2]strin
 		hasIndex:      hasIndex,
 	})
 	return blocks, indexTerms
+}
+
+// titled emits blocks from the document's titles when it declares no
+// sections and numbers none: no printed contents, and no numbered heading
+// in the body. It reports false when there is numbering to follow, or no
+// title to follow instead.
+func (n numbered) titled(scan headingScan, diagnostics map[string]any) ([]domain.Block, bool) {
+	if len(n.entries) > 0 || len(scan.headings) > 0 {
+		return nil, false
+	}
+	placements, titles := titlePlacements(n.pages, n.headingSizes, n.boiler)
+	if len(placements) == 0 {
+		return nil, false
+	}
+	diagnostics["headings_from"] = "unnumbered_titles"
+	diagnostics["unnumbered_titles"] = len(placements)
+	diagnostics["printed_page_offset"] = 0
+	return emitOutlineBlocks(n.pages, placements, titles, n.boiler, n.figureTops, nil), true
 }
 
 // indexSection is the first declared section titled "Index".
