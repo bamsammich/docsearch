@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -42,6 +43,21 @@ func (s *DocxSuite) TestRejectsAFileThatIsNotAPackage() {
 	s.Error(err)
 }
 
+// A part that decompresses past the bound is refused rather than read into
+// memory: this one is a few hundred kilobytes on disk and 65 MB inflated.
+func (s *DocxSuite) TestRefusesAPartThatInflatesPastTheBound() {
+	body := `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+		`<w:body><w:p><w:r><w:t>` + strings.Repeat("a", 65<<20) + `</w:t></w:r></w:p></w:body></w:document>`
+	path := s.write(map[string]string{"_rels/.rels": mainRelationship, "word/document.xml": body})
+	_, err := docx.Extract(path)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "larger than 64 MB")
+}
+
+const mainRelationship = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+	`<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>` +
+	`</Relationships>`
+
 // minimalDocx writes a package holding one paragraph, with no styles or
 // core properties part and mainRels relationships to its main document.
 func (s *DocxSuite) minimalDocx(mainRels int) string {
@@ -57,6 +73,11 @@ func (s *DocxSuite) minimalDocx(mainRels int) string {
 			`<w:body><w:p><w:r><w:t>Only paragraph</w:t></w:r></w:p></w:body></w:document>`,
 	}
 
+	return s.write(parts)
+}
+
+// write packages parts into a .docx and returns its path.
+func (s *DocxSuite) write(parts map[string]string) string {
 	path := filepath.Join(s.T().TempDir(), "minimal.docx")
 	f, err := os.Create(path)
 	s.Require().NoError(err)

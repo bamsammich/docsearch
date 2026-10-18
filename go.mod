@@ -8,6 +8,7 @@ require (
 	github.com/alexedwards/argon2id v1.0.0
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/go-jose/go-jose/v4 v4.1.4
+	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/jimsmart/grobotstxt v1.0.3
 	github.com/klippa-app/go-pdfium v1.20.3

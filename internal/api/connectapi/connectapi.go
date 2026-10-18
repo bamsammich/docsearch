@@ -25,6 +25,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
+	"github.com/bamsammich/docsearch/internal/upload"
 )
 
 // Ingester runs one ingest. The port is declared here because this package
@@ -73,11 +74,8 @@ func (s *Server) Ingest(
 	stream *connect.ServerStream[ingestv1.IngestResponse],
 ) error {
 	msg := req.Msg
-	if msg.GetSource() == "" {
-		return connect.NewError(
-			connect.CodeInvalidArgument,
-			errors.New("source names the file or site to read, and was empty"),
-		)
+	if err := checkSource(msg.GetSource()); err != nil {
+		return err
 	}
 	user, err := owner.From(ctx)
 	if err != nil {
@@ -107,6 +105,28 @@ func (s *Server) Ingest(
 	return stream.Send(&ingestv1.IngestResponse{
 		Message: &ingestv1.IngestResponse_Result{Result: resultMessage(result)},
 	})
+}
+
+// errUploadQueued answers a synchronous ingest of an uploaded file. Reading
+// one means extracting a file anyone holding a link could have sent, which
+// belongs in the worker, sandboxed from the server that answers requests.
+// The upload door queued the file when it arrived, so there is nothing to do
+// here that the queue is not already doing.
+var errUploadQueued = errors.New("an uploaded file is read by the worker, which queued it " +
+	"when it arrived; run `docsearch enqueue` on it to read it again")
+
+// checkSource refuses a source this server does not read itself.
+func checkSource(source string) error {
+	if source == "" {
+		return connect.NewError(
+			connect.CodeInvalidArgument,
+			errors.New("source names the file or site to read, and was empty"),
+		)
+	}
+	if _, ok := upload.KeyOf(source); ok {
+		return connect.NewError(connect.CodeFailedPrecondition, errUploadQueued)
+	}
+	return nil
 }
 
 // sendProgress reports each phase to the caller, and calls hungUp once a

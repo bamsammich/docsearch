@@ -1,6 +1,8 @@
 package fetch_test
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"net/http"
@@ -80,6 +82,18 @@ func (s *FetchSuite) SetupTest() {
 	mux.HandleFunc("/private/secret.html", func(w http.ResponseWriter, _ *http.Request) {
 		s.requests.Add(1)
 		s.write(w, "secret")
+	})
+	// A small gzip body that expands to a megabyte.
+	var packed bytes.Buffer
+	zw := gzip.NewWriter(&packed)
+	_, err := zw.Write(bytes.Repeat([]byte("a"), 1<<20))
+	s.Require().NoError(err)
+	s.Require().NoError(zw.Close())
+	mux.HandleFunc("/bomb.html", func(w http.ResponseWriter, _ *http.Request) {
+		s.requests.Add(1)
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Content-Type", "text/html")
+		s.write(w, packed.String())
 	})
 	s.server = httptest.NewServer(mux)
 	s.T().Cleanup(s.server.Close)
@@ -190,6 +204,19 @@ func (s *FetchSuite) TestFetchesAndCachesAPage() {
 	s.Require().NoError(err)
 	s.True(again.FromCache)
 	s.Equal(before, s.requests.Load())
+}
+
+// A response past the limit is refused, measured after decompression, so a
+// small compressed body cannot expand into memory without bound.
+func (s *FetchSuite) TestABodyPastTheLimitIsRefused() {
+	f := s.fetcher(fetch.Options{MaxBodyBytes: 64 << 10})
+	_, err := f.Fetch(s.T().Context(), s.server.URL+"/bomb.html", true)
+	s.Require().ErrorIs(err, fetch.ErrFetch)
+	s.Contains(err.Error(), "larger than")
+
+	got, err := f.Fetch(s.T().Context(), s.server.URL+"/page.html", true)
+	s.Require().NoError(err, "a page under the limit is read")
+	s.Contains(string(got.Body), "a page")
 }
 
 func (s *FetchSuite) TestAnUnchangedPageTransfersNoBody() {

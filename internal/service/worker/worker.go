@@ -33,6 +33,11 @@ const (
 	// DefaultCancelPoll is the gap between asking whether the operator has
 	// cancelled the running job.
 	DefaultCancelPoll = 2 * time.Second
+	// DefaultJobTimeout is the longest one job may run. A crawl at its
+	// fetch limit takes under an hour; this is for an extraction that has
+	// wedged, which would otherwise hold the worker, and every account it
+	// serves, indefinitely.
+	DefaultJobTimeout = 4 * time.Hour
 	// progressInterval is the shortest gap between progress writes.
 	//
 	// Progress must be frequent enough that a long extraction is visibly
@@ -113,7 +118,9 @@ type Options struct {
 	Poll  time.Duration
 	// CancelPoll is how often a running job is asked whether the operator
 	// has cancelled it.
-	CancelPoll  time.Duration
+	CancelPoll time.Duration
+	// JobTimeout ends a job that runs longer, as a permanent failure.
+	JobTimeout  time.Duration
 	MaxAttempts int
 	// Once returns after one job, or after finding the queue empty. It is
 	// what a test and a one-shot container want.
@@ -137,6 +144,9 @@ func New(jobs Jobs, ingester Ingester, sources Sources, opts Options) *Service {
 	}
 	if opts.Poll == 0 {
 		opts.Poll = DefaultPoll
+	}
+	if opts.JobTimeout == 0 {
+		opts.JobTimeout = DefaultJobTimeout
 	}
 	if opts.CancelPoll == 0 {
 		opts.CancelPoll = DefaultCancelPoll
@@ -215,8 +225,10 @@ func (s *Service) execute(ctx context.Context, job *Job) error {
 	jobCtx, stop := context.WithCancel(context.WithoutCancel(ctx))
 	defer stop()
 	watcher := s.watchForCancel(jobCtx, job.ID, stop)
+	runCtx, expire := context.WithTimeoutCause(jobCtx, s.opts.JobTimeout, errTooLong)
+	defer expire()
 
-	result, err := s.ingester.Run(jobCtx, source, ingest.Options{
+	result, err := s.ingester.Run(runCtx, source, ingest.Options{
 		Title:      job.Title,
 		JobID:      &job.ID,
 		JobAttempt: job.Attempts,
@@ -236,12 +248,18 @@ func (s *Service) execute(ctx context.Context, job *Job) error {
 	case watched == lost || errors.Is(err, ingest.ErrLostClaim):
 		s.log.Warn("another worker took the job over; leaving it to them", "job", job.ID)
 		return nil
+	case errors.Is(context.Cause(runCtx), errTooLong):
+		return s.fail(jobCtx, job, fmt.Errorf("%w (%s)", errTooLong, s.opts.JobTimeout), true)
 	case watched == cancelled || errors.Is(err, ingest.ErrCancelled):
 		return s.cancelled(jobCtx, job)
 	default:
 		return s.fail(jobCtx, job, err, permanent(err))
 	}
 }
+
+// errTooLong is a job that ran past its timeout. Permanent, since what
+// wedged once would wedge again on the next attempt.
+var errTooLong = errors.New("the job ran past the longest a job may run")
 
 // watchResult is how a job's watch ended.
 type watchResult int
