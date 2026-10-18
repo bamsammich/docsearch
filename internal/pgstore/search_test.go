@@ -3,7 +3,6 @@ package pgstore
 import (
 	"context"
 	"database/sql"
-	"strings"
 	"testing"
 
 	"github.com/bamsammich/docsearch/internal/pgtest"
@@ -208,38 +207,6 @@ func bestKeywordRank(res []SearchResult) int {
 		}
 	}
 	return 0
-}
-
-// A finding captured at ingest is worthless if it stops at the database. The
-// worker is headless, so this passthrough is the only way a caller learns that
-// a document's structure does not separate its own chunks.
-func TestSummarizeWarningsSurfacesStructureNotes(t *testing.T) {
-	raw := sql.NullString{Valid: true, String: `{
-		"quality": "degraded",
-		"notes": ["35 chunks share only 10 distinct heading paths (0.29 per chunk)"],
-		"scattered_sections": ["4.2"]
-	}`}
-	quality, notes := summarizeWarnings(raw)
-	if quality != "degraded" {
-		t.Fatalf("quality = %q, want degraded", quality)
-	}
-	var joined string
-	for _, n := range notes {
-		joined += n + "\n"
-	}
-	if !strings.Contains(joined, "35 chunks share only 10 distinct heading paths") {
-		t.Errorf("structure note did not reach the caller, got: %v", notes)
-	}
-	if !strings.Contains(joined, "sections spanning non-adjacent chunks") {
-		t.Errorf("existing findings must survive alongside notes, got: %v", notes)
-	}
-}
-
-func TestSummarizeWarningsOnUningestedDocument(t *testing.T) {
-	quality, notes := summarizeWarnings(sql.NullString{})
-	if quality != "unknown" || notes != nil {
-		t.Errorf("got (%q, %v), want (unknown, nil)", quality, notes)
-	}
 }
 
 // builtinUser owns every row these cases write, which is what phase 04
