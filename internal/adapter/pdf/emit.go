@@ -162,14 +162,8 @@ func emitOutlinePage(sink *blockSink, lines []Line, pno int, pending []placement
 ) ([]placement, int) {
 	next, wrapped := 0, 0
 	for _, ln := range lines {
-		consumed := false
-		for len(pending) > 0 && pending[0].y <= ln.Y0 {
-			sink.enter(pending[0].section)
-			if pending[0].matched {
-				consumed, wrapped = true, pending[0].wrapped
-			}
-			pending = pending[1:]
-		}
+		var consumed bool
+		pending, consumed, wrapped = sink.enterAbove(pending, ln.Y0, wrapped)
 		if consumed || boiler.matches(ln.Text) {
 			continue
 		}
@@ -181,6 +175,26 @@ func emitOutlinePage(sink *blockSink, lines []Line, pno int, pending []placement
 		sink.buf.add(ln.Text, pno)
 	}
 	return pending, next
+}
+
+// enterAbove enters each pending heading placed at or above y. It returns the
+// headings still pending, whether one of those entered was matched against
+// the line at y, which is then the heading rather than text, and how many
+// lines after that one carry the rest of its title.
+func (s *blockSink) enterAbove(
+	pending []placement,
+	y float64,
+	wrapped int,
+) ([]placement, bool, int) {
+	consumed := false
+	for len(pending) > 0 && pending[0].y <= y {
+		s.enter(pending[0].section)
+		if pending[0].matched {
+			consumed, wrapped = true, pending[0].wrapped
+		}
+		pending = pending[1:]
+	}
+	return pending, consumed, wrapped
 }
 
 // numberedLayout is what emitNumberedBlocks reads: the body headings placed

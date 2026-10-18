@@ -103,19 +103,29 @@ func readsAsSentence(title string) bool {
 func (s *headingScanner) numberedList(lines []Line) bool {
 	numbered, sentences := 0, 0
 	for _, ln := range lines {
-		if !slices.Contains(s.sizes, ln.Size) || s.boiler.matches(ln.Text) {
-			continue
-		}
-		m := sectionLine.FindStringSubmatch(ln.Text)
-		if m == nil {
+		text, ok := s.numberedText(ln)
+		if !ok {
 			continue
 		}
 		numbered++
-		if readsAsSentence(m[2]) {
+		if readsAsSentence(text) {
 			sentences++
 		}
 	}
 	return sentences >= minListItems && 2*sentences > numbered
+}
+
+// numberedText is what follows the number of a heading-size line that
+// carries one.
+func (s *headingScanner) numberedText(ln Line) (string, bool) {
+	if !slices.Contains(s.sizes, ln.Size) || s.boiler.matches(ln.Text) {
+		return "", false
+	}
+	m := sectionLine.FindStringSubmatch(ln.Text)
+	if m == nil {
+		return "", false
+	}
+	return m[2], true
 }
 
 // headingScanner reads a document's lines in order, remembering the last

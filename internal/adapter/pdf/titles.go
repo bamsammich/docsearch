@@ -64,18 +64,7 @@ func titlePlacements(
 // titleSize is the heading size whose unnumbered lines head the most pages,
 // the larger on a tie.
 func titleSize(pages []Page, headingSizes []float64, boiler boilerplate) (float64, bool) {
-	pagesAt := map[float64]int{}
-	for _, p := range pages {
-		seen := map[float64]bool{}
-		for _, ln := range p.Lines {
-			if !slices.Contains(headingSizes, ln.Size) || seen[ln.Size] ||
-				boiler.matches(ln.Text) || sectionLine.MatchString(ln.Text) {
-				continue
-			}
-			seen[ln.Size] = true
-			pagesAt[ln.Size]++
-		}
-	}
+	pagesAt := pagesPerSize(pages, headingSizes, boiler)
 	best, found := 0.0, false
 	for size, count := range pagesAt {
 		if !found || count > pagesAt[best] || (count == pagesAt[best] && size > best) {
@@ -83,6 +72,30 @@ func titleSize(pages []Page, headingSizes []float64, boiler boilerplate) (float6
 		}
 	}
 	return best, found
+}
+
+// pagesPerSize counts, for each heading size, the pages holding an
+// unnumbered line at it.
+func pagesPerSize(pages []Page, headingSizes []float64, boiler boilerplate) map[float64]int {
+	pagesAt := map[float64]int{}
+	for _, p := range pages {
+		seen := map[float64]bool{}
+		for _, ln := range p.Lines {
+			if seen[ln.Size] || !unnumberedHeading(ln, headingSizes, boiler) {
+				continue
+			}
+			seen[ln.Size] = true
+			pagesAt[ln.Size]++
+		}
+	}
+	return pagesAt
+}
+
+// unnumberedHeading reports whether a line is at a heading size, carries no
+// section number, and is not page furniture.
+func unnumberedHeading(ln Line, headingSizes []float64, boiler boilerplate) bool {
+	return slices.Contains(headingSizes, ln.Size) && !boiler.matches(ln.Text) &&
+		!sectionLine.MatchString(ln.Text)
 }
 
 // joinTitle is the title starting at lines[i], with any lines that carry it
