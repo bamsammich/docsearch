@@ -345,15 +345,18 @@ func sectionsOf(chunks []ChunkFacts) sectionCounts {
 	var out sectionCounts
 	for _, c := range chunks {
 		perPath[c.HeadingPath]++
-		if perPath[c.HeadingPath] > out.largest {
-			out.largest = perPath[c.HeadingPath]
-			out.largestPath = c.HeadingPath
-		}
 		if pystr.Strip(c.HeadingPath) == "" {
 			out.headless++
 		}
 	}
 	out.distinct = len(perPath)
+	// Counted before it is chosen: the first path to reach a count is not
+	// the first in the document when a section's chunks are scattered.
+	for _, c := range chunks {
+		if perPath[c.HeadingPath] > out.largest {
+			out.largestPath, out.largest = c.HeadingPath, perPath[c.HeadingPath]
+		}
+	}
 	return out
 }
 

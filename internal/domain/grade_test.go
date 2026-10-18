@@ -184,6 +184,19 @@ func (s *GradeSuite) TestOneSectionHoldingMostOfAMarkupDocumentIsUnaddressable()
 	s.Contains(findings[0].Detail, "18 of 30 chunks (60%) share one heading path")
 }
 
+// Of two paths holding as many chunks, the finding names the first in
+// document order, even when that section's chunks are scattered.
+func (s *GradeSuite) TestTheUndividedPathIsTheFirstOfEqualsInDocumentOrder() {
+	facts := factsIn([]int{15, 15})
+	facts = append(facts[:1], append(facts[15:], facts[1:15]...)...)
+	findings := domain.Grade(facts, domain.SourceATXHeadings)
+	s.Require().Len(findings, 1)
+	s.Contains(
+		findings[0].Detail,
+		"15 of 30 chunks (50%) share one heading path, 'Paper > Section 1'",
+	)
+}
+
 func (s *GradeSuite) TestTheVerdictIsTheWorstFinding() {
 	s.Equal(domain.VerdictGood, domain.GradeVerdict(nil))
 	s.Equal(domain.VerdictDegraded, domain.GradeVerdict([]domain.Finding{

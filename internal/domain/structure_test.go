@@ -349,6 +349,20 @@ func (s *StructureSuite) TestTheLargestSectionIsTheFirstOfEquals() {
 	s.InDelta(3.0/7.0, report.LargestSectionShare(), 1e-9)
 }
 
+// A scattered section reaches its count after a later section reaches the
+// same count, and the first in document order is still the one named.
+func (s *StructureSuite) TestTheFirstOfEqualsIsByDocumentOrderWhenSectionsScatter() {
+	chunks := sectioned([]int{1, 2})
+	chunks = append(chunks, domain.Chunk{
+		HeadingPath: "Paper > Section 1",
+		Text:        "The pump draws water through the inlet filter.",
+		Ordinal:     len(chunks),
+	})
+	report := measured(domain.SourceATXHeadings, chunks)
+	s.Equal(2, report.LargestSectionChunks)
+	s.Equal("Paper > Section 1", report.LargestSectionPath)
+}
+
 // Chunk sizes for a document in an uncalibrated script are in an unknown
 // unit, though nothing looks wrong. Noted first, downgraded past a bound.
 func (s *StructureSuite) TestUncalibratedScripts() {
