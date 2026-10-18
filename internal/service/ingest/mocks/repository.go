@@ -245,8 +245,8 @@ func (_c *MockRepository_Confirm_Call) RunAndReturn(run func(ctx context.Context
 }
 
 // Create provides a mock function for the type MockRepository
-func (_mock *MockRepository) Create(ctx context.Context, doc ingest.Document, replacing string) error {
-	ret := _mock.Called(ctx, doc, replacing)
+func (_mock *MockRepository) Create(ctx context.Context, doc ingest.Document, stale string) error {
+	ret := _mock.Called(ctx, doc, stale)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Create")
@@ -254,7 +254,7 @@ func (_mock *MockRepository) Create(ctx context.Context, doc ingest.Document, re
 
 	var r0 error
 	if returnFunc, ok := ret.Get(0).(func(context.Context, ingest.Document, string) error); ok {
-		r0 = returnFunc(ctx, doc, replacing)
+		r0 = returnFunc(ctx, doc, stale)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -269,12 +269,12 @@ type MockRepository_Create_Call struct {
 // Create is a helper method to define mock.On call
 //   - ctx context.Context
 //   - doc ingest.Document
-//   - replacing string
-func (_e *MockRepository_Expecter) Create(ctx any, doc any, replacing any) *MockRepository_Create_Call {
-	return &MockRepository_Create_Call{Call: _e.mock.On("Create", ctx, doc, replacing)}
+//   - stale string
+func (_e *MockRepository_Expecter) Create(ctx any, doc any, stale any) *MockRepository_Create_Call {
+	return &MockRepository_Create_Call{Call: _e.mock.On("Create", ctx, doc, stale)}
 }
 
-func (_c *MockRepository_Create_Call) Run(run func(ctx context.Context, doc ingest.Document, replacing string)) *MockRepository_Create_Call {
+func (_c *MockRepository_Create_Call) Run(run func(ctx context.Context, doc ingest.Document, stale string)) *MockRepository_Create_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -302,7 +302,7 @@ func (_c *MockRepository_Create_Call) Return(err error) *MockRepository_Create_C
 	return _c
 }
 
-func (_c *MockRepository_Create_Call) RunAndReturn(run func(ctx context.Context, doc ingest.Document, replacing string) error) *MockRepository_Create_Call {
+func (_c *MockRepository_Create_Call) RunAndReturn(run func(ctx context.Context, doc ingest.Document, stale string) error) *MockRepository_Create_Call {
 	_c.Call.Return(run)
 	return _c
 }

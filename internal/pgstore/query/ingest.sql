@@ -117,3 +117,27 @@ DELETE FROM uploads
 
 -- name: ConfirmDocument :exec
 UPDATE documents SET ingested_at = $2 WHERE doc_id = $1;
+
+-- A replacement written under a staging identifier takes the old
+-- identifier when it is published. The document row is copied rather than
+-- renamed, because the chunks' foreign key names the row they belong to.
+-- name: CopyDocumentAs :exec
+INSERT INTO documents (
+  user_id, doc_id, title, format, source_path, source_kind, sha256,
+  page_count, chunk_count, status, ingested_at, warnings
+)
+SELECT user_id, sqlc.arg(to_id)::text, title, format, source_path, source_kind, sha256,
+       page_count, chunk_count, status, ingested_at, warnings
+  FROM documents WHERE doc_id = sqlc.arg(from_id)::text;
+
+-- name: MoveChunks :exec
+UPDATE chunks SET doc_id = sqlc.arg(to_id)::text WHERE doc_id = sqlc.arg(from_id)::text;
+
+-- name: MovePages :exec
+UPDATE pages SET doc_id = sqlc.arg(to_id)::text WHERE doc_id = sqlc.arg(from_id)::text;
+
+-- name: MoveIndexTerms :exec
+UPDATE index_terms SET doc_id = sqlc.arg(to_id)::text WHERE doc_id = sqlc.arg(from_id)::text;
+
+-- name: DeleteDocumentOnly :exec
+DELETE FROM documents WHERE doc_id = $1;

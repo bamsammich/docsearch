@@ -129,16 +129,42 @@ func (s *IngestSuite) TestARetitledSourceReplacesItsOwnRows() {
 	s.repo.EXPECT().ReadyWithDigest(mock.Anything, "def456").Return(nil, nil)
 	s.repo.EXPECT().DocIDForIdentity(mock.Anything, "/library/guide.md").
 		Return("operator-guide", nil)
-	s.repo.EXPECT().Create(mock.Anything, mock.Anything, "operator-guide").Return(nil)
-	s.repo.EXPECT().AddChunks(mock.Anything, "operator-guide", mock.Anything).Return(nil)
-	s.repo.EXPECT().AddPagesAndTerms(mock.Anything, "operator-guide", mock.Anything, mock.Anything).
+	// The replacement is written beside the old version, which stays
+	// searchable until the new one is published in its place.
+	staging := ingest.Staging("operator-guide")
+	s.repo.EXPECT().Create(mock.Anything, mock.MatchedBy(func(d ingest.Document) bool {
+		return d.DocID == staging
+	}), staging).Return(nil)
+	s.repo.EXPECT().AddChunks(mock.Anything, staging, mock.Anything).Return(nil)
+	s.repo.EXPECT().AddPagesAndTerms(mock.Anything, staging, mock.Anything, mock.Anything).
 		Return(nil)
-	s.repo.EXPECT().MarkReady(mock.Anything, mock.Anything).Return(nil)
+	s.repo.EXPECT().MarkReady(mock.Anything, mock.MatchedBy(func(r ingest.Ready) bool {
+		return r.DocID == staging && r.Replaces == "operator-guide"
+	})).Return(nil)
 
 	result, err := s.service().Run(s.T().Context(), s.source, ingest.Options{})
 	s.Require().NoError(err)
 	s.Equal(ingest.Replaced, result.Outcome)
 	s.Equal("operator-guide", result.DocID, "the identifier it already had")
+}
+
+// A replacement that fails part way removes only what it wrote: the version
+// it was replacing is never touched.
+func (s *IngestSuite) TestAFailedReplacementLeavesTheOldVersion() {
+	s.acquires("def456", "/library/guide.md")
+	s.extracts("Operator Handbook")
+	s.repo.EXPECT().ReadyWithDigest(mock.Anything, "def456").Return(nil, nil)
+	s.repo.EXPECT().DocIDForIdentity(mock.Anything, "/library/guide.md").
+		Return("operator-guide", nil)
+	staging := ingest.Staging("operator-guide")
+	s.repo.EXPECT().Create(mock.Anything, mock.Anything, staging).Return(nil)
+	s.repo.EXPECT().AddChunks(mock.Anything, staging, mock.Anything).
+		Return(errors.New("connection reset"))
+	s.repo.EXPECT().Delete(mock.Anything, staging).Return(nil)
+
+	_, err := s.service().Run(s.T().Context(), s.source, ingest.Options{})
+	s.Require().Error(err)
+	s.repo.AssertNotCalled(s.T(), "Delete", mock.Anything, "operator-guide")
 }
 
 func (s *IngestSuite) TestATakenIdentifierIsNumberedPast() {

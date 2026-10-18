@@ -316,10 +316,16 @@ func newServer(
 	log *slog.Logger,
 	shutdown fx.Shutdowner,
 ) *http.Server {
+	// Requests run on a context the server cancels itself at shutdown, once
+	// the drain has had its time. Shutdown alone never cancels a request, so
+	// a long ingest stream would otherwise outlive the grace period and be
+	// cut off mid-write when the process exits.
+	base, cancelRequests := context.WithCancel(context.Background())
 	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           httpx.LogRequests(log, mux),
 		ReadHeaderTimeout: 10 * time.Second,
+		BaseContext:       func(net.Listener) context.Context { return base },
 	}
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
@@ -334,9 +340,29 @@ func newServer(
 			go serveUntilStopped(srv, listener, log, shutdown)
 			return nil
 		},
-		OnStop: srv.Shutdown,
+		OnStop: func(ctx context.Context) error {
+			return drain(ctx, srv, cancelRequests)
+		},
 	})
 	return srv
+}
+
+// drainGrace is how long requests have to finish on their own at shutdown,
+// out of shutdownGrace, before the ones still running are cancelled.
+const drainGrace = shutdownGrace - 5*time.Second
+
+// drain lets requests finish, then cancels any still running and waits for
+// them to unwind. A cancelled ingest removes what it wrote, and a
+// replacement leaves the version it was replacing untouched.
+func drain(ctx context.Context, srv *http.Server, cancelRequests context.CancelFunc) error {
+	patient, cancel := context.WithTimeout(ctx, drainGrace)
+	defer cancel()
+	err := srv.Shutdown(patient)
+	cancelRequests()
+	if err == nil {
+		return nil
+	}
+	return srv.Shutdown(ctx)
 }
 
 // mountedPaths is every mounted path, sorted, for the startup log.

@@ -204,28 +204,33 @@ func (s *Service) execute(ctx context.Context, job *Job) error {
 		return s.fail(ctx, job, err, true)
 	}
 
-	// The ingest is cancelled from two directions: the worker shutting down,
-	// and the operator cancelling this job.
-	ctx, stop := context.WithCancel(ctx)
+	// Only the operator cancels a job. The worker shutting down waits for it
+	// instead, which is what its stop grace period is for: a job cut off by
+	// a deploy would otherwise be recorded as cancelled, or spend an attempt.
+	jobCtx, stop := context.WithCancel(context.WithoutCancel(ctx))
 	defer stop()
-	watcher := s.watchForCancel(ctx, job.ID, stop)
+	watcher := s.watchForCancel(jobCtx, job.ID, stop)
 
-	result, err := s.ingester.Run(ctx, source, ingest.Options{
+	result, err := s.ingester.Run(jobCtx, source, ingest.Options{
 		Title:    job.Title,
 		JobID:    &job.ID,
-		Progress: s.progress(ctx, job.ID),
-		OnDocID:  s.recordDocID(ctx, job.ID),
+		Progress: s.progress(jobCtx, job.ID),
+		OnDocID:  s.recordDocID(jobCtx, job.ID),
 	})
 	stop()
 	cancelledByOperator := <-watcher
 
+	// A finished ingest is finished, however late a cancel request arrived:
+	// its document is already published in the transaction that completed
+	// the job.
 	switch {
+	case err == nil:
+		return s.done(jobCtx, job, result)
 	case cancelledByOperator || errors.Is(err, ingest.ErrCancelled):
-		return s.cancelled(ctx, job)
-	case err != nil:
-		return s.fail(ctx, job, err, permanent(err))
+		return s.cancelled(jobCtx, job)
+	default:
+		return s.fail(jobCtx, job, err, permanent(err))
 	}
-	return s.done(ctx, job, result)
 }
 
 // watchForCancel polls the job row and stops the ingest when the operator
