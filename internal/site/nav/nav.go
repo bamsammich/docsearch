@@ -118,6 +118,13 @@ type candidate struct {
 	name       domain.StructureSource
 }
 
+// treeSource is one place the seed page may declare the site's tree, and the
+// name a structure read from it is recorded under.
+type treeSource struct {
+	nodes []*node
+	name  domain.StructureSource
+}
+
 // bestCandidate reads the declared sources the seed page offers and returns
 // whichever places most of the page set.
 func bestCandidate(
@@ -134,10 +141,7 @@ func bestCandidate(
 	if err != nil {
 		return best, fmt.Errorf("parse %s: %w", seed, err)
 	}
-	for _, source := range []struct {
-		nodes []*node
-		name  domain.StructureSource
-	}{
+	for _, source := range []treeSource{
 		{nodes: sidebarTree(doc, seed), name: domain.SourceSidebarDOM},
 		{nodes: indexPageTree(doc, seed), name: domain.SourceIndexPage},
 	} {

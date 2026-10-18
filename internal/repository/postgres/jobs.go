@@ -70,8 +70,7 @@ func fenced(rows int64, err error) error {
 // NewJobs reads and writes one user's queue through db.
 //
 // The user is bound here rather than passed per call, because a repository
-// serves one request and a request belongs to one user. Step 4f hands it
-// down from the service layer; until then it is the built-in user.
+// serves one request and a request belongs to one user.
 func NewJobs(db *sql.DB, userID string) *Jobs {
 	return &Jobs{db: db, q: pgdbgen.New(db), userID: userID}
 }
