@@ -526,3 +526,66 @@ func (_c *MockJobs_RecordProgress_Call) RunAndReturn(run func(ctx context.Contex
 	_c.Call.Return(run)
 	return _c
 }
+
+// RenewLease provides a mock function for the type MockJobs
+func (_mock *MockJobs) RenewLease(ctx context.Context, id int64, lease time.Duration) error {
+	ret := _mock.Called(ctx, id, lease)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RenewLease")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, time.Duration) error); ok {
+		r0 = returnFunc(ctx, id, lease)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockJobs_RenewLease_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RenewLease'
+type MockJobs_RenewLease_Call struct {
+	*mock.Call
+}
+
+// RenewLease is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id int64
+//   - lease time.Duration
+func (_e *MockJobs_Expecter) RenewLease(ctx any, id any, lease any) *MockJobs_RenewLease_Call {
+	return &MockJobs_RenewLease_Call{Call: _e.mock.On("RenewLease", ctx, id, lease)}
+}
+
+func (_c *MockJobs_RenewLease_Call) Run(run func(ctx context.Context, id int64, lease time.Duration)) *MockJobs_RenewLease_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		var arg2 time.Duration
+		if args[2] != nil {
+			arg2 = args[2].(time.Duration)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockJobs_RenewLease_Call) Return(err error) *MockJobs_RenewLease_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockJobs_RenewLease_Call) RunAndReturn(run func(ctx context.Context, id int64, lease time.Duration) error) *MockJobs_RenewLease_Call {
+	_c.Call.Return(run)
+	return _c
+}

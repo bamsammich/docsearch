@@ -23,6 +23,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/adapter"
 	"github.com/bamsammich/docsearch/internal/adapter/pdf"
 	"github.com/bamsammich/docsearch/internal/config"
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/repository/postgres"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 	"github.com/bamsammich/docsearch/internal/service/worker"
@@ -128,6 +129,7 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("open database: %w", err)
 	}
 	defer func() { _ = db.Close() }()
+	pgsession.Bound(db, pgsession.WorkerConnections)
 	if err := db.Ping(); err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}

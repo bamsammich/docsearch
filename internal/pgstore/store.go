@@ -66,9 +66,11 @@ func (s *Store) Close() error { return s.db.Close() }
 
 // The statuses and the grade a caller sees, written once.
 const (
-	statusQueued   = "queued"
-	statusRunning  = "running"
-	qualityUnknown = "unknown"
+	statusQueued  = "queued"
+	statusRunning = "running"
+	// statusCancelled is a job stopped before it finished.
+	statusCancelled = "cancelled"
+	qualityUnknown  = "unknown"
 )
 
 // timeFormat is how a timestamp reads when a tool prints one.

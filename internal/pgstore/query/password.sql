@@ -12,13 +12,21 @@ SELECT username, user_id, password_hash, failed_attempts, locked_until, created_
 -- name: PasswordAccountExists :one
 SELECT EXISTS (SELECT 1 FROM password_accounts WHERE user_id = $1)::boolean AS present;
 
--- A failure past the threshold locks the account until lock_until.
--- name: RecordFailedSignIn :exec
+-- An attempt is counted before its password is checked, in the statement that
+-- reads whether the account is locked, so guesses sent at once cannot all slip
+-- in under the threshold. A lock that has run out starts the count again, so
+-- a single wrong guess cannot hold an account locked indefinitely. No row is
+-- a locked account: the attempt is refused and counts for nothing.
+-- name: BeginSignIn :one
 UPDATE password_accounts
-   SET failed_attempts = failed_attempts + 1,
-       locked_until = CASE WHEN failed_attempts + 1 >= sqlc.arg(threshold)::int
-                           THEN sqlc.arg(lock_until)::timestamptz ELSE locked_until END
- WHERE username = sqlc.arg(username);
+   SET failed_attempts = CASE WHEN locked_until IS NULL THEN failed_attempts + 1 ELSE 1 END,
+       locked_until = CASE
+           WHEN (CASE WHEN locked_until IS NULL THEN failed_attempts + 1 ELSE 1 END)
+                >= sqlc.arg(threshold)::int
+           THEN sqlc.arg(lock_until)::timestamptz END
+ WHERE username = sqlc.arg(username)
+   AND (locked_until IS NULL OR locked_until <= sqlc.arg(now)::timestamptz)
+RETURNING failed_attempts;
 
 -- name: ClearFailedSignIns :exec
 UPDATE password_accounts SET failed_attempts = 0, locked_until = NULL WHERE username = $1;

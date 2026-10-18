@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/bamsammich/docsearch/internal/owner"
 )
@@ -64,7 +65,7 @@ func (d Doors) Link() http.Handler {
 		case http.MethodGet:
 			d.page(w, r, token)
 		case http.MethodPut, http.MethodPost:
-			received, err := d.spend(r, token)
+			received, err := d.spend(w, r, token)
 			d.answer(w, r, received, err)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -98,9 +99,25 @@ func (d Doors) Direct() http.Handler {
 	})
 }
 
-// spend reads the file before the link, so a file nobody can read refuses
-// without using up the link the person would need to try another.
-func (d Doors) spend(r *http.Request, token string) (Received, error) {
+// spend checks the link before reading anything, then reads the file before
+// spending the link. The first keeps a caller with no link from making the
+// server read a body at all; the second lets a person whose file nobody can
+// read keep the link to try another.
+func (d Doors) spend(w http.ResponseWriter, r *http.Request, token string) (Received, error) {
+	open, err := d.Links.Open(r.Context(), hashToken(token))
+	if err != nil {
+		return Received{}, err
+	}
+	if !open {
+		return Received{}, errLinkClosed
+	}
+	// A body is read in full before it is stored, so a slow sender must not
+	// be able to hold the request open indefinitely.
+	if err := http.NewResponseController(w).
+		SetReadDeadline(time.Now().Add(ReadTimeout)); err != nil &&
+		!errors.Is(err, http.ErrNotSupported) {
+		return Received{}, err
+	}
 	file, err := d.take(r, "")
 	if err != nil {
 		return Received{}, err
@@ -118,11 +135,18 @@ func (d Doors) redeem(ctx context.Context, token string) (string, error) {
 		return "", err
 	}
 	if !ok {
-		return "", refused(http.StatusNotFound,
-			"this upload link has expired or was already used; ask for a new one")
+		return "", errLinkClosed
 	}
 	return user, nil
 }
+
+// errLinkClosed is a link that has expired, was used, or was never issued.
+var errLinkClosed = refused(http.StatusNotFound,
+	"this upload link has expired or was already used; ask for a new one")
+
+// ReadTimeout bounds how long one upload may take to arrive: enough for the
+// largest allowed file over a slow connection, and no longer.
+const ReadTimeout = 10 * time.Minute
 
 // take reads one file and refuses one no adapter reads. An empty key takes
 // the content hash.

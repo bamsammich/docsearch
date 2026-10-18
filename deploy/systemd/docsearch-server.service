@@ -11,13 +11,15 @@ Type=simple
 Environment=DOCSEARCH_ROOT=%h/Documents/library
 Environment=DOCSEARCH_ADDR=127.0.0.1:8765
 Environment=DOCSEARCH_ALLOWED_ORIGINS=https://claude.ai
-# The token and the DSN live in a mode-0600 file, not in this unit, so
-# neither reaches `systemctl cat` or the process environment listing. Both
-# are credentials: the DSN carries the database password.
+# The token and the DSNs live in a mode-0600 file, not in this unit, so
+# none reaches `systemctl cat`. DOCSEARCH_DSN there is the request role's,
+# docsearch_app; the owner's goes in DOCSEARCH_OWNER_DSN, which only
+# `docsearch migrate` and `docsearch account` read. The server takes its DSN
+# from the environment rather than a flag, since an argument is visible to
+# every process on the host through ps.
 EnvironmentFile=%h/.config/docsearch/token.env
 
 ExecStart=%h/.local/bin/docsearch-server \
-  --dsn ${DOCSEARCH_DSN} \
   --root ${DOCSEARCH_ROOT} \
   --addr ${DOCSEARCH_ADDR} \
   --allowed-origins ${DOCSEARCH_ALLOWED_ORIGINS}

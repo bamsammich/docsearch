@@ -2,6 +2,8 @@ package password_test
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,7 +33,7 @@ func (s *PasswordSuite) SetupTest() {
 	accounts, err := password.New(s.store, func() time.Time { return now })
 	s.Require().NoError(err)
 	s.accounts = accounts
-	s.hash, err = argon2id.CreateHash(secret, argon2id.DefaultParams)
+	s.hash, err = argon2id.CreateHash(secret, password.Params())
 	s.Require().NoError(err)
 }
 
@@ -41,30 +43,88 @@ func (s *PasswordSuite) record(lockedUntil time.Time) password.Record {
 	}}
 }
 
+// attempt is the attempt the policy counts at now.
+var attempt = password.Attempt{
+	At: now, LockUntil: now.Add(password.LockDuration), Threshold: password.LockThreshold,
+}
+
 func (s *PasswordSuite) TestTheRightPasswordSignsInAndClearsFailures() {
 	s.store.EXPECT().Find(mock.Anything, "alice").Return(s.record(time.Time{}), true, nil)
+	s.store.EXPECT().Begin(mock.Anything, "alice", attempt).Return(true, nil)
 	s.store.EXPECT().Succeeded(mock.Anything, "alice").Return(nil)
 	user, err := s.accounts.Authenticate(s.T().Context(), "Alice", secret)
 	s.Require().NoError(err)
 	s.Equal("user-a", user)
 }
 
-func (s *PasswordSuite) TestAWrongPasswordCountsTowardsALock() {
+// The attempt is counted before the password is compared, so a wrong
+// password has nothing left to record.
+func (s *PasswordSuite) TestAWrongPasswordIsCountedBeforeItIsChecked() {
 	s.store.EXPECT().Find(mock.Anything, "alice").Return(s.record(time.Time{}), true, nil)
-	s.store.EXPECT().Failed(mock.Anything, "alice", password.LockThreshold,
-		now.Add(password.LockDuration)).Return(nil)
+	s.store.EXPECT().Begin(mock.Anything, "alice", attempt).Return(true, nil)
 	_, err := s.accounts.Authenticate(s.T().Context(), "alice", "not the password")
 	s.Require().ErrorIs(err, password.ErrSignInRefused)
+	s.store.AssertNotCalled(s.T(), "Succeeded", mock.Anything, mock.Anything)
 }
 
-// A locked account is refused before its password is even checked, so a
-// guess made during the lock tells an attacker nothing.
+// A locked account is refused whatever the password, and the refusal still
+// pays for a comparison, so its timing does not say the account is locked.
 func (s *PasswordSuite) TestALockedAccountRefusesEvenTheRightPassword() {
-	s.store.EXPECT().Find(mock.Anything, "alice").
-		Return(s.record(now.Add(time.Minute)), true, nil)
+	s.store.EXPECT().Find(mock.Anything, "alice").Return(s.record(time.Time{}), true, nil)
+	s.store.EXPECT().Begin(mock.Anything, "alice", attempt).Return(false, nil)
 	_, err := s.accounts.Authenticate(s.T().Context(), "alice", secret)
 	s.Require().ErrorIs(err, password.ErrSignInRefused)
 	s.store.AssertNotCalled(s.T(), "Succeeded", mock.Anything, mock.Anything)
+}
+
+// A hash made under earlier, costlier settings is replaced when its password
+// next signs in, so the cheaper costs reach existing accounts.
+func (s *PasswordSuite) TestAnOlderHashIsReplacedOnSignIn() {
+	older, err := argon2id.CreateHash(secret, argon2id.DefaultParams)
+	s.Require().NoError(err)
+	record := s.record(time.Time{})
+	record.Hash = older
+	s.store.EXPECT().Find(mock.Anything, "alice").Return(record, true, nil)
+	s.store.EXPECT().Begin(mock.Anything, "alice", attempt).Return(true, nil)
+	s.store.EXPECT().SetHash(mock.Anything, "alice", mock.Anything).
+		RunAndReturn(func(_ context.Context, _, hash string) error {
+			_, made, err := argon2id.CheckHash(secret, hash)
+			s.Require().NoError(err)
+			s.Equal(*password.Params(), *made)
+			return nil
+		})
+	user, err := s.accounts.Authenticate(s.T().Context(), "alice", secret)
+	s.Require().NoError(err)
+	s.Equal("user-a", user)
+}
+
+// Sign-ins past the bound wait rather than each holding a hash's memory, and
+// a caller that gives up while waiting is let go.
+func (s *PasswordSuite) TestSignInsBeyondTheBoundWait() {
+	release := make(chan struct{})
+	var arrived atomic.Int32
+	s.store.EXPECT().Find(mock.Anything, "alice").
+		RunAndReturn(func(context.Context, string) (password.Record, bool, error) {
+			arrived.Add(1)
+			<-release
+			return password.Record{}, false, nil
+		})
+	var held sync.WaitGroup
+	for range password.ConcurrentChecks {
+		held.Go(func() {
+			_, err := s.accounts.Authenticate(context.Background(), "alice", secret)
+			s.ErrorIs(err, password.ErrSignInRefused)
+		})
+	}
+	s.Eventually(func() bool { return arrived.Load() == password.ConcurrentChecks },
+		time.Second, time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(s.T().Context(), 20*time.Millisecond)
+	defer cancel()
+	_, err := s.accounts.Authenticate(ctx, "alice", secret)
+	s.Require().ErrorIs(err, context.DeadlineExceeded)
+	close(release)
+	held.Wait()
 }
 
 // An unknown username is refused the same way as a wrong password, so the

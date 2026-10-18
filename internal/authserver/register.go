@@ -143,12 +143,10 @@ func isLoopback(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// clientName is what the sign-in page shows, kept short and readable.
+// clientName is what the sign-in page shows, kept short and readable. An
+// app may give none.
 func clientName(name string) string {
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return "an unnamed app"
-	}
 	if utf8.RuneCountInString(name) > maxClientName {
 		return string([]rune(name)[:maxClientName])
 	}

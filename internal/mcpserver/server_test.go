@@ -50,8 +50,12 @@ func TestDescribeRootsSaysHowToRecover(t *testing.T) {
 // unreachable; it must still not claim a path would be accepted.
 func TestDescribeRootsWithNoneConfiguredPromisesNothing(t *testing.T) {
 	got := describeRoots(nil)
-	if !strings.Contains(got, "cannot accept any path") {
-		t.Errorf("description with no roots = %q, want it to say no path is acceptable", got)
+	if !strings.Contains(got, "takes no filesystem paths") ||
+		!strings.Contains(got, "upload_link") {
+		t.Errorf(
+			"description with no roots = %q, want it to refuse paths and name upload_link",
+			got,
+		)
 	}
 }
 

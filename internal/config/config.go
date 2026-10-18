@@ -29,6 +29,10 @@ type Config struct {
 	BearerToken     string
 	AllowedOrigins  []string
 	AllowPublicBind bool
+	// SharedPaths lets a deployment with accounts take paths. Every account
+	// reads the same roots, so a path ingest lets anyone signed in index
+	// any file under them; a deployment for several people opts into that.
+	SharedPaths     bool
 	RecentJobWindow int
 	// OIDC is read only in auth mode oidc.
 	OIDC OIDC
@@ -74,6 +78,12 @@ const (
 	EnvToken = "DOCSEARCH_TOKEN" //nolint:gosec // name of a variable, not a credential
 	// EnvDSN addresses the Postgres database the server and the worker read.
 	EnvDSN = "DOCSEARCH_DSN"
+	// EnvOwnerDSN is the database owner's DSN, which migrate and account
+	// read ahead of EnvDSN, so one environment file can hold both and the
+	// server is never handed the owner's credential by accident.
+	EnvOwnerDSN = "DOCSEARCH_OWNER_DSN"
+	// EnvSharedPaths lets a deployment with accounts take paths.
+	EnvSharedPaths = "DOCSEARCH_SHARED_PATHS"
 	// EnvDB is the SQLite file the migrate command still takes, which step
 	// 4g of docs/plans/postgres-multiuser.md removes along with the dialect.
 	EnvDB   = "DOCSEARCH_DB"
@@ -124,6 +134,21 @@ var ErrPublicBind = errors.New(
 		"includes a filesystem path parameter and this service must not be reachable " +
 		"from outside a trusted network")
 
+// ErrSharedPaths is a deployment with accounts configured with library
+// roots it has not said every account may read.
+var ErrSharedPaths = errors.New(
+	"refusing library roots with accounts: every account would read the same " +
+		"directories, so anyone signed in could index any file under them. Remove --root, " +
+		"or set --shared-paths to say every account may")
+
+// MinTokenLength is the shortest bearer token accepted. The token is the
+// whole of mode token's security, and 32 characters of base64 is 192 bits.
+const MinTokenLength = 32
+
+// placeholders are the shapes an example token ships with, which a real
+// deployment must replace.
+var placeholders = []string{"change-me", "changeme", "replace-me", "example"}
+
 // ErrOpenToTheNetwork is returned for auth mode none on an address that is
 // not loopback.
 //
@@ -140,8 +165,10 @@ func (c *Config) Validate() error {
 	if c.Auth == 0 {
 		c.Auth = owner.Token
 	}
-	if c.Auth == owner.Token && c.BearerToken == "" {
-		return fmt.Errorf("no bearer token: set %s", EnvToken)
+	if c.Auth == owner.Token {
+		if err := checkToken(c.BearerToken); err != nil {
+			return err
+		}
 	}
 	if c.Auth == owner.OIDC {
 		if err := c.OIDC.validate(); err != nil {
@@ -157,8 +184,8 @@ func (c *Config) Validate() error {
 	if c.DSN == "" {
 		return errors.New("no database: set --dsn or " + EnvDSN)
 	}
-	if len(c.LibraryRoots) == 0 {
-		return errors.New("no library root: set --root or " + EnvRoot)
+	if err := c.checkRoots(); err != nil {
+		return err
 	}
 
 	// Each root is resolved once, at startup, through symlinks. Every later
@@ -242,6 +269,44 @@ func (c Config) BrowserOrigins() []string {
 		add("http://localhost:" + port)
 	}
 	return origins
+}
+
+// checkToken refuses a bearer token that is missing, short, or a placeholder.
+func checkToken(token string) error {
+	if token == "" {
+		return fmt.Errorf("no bearer token: set %s", EnvToken)
+	}
+	lowered := strings.ToLower(token)
+	for _, placeholder := range placeholders {
+		if strings.Contains(lowered, placeholder) {
+			return fmt.Errorf("%s is still the example's placeholder; generate one with "+
+				"`openssl rand -base64 48`", EnvToken)
+		}
+	}
+	if len(token) < MinTokenLength {
+		return fmt.Errorf("%s is %d characters; use at least %d, such as "+
+			"`openssl rand -base64 48`", EnvToken, len(token), MinTokenLength)
+	}
+	return nil
+}
+
+// checkRoots decides whether this deployment takes paths at all. One user's
+// deployment must name a root, since paths are what it is for. One with
+// accounts takes none unless the operator says every account may share them.
+func (c *Config) checkRoots() error {
+	if c.Auth != owner.OIDC && c.Auth != owner.Password {
+		if len(c.LibraryRoots) == 0 {
+			return errors.New("no library root: set --root or " + EnvRoot)
+		}
+		return nil
+	}
+	if len(c.LibraryRoots) > 0 && !c.SharedPaths {
+		return ErrSharedPaths
+	}
+	if c.SharedPaths && len(c.LibraryRoots) == 0 {
+		return errors.New("--shared-paths names no directory: set --root as well")
+	}
+	return nil
 }
 
 // resolvePublicURL settles where a browser reaches the server when nobody

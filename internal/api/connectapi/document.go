@@ -16,6 +16,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/api/docsearch/document/v1/documentv1connect"
 	typev1 "github.com/bamsammich/docsearch/internal/api/docsearch/type/v1"
 	"github.com/bamsammich/docsearch/internal/domain"
+	"github.com/bamsammich/docsearch/internal/libroot"
 	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/service/document"
 )
@@ -215,12 +216,17 @@ func (s *DocumentServer) Read(
 }
 
 // asConnectError says what the caller should do about a failure. A document
-// the index does not hold is the caller's mistake, not the server's.
+// the index does not hold, or a path outside the roots, is the caller's
+// mistake, not the server's.
 func (s *DocumentServer) asConnectError(err error) error {
-	if s.notFound != nil && errors.Is(err, s.notFound) {
+	switch {
+	case s.notFound != nil && errors.Is(err, s.notFound):
 		return connect.NewError(connect.CodeNotFound, err)
+	case errors.Is(err, libroot.ErrOutsideRoot):
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	default:
+		return connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewError(connect.CodeInternal, err)
 }
 
 // documentMessage is one document as a caller sees it.

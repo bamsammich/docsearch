@@ -10,16 +10,24 @@ import (
 	"database/sql"
 )
 
-const cancelJob = `-- name: CancelJob :exec
+const cancelJob = `-- name: CancelJob :execrows
 UPDATE ingest_jobs
    SET status = 'cancelled', phase = NULL, lease_until = NULL,
        error = 'cancelled at operator request', updated_at = now()
- WHERE id = $1
+ WHERE id = $1 AND attempts = $2 AND status = 'running'
 `
 
-func (q *Queries) CancelJob(ctx context.Context, id int64) error {
-	_, err := q.db.ExecContext(ctx, cancelJob, id)
-	return err
+type CancelJobParams struct {
+	ID      int64
+	Attempt int32
+}
+
+func (q *Queries) CancelJob(ctx context.Context, arg CancelJobParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, cancelJob, arg.ID, arg.Attempt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const claimJob = `-- name: ClaimJob :one
@@ -55,6 +63,11 @@ type ClaimJobParams struct {
 // Crash recovery rests on the lease. A claimed job carries lease_until, and
 // the claim takes back any running job whose lease has expired, so a worker
 // killed mid-job is recovered by the next one without intervention.
+//
+// Every write a worker makes to its job is fenced by the attempt it claimed:
+// it matches only while the job is still running under that attempt. A worker
+// whose lease lapsed, and whose job another worker reclaimed, then changes
+// nothing, and learns so from the rows affected.
 // Claims one job.
 //
 // The deadline is computed by the database rather than the worker, so every
@@ -94,31 +107,35 @@ func (q *Queries) ClaimJob(ctx context.Context, arg ClaimJobParams) (IngestJob, 
 	return i, err
 }
 
-const completeJobWithoutDocument = `-- name: CompleteJobWithoutDocument :exec
+const completeJobWithoutDocument = `-- name: CompleteJobWithoutDocument :execrows
 UPDATE ingest_jobs
    SET status = 'done', phase = NULL, doc_id = $1, error = NULL,
        lease_until = NULL, updated_at = now()
- WHERE id = $2
+ WHERE id = $2 AND attempts = $3 AND status = 'running'
 `
 
 type CompleteJobWithoutDocumentParams struct {
-	DocID sql.NullString
-	ID    int64
+	DocID   sql.NullString
+	ID      int64
+	Attempt int32
 }
 
 // Completes a job whose ingest wrote nothing, which is what an unchanged
 // source produces: the transaction that would have completed the job
 // alongside the document never ran, because no document was written.
-func (q *Queries) CompleteJobWithoutDocument(ctx context.Context, arg CompleteJobWithoutDocumentParams) error {
-	_, err := q.db.ExecContext(ctx, completeJobWithoutDocument, arg.DocID, arg.ID)
-	return err
+func (q *Queries) CompleteJobWithoutDocument(ctx context.Context, arg CompleteJobWithoutDocumentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, completeJobWithoutDocument, arg.DocID, arg.ID, arg.Attempt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
-const finishJob = `-- name: FinishJob :exec
+const finishJob = `-- name: FinishJob :execrows
 UPDATE ingest_jobs
    SET status = $1, phase = NULL, error = $2, permanent = $3,
        lease_until = NULL, updated_at = now()
- WHERE id = $4
+ WHERE id = $4 AND attempts = $5 AND status = 'running'
 `
 
 type FinishJobParams struct {
@@ -126,6 +143,7 @@ type FinishJobParams struct {
 	Error     sql.NullString
 	Permanent bool
 	ID        int64
+	Attempt   int32
 }
 
 // attempts is left at its true value. A status of 'failed' is already
@@ -134,14 +152,18 @@ type FinishJobParams struct {
 // and would make a job that failed deterministically on its first attempt
 // indistinguishable from one that genuinely exhausted three. The permanent
 // flag carries that distinction instead.
-func (q *Queries) FinishJob(ctx context.Context, arg FinishJobParams) error {
-	_, err := q.db.ExecContext(ctx, finishJob,
+func (q *Queries) FinishJob(ctx context.Context, arg FinishJobParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, finishJob,
 		arg.Status,
 		arg.Error,
 		arg.Permanent,
 		arg.ID,
+		arg.Attempt,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const jobCancelRequested = `-- name: JobCancelRequested :one
@@ -166,29 +188,33 @@ func (q *Queries) JobDocID(ctx context.Context, id int64) (sql.NullString, error
 	return doc_id, err
 }
 
-const recordJobDocID = `-- name: RecordJobDocID :exec
+const recordJobDocID = `-- name: RecordJobDocID :execrows
 UPDATE ingest_jobs
    SET doc_id = $1, updated_at = now()
- WHERE id = $2
+ WHERE id = $2 AND attempts = $3 AND status = 'running'
 `
 
 type RecordJobDocIDParams struct {
-	DocID sql.NullString
-	ID    int64
+	DocID   sql.NullString
+	ID      int64
+	Attempt int32
 }
 
 // Recorded while the ingest runs, so a job that dies mid-write still says
 // which document it was writing.
-func (q *Queries) RecordJobDocID(ctx context.Context, arg RecordJobDocIDParams) error {
-	_, err := q.db.ExecContext(ctx, recordJobDocID, arg.DocID, arg.ID)
-	return err
+func (q *Queries) RecordJobDocID(ctx context.Context, arg RecordJobDocIDParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, recordJobDocID, arg.DocID, arg.ID, arg.Attempt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
-const recordJobProgress = `-- name: RecordJobProgress :exec
+const recordJobProgress = `-- name: RecordJobProgress :execrows
 UPDATE ingest_jobs
    SET phase = $1, progress_cur = $2, progress_tot = $3,
        lease_until = now() + make_interval(secs => $4), updated_at = now()
- WHERE id = $5
+ WHERE id = $5 AND attempts = $6 AND status = 'running'
 `
 
 type RecordJobProgressParams struct {
@@ -197,17 +223,81 @@ type RecordJobProgressParams struct {
 	ProgressTot  sql.NullInt32
 	LeaseSeconds float64
 	ID           int64
+	Attempt      int32
 }
 
 // Every progress write renews the lease: a job that is visibly advancing must
 // never be reclaimed out from under the worker running it.
-func (q *Queries) RecordJobProgress(ctx context.Context, arg RecordJobProgressParams) error {
-	_, err := q.db.ExecContext(ctx, recordJobProgress,
+func (q *Queries) RecordJobProgress(ctx context.Context, arg RecordJobProgressParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, recordJobProgress,
 		arg.Phase,
 		arg.ProgressCur,
 		arg.ProgressTot,
 		arg.LeaseSeconds,
 		arg.ID,
+		arg.Attempt,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const renewJobLease = `-- name: RenewJobLease :execrows
+UPDATE ingest_jobs
+   SET lease_until = now() + make_interval(secs => $1)
+ WHERE id = $2 AND attempts = $3 AND status = 'running'
+`
+
+type RenewJobLeaseParams struct {
+	LeaseSeconds float64
+	ID           int64
+	Attempt      int32
+}
+
+// The worker renews the lease on its own schedule as well, because a long
+// extraction reports no progress until it is done.
+func (q *Queries) RenewJobLease(ctx context.Context, arg RenewJobLeaseParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, renewJobLease, arg.LeaseSeconds, arg.ID, arg.Attempt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const sweepStrandedJobs = `-- name: SweepStrandedJobs :many
+UPDATE ingest_jobs
+   SET status = CASE WHEN cancel_req THEN 'cancelled' ELSE 'failed' END,
+       error = CASE WHEN cancel_req THEN 'cancelled at operator request'
+                    ELSE 'the worker running it stopped on its last attempt' END,
+       phase = NULL, lease_until = NULL, updated_at = now()
+ WHERE status = 'running' AND lease_until < now()
+   AND (cancel_req OR attempts >= $1::int)
+RETURNING id
+`
+
+// A job no worker will ever finish: its lease expired on its last attempt,
+// or while a cancel request waited for a worker that had died. The claim
+// passes both over, so without this they would read as running forever.
+func (q *Queries) SweepStrandedJobs(ctx context.Context, maxAttempts int32) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, sweepStrandedJobs, maxAttempts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

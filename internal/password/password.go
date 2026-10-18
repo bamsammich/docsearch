@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/alexedwards/argon2id"
+	"golang.org/x/sync/semaphore"
 )
 
 // The lockout policy: this many failures in a row lock an account for this
@@ -50,9 +51,21 @@ var (
 
 var usernamePattern = regexp.MustCompile(`^[a-z0-9._-]{1,64}$`)
 
-// params are the argon2id costs: the library's defaults, which follow RFC
-// 9106's second recommendation for memory-constrained machines.
-var params = argon2id.DefaultParams
+// params are the argon2id costs OWASP recommends for a server: 19 MiB, two
+// passes, one lane. A hash records the costs it was made with, so one made
+// under earlier costs still verifies, and is replaced on its next sign-in.
+var params = &argon2id.Params{
+	Memory:      19 * 1024,
+	Iterations:  2,
+	Parallelism: 1,
+	SaltLength:  16,
+	KeyLength:   32,
+}
+
+// concurrentChecks is how many passwords are hashed at once. Each check holds
+// its hash's memory until it finishes, so without a bound a burst of sign-ins
+// is a burst of allocations; past it, a sign-in waits its turn.
+const concurrentChecks = 4
 
 // Account is one password account, as an operator lists it.
 type Account struct {
@@ -75,7 +88,10 @@ type Store interface {
 	// gives it the library from before accounts instead of a new one.
 	Add(ctx context.Context, username, userID, hash string, builtin bool) error
 	Find(ctx context.Context, username string) (Record, bool, error)
-	Failed(ctx context.Context, username string, threshold int, lockUntil time.Time) error
+	// Begin counts an attempt as a failure before its password is checked,
+	// reporting false for an account that is locked. Counting first is what
+	// stops guesses sent at once from all landing under the threshold.
+	Begin(ctx context.Context, username string, attempt Attempt) (bool, error)
 	Succeeded(ctx context.Context, username string) error
 	SetHash(ctx context.Context, username, hash string) error
 	// Remove ends the account's sign-ins. Its library stays, since what
@@ -87,12 +103,24 @@ type Store interface {
 	Exists(ctx context.Context, userID string) (bool, error)
 }
 
+// Attempt is one sign-in as the lockout policy counts it.
+type Attempt struct {
+	// At is when the attempt was made; a lock ending before it has expired.
+	At time.Time
+	// LockUntil is when the lock this attempt would set ends.
+	LockUntil time.Time
+	// Threshold is the count at which the account locks.
+	Threshold int
+}
+
 // Accounts applies the sign-in policy over a store.
 type Accounts struct {
-	store Store
-	now   func() time.Time
-	// decoy is checked when a username does not exist, so a refusal takes
-	// as long whether or not the name is real.
+	store  Store
+	now    func() time.Time
+	checks *semaphore.Weighted
+	// decoy is checked when a sign-in is refused without its password being
+	// compared, so a refusal takes as long whether or not the name is real
+	// and whether or not the account is locked.
 	decoy string
 }
 
@@ -102,7 +130,12 @@ func New(store Store, now func() time.Time) (*Accounts, error) {
 	if err != nil {
 		return nil, fmt.Errorf("prepare sign-in: %w", err)
 	}
-	return &Accounts{store: store, now: now, decoy: decoy}, nil
+	return &Accounts{
+		store:  store,
+		now:    now,
+		checks: semaphore.NewWeighted(concurrentChecks),
+		decoy:  decoy,
+	}, nil
 }
 
 // Add creates an account. builtin makes it the owner of the library from
@@ -133,46 +166,72 @@ func (a *Accounts) SetPassword(ctx context.Context, username, secret string) err
 
 // Authenticate is the user a username and password sign in as.
 func (a *Accounts) Authenticate(ctx context.Context, username, secret string) (string, error) {
+	if err := a.checks.Acquire(ctx, 1); err != nil {
+		return "", fmt.Errorf("wait to check password: %w", err)
+	}
+	defer a.checks.Release(1)
+
 	record, found, err := a.store.Find(ctx, strings.ToLower(username))
 	if err != nil {
 		return "", err
 	}
 	if !found {
-		return "", a.refuseUnknown(secret)
+		return "", a.refuse(secret)
 	}
-	if a.now().Before(record.LockedUntil) {
-		return "", ErrSignInRefused
+	at := a.now()
+	open, err := a.store.Begin(ctx, record.Username, Attempt{
+		At: at, LockUntil: at.Add(LockDuration), Threshold: LockThreshold,
+	})
+	if err != nil {
+		return "", err
+	}
+	if !open {
+		return "", a.refuse(secret)
 	}
 	return a.check(ctx, record, secret)
 }
 
-// refuseUnknown refuses a username that does not exist. The comparison is
-// the expensive part, so a missing name runs it too and the refusal takes the
-// same time.
-func (a *Accounts) refuseUnknown(secret string) error {
+// refuse refuses a sign-in without checking its password. The comparison is
+// the expensive part, so the refusal runs one anyway and takes the same time.
+func (a *Accounts) refuse(secret string) error {
 	if _, err := argon2id.ComparePasswordAndHash(secret, a.decoy); err != nil {
 		return fmt.Errorf("check password: %w", err)
 	}
 	return ErrSignInRefused
 }
 
-// check compares the password, counting a failure towards the lock.
+// check compares the password. The attempt is already counted, so a match is
+// what clears the count, and a mismatch has nothing more to record.
 func (a *Accounts) check(ctx context.Context, record Record, secret string) (string, error) {
-	match, err := argon2id.ComparePasswordAndHash(secret, record.Hash)
+	match, made, err := argon2id.CheckHash(secret, record.Hash)
 	if err != nil {
 		return "", fmt.Errorf("check password: %w", err)
 	}
 	if !match {
-		if err := a.store.Failed(ctx, record.Username, LockThreshold,
-			a.now().Add(LockDuration)); err != nil {
-			return "", err
-		}
 		return "", ErrSignInRefused
 	}
-	if err := a.store.Succeeded(ctx, record.Username); err != nil {
+	if err := a.succeeded(ctx, record.Username, secret, *made); err != nil {
 		return "", err
 	}
 	return record.UserID, nil
+}
+
+// succeeded clears the count a correct password ends. A hash made under
+// earlier costs is replaced while the password is in hand to make it again,
+// which clears the count as an operator's reset does.
+func (a *Accounts) succeeded(
+	ctx context.Context,
+	username, secret string,
+	made argon2id.Params,
+) error {
+	if made == *params {
+		return a.store.Succeeded(ctx, username)
+	}
+	hash, err := argon2id.CreateHash(secret, params)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+	return a.store.SetHash(ctx, username, hash)
 }
 
 // Generate is a password for an operator to hand on: 26 characters of

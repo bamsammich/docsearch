@@ -148,13 +148,36 @@ func (q *Queries) InsertRefreshToken(ctx context.Context, arg InsertRefreshToken
 	return err
 }
 
+const markOAuthClientSignedIn = `-- name: MarkOAuthClientSignedIn :exec
+UPDATE oauth_clients SET signed_in_at = $1::timestamptz
+ WHERE signed_in_at IS NULL
+   AND client_id = (SELECT client_id FROM oauth_auth_requests WHERE id = $2)
+`
+
+type MarkOAuthClientSignedInParams struct {
+	At        time.Time
+	RequestID string
+}
+
+func (q *Queries) MarkOAuthClientSignedIn(ctx context.Context, arg MarkOAuthClientSignedInParams) error {
+	_, err := q.db.ExecContext(ctx, markOAuthClientSignedIn, arg.At, arg.RequestID)
+	return err
+}
+
 const oAuthClient = `-- name: OAuthClient :one
 SELECT client_id, client_name, redirect_uris, created_at FROM oauth_clients WHERE client_id = $1
 `
 
-func (q *Queries) OAuthClient(ctx context.Context, clientID string) (OauthClient, error) {
+type OAuthClientRow struct {
+	ClientID     string
+	ClientName   string
+	RedirectUris json.RawMessage
+	CreatedAt    time.Time
+}
+
+func (q *Queries) OAuthClient(ctx context.Context, clientID string) (OAuthClientRow, error) {
 	row := q.db.QueryRowContext(ctx, oAuthClient, clientID)
-	var i OauthClient
+	var i OAuthClientRow
 	err := row.Scan(
 		&i.ClientID,
 		&i.ClientName,
@@ -228,6 +251,20 @@ func (q *Queries) OAuthRequestByCode(ctx context.Context, codeHash sql.NullStrin
 	var i OAuthRequestByCodeRow
 	err := row.Scan(&i.Request, &i.UserID, &i.AuthTime)
 	return i, err
+}
+
+const pruneOAuthClients = `-- name: PruneOAuthClients :exec
+DELETE FROM oauth_clients c
+ WHERE c.signed_in_at IS NULL AND c.created_at < $1::timestamptz
+   AND NOT EXISTS (SELECT 1 FROM oauth_auth_requests r WHERE r.client_id = c.client_id)
+`
+
+// Registering a client also clears those registered long ago that never
+// signed anyone in, so open registration cannot fill the table. A client with
+// a sign-in still in flight is kept.
+func (q *Queries) PruneOAuthClients(ctx context.Context, before time.Time) error {
+	_, err := q.db.ExecContext(ctx, pruneOAuthClients, before)
+	return err
 }
 
 const pruneOAuthRequests = `-- name: PruneOAuthRequests :exec

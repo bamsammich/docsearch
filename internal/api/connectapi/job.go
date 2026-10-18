@@ -10,6 +10,7 @@ import (
 	ingestv1 "github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1"
 	"github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1/ingestv1connect"
 	typev1 "github.com/bamsammich/docsearch/internal/api/docsearch/type/v1"
+	"github.com/bamsammich/docsearch/internal/libroot"
 	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 	"github.com/bamsammich/docsearch/internal/service/job"
@@ -130,7 +131,7 @@ func (s *JobServer) asConnectError(err error) error {
 	switch {
 	case s.notFound != nil && errors.Is(err, s.notFound):
 		return connect.NewError(connect.CodeNotFound, err)
-	case errors.Is(err, ingest.ErrUnsupportedFormat):
+	case errors.Is(err, ingest.ErrUnsupportedFormat), errors.Is(err, libroot.ErrOutsideRoot):
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	default:
 		return connect.NewError(connect.CodeInternal, err)

@@ -5,6 +5,14 @@
 INSERT INTO oauth_clients (client_id, client_name, redirect_uris, created_at)
 VALUES ($1, $2, $3, $4);
 
+-- Registering a client also clears those registered long ago that never
+-- signed anyone in, so open registration cannot fill the table. A client with
+-- a sign-in still in flight is kept.
+-- name: PruneOAuthClients :exec
+DELETE FROM oauth_clients c
+ WHERE c.signed_in_at IS NULL AND c.created_at < sqlc.arg(before)::timestamptz
+   AND NOT EXISTS (SELECT 1 FROM oauth_auth_requests r WHERE r.client_id = c.client_id);
+
 -- name: OAuthClient :one
 SELECT client_id, client_name, redirect_uris, created_at FROM oauth_clients WHERE client_id = $1;
 
@@ -27,6 +35,11 @@ UPDATE oauth_auth_requests SET code_hash = $2 WHERE id = $1;
 
 -- name: CompleteOAuthRequest :exec
 UPDATE oauth_auth_requests SET user_id = $2, auth_time = $3 WHERE id = $1;
+
+-- name: MarkOAuthClientSignedIn :exec
+UPDATE oauth_clients SET signed_in_at = sqlc.arg(at)::timestamptz
+ WHERE signed_in_at IS NULL
+   AND client_id = (SELECT client_id FROM oauth_auth_requests WHERE id = sqlc.arg(request_id));
 
 -- name: DeleteOAuthRequest :exec
 DELETE FROM oauth_auth_requests WHERE id = $1;

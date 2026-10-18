@@ -24,6 +24,10 @@ packages:
     interfaces:
       Queue:
       Targets:
+  github.com/bamsammich/docsearch/internal/service/inspect:
+    interfaces:
+      Reader:
+      Formats:
   github.com/bamsammich/docsearch/internal/service/document:
     interfaces:
       Repository:

@@ -10,24 +10,35 @@ import (
 	"database/sql"
 )
 
-const completeJob = `-- name: CompleteJob :exec
+const completeJob = `-- name: CompleteJob :execrows
 UPDATE ingest_jobs
    SET status = 'done', phase = NULL, doc_id = $1, error = NULL, warnings = $2,
        lease_until = NULL, updated_at = now()
- WHERE id = $3
+ WHERE id = $3 AND attempts = $4 AND status = 'running'
 `
 
 type CompleteJobParams struct {
 	DocID    sql.NullString
 	Warnings sql.NullString
 	ID       int64
+	Attempt  int32
 }
 
 // Run in the same transaction as MarkDocumentReady, so a document can never
 // be searchable while the job that wrote it still reads as running.
-func (q *Queries) CompleteJob(ctx context.Context, arg CompleteJobParams) error {
-	_, err := q.db.ExecContext(ctx, completeJob, arg.DocID, arg.Warnings, arg.ID)
-	return err
+// Fenced like every worker write: a worker that lost its job must not
+// complete it, so publishing rolls back when this matches nothing.
+func (q *Queries) CompleteJob(ctx context.Context, arg CompleteJobParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, completeJob,
+		arg.DocID,
+		arg.Warnings,
+		arg.ID,
+		arg.Attempt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const confirmDocument = `-- name: ConfirmDocument :exec

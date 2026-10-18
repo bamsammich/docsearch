@@ -244,3 +244,14 @@ func (s *APISuite) TestAnIngestWithNoOwnerIsRefused() {
 	}
 	s.Require().ErrorContains(stream.Err(), "no owner")
 }
+
+// An uploaded file is never extracted by the server that answers requests:
+// the worker has it queued already.
+func (s *APISuite) TestAnUploadIsLeftToTheWorker() {
+	_, err := s.ingest(&ingestv1.IngestRequest{Source: "upload:abc123"})
+	s.Require().Error(err)
+	s.Equal(connect.CodeFailedPrecondition, connect.CodeOf(err))
+	s.Contains(err.Error(), "read by the worker")
+	s.sources.AssertNotCalled(s.T(), "For", mock.Anything, mock.Anything)
+	s.ingester.AssertNotCalled(s.T(), "Run", mock.Anything, mock.Anything, mock.Anything)
+}

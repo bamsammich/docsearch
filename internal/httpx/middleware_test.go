@@ -1,8 +1,11 @@
 package httpx
 
 import (
+	"bytes"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -188,5 +191,20 @@ func TestEmptyAllowlistStillRejectsBrowserOrigins(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("status = %d, want 403", rec.Code)
+	}
+}
+
+// A signed link's token is its credential, so the request log names the
+// route and never the token.
+func TestAnUploadLinkTokenIsNotLogged(t *testing.T) {
+	var logged bytes.Buffer
+	handler := LogRequests(slog.New(slog.NewTextHandler(&logged, nil)), http.NotFoundHandler())
+	handler.ServeHTTP(httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodPut, "/upload/SECRET-TOKEN", nil))
+	if strings.Contains(logged.String(), "SECRET-TOKEN") {
+		t.Fatalf("the token reached the log: %s", logged.String())
+	}
+	if !strings.Contains(logged.String(), "/upload/<redacted>") {
+		t.Errorf("the route is missing from the log: %s", logged.String())
 	}
 }

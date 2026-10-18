@@ -67,8 +67,9 @@ func command() *cli.Command {
 				Sources: cli.EnvVars(config.EnvAuth),
 			},
 			&cli.StringSliceFlag{
-				Name:    "root",
-				Usage:   "library `ROOT`; the only paths add_document accepts. Repeat for more than one.",
+				Name: "root",
+				Usage: "library `ROOT`; the only paths add_document accepts. Repeat for more " +
+					"than one. Required without accounts; with them, needs --shared-paths.",
 				Sources: cli.EnvVars(config.EnvRoot),
 			},
 			// Origins are comma-separated rather than a slice flag: urfave
@@ -84,6 +85,12 @@ func command() *cli.Command {
 				Name:    "allow-public-bind",
 				Usage:   "permit binding a non-loopback address",
 				Sources: cli.EnvVars(config.EnvAllowPublicBind),
+			},
+			&cli.BoolFlag{
+				Name: "shared-paths",
+				Usage: "with accounts (oidc or password), take paths under --root; every " +
+					"account then reads the same directories",
+				Sources: cli.EnvVars(config.EnvSharedPaths),
 			},
 			&cli.StringFlag{
 				Name:    "public-url",
@@ -172,6 +179,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 		BearerToken:     os.Getenv(config.EnvToken),
 		AllowedOrigins:  commaList(cmd.String("allowed-origins")),
 		AllowPublicBind: cmd.Bool("allow-public-bind"),
+		SharedPaths:     cmd.Bool("shared-paths"),
 		PublicURL:       cmd.String("public-url"),
 		UploadMaxMB:     cmd.Int64("upload-max-mb"),
 		UIClientID:      cmd.String("ui-client-id"),

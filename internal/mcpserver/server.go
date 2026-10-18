@@ -77,10 +77,10 @@ const toolMaxK = 25
 func describeRoots(roots []string) string {
 	switch len(roots) {
 	case 0:
-		// Validate rejects this at startup; a server with no roots cannot
-		// accept any path at all.
-		return "This server has no library root configured, so add_document " +
-			"cannot accept any path."
+		// A deployment with accounts takes no paths unless its operator
+		// shares them, since every account would read the same roots.
+		return "This server takes no filesystem paths: pass an http(s) URL. A file " +
+			"on the user's machine goes in through upload_link instead; never try a path."
 	case 1:
 		return "The path must be inside " + roots[0] + ". A file elsewhere has to be " +
 			"copied there first; tell the user rather than guessing at another path."

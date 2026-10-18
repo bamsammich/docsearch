@@ -37,6 +37,7 @@ func (s *RotationSuite) library(user string, jobs ...int64) *worker.Service {
 			}).Once()
 	}
 	queue.EXPECT().Claim(mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	queue.EXPECT().RenewLease(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	queue.EXPECT().Finish(mock.Anything, mock.Anything, mock.Anything, mock.Anything, true).
 		Return(nil).Maybe()
 	sources := mocks.NewMockSources(s.T())
