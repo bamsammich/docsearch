@@ -51,6 +51,8 @@ type Route struct {
 // Server is the authorization server.
 type Server struct {
 	provider *op.Provider
+	// signIn is the POST that checks a password, held to its rate.
+	signIn   http.Handler
 	storage  *storage
 	store    Store
 	accounts Accounts
@@ -74,6 +76,7 @@ func New(
 		return nil, fmt.Errorf("authorization server: issuer %q is not an absolute URL", cfg.Issuer)
 	}
 	s := &Server{store: store, accounts: accounts, log: log, now: time.Now, cfg: cfg}
+	s.signIn = limited(signInsPerMinute, time.Minute, http.HandlerFunc(s.checkSignIn))
 	s.storage = &storage{
 		store:    store,
 		accounts: accounts,
@@ -123,28 +126,16 @@ func cryptoKey(key parsedKey) [32]byte {
 func (s *Server) Routes() []Route {
 	routes := []Route{
 		{Path: providerPrefix, Handler: s.provider},
-		{Path: pathAuthorize, Handler: withScope(s.provider)},
-		{Path: pathRegister, Handler: http.HandlerFunc(s.register)},
+		{Path: pathAuthorize, Handler: limited(authorizesPerMinute, time.Minute,
+			authorize(s.provider))},
+		{Path: pathRegister, Handler: limited(registrationsPerHour, time.Hour,
+			http.HandlerFunc(s.register))},
 		{Path: pathLogin, Handler: http.HandlerFunc(s.login)},
 	}
 	for _, path := range metadataPaths {
 		routes = append(routes, Route{Path: path, Handler: http.HandlerFunc(s.metadata)})
 	}
 	return routes
-}
-
-// withScope gives a request that names no scope the one docsearch grants.
-// The provider refuses a request with none, and an MCP client told no scope
-// by the resource server may send none.
-func withScope(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		query := r.URL.Query()
-		if r.Method == http.MethodGet && query.Get("scope") == "" {
-			query.Set("scope", Scope)
-			r.URL.RawQuery = query.Encode()
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 // metadata is the server's RFC 8414 document: the provider's own, with the

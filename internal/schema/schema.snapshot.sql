@@ -278,7 +278,8 @@ CREATE TABLE public.oauth_clients (
     client_id text NOT NULL,
     client_name text NOT NULL,
     redirect_uris jsonb NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    signed_in_at timestamp with time zone
 );
 
 

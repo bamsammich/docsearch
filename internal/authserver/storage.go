@@ -125,11 +125,6 @@ func (s *storage) CreateAccessAndRefreshTokens(
 	request op.TokenRequest,
 	current string,
 ) (string, string, time.Time, error) {
-	if current != "" {
-		if _, found, err := s.store.TakeRefresh(ctx, hashOf(current)); err != nil || !found {
-			return "", "", time.Time{}, errors.Join(err, errIf(!found, op.ErrInvalidRefreshToken))
-		}
-	}
 	grant, err := grantOf(request)
 	if err != nil {
 		return "", "", time.Time{}, err
@@ -137,10 +132,26 @@ func (s *storage) CreateAccessAndRefreshTokens(
 	token := rand.Text()
 	grant.TokenHash = hashOf(token)
 	grant.ExpiresAt = s.now().Add(RefreshTokenLifetime)
-	if err := s.store.SaveRefresh(ctx, grant); err != nil {
+	if err := s.saveGrant(ctx, current, grant); err != nil {
 		return "", "", time.Time{}, err
 	}
 	return rand.Text(), token, s.now().Add(AccessTokenLifetime), nil
+}
+
+// saveGrant saves a new refresh token, in place of current where the grant
+// is a refresh.
+func (s *storage) saveGrant(ctx context.Context, current string, grant Refresh) error {
+	if current == "" {
+		return s.store.SaveRefresh(ctx, grant)
+	}
+	found, err := s.store.RotateRefresh(ctx, hashOf(current), grant)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return op.ErrInvalidRefreshToken
+	}
+	return nil
 }
 
 // grantOf is what a new refresh token carries, from whichever request
@@ -309,14 +320,6 @@ func (*storage) ValidateJWTProfileScopes(context.Context, string, []string) ([]s
 }
 
 func (*storage) Health(context.Context) error { return nil }
-
-// errIf is err when cond holds.
-func errIf(cond bool, err error) error {
-	if cond {
-		return err
-	}
-	return nil
-}
 
 // keyring loads the signing keys once, making the first if there is none.
 type keyring struct {

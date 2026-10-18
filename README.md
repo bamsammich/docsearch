@@ -319,17 +319,21 @@ schema can manage accounts, and nobody else can.
 
 | | |
 |---|---|
-| passwords | argon2id, at least 12 characters |
+| passwords | argon2id at 19 MiB, at least 12 characters; four are checked at a time |
 | failed sign-ins | five in a row lock the account for 15 minutes |
+| rate limits | per address: 30 registrations an hour, 60 authorizations and 20 sign-ins a minute |
 | access tokens | ES256 JWTs, valid for an hour |
 | refresh tokens | valid for 30 days, and replaced every time one is used |
-| clients | register themselves (RFC 7591), hold no secret, and must use PKCE |
+| clients | register themselves (RFC 7591), hold no secret, and must use PKCE; one that signs nobody in within a day is cleared |
 
 Set `--public-url` to the address people reach the server at. It is the
 issuer every token names, and the sign-in page lives there. A refused sign-in
 never says whether the username exists. There is no self-service reset,
 since that needs a mail server; `docsearch account passwd` is the reset.
 Removing an account stops its tokens at once rather than when they expire.
+Behind a reverse proxy, every request has the proxy's address, so the rate
+limits apply to the deployment as a whole. A forwarded header is not trusted,
+because whoever sends one chooses it.
 
 ### Signing in through your own provider
 
