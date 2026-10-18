@@ -241,7 +241,7 @@ func (i *index) enqueue(path string) int64 {
 
 // work runs the real worker until it has taken jobs times from the queue.
 func (i *index) work(jobs int) {
-	extractor, err := pdf.New()
+	extractor, err := pdf.New(1)
 	Expect(err).NotTo(HaveOccurred())
 	defer func() { Expect(extractor.Close()).To(Succeed()) }()
 

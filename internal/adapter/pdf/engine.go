@@ -23,7 +23,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/domain"
 )
 
-// instanceTimeout bounds the wait for the engine's one PDFium instance.
+// instanceTimeout bounds the wait for a free PDFium instance.
 const instanceTimeout = 30 * time.Second
 
 // Extractor reads PDFs with PDFium compiled to WebAssembly, so no cgo and
@@ -33,9 +33,16 @@ type Extractor struct {
 	pool pdfium.Pool
 }
 
-// New starts PDFium.
-func New() (*Extractor, error) {
-	pool, err := webassembly.Init(webassembly.Config{MinIdle: 1, MaxIdle: 1, MaxTotal: 1})
+// New starts PDFium with room for instances documents at once. A caller past
+// that waits up to instanceTimeout for one to come free. Each instance holds
+// a document's whole working set, so the count is a memory budget as much as
+// a concurrency one; one instance is kept warm and the rest are made as
+// needed.
+func New(instances int) (*Extractor, error) {
+	instances = max(instances, 1)
+	pool, err := webassembly.Init(webassembly.Config{
+		MinIdle: 1, MaxIdle: instances, MaxTotal: instances,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("start pdfium: %w", err)
 	}
