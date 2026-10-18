@@ -144,6 +144,7 @@ func (s *DocumentSuite) TestADocumentWithNoChunksIsAProblemRatherThanAGrade() {
 	s.Require().NoError(err)
 	s.Equal([]string{"document has no chunks"}, report.Problems)
 	s.Empty(report.Findings, "there is nothing to grade")
+	s.Equal(domain.VerdictUnusable, report.Verdict, "and nothing a search could return")
 }
 
 func (s *DocumentSuite) TestADocumentThatIsNotThereSaysSo() {

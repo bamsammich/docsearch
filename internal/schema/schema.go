@@ -30,6 +30,8 @@ import (
 	"io/fs"
 	"strings"
 
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/pressly/goose/v3"
 )
 
@@ -283,14 +285,25 @@ func Recorded(ctx context.Context, db *sql.DB) (int, bool, error) {
 	var version int
 	err := db.QueryRowContext(ctx, `SELECT version FROM schema_version LIMIT 1`).Scan(&version)
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case Unversioned(err):
 		return 0, false, nil
 	case err != nil:
-		// A database with no schema_version table predates the stamp, which
-		// is the same answer as an empty one: nothing was recorded.
-		return 0, false, nil
+		return 0, false, fmt.Errorf("read the recorded version: %w", err)
 	}
 	return version, true, nil
+}
+
+// Unversioned reports whether reading schema_version failed because nothing
+// was ever recorded: no row, or no table, which a database from before the
+// stamp lacks. Any other failure is the database not answering, and reading
+// that as "unversioned" would send an operator to migrate a database that
+// may be current.
+func Unversioned(err error) bool {
+	if errors.Is(err, sql.ErrNoRows) {
+		return true
+	}
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UndefinedTable
 }
 
 // Problems is what must hold before a version may be recorded.
@@ -318,13 +331,23 @@ func Problems(ctx context.Context, db *sql.DB) ([]string, error) {
 // goose keeps its own record of which migrations ran. This one answers a
 // different question, which a reader asks before it trusts the shape: what
 // version does this database claim to be.
+//
+// One transaction, so a failure between clearing the old version and writing
+// the new one cannot leave a database that reads as never migrated.
 func stamp(ctx context.Context, db *sql.DB, version int) error {
-	if _, err := db.ExecContext(ctx, `DELETE FROM schema_version`); err != nil {
-		return fmt.Errorf("clear the recorded version: %w", err)
-	}
-	_, err := db.ExecContext(ctx,
-		`INSERT INTO schema_version (version, applied_at) VALUES ($1, now())`, version)
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
+		return fmt.Errorf("record version %d: %w", version, err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM schema_version`); err != nil {
+		return errors.Join(fmt.Errorf("clear the recorded version: %w", err), tx.Rollback())
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO schema_version (version, applied_at) VALUES ($1, now())`,
+		version); err != nil {
+		return errors.Join(fmt.Errorf("record version %d: %w", version, err), tx.Rollback())
+	}
+	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("record version %d: %w", version, err)
 	}
 	return nil
