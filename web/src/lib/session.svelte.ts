@@ -101,7 +101,7 @@ class Session {
       const message = err instanceof Error ? err.message : String(err);
       // A client the server has forgotten, after its database was reset,
       // cannot sign in; registering again can.
-      if (config.auth === "password" && /client/i.test(message)) forgetClient(config.issuer);
+      if (config.auth === "password" && /client/i.test(message)) forgetClient(config.issuer, location.origin);
       this.error = message;
       this.status = "error";
     }
