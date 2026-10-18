@@ -30,7 +30,7 @@ type InspectSuite struct {
 func TestInspect(t *testing.T) { suite.Run(t, new(InspectSuite)) }
 
 func (s *InspectSuite) SetupSuite() {
-	engine, err := pdf.New()
+	engine, err := pdf.New(1)
 	s.Require().NoError(err)
 	s.engine = engine
 }

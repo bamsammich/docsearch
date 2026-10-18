@@ -23,6 +23,14 @@ type indexedDocument struct {
 // scores incomparable.
 func buildIndex(t *testing.T) *Store {
 	t.Helper()
+	st, _ := buildIndexWith(t)
+	return st
+}
+
+// buildIndexWith is buildIndex, with the owner's connection for a case that
+// seeds more rows.
+func buildIndexWith(t *testing.T) (*Store, *sql.DB) {
+	t.Helper()
 	pg := pgtest.Start(t)
 	// The migrations, the same ones a deployment runs and sqlc types its
 	// queries against. Fatal rather than skipped: skipping would leave the
@@ -38,7 +46,7 @@ func buildIndex(t *testing.T) *Store {
 	}
 	// The store reads as the restricted role a request uses, not as the
 	// owner that seeded the rows.
-	return New(pg.App, builtinUser)
+	return New(pg.App, builtinUser), pg.Owner
 }
 
 func seedDocument(t *testing.T, raw *sql.DB, d indexedDocument) {
@@ -280,4 +288,47 @@ func TestASectionFilterHasNoWildcards(t *testing.T) {
 	if len(res) != 2 {
 		t.Errorf("got %d results, want the section and its child", len(res))
 	}
+}
+
+// A chunk whose section a matching back-of-book entry names is lifted, both
+// in a search of its document and in a search of the whole library, which
+// reads every document's entries in one query.
+func TestAnIndexEntryLiftsTheSectionItNames(t *testing.T) {
+	st, owner := buildIndexWith(t)
+	write(t, owner, `INSERT INTO index_terms (user_id, doc_id, term, section)
+		VALUES ($1, 'big', 'Universe, patching a', '1.9')`, builtinUser)
+
+	scoped, err := st.Search(t.Context(), SearchParams{Query: "universe", DocID: "big", K: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if best := firstOf(scoped, "big"); best.Section != "1.9" {
+		t.Errorf("scoped: results are %v, want section 1.9 first", sections(scoped))
+	}
+
+	across, err := st.Search(t.Context(), SearchParams{Query: "universe", K: 6})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if best := firstOf(across, "big"); best.Section != "1.9" {
+		t.Errorf("across: big's best is %q, want section 1.9", best.Section)
+	}
+}
+
+// firstOf is the best-ranked result from one document.
+func firstOf(results []SearchResult, docID string) SearchResult {
+	for _, r := range results {
+		if r.DocID == docID {
+			return r
+		}
+	}
+	return SearchResult{}
+}
+
+func sections(results []SearchResult) []string {
+	out := make([]string, 0, len(results))
+	for _, r := range results {
+		out = append(out, r.Section)
+	}
+	return out
 }
