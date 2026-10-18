@@ -261,7 +261,7 @@ func candidateQuery(p SearchParams, match string) (string, []any) {
 		 WHERE chunks.doc_id = $2`)
 	if p.SectionFilter != "" {
 		fmt.Fprintf(&sb,
-			" AND (chunks.heading_path = $%d OR chunks.heading_path LIKE $%d || ' > %%')",
+			" AND (chunks.heading_path = $%d OR starts_with(chunks.heading_path, $%d || ' > '))",
 			len(args)+1, len(args)+1)
 		args = append(args, p.SectionFilter)
 	}

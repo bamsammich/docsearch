@@ -128,10 +128,13 @@ func (s *Store) Ready(ctx context.Context) error {
 	}
 
 	version, err := s.q.SchemaVersion(ctx)
-	if err != nil {
-		// Covers both no row and no schema_version table at all: either way
-		// this is a database from before versioning.
+	if schema.Unversioned(err) {
+		// No row, or no schema_version table at all: either way this is a
+		// database from before versioning.
 		return &ErrSchemaVersion{Found: 0, Required: RequiredSchemaVersion}
+	}
+	if err != nil {
+		return fmt.Errorf("read the schema version: %w", err)
 	}
 	if int(version) != RequiredSchemaVersion {
 		return &ErrSchemaVersion{Found: int(version), Required: RequiredSchemaVersion}

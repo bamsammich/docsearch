@@ -221,6 +221,42 @@ func bestKeywordRank(res []SearchResult) int {
 // serves until authentication arrives.
 const builtinUser = "default"
 
+// A section filter is matched as written. Under LIKE, the underscore in
+// "10_ Rules" would be a wildcard and sweep in "100 Rules".
+func TestASectionFilterHasNoWildcards(t *testing.T) {
+	pg := pgtest.Start(t)
+	if err := schema.Create(t.Context(), pg.Owner); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+	write(t, pg.Owner, `INSERT INTO documents
+		   (user_id,doc_id,title,format,source_path,sha256,status,chunk_count)
+		 VALUES ($1,'wild','Wild','pdf','/x','wild','ready',3)`, builtinUser)
+	for i, heading := range []string{
+		"Wild > 10_ Rules", "Wild > 10_ Rules > Detail", "Wild > 100 Rules > Detail",
+	} {
+		write(t, pg.Owner, `INSERT INTO chunks
+			   (user_id,doc_id,ordinal,section,heading_path,text,kind,image_count)
+			 VALUES ($1,'wild',$2,$3,$4,'calibrate the fixture before use','prose',0)`,
+			builtinUser, i, itoa(i+1), heading)
+	}
+	st := New(pg.App, builtinUser)
+
+	res, err := st.Search(t.Context(), SearchParams{
+		Query: "calibrate fixture", DocID: "wild", SectionFilter: "Wild > 10_ Rules", K: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range res {
+		if strings.Contains(r.HeadingPath, "100 Rules") {
+			t.Errorf("the filter matched %q, a section it does not name", r.HeadingPath)
+		}
+	}
+	if len(res) != 2 {
+		t.Errorf("got %d results, want the section and its child", len(res))
+	}
+}
+
 // A chunk whose section a matching back-of-book entry names is lifted, both
 // in a search of its document and in a search of the whole library, which
 // reads every document's entries in one query.

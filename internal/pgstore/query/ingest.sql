@@ -106,7 +106,7 @@ SELECT COUNT(*) FROM index_terms WHERE doc_id = $1;
 -- name: SectionHasChunks :one
 SELECT EXISTS(
   SELECT 1 FROM chunks
-   WHERE doc_id = $1 AND (chunks.section = $2 OR chunks.section LIKE $2 || '.%'));
+   WHERE doc_id = $1 AND (chunks.section = $2 OR starts_with(chunks.section, $2 || '.')));
 
 -- An uploaded document's bytes go when a person removes the document, so a
 -- removed upload is gone rather than kept where nothing can reach it. Only

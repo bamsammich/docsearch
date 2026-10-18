@@ -135,8 +135,10 @@ func (s *Service) Verify(ctx context.Context, docID string) (*VerifyReport, erro
 
 	report := &VerifyReport{Document: *doc, Problems: []string{}, Findings: []domain.Finding{}}
 	if len(chunks) == 0 {
+		// Nothing to grade, and nothing a search can return: a verdict of
+		// good would tell a caller the document is fine to search.
 		report.Problems = append(report.Problems, "document has no chunks")
-		report.Verdict = domain.VerdictGood
+		report.Verdict = domain.VerdictUnusable
 		return report, nil
 	}
 

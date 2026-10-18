@@ -31,14 +31,17 @@ SELECT page, text FROM pages
 -- reference to "4" covers "4" and "4.1" and must not touch "41". The trailing
 -- dot is what makes it a boundary. Kept identical to store.SectionCovers,
 -- which the in-memory index-term boost applies by the same rule.
+-- starts_with rather than LIKE, which would read a % or _ in the reference
+-- as a wildcard.
 -- name: ChunksInSection :many
 SELECT heading_path, text FROM chunks
- WHERE doc_id = $1 AND (chunks.section = $2 OR chunks.section LIKE $2 || '.%')
+ WHERE doc_id = $1 AND (chunks.section = $2 OR starts_with(chunks.section, $2 || '.'))
  ORDER BY ordinal;
 
+-- strpos for the same reason: the heading is matched as written.
 -- name: ChunksMatchingHeading :many
 SELECT heading_path, text FROM chunks
- WHERE doc_id = $1 AND lower(heading_path) LIKE '%' || lower($2) || '%'
+ WHERE doc_id = $1 AND strpos(lower(heading_path), lower($2)) > 0
  ORDER BY ordinal;
 
 -- name: AllChunksInOrder :many
