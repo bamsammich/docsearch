@@ -168,9 +168,22 @@ type Ready struct {
 	IngestedAt time.Time
 	JobID      *int64
 	DocID      string
+	// Replaces is the document DocID was written to take the place of. The
+	// old rows are deleted and DocID's are moved under Replaces in the same
+	// transaction that publishes them, so a reader sees the old version or
+	// the new one and never neither. Empty for a document new to the index.
+	Replaces   string
 	Warnings   []byte
 	ChunkCount int
 }
+
+// stagingSuffix marks the identifier a replacement is written under until it
+// is published. A slug never contains a tilde, so it cannot collide with a
+// real document.
+const stagingSuffix = "~next"
+
+// Staging is the identifier a replacement of docID is written under.
+func Staging(docID string) string { return docID + stagingSuffix }
 
 // Repository is where an ingest writes. Each method owns its transaction:
 // the service decides what happens, and the repository decides what happens
@@ -185,9 +198,9 @@ type Repository interface {
 	DocIDForIdentity(ctx context.Context, identity string) (string, error)
 	// DocIDsWithPrefix are the taken identifiers a new one must avoid.
 	DocIDsWithPrefix(ctx context.Context, prefix string) ([]string, error)
-	// Create writes the document as ingesting, replacing every row of the
-	// document it is taking the place of.
-	Create(ctx context.Context, doc Document, replacing string) error
+	// Create writes the document as ingesting, first clearing any rows left
+	// under stale, the staging identifier of a replacement that died.
+	Create(ctx context.Context, doc Document, stale string) error
 	// AddChunks appends one batch.
 	AddChunks(ctx context.Context, docID string, chunks []domain.Chunk) error
 	// AddPagesAndTerms writes a paginated format's page text and a
@@ -354,34 +367,46 @@ func (s *Service) prepare(
 // write puts the document in the index and makes it visible. A failure part
 // way through leaves nothing behind: the rows written so far are deleted and
 // the original error is returned.
+//
+// A replacement is written beside the version it replaces, under a staging
+// identifier, and swapped in when it is published. The old version stays
+// searchable throughout, and an ingest that fails, is cancelled or dies
+// leaves it exactly as it was.
 func (s *Service) write(ctx context.Context, p *prepared, opts Options) error {
-	if err := s.repo.Create(ctx, p.doc, p.replacing); err != nil {
-		return fmt.Errorf("create %s: %w", p.doc.DocID, err)
+	staged, stale := p.doc, ""
+	if p.replacing != "" {
+		staged.DocID = Staging(p.doc.DocID)
+		// A replacement that died earlier left its rows here.
+		stale = staged.DocID
 	}
-	if err := s.fill(ctx, p, opts); err != nil {
-		if delErr := s.repo.Delete(context.WithoutCancel(ctx), p.doc.DocID); delErr != nil {
-			return errors.Join(err, fmt.Errorf("clean up %s: %w", p.doc.DocID, delErr))
+	if err := s.repo.Create(ctx, staged, stale); err != nil {
+		return fmt.Errorf("create %s: %w", staged.DocID, err)
+	}
+	if err := s.fill(ctx, p, staged.DocID, opts); err != nil {
+		if delErr := s.repo.Delete(context.WithoutCancel(ctx), staged.DocID); delErr != nil {
+			return errors.Join(err, fmt.Errorf("clean up %s: %w", staged.DocID, delErr))
 		}
 		return err
 	}
 	return nil
 }
 
-// fill writes everything the document is made of, then flips it to ready.
-func (s *Service) fill(ctx context.Context, p *prepared, opts Options) error {
+// fill writes everything the document is made of under writeID, then
+// publishes it.
+func (s *Service) fill(ctx context.Context, p *prepared, writeID string, opts Options) error {
 	total := len(p.chunks)
 	for start := 0; start < total; start += chunkBatch {
 		if err := ctx.Err(); err != nil {
 			return ErrCancelled
 		}
 		end := min(start+chunkBatch, total)
-		if err := s.repo.AddChunks(ctx, p.doc.DocID, p.chunks[start:end]); err != nil {
+		if err := s.repo.AddChunks(ctx, writeID, p.chunks[start:end]); err != nil {
 			return fmt.Errorf("write chunks %d to %d: %w", start, end, err)
 		}
 		opts.Progress.report(PhaseIndex, end, total)
 	}
 
-	err := s.repo.AddPagesAndTerms(ctx, p.doc.DocID, p.extraction.Pages, p.extraction.IndexTerms)
+	err := s.repo.AddPagesAndTerms(ctx, writeID, p.extraction.Pages, p.extraction.IndexTerms)
 	if err != nil {
 		return fmt.Errorf("write pages and index terms: %w", err)
 	}
@@ -393,7 +418,8 @@ func (s *Service) fill(ctx context.Context, p *prepared, opts Options) error {
 	ready := Ready{
 		JobID:      opts.JobID,
 		Warnings:   warnings,
-		DocID:      p.doc.DocID,
+		DocID:      writeID,
+		Replaces:   p.replacing,
 		IngestedAt: s.now().UTC(),
 		ChunkCount: total,
 	}

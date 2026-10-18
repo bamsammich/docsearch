@@ -148,6 +148,48 @@ func (s *WorkerSuite) TestAnUnresolvedHostReadsAsARefusal() {
 	s.ErrorIs(urlguard.ErrUnresolved, urlguard.ErrBlocked)
 }
 
+// Shutting the worker down waits for the running job rather than cutting
+// it off: a deploy must not record a job as cancelled by its operator, nor
+// spend one of its attempts.
+func (s *WorkerSuite) TestShuttingDownLetsTheRunningJobFinish() {
+	s.claims(&worker.Job{ID: 7, Source: "/library/guide.md", Attempts: 1})
+	s.buildsASource()
+	s.neverCancelled()
+	shutdown, stopWorker := context.WithCancel(s.T().Context())
+	defer stopWorker()
+	var cutOff bool
+	s.ingester.EXPECT().Run(mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(ctx context.Context, _ ingest.Source, _ ingest.Options) (*ingest.Result, error) {
+			stopWorker()
+			time.Sleep(20 * time.Millisecond)
+			cutOff = ctx.Err() != nil
+			return &ingest.Result{DocID: "guide", Outcome: ingest.Ingested}, nil
+		})
+
+	err := worker.New(s.jobs, s.ingester, s.sources, worker.Options{
+		Log: slog.New(slog.DiscardHandler), CancelPoll: time.Millisecond,
+	}).Run(shutdown)
+	s.Require().NoError(err)
+	s.False(cutOff, "the job's context outlived the worker's")
+	s.jobs.AssertNotCalled(s.T(), "Cancel", mock.Anything, mock.Anything)
+}
+
+// A cancel request read just as the ingest committed does not undo it: the
+// document is already published, in the transaction that completed the job.
+func (s *WorkerSuite) TestAFinishedJobIsNotCancelledAfterTheFact() {
+	s.claims(&worker.Job{ID: 7, Source: "/library/guide.md", Attempts: 1})
+	s.buildsASource()
+	s.jobs.EXPECT().CancelRequested(mock.Anything, int64(7)).Return(true, nil).Maybe()
+	s.ingester.EXPECT().Run(mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(context.Context, ingest.Source, ingest.Options) (*ingest.Result, error) {
+			time.Sleep(20 * time.Millisecond)
+			return &ingest.Result{DocID: "guide", Outcome: ingest.Ingested}, nil
+		})
+
+	s.Require().NoError(s.run(worker.Options{}))
+	s.jobs.AssertNotCalled(s.T(), "Cancel", mock.Anything, mock.Anything)
+}
+
 func (s *WorkerSuite) TestARefusedStructureIsNotTriedAgain() {
 	// The next attempt would read the same bytes and refuse them again.
 	s.claims(&worker.Job{ID: 7, Source: "/library/empty.md", Attempts: 1})

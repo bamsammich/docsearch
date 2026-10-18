@@ -9,6 +9,7 @@ import (
 
 	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
+	"github.com/bamsammich/docsearch/internal/service/ingest"
 	"github.com/bamsammich/docsearch/internal/service/job"
 	"github.com/bamsammich/docsearch/internal/service/worker"
 )
@@ -190,6 +191,11 @@ func dropPartial(ctx context.Context, q *pgdbgen.Queries, id int64) error {
 	}
 	if err != nil {
 		return fmt.Errorf("read the status of %s: %w", docID.String, err)
+	}
+	// A replacement writes under its staging identifier, which is never
+	// ready; clearing it is always safe.
+	if err := deleteRows(ctx, q, ingest.Staging(docID.String)); err != nil {
+		return err
 	}
 	if status == "ready" {
 		return nil

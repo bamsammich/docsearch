@@ -152,13 +152,13 @@ func (r *Repository) DocIDsWithPrefix(ctx context.Context, prefix string) ([]str
 	return ids, nil
 }
 
-// Create writes the document as ingesting. Replacing one deletes its rows in
-// the same transaction, so a failure here cannot leave two documents at one
-// identity.
-func (r *Repository) Create(ctx context.Context, doc ingest.Document, replacing string) error {
+// Create writes the document as ingesting. stale names rows a replacement
+// that died left behind, cleared in the same transaction so the new attempt
+// starts from nothing.
+func (r *Repository) Create(ctx context.Context, doc ingest.Document, stale string) error {
 	return r.inTx(ctx, func(q *pgdbgen.Queries) error {
-		if replacing != "" {
-			if err := deleteRows(ctx, q, replacing); err != nil {
+		if stale != "" {
+			if err := deleteRows(ctx, q, stale); err != nil {
 				return err
 			}
 		}
@@ -253,27 +253,76 @@ func writeTerms(
 
 // MarkReady makes the document visible to search, and completes the job that
 // wrote it in the same transaction.
+// MarkReady publishes a document. A replacement is swapped in here: the old
+// version's rows are deleted and the new version's moved under its
+// identifier, all in the one transaction, so a search sees one version or
+// the other and never a gap.
 func (r *Repository) MarkReady(ctx context.Context, ready ingest.Ready) error {
 	return r.inTx(ctx, func(q *pgdbgen.Queries) error {
+		published, err := swapIn(ctx, q, ready)
+		if err != nil {
+			return err
+		}
 		warnings := nullString(string(ready.Warnings))
-		err := q.MarkDocumentReady(ctx, pgdbgen.MarkDocumentReadyParams{
+		err = q.MarkDocumentReady(ctx, pgdbgen.MarkDocumentReadyParams{
 			ChunkCount: sql.NullInt32{Int32: pgsession.Narrow(ready.ChunkCount), Valid: true},
 			IngestedAt: sql.NullTime{Time: ready.IngestedAt.UTC(), Valid: true},
 			Warnings:   warnings,
-			DocID:      ready.DocID,
+			DocID:      published,
 		})
 		if err != nil {
-			return fmt.Errorf("publish %s: %w", ready.DocID, err)
+			return fmt.Errorf("publish %s: %w", published, err)
 		}
 		if ready.JobID == nil {
 			return nil
 		}
 		return q.CompleteJob(ctx, pgdbgen.CompleteJobParams{
-			DocID:    nullString(ready.DocID),
+			DocID:    nullString(published),
 			Warnings: warnings,
 			ID:       *ready.JobID,
 		})
 	})
+}
+
+// swapIn is the identifier a document is published under: its own, or that
+// of the version it replaces, once promoted into its place.
+func swapIn(ctx context.Context, q *pgdbgen.Queries, ready ingest.Ready) (string, error) {
+	if ready.Replaces == "" {
+		return ready.DocID, nil
+	}
+	if err := promote(ctx, q, ready.DocID, ready.Replaces); err != nil {
+		return "", err
+	}
+	return ready.Replaces, nil
+}
+
+// promote replaces the document at to with the one written at from.
+func promote(ctx context.Context, q *pgdbgen.Queries, from, to string) error {
+	if err := deleteRows(ctx, q, to); err != nil {
+		return fmt.Errorf("retire the old %s: %w", to, err)
+	}
+	if err := q.CopyDocumentAs(
+		ctx,
+		pgdbgen.CopyDocumentAsParams{FromID: from, ToID: to},
+	); err != nil {
+		return fmt.Errorf("promote %s: copy the document row: %w", from, err)
+	}
+	if err := q.MoveChunks(ctx, pgdbgen.MoveChunksParams{FromID: from, ToID: to}); err != nil {
+		return fmt.Errorf("promote %s: move chunks: %w", from, err)
+	}
+	if err := q.MovePages(ctx, pgdbgen.MovePagesParams{FromID: from, ToID: to}); err != nil {
+		return fmt.Errorf("promote %s: move pages: %w", from, err)
+	}
+	if err := q.MoveIndexTerms(
+		ctx,
+		pgdbgen.MoveIndexTermsParams{FromID: from, ToID: to},
+	); err != nil {
+		return fmt.Errorf("promote %s: move index terms: %w", from, err)
+	}
+	if err := q.DeleteDocumentOnly(ctx, from); err != nil {
+		return fmt.Errorf("promote %s: drop the staging row: %w", from, err)
+	}
+	return nil
 }
 
 func (r *Repository) Delete(ctx context.Context, docID string) error {

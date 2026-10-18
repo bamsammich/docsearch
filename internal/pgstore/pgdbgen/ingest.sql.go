@@ -44,6 +44,29 @@ func (q *Queries) ConfirmDocument(ctx context.Context, arg ConfirmDocumentParams
 	return err
 }
 
+const copyDocumentAs = `-- name: CopyDocumentAs :exec
+INSERT INTO documents (
+  user_id, doc_id, title, format, source_path, source_kind, sha256,
+  page_count, chunk_count, status, ingested_at, warnings
+)
+SELECT user_id, $1::text, title, format, source_path, source_kind, sha256,
+       page_count, chunk_count, status, ingested_at, warnings
+  FROM documents WHERE doc_id = $2::text
+`
+
+type CopyDocumentAsParams struct {
+	ToID   string
+	FromID string
+}
+
+// A replacement written under a staging identifier takes the old
+// identifier when it is published. The document row is copied rather than
+// renamed, because the chunks' foreign key names the row they belong to.
+func (q *Queries) CopyDocumentAs(ctx context.Context, arg CopyDocumentAsParams) error {
+	_, err := q.db.ExecContext(ctx, copyDocumentAs, arg.ToID, arg.FromID)
+	return err
+}
+
 const countDocumentChunks = `-- name: CountDocumentChunks :one
 SELECT COUNT(*) FROM chunks WHERE doc_id = $1
 `
@@ -73,6 +96,15 @@ DELETE FROM index_terms WHERE doc_id = $1
 
 func (q *Queries) DeleteDocumentIndexTerms(ctx context.Context, docID string) error {
 	_, err := q.db.ExecContext(ctx, deleteDocumentIndexTerms, docID)
+	return err
+}
+
+const deleteDocumentOnly = `-- name: DeleteDocumentOnly :exec
+DELETE FROM documents WHERE doc_id = $1
+`
+
+func (q *Queries) DeleteDocumentOnly(ctx context.Context, docID string) error {
+	_, err := q.db.ExecContext(ctx, deleteDocumentOnly, docID)
 	return err
 }
 
@@ -402,6 +434,48 @@ func (q *Queries) MarkDocumentReady(ctx context.Context, arg MarkDocumentReadyPa
 		arg.Warnings,
 		arg.DocID,
 	)
+	return err
+}
+
+const moveChunks = `-- name: MoveChunks :exec
+UPDATE chunks SET doc_id = $1::text WHERE doc_id = $2::text
+`
+
+type MoveChunksParams struct {
+	ToID   string
+	FromID string
+}
+
+func (q *Queries) MoveChunks(ctx context.Context, arg MoveChunksParams) error {
+	_, err := q.db.ExecContext(ctx, moveChunks, arg.ToID, arg.FromID)
+	return err
+}
+
+const moveIndexTerms = `-- name: MoveIndexTerms :exec
+UPDATE index_terms SET doc_id = $1::text WHERE doc_id = $2::text
+`
+
+type MoveIndexTermsParams struct {
+	ToID   string
+	FromID string
+}
+
+func (q *Queries) MoveIndexTerms(ctx context.Context, arg MoveIndexTermsParams) error {
+	_, err := q.db.ExecContext(ctx, moveIndexTerms, arg.ToID, arg.FromID)
+	return err
+}
+
+const movePages = `-- name: MovePages :exec
+UPDATE pages SET doc_id = $1::text WHERE doc_id = $2::text
+`
+
+type MovePagesParams struct {
+	ToID   string
+	FromID string
+}
+
+func (q *Queries) MovePages(ctx context.Context, arg MovePagesParams) error {
+	_, err := q.db.ExecContext(ctx, movePages, arg.ToID, arg.FromID)
 	return err
 }
 
