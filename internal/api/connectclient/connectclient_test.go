@@ -166,12 +166,25 @@ func (s *ClientSuite) TestEnqueueNamesEveryJobItQueued() {
 			},
 		}), nil)
 
-	queued, err := s.client.Enqueue(s.T().Context(), "/library", "")
+	queued, err := s.client.Enqueue(s.T().Context(), "/library", "", false)
 	s.Require().NoError(err)
 	s.Require().Len(queued, 2)
 	s.Equal("/library/b.pdf", queued[1].Source)
 	s.Equal(int64(2), queued[1].JobID)
 	s.Equal(2, queued[1].Position)
+}
+
+func (s *ClientSuite) TestEnqueueSendsForce() {
+	s.jobs.EXPECT().Enqueue(mock.Anything,
+		mock.MatchedBy(func(req *connect.Request[ingestv1.EnqueueRequest]) bool {
+			return req.Msg.GetForce()
+		})).
+		Return(connect.NewResponse(&ingestv1.EnqueueResponse{
+			Jobs: []*ingestv1.QueuedJob{{Source: "/library/a.md", JobId: 1, QueuePosition: 1}},
+		}), nil)
+
+	_, err := s.client.Enqueue(s.T().Context(), "/library/a.md", "", true)
+	s.Require().NoError(err)
 }
 
 func (s *ClientSuite) TestAQueuedJobArrivesWithoutProgress() {

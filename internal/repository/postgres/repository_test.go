@@ -121,7 +121,9 @@ func (s *RepositorySuite) TestBytesAlreadyIndexedAreFoundByTheirHash() {
 	s.Require().NotNil(existing)
 	s.Equal("guide", existing.DocID)
 	s.Equal("Guide", existing.Title)
+	s.Equal("/library/guide.md", existing.Identity)
 	s.Equal(1, existing.ChunkCount)
+	s.Zero(existing.PipelineVersion, "the report it was published with recorded none")
 }
 
 func (s *RepositorySuite) TestAHashNobodyHoldsIsNotAFailure() {
@@ -330,6 +332,47 @@ func (s *RepositorySuite) TestTheServiceRunsAgainstThisRepository() {
 	s.Equal("operator-guide", result.DocID)
 	s.Equal("ready", s.queryOne(`SELECT status FROM documents WHERE doc_id='operator-guide'`))
 	s.Positive(result.ChunkCount)
+}
+
+// ingestGuide runs the real service over the static guide.
+func (s *RepositorySuite) ingestGuide(opts ingest.Options) *ingest.Result {
+	service := ingest.New(s.repo, func() time.Time { return stamped })
+	result, err := service.Run(s.T().Context(), &staticSource{}, opts)
+	s.Require().NoError(err)
+	return result
+}
+
+// Re-ingesting bytes the index holds skips them while the pipeline that read
+// them is current, and reads them again when forced, leaving one document.
+func (s *RepositorySuite) TestAForcedReIngestReplacesHeldBytes() {
+	s.ingestGuide(ingest.Options{})
+
+	s.Equal(ingest.Unchanged, s.ingestGuide(ingest.Options{}).Outcome)
+	s.Equal(ingest.Replaced, s.ingestGuide(ingest.Options{Force: true}).Outcome)
+
+	s.Equal("1", s.queryOne(`SELECT COUNT(*) FROM documents`))
+	s.Equal("ready", s.queryOne(`SELECT status FROM documents WHERE doc_id='operator-guide'`))
+}
+
+// A grade written by an older pipeline is replaced on the next ingest of the
+// same bytes, unforced, which is how a grading change reaches documents
+// already in the index.
+func (s *RepositorySuite) TestAGradeAnOlderPipelineWroteIsReplaced() {
+	s.ingestGuide(ingest.Options{})
+	pgtest.WriteAs(s.T(), s.db, builtinID, func(tx *sql.Tx) {
+		_, err := tx.ExecContext(s.T().Context(),
+			`UPDATE documents SET warnings = '{"quality":"degraded"}'
+			  WHERE doc_id = 'operator-guide'`)
+		s.Require().NoError(err)
+	})
+
+	result := s.ingestGuide(ingest.Options{})
+
+	s.Equal(ingest.Replaced, result.Outcome)
+	warnings := s.queryOne(`SELECT warnings FROM documents WHERE doc_id='operator-guide'`)
+	s.Contains(warnings, `"quality":"ok"`)
+	s.Equal(domain.PipelineVersion, domain.StoredPipelineVersion(warnings))
+	s.Equal("1", s.queryOne(`SELECT COUNT(*) FROM documents`))
 }
 
 // staticSource is a document already in memory, so the wiring test exercises

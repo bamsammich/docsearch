@@ -103,9 +103,9 @@ func (s *ImportSuite) TestARootMapNeedsBothSides() {
 // sent.
 func (s *ImportSuite) TestRunQueuesTheRestPastARefusal() {
 	enqueuer := mocks.NewMockEnqueuer(s.T())
-	enqueuer.EXPECT().Enqueue(mock.Anything, "/srv/a.pdf", "A").
+	enqueuer.EXPECT().Enqueue(mock.Anything, "/srv/a.pdf", "A", false).
 		Return(nil, errors.New("outside the library root"))
-	enqueuer.EXPECT().Enqueue(mock.Anything, "/srv/b.pdf", "B").
+	enqueuer.EXPECT().Enqueue(mock.Anything, "/srv/b.pdf", "B", false).
 		Return([]job.Queued{{JobID: 7, Source: "/srv/b.pdf"}}, nil)
 
 	got := v1import.Run(s.T().Context(), enqueuer, []v1import.Entry{

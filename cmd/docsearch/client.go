@@ -37,6 +37,7 @@ const (
 	argTarget = "<path or url>"
 	argDocID  = "<doc_id>"
 	flagTitle = "title"
+	flagForce = "force"
 )
 
 // titleFlag overrides the name a document gives itself.

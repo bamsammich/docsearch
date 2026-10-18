@@ -12,8 +12,11 @@
 -- A write names user_id because a row has to carry its owner, and the policy
 -- then refuses a value that disagrees with the session.
 
+-- warnings is read whole because the pipeline version that wrote the
+-- report is one of its keys.
 -- name: ReadyDocumentWithDigest :one
-SELECT doc_id, title FROM documents WHERE sha256 = $1 AND status = 'ready';
+SELECT doc_id, title, source_path, warnings
+  FROM documents WHERE sha256 = $1 AND status = 'ready';
 
 -- name: CountDocumentChunks :one
 SELECT COUNT(*) FROM chunks WHERE doc_id = $1;

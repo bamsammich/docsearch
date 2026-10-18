@@ -33,10 +33,10 @@ func (s *JobSuite) service() *job.Service {
 func (s *JobSuite) TestAFileBecomesOneJob() {
 	s.targets.EXPECT().Targets("/library/guide.md").
 		Return([]string{"/library/guide.md"}, nil)
-	s.queue.EXPECT().Add(mock.Anything, "/library/guide.md", "Guide").
+	s.queue.EXPECT().Add(mock.Anything, "/library/guide.md", "Guide", false).
 		Return(7, 1, nil)
 
-	queued, err := s.service().Enqueue(s.T().Context(), "/library/guide.md", "Guide")
+	queued, err := s.service().Enqueue(s.T().Context(), "/library/guide.md", "Guide", false)
 	s.Require().NoError(err)
 	s.Require().Len(queued, 1)
 	s.Equal(int64(7), queued[0].JobID)
@@ -49,20 +49,33 @@ func (s *JobSuite) TestADirectoryBecomesOneJobPerFile() {
 	s.targets.EXPECT().Targets("/library").Return([]string{
 		"/library/a.md", "/library/b.pdf",
 	}, nil)
-	s.queue.EXPECT().Add(mock.Anything, "/library/a.md", "").Return(1, 1, nil)
-	s.queue.EXPECT().Add(mock.Anything, "/library/b.pdf", "").Return(2, 2, nil)
+	s.queue.EXPECT().Add(mock.Anything, "/library/a.md", "", false).Return(1, 1, nil)
+	s.queue.EXPECT().Add(mock.Anything, "/library/b.pdf", "", false).Return(2, 2, nil)
 
-	queued, err := s.service().Enqueue(s.T().Context(), "/library", "")
+	queued, err := s.service().Enqueue(s.T().Context(), "/library", "", false)
 	s.Require().NoError(err)
 	s.Len(queued, 2)
 	s.Equal("/library/b.pdf", queued[1].Source)
+}
+
+// Forcing a directory forces every file beneath it, since each is its own
+// job and each could already be held.
+func (s *JobSuite) TestForceReachesEveryJobATargetBecomes() {
+	s.targets.EXPECT().Targets("/library").Return([]string{
+		"/library/a.md", "/library/b.pdf",
+	}, nil)
+	s.queue.EXPECT().Add(mock.Anything, "/library/a.md", "", true).Return(1, 1, nil)
+	s.queue.EXPECT().Add(mock.Anything, "/library/b.pdf", "", true).Return(2, 2, nil)
+
+	_, err := s.service().Enqueue(s.T().Context(), "/library", "", true)
+	s.Require().NoError(err)
 }
 
 func (s *JobSuite) TestATargetThatNamesNothingIsRefused() {
 	refused := errors.New("no supported files under /library/empty")
 	s.targets.EXPECT().Targets("/library/empty").Return(nil, refused)
 
-	_, err := s.service().Enqueue(s.T().Context(), "/library/empty", "")
+	_, err := s.service().Enqueue(s.T().Context(), "/library/empty", "", false)
 	s.Require().ErrorIs(err, refused)
 }
 

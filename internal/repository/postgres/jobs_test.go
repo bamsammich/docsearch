@@ -42,7 +42,7 @@ func (s *JobsSuite) SetupTest() {
 
 // queued puts one source on the queue and returns its id.
 func (s *JobsSuite) queued(source string) int64 {
-	id, _, err := s.jobs.Add(s.T().Context(), source, "")
+	id, _, err := s.jobs.Add(s.T().Context(), source, "", false)
 	s.Require().NoError(err)
 	return id
 }
@@ -65,6 +65,22 @@ func (s *JobsSuite) TestAnEmptyQueueIsNotAFailure() {
 	claimed, err := s.jobs.Claim(s.T().Context(), lease, 3)
 	s.Require().NoError(err)
 	s.Nil(claimed)
+}
+
+func (s *JobsSuite) TestAForcedJobIsClaimedForced() {
+	_, _, err := s.jobs.Add(s.T().Context(), "/library/guide.md", "", true)
+	s.Require().NoError(err)
+	s.queued("/library/other.md")
+
+	forced, err := s.jobs.Claim(s.T().Context(), lease, 3)
+	s.Require().NoError(err)
+	s.Require().NotNil(forced)
+	s.True(forced.Force)
+
+	plain, err := s.jobs.Claim(s.T().Context(), lease, 3)
+	s.Require().NoError(err)
+	s.Require().NotNil(plain)
+	s.False(plain.Force)
 }
 
 func (s *JobsSuite) TestTwoWorkersRacingTakeTwoDifferentJobs() {
@@ -156,7 +172,7 @@ func (s *JobsSuite) TestACancelledQueuedJobLeavesTheQueue() {
 	active, err := s.jobs.List(s.T().Context(), false, 10)
 	s.Require().NoError(err)
 	s.Empty(active)
-	_, position, err := s.jobs.Add(s.T().Context(), "/library/next.md", "")
+	_, position, err := s.jobs.Add(s.T().Context(), "/library/next.md", "", false)
 	s.Require().NoError(err)
 	s.Equal(1, position)
 }
@@ -277,9 +293,9 @@ func (s *JobsSuite) TestAPermanentFailureStaysFailed() {
 }
 
 func (s *JobsSuite) TestAPositionCountsTheJobItself() {
-	_, first, err := s.jobs.Add(s.T().Context(), "/library/a.md", "")
+	_, first, err := s.jobs.Add(s.T().Context(), "/library/a.md", "", false)
 	s.Require().NoError(err)
-	_, second, err := s.jobs.Add(s.T().Context(), "/library/b.md", "")
+	_, second, err := s.jobs.Add(s.T().Context(), "/library/b.md", "", false)
 	s.Require().NoError(err)
 
 	s.Equal(1, first, "nothing ahead of it")

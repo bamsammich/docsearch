@@ -198,8 +198,14 @@ type EnqueueRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Source is a path inside the configured library root, or the URL of a
 	// documentation site.
-	Source        string `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
-	Title         string `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Source string `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	Title  string `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	// Force reads the source again even where the index already holds its
+	// bytes, which is how a change to extraction or grading reaches a
+	// document whose file never changed. The document stays searchable until
+	// the new read replaces it. Without force, held bytes are skipped unless
+	// an older pipeline read them.
+	Force         bool `protobuf:"varint,3,opt,name=force,proto3" json:"force,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -246,6 +252,13 @@ func (x *EnqueueRequest) GetTitle() string {
 		return x.Title
 	}
 	return ""
+}
+
+func (x *EnqueueRequest) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
 }
 
 // QueuedJob is one job Enqueue created.
@@ -573,10 +586,11 @@ const file_docsearch_ingest_v1_job_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\x0f \x01(\tR\tupdatedAtB\x13\n" +
 	"\x11_progress_currentB\x11\n" +
-	"\x0f_progress_total\">\n" +
+	"\x0f_progress_total\"T\n" +
 	"\x0eEnqueueRequest\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x14\n" +
-	"\x05title\x18\x02 \x01(\tR\x05title\"a\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12\x14\n" +
+	"\x05force\x18\x03 \x01(\bR\x05force\"a\n" +
 	"\tQueuedJob\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x15\n" +
 	"\x06job_id\x18\x02 \x01(\x03R\x05jobId\x12%\n" +

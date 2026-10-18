@@ -72,8 +72,12 @@ class Queue {
     this.#timer = setTimeout(() => void this.#tick(), this.active > 0 ? 2000 : 15000);
   }
 
-  async enqueue(source: string, title: string): Promise<number> {
-    const { jobs: queued } = await jobs.enqueue({ source, title });
+  /**
+   * Queues a source. Forced, it is read again even where the index already
+   * holds its bytes, which is what re-ingesting an unchanged file means.
+   */
+  async enqueue(source: string, title: string, force = false): Promise<number> {
+    const { jobs: queued } = await jobs.enqueue({ source, title, force });
     void this.refresh();
     return Number(queued[0]?.queuePosition ?? 0n);
   }

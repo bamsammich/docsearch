@@ -554,3 +554,49 @@ func (s *MigrationSuite) TestIdentityGoesDownAndUpAgain() {
 	s.exec(`SELECT create_account('a', 'https://one.example', 'alice')`)
 	s.True(s.tableExists("chunks_a"))
 }
+
+// -- 00016_job_force ------------------------------------------------------
+
+// queuedJob puts one job on the default library's queue.
+func (s *MigrationSuite) queuedJob() {
+	pgtest.WriteAs(s.T(), s.db, "default", func(tx *sql.Tx) {
+		_, err := tx.ExecContext(s.T().Context(),
+			`INSERT INTO ingest_jobs (user_id, source_path, status, created_at, updated_at)
+			 VALUES ('default', '/library/guide.md', 'queued', now(), now())`)
+		s.Require().NoError(err)
+	})
+}
+
+// forcedJobs counts the default library's jobs that force a re-read.
+func (s *MigrationSuite) forcedJobs() (forced, total int) {
+	pgtest.ReadAs(s.T(), s.db, "default", func(tx *sql.Tx) {
+		s.Require().NoError(tx.QueryRowContext(s.T().Context(),
+			`SELECT COUNT(*) FILTER (WHERE force), COUNT(*) FROM ingest_jobs`).
+			Scan(&forced, &total))
+	})
+	return forced, total
+}
+
+func (s *MigrationSuite) TestJobForceUpLeavesTheQueueUnforced() {
+	// A job queued before the column existed asked for an ordinary ingest,
+	// and must still get one.
+	s.upTo(15)
+	s.queuedJob()
+
+	s.upTo(16)
+
+	forced, total := s.forcedJobs()
+	s.Equal(1, total)
+	s.Equal(0, forced)
+}
+
+func (s *MigrationSuite) TestJobForceGoesDownAndUpAgain() {
+	s.upTo(16)
+	s.queuedJob()
+	s.down()
+	s.upTo(16)
+
+	forced, total := s.forcedJobs()
+	s.Equal(1, total, "the job survives losing the column")
+	s.Equal(0, forced)
+}

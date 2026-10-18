@@ -235,7 +235,8 @@ CREATE TABLE public.ingest_jobs (
     lease_until timestamp with time zone,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
-    user_id text NOT NULL
+    user_id text NOT NULL,
+    force boolean DEFAULT false NOT NULL
 );
 
 ALTER TABLE ONLY public.ingest_jobs FORCE ROW LEVEL SECURITY;

@@ -48,8 +48,8 @@ func (_m *MockEnqueuer) EXPECT() *MockEnqueuer_Expecter {
 }
 
 // Enqueue provides a mock function for the type MockEnqueuer
-func (_mock *MockEnqueuer) Enqueue(ctx context.Context, target string, title string) ([]job.Queued, error) {
-	ret := _mock.Called(ctx, target, title)
+func (_mock *MockEnqueuer) Enqueue(ctx context.Context, target string, title string, force bool) ([]job.Queued, error) {
+	ret := _mock.Called(ctx, target, title, force)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Enqueue")
@@ -57,18 +57,18 @@ func (_mock *MockEnqueuer) Enqueue(ctx context.Context, target string, title str
 
 	var r0 []job.Queued
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) ([]job.Queued, error)); ok {
-		return returnFunc(ctx, target, title)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, bool) ([]job.Queued, error)); ok {
+		return returnFunc(ctx, target, title, force)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) []job.Queued); ok {
-		r0 = returnFunc(ctx, target, title)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, bool) []job.Queued); ok {
+		r0 = returnFunc(ctx, target, title, force)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]job.Queued)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = returnFunc(ctx, target, title)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, bool) error); ok {
+		r1 = returnFunc(ctx, target, title, force)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -84,11 +84,12 @@ type MockEnqueuer_Enqueue_Call struct {
 //   - ctx context.Context
 //   - target string
 //   - title string
-func (_e *MockEnqueuer_Expecter) Enqueue(ctx any, target any, title any) *MockEnqueuer_Enqueue_Call {
-	return &MockEnqueuer_Enqueue_Call{Call: _e.mock.On("Enqueue", ctx, target, title)}
+//   - force bool
+func (_e *MockEnqueuer_Expecter) Enqueue(ctx any, target any, title any, force any) *MockEnqueuer_Enqueue_Call {
+	return &MockEnqueuer_Enqueue_Call{Call: _e.mock.On("Enqueue", ctx, target, title, force)}
 }
 
-func (_c *MockEnqueuer_Enqueue_Call) Run(run func(ctx context.Context, target string, title string)) *MockEnqueuer_Enqueue_Call {
+func (_c *MockEnqueuer_Enqueue_Call) Run(run func(ctx context.Context, target string, title string, force bool)) *MockEnqueuer_Enqueue_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -102,10 +103,15 @@ func (_c *MockEnqueuer_Enqueue_Call) Run(run func(ctx context.Context, target st
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
+		var arg3 bool
+		if args[3] != nil {
+			arg3 = args[3].(bool)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -116,7 +122,7 @@ func (_c *MockEnqueuer_Enqueue_Call) Return(queueds []job.Queued, err error) *Mo
 	return _c
 }
 
-func (_c *MockEnqueuer_Enqueue_Call) RunAndReturn(run func(ctx context.Context, target string, title string) ([]job.Queued, error)) *MockEnqueuer_Enqueue_Call {
+func (_c *MockEnqueuer_Enqueue_Call) RunAndReturn(run func(ctx context.Context, target string, title string, force bool) ([]job.Queued, error)) *MockEnqueuer_Enqueue_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -45,7 +45,7 @@ the mise registry — install it from your package manager.
 docsearch migrate [--check] [--dsn DSN]            # bring the schema up to date
 docsearch inspect <target>                         # what structure does it offer?
 docsearch add     <target> [--title T]             # synchronous; file, directory or URL
-docsearch enqueue <target> [--title T]             # queue for the worker
+docsearch enqueue <target> [--title T] [--force]   # queue for the worker
 docsearch refresh <doc_id> [--from-cache]          # re-crawl an ingested site
 docsearch jobs    [--all] [--limit N]              # queue state
 docsearch cancel  <job_id>                         # ask a job to stop
@@ -114,6 +114,34 @@ it only when one path holds half the document or more.
 A document is invisible to search until its ingest completes. Every read path
 filters `documents.status='ready'`.
 
+### Re-ingesting unchanged bytes
+
+An ingest hashes its source first. When a ready document already holds those
+bytes, the ingest stamps it as read and stops, so a sync or a repeated
+`enqueue` of a directory costs a hash per file. That shortcut would also stop
+a change to extraction, chunking or grading from ever reaching a document
+whose file never changed, so two things get past it.
+
+| | reads held bytes again when |
+|---|---|
+| `docsearch enqueue --force`, and Re-ingest in the library UI | always |
+| any other ingest | the document's structure report was written by an older pipeline |
+
+Every structure report records the `domain.PipelineVersion` that wrote it,
+and a change to an adapter, the chunker or the grader bumps that number. A
+report from before versions were recorded counts as older than any build.
+The re-read replaces the document that holds the bytes and keeps its
+`doc_id`, path and title unless `--title` names another. The old version stays
+searchable until the new one is published in its place, and `verify`,
+`list_documents` and the library UI then show the new grade.
+
+**Cost:** after a bump, each held document is read again the next time its
+bytes arrive, once. A directory `enqueue` re-reads every file in it, and a
+site `refresh --from-cache` re-chunks the site instead of reporting it
+unchanged. `docsearch-sync` skips a document by timestamp before it sends
+anything, so a bump reaches synced documents only when Paperless changes them
+or they are re-ingested.
+
 ## Uploading a file
 
 `add_document` reads files under the library roots, which a remote server
@@ -154,7 +182,7 @@ and how well, the ingest queue, and a search preview that calls the same MCP
 
 | tab | what it answers |
 |---|---|
-| Library | Which documents need attention, and what an agent loses on each. A coverage strip splits every document into pages reachable by chapter, pages reachable without usable chapters, and pages that never reached the index. Rename a document here; its `doc_id` stays the same. |
+| Library | Which documents need attention, and what an agent loses on each. A coverage strip splits every document into pages reachable by chapter, pages reachable without usable chapters, and pages that never reached the index. Rename a document here; its `doc_id` stays the same. Re-ingest reads the file again even when it is unchanged, so a document picks up the current extraction and grading. |
 | Reader | A document's chunks in order, as agents receive them, beside its outline. Chunks without a heading and pages that never reached the index are marked. A search result opens the reader at its chunk. Original opens the file the document was read from. |
 | Ingest | Add a site or upload a file, with an optional title, and follow each job through discover, fetch, extract, chunk and index. Failures are listed first. |
 | Search preview | Run a query, optionally inside one document and section, and see the ranked results and the raw response an agent receives. |

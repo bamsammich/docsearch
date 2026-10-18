@@ -77,9 +77,11 @@ func (r *Repository) ReadyWithDigest(
 		return nil, fmt.Errorf("count the chunks of %s: %w", row.DocID, err)
 	}
 	return &ingest.Existing{
-		DocID:      row.DocID,
-		Title:      row.Title,
-		ChunkCount: int(chunks),
+		DocID:           row.DocID,
+		Title:           row.Title,
+		Identity:        row.SourcePath,
+		ChunkCount:      int(chunks),
+		PipelineVersion: domain.StoredPipelineVersion(row.Warnings.String),
 	}, nil
 }
 

@@ -484,7 +484,7 @@ func (d Deps) addDocument(ctx context.Context, _ *mcp.CallToolRequest,
 	if err != nil {
 		return nil, addDocumentOutput{}, err
 	}
-	queued, err := jobs.Enqueue(ctx, target, in.Title)
+	queued, err := jobs.Enqueue(ctx, target, in.Title, false)
 	if err != nil {
 		return nil, addDocumentOutput{}, err
 	}

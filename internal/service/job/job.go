@@ -45,8 +45,8 @@ type Job struct {
 // is what drives it.
 type Queue interface {
 	// Add puts one source on the queue and returns its id and its position,
-	// counting itself.
-	Add(ctx context.Context, source, title string) (id int64, position int, err error)
+	// counting itself. A forced job re-reads bytes the index already holds.
+	Add(ctx context.Context, source, title string, force bool) (id int64, position int, err error)
 	List(ctx context.Context, includeCompleted bool, limit int) ([]Job, error)
 	// Job is one job, by id.
 	Job(ctx context.Context, id int64) (Job, error)
@@ -81,15 +81,15 @@ func New(queue Queue, targets Targets) *Service {
 //
 // A directory becomes one job per supported file beneath it, because the
 // site model applies to a crawled site rather than to any directory that
-// happens to hold Markdown.
-func (s *Service) Enqueue(ctx context.Context, target, title string) ([]Queued, error) {
+// happens to hold Markdown. Force applies to every one of them.
+func (s *Service) Enqueue(ctx context.Context, target, title string, force bool) ([]Queued, error) {
 	sources, err := s.targets.Targets(target)
 	if err != nil {
 		return nil, err
 	}
 	queued := make([]Queued, 0, len(sources))
 	for _, source := range sources {
-		id, position, err := s.queue.Add(ctx, source, title)
+		id, position, err := s.queue.Add(ctx, source, title, force)
 		if err != nil {
 			return nil, fmt.Errorf("queue %s: %w", source, err)
 		}

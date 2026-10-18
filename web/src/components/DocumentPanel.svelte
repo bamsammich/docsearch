@@ -60,7 +60,9 @@
   async function reingest() {
     busy = true;
     try {
-      const position = await queue.enqueue(doc.source, doc.title);
+      // Forced: the file is usually unchanged, and an unforced ingest would
+      // skip bytes the index already holds.
+      const position = await queue.enqueue(doc.source, doc.title, true);
       toast.show(`Re-ingest queued (position ${position}). ${doc.title} stays searchable until it's done.`);
     } catch (err) {
       toast.show(problem(err));

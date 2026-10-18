@@ -84,6 +84,7 @@ type IngestJob struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	UserID      string
+	Force       bool
 }
 
 type OauthAuthRequest struct {

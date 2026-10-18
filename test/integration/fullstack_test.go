@@ -234,7 +234,7 @@ func (i *index) writeBytes(name string, body []byte) string {
 // enqueue puts one job on the queue, as the CLI's add does.
 func (i *index) enqueue(path string) int64 {
 	id, _, err := postgres.NewJobs(i.db, owner.Builtin).
-		Add(context.Background(), path, "")
+		Add(context.Background(), path, "", false)
 	Expect(err).NotTo(HaveOccurred())
 	return id
 }
