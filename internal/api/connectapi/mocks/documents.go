@@ -178,6 +178,92 @@ func (_c *MockDocuments_List_Call) RunAndReturn(run func(ctx context.Context) ([
 	return _c
 }
 
+// Read provides a mock function for the type MockDocuments
+func (_mock *MockDocuments) Read(ctx context.Context, docID string, from int, atChunk *int64, limit int) (*document.Reading, error) {
+	ret := _mock.Called(ctx, docID, from, atChunk, limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Read")
+	}
+
+	var r0 *document.Reading
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, *int64, int) (*document.Reading, error)); ok {
+		return returnFunc(ctx, docID, from, atChunk, limit)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, *int64, int) *document.Reading); ok {
+		r0 = returnFunc(ctx, docID, from, atChunk, limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*document.Reading)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, int, *int64, int) error); ok {
+		r1 = returnFunc(ctx, docID, from, atChunk, limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockDocuments_Read_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Read'
+type MockDocuments_Read_Call struct {
+	*mock.Call
+}
+
+// Read is a helper method to define mock.On call
+//   - ctx context.Context
+//   - docID string
+//   - from int
+//   - atChunk *int64
+//   - limit int
+func (_e *MockDocuments_Expecter) Read(ctx any, docID any, from any, atChunk any, limit any) *MockDocuments_Read_Call {
+	return &MockDocuments_Read_Call{Call: _e.mock.On("Read", ctx, docID, from, atChunk, limit)}
+}
+
+func (_c *MockDocuments_Read_Call) Run(run func(ctx context.Context, docID string, from int, atChunk *int64, limit int)) *MockDocuments_Read_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 int
+		if args[2] != nil {
+			arg2 = args[2].(int)
+		}
+		var arg3 *int64
+		if args[3] != nil {
+			arg3 = args[3].(*int64)
+		}
+		var arg4 int
+		if args[4] != nil {
+			arg4 = args[4].(int)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDocuments_Read_Call) Return(reading *document.Reading, err error) *MockDocuments_Read_Call {
+	_c.Call.Return(reading, err)
+	return _c
+}
+
+func (_c *MockDocuments_Read_Call) RunAndReturn(run func(ctx context.Context, docID string, from int, atChunk *int64, limit int) (*document.Reading, error)) *MockDocuments_Read_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Remove provides a mock function for the type MockDocuments
 func (_mock *MockDocuments) Remove(ctx context.Context, docID string) error {
 	ret := _mock.Called(ctx, docID)
@@ -231,6 +317,69 @@ func (_c *MockDocuments_Remove_Call) Return(err error) *MockDocuments_Remove_Cal
 }
 
 func (_c *MockDocuments_Remove_Call) RunAndReturn(run func(ctx context.Context, docID string) error) *MockDocuments_Remove_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Rename provides a mock function for the type MockDocuments
+func (_mock *MockDocuments) Rename(ctx context.Context, docID string, title string) error {
+	ret := _mock.Called(ctx, docID, title)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Rename")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, docID, title)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockDocuments_Rename_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Rename'
+type MockDocuments_Rename_Call struct {
+	*mock.Call
+}
+
+// Rename is a helper method to define mock.On call
+//   - ctx context.Context
+//   - docID string
+//   - title string
+func (_e *MockDocuments_Expecter) Rename(ctx any, docID any, title any) *MockDocuments_Rename_Call {
+	return &MockDocuments_Rename_Call{Call: _e.mock.On("Rename", ctx, docID, title)}
+}
+
+func (_c *MockDocuments_Rename_Call) Run(run func(ctx context.Context, docID string, title string)) *MockDocuments_Rename_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDocuments_Rename_Call) Return(err error) *MockDocuments_Rename_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockDocuments_Rename_Call) RunAndReturn(run func(ctx context.Context, docID string, title string) error) *MockDocuments_Rename_Call {
 	_c.Call.Return(run)
 	return _c
 }

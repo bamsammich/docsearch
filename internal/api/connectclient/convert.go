@@ -92,6 +92,7 @@ func measurementsOf(m *documentv1.Measurements) domain.Measurements {
 			Total:  int(m.GetTokens().GetTotal()),
 		},
 		MissingLocator:   int(m.GetMissingLocator()),
+		HeadlessChunks:   int(m.GetHeadlessChunks()),
 		ChunksWithImages: int(m.GetChunksWithImages()),
 		ChunkCount:       int(m.GetChunkCount()),
 	}

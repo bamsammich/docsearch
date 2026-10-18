@@ -120,6 +120,55 @@ func (d *Documents) Chunks(ctx context.Context, docID string) ([]domain.Chunk, e
 	return out, nil
 }
 
+// Passages are the chunks whose ordinals run from from through to.
+func (d *Documents) Passages(
+	ctx context.Context,
+	docID string,
+	from, to int,
+) ([]document.Passage, error) {
+	rows, err := pgsession.Read(ctx, d.db, d.q, d.userID,
+		func(q *pgdbgen.Queries) ([]pgdbgen.ContextChunksRow, error) {
+			return q.ContextChunks(ctx, pgdbgen.ContextChunksParams{
+				DocID:     docID,
+				Ordinal:   pgsession.Narrow(from),
+				Ordinal_2: pgsession.Narrow(to),
+			})
+		})
+	if err != nil {
+		return nil, fmt.Errorf("read chunks %d to %d of %s: %w", from, to, docID, err)
+	}
+	out := make([]document.Passage, len(rows))
+	for i, row := range rows {
+		out[i] = document.Passage{
+			Section:     stringOf(row.Section),
+			PageStart:   intOf(row.PageStart),
+			URL:         stringOf(row.Url),
+			Fragment:    stringOf(row.Fragment),
+			HeadingPath: row.HeadingPath,
+			Text:        row.Text,
+			ID:          row.ID,
+			Ordinal:     int(row.Ordinal),
+		}
+	}
+	return out, nil
+}
+
+// ChunkOrdinal is where a chunk sits in its document. A chunk the document
+// does not hold is reported as not found.
+func (d *Documents) ChunkOrdinal(ctx context.Context, docID string, chunkID int64) (int, error) {
+	ordinal, err := pgsession.Read(ctx, d.db, d.q, d.userID,
+		func(q *pgdbgen.Queries) (int32, error) {
+			return q.ChunkOrdinal(ctx, pgdbgen.ChunkOrdinalParams{ID: chunkID, DocID: docID})
+		})
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, fmt.Errorf("%w: chunk %d of %s", ErrNotFound, chunkID, docID)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("find chunk %d of %s: %w", chunkID, docID, err)
+	}
+	return int(ordinal), nil
+}
+
 // IndexTermSections are the distinct sections a back-of-book index points at.
 func (d *Documents) IndexTermSections(ctx context.Context, docID string) ([]string, error) {
 	sections, err := pgsession.Read(ctx, d.db, d.q, d.userID,
@@ -174,6 +223,26 @@ func (d *Documents) Delete(ctx context.Context, docID string) error {
 		}
 		return deleteRows(ctx, q, docID)
 	})
+}
+
+// Rename changes what a document is called.
+func (d *Documents) Rename(ctx context.Context, docID, title string) error {
+	var renamed int64
+	err := pgsession.Run(ctx, d.db, d.q, d.userID, func(q *pgdbgen.Queries) error {
+		var err error
+		renamed, err = q.RenameDocument(
+			ctx,
+			pgdbgen.RenameDocumentParams{DocID: docID, Title: title},
+		)
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("rename %s: %w", docID, err)
+	}
+	if renamed == 0 {
+		return fmt.Errorf("%w: %s", ErrNotFound, docID)
+	}
+	return nil
 }
 
 // timeOf is a nullable timestamp, zero where it is null.

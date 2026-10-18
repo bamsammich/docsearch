@@ -34,6 +34,10 @@ packages:
       Ingester:
       Sources:
       Accounts:
+  github.com/bamsammich/docsearch/internal/original:
+    interfaces:
+      Documents:
+      Uploads:
   github.com/bamsammich/docsearch/internal/resource:
     interfaces:
       Reader:

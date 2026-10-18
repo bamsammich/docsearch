@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/bamsammich/docsearch/internal/owner"
@@ -272,5 +273,55 @@ func TestAnOIDCConfigurationThatCannotWorkIsRefused(t *testing.T) {
 				t.Error("Validate() = nil, want an error")
 			}
 		})
+	}
+}
+
+func TestBrowserOriginsAddTheServersOwnOrigin(t *testing.T) {
+	cfg := Config{
+		AllowedOrigins: []string{"https://claude.ai"},
+		PublicURL:      "https://docs.example.org/base",
+	}
+	got := cfg.BrowserOrigins()
+	want := []string{"https://claude.ai", "https://docs.example.org"}
+	if !slices.Equal(got, want) {
+		t.Errorf("BrowserOrigins() = %v, want %v", got, want)
+	}
+}
+
+func TestBrowserOriginsDoNotRepeatAListedOrigin(t *testing.T) {
+	cfg := Config{
+		AllowedOrigins: []string{"HTTPS://Docs.Example.org"},
+		PublicURL:      "https://docs.example.org",
+	}
+	if got := cfg.BrowserOrigins(); len(got) != 1 {
+		t.Errorf("BrowserOrigins() = %v, want the one listed origin", got)
+	}
+}
+
+func TestBrowserOriginsLeaveTheAllowlistUntouched(t *testing.T) {
+	cfg := Config{AllowedOrigins: []string{"https://claude.ai"}, PublicURL: "http://127.0.0.1:8765"}
+	_ = cfg.BrowserOrigins()
+	if len(cfg.AllowedOrigins) != 1 {
+		t.Errorf("AllowedOrigins grew to %v", cfg.AllowedOrigins)
+	}
+}
+
+func TestBrowserOriginsAcceptBothLoopbackSpellingsOnALoopbackListener(t *testing.T) {
+	cfg := Config{PublicURL: "http://docs.tailnet.example:18765", Addr: "127.0.0.1:18765"}
+	got := cfg.BrowserOrigins()
+	want := []string{
+		"http://docs.tailnet.example:18765",
+		"http://127.0.0.1:18765",
+		"http://localhost:18765",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("BrowserOrigins() = %v, want %v", got, want)
+	}
+}
+
+func TestBrowserOriginsAddNoLoopbackOnAPublicListener(t *testing.T) {
+	cfg := Config{PublicURL: "https://docs.example.org", Addr: "0.0.0.0:8765"}
+	if got := cfg.BrowserOrigins(); len(got) != 1 {
+		t.Errorf("BrowserOrigins() = %v, want only the public origin", got)
 	}
 }

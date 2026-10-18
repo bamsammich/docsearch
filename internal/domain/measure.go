@@ -1,6 +1,10 @@
 package domain
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/bamsammich/docsearch/internal/pystr"
+)
 
 // Measurements are what a document's chunks show about how it was stored.
 //
@@ -27,6 +31,9 @@ type Measurements struct {
 	MissingLocator   int `json:"missing_locator"`
 	ChunksWithImages int `json:"chunks_with_images"`
 	ChunkCount       int `json:"chunk_count"`
+	// HeadlessChunks carry no heading path, so no heading reaches them:
+	// section_filter cannot select them and the outline cannot list them.
+	HeadlessChunks int `json:"headless_chunks"`
 }
 
 // TokenSpread is the distribution of chunk sizes.
@@ -76,12 +83,7 @@ func Measure(chunks []Chunk, pageCount *int) Measurements {
 			HeadingPath: c.HeadingPath, Ordinal: c.Ordinal, Tokens: tokens,
 		}
 		counts[i] = tokens
-		if c.ImageCount > 0 {
-			m.ChunksWithImages++
-		}
-		if pageCount != nil && c.PageStart == nil {
-			m.MissingLocator++
-		}
+		m.tally(c, pageCount != nil)
 	}
 
 	m.Tokens = spread(counts)
@@ -89,6 +91,19 @@ func Measure(chunks []Chunk, pageCount *int) Measurements {
 	m.UncoveredPages = uncoveredPages(chunks, pageCount)
 	m.OrdinalGaps = ordinalGaps(chunks)
 	return m
+}
+
+// tally counts what one chunk lacks or carries.
+func (m *Measurements) tally(c Chunk, paginated bool) {
+	if c.ImageCount > 0 {
+		m.ChunksWithImages++
+	}
+	if paginated && c.PageStart == nil {
+		m.MissingLocator++
+	}
+	if pystr.Strip(c.HeadingPath) == "" {
+		m.HeadlessChunks++
+	}
 }
 
 // spread is the token distribution, with the percentiles Python picks.

@@ -179,3 +179,52 @@ func (s *DocumentSuite) TestInspectionIsPassedThrough() {
 	s.Require().NoError(err)
 	s.Equal(want, got)
 }
+
+func (s *DocumentSuite) TestAReadStartsWhereItWasAskedTo() {
+	chunks := 12
+	s.repo.EXPECT().Get(mock.Anything, "guide").
+		Return(&document.Document{DocID: "guide", ChunkCount: &chunks}, nil)
+	s.repo.EXPECT().Passages(mock.Anything, "guide", 5, 9).
+		Return([]document.Passage{{ID: 41, Ordinal: 5}}, nil)
+
+	reading, err := s.service().Read(s.T().Context(), "guide", 5, nil, 5)
+	s.Require().NoError(err)
+	s.Equal(5, reading.From)
+	s.Equal(12, reading.ChunkCount)
+	s.Len(reading.Passages, 1)
+}
+
+func (s *DocumentSuite) TestAReadAtAChunkStartsAtItsOrdinal() {
+	s.repo.EXPECT().Get(mock.Anything, "guide").Return(&document.Document{DocID: "guide"}, nil)
+	s.repo.EXPECT().ChunkOrdinal(mock.Anything, "guide", int64(77)).Return(30, nil)
+	s.repo.EXPECT().Passages(mock.Anything, "guide", 30, 30+document.DefaultReadLimit-1).
+		Return(nil, nil)
+
+	chunk := int64(77)
+	reading, err := s.service().Read(s.T().Context(), "guide", 0, &chunk, 0)
+	s.Require().NoError(err)
+	s.Equal(30, reading.From)
+}
+
+func (s *DocumentSuite) TestAnOversizedReadTakesTheDefault() {
+	s.repo.EXPECT().Get(mock.Anything, "guide").Return(&document.Document{DocID: "guide"}, nil)
+	s.repo.EXPECT().Passages(mock.Anything, "guide", 0, document.DefaultReadLimit-1).
+		Return(nil, nil)
+
+	_, err := s.service().Read(s.T().Context(), "guide", -3, nil, document.ReadLimit+1)
+	s.Require().NoError(err)
+}
+
+func (s *DocumentSuite) TestReadingADocumentTheIndexDoesNotHoldFails() {
+	missing := errors.New("no such document")
+	s.repo.EXPECT().Get(mock.Anything, "gone").Return(nil, missing)
+
+	_, err := s.service().Read(s.T().Context(), "gone", 0, nil, 0)
+	s.Require().ErrorIs(err, missing)
+}
+
+func (s *DocumentSuite) TestARenameReachesTheIndex() {
+	s.repo.EXPECT().Rename(mock.Anything, "guide", "Field guide").Return(nil)
+
+	s.Require().NoError(s.service().Rename(s.T().Context(), "guide", "Field guide"))
+}

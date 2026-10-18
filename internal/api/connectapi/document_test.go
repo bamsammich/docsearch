@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -224,4 +225,80 @@ func (s *DocumentAPISuite) TestAListWithNoOwnerIsRefused() {
 	_, err := documentv1connect.NewDocumentServiceClient(server.Client(), server.URL).
 		List(s.T().Context(), connect.NewRequest(&documentv1.ListRequest{}))
 	s.Require().ErrorContains(err, "no owner")
+}
+
+func (s *DocumentAPISuite) TestAReadCarriesEachChunkAsStored() {
+	section, page := "4.2", 118
+	chunk := int64(77)
+	s.documents.EXPECT().Read(mock.Anything, "manual", 0, &chunk, 20).
+		Return(&document.Reading{
+			Passages: []document.Passage{{
+				Section:     &section,
+				PageStart:   &page,
+				HeadingPath: "Manual > Retry policy",
+				Text:        "Retries back off exponentially.",
+				ID:          77,
+				Ordinal:     30,
+			}},
+			From:       30,
+			ChunkCount: 281,
+		}, nil)
+
+	resp, err := s.client.Read(s.T().Context(), connect.NewRequest(&documentv1.ReadRequest{
+		DocId: "manual", AtChunkId: &chunk, Limit: 20,
+	}))
+	s.Require().NoError(err)
+	s.Equal(int64(30), resp.Msg.GetFromOrdinal())
+	s.Equal(int64(281), resp.Msg.GetChunkCount())
+	s.Require().Len(resp.Msg.GetChunks(), 1)
+	got := resp.Msg.GetChunks()[0]
+	s.Equal(int64(77), got.GetChunkId())
+	s.Equal(int64(30), got.GetOrdinal())
+	s.Equal("4.2", got.GetSection())
+	s.Equal(int64(118), got.GetPageStart())
+	s.Equal("Manual > Retry policy", got.GetHeadingPath())
+	s.Nil(got.Url)
+}
+
+func (s *DocumentAPISuite) TestReadingAChunkTheDocumentDoesNotHoldIsNotFound() {
+	s.documents.EXPECT().Read(mock.Anything, "manual", 0, mock.Anything, 0).
+		Return(nil, errNotFound)
+
+	chunk := int64(9)
+	_, err := s.client.Read(s.T().Context(), connect.NewRequest(&documentv1.ReadRequest{
+		DocId: "manual", AtChunkId: &chunk,
+	}))
+	s.Equal(connect.CodeNotFound, connect.CodeOf(err))
+}
+
+func (s *DocumentAPISuite) TestAReadWithNoDocumentIsRefused() {
+	_, err := s.client.Read(s.T().Context(), connect.NewRequest(&documentv1.ReadRequest{}))
+	s.Equal(connect.CodeInvalidArgument, connect.CodeOf(err))
+}
+
+func (s *DocumentAPISuite) TestARenameTrimsTheTitle() {
+	s.documents.EXPECT().Rename(mock.Anything, "manual", "Gateway manual").Return(nil)
+
+	_, err := s.client.Rename(s.T().Context(), connect.NewRequest(&documentv1.RenameRequest{
+		DocId: "manual", Title: "  Gateway manual\n",
+	}))
+	s.Require().NoError(err)
+}
+
+func (s *DocumentAPISuite) TestABlankOrOverlongTitleIsRefused() {
+	for _, title := range []string{"", "   ", strings.Repeat("x", connectapi.TitleLimit+1)} {
+		_, err := s.client.Rename(s.T().Context(), connect.NewRequest(&documentv1.RenameRequest{
+			DocId: "manual", Title: title,
+		}))
+		s.Equal(connect.CodeInvalidArgument, connect.CodeOf(err), "%q", title)
+	}
+}
+
+func (s *DocumentAPISuite) TestRenamingADocumentTheIndexDoesNotHoldIsNotFound() {
+	s.documents.EXPECT().Rename(mock.Anything, "gone", "New").Return(errNotFound)
+
+	_, err := s.client.Rename(s.T().Context(), connect.NewRequest(&documentv1.RenameRequest{
+		DocId: "gone", Title: "New",
+	}))
+	s.Equal(connect.CodeNotFound, connect.CodeOf(err))
 }

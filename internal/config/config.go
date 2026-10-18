@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/bamsammich/docsearch/internal/owner"
@@ -36,6 +37,10 @@ type Config struct {
 	PublicURL string
 	// UploadMaxMB refuses a larger upload before it is stored.
 	UploadMaxMB int64
+	// UIClientID is the public client the library UI signs in as, at the
+	// provider in auth mode oidc. Without it the UI cannot sign anyone in
+	// there, and says so.
+	UIClientID string
 }
 
 // OIDC is how a deployment in auth mode oidc reaches its provider, and who
@@ -104,6 +109,8 @@ const (
 	EnvPublicURL = "DOCSEARCH_PUBLIC_URL"
 	// EnvUploadMaxMB caps an upload's size.
 	EnvUploadMaxMB = "DOCSEARCH_UPLOAD_MAX_MB"
+	// EnvUIClientID names the library UI's client at the provider.
+	EnvUIClientID = "DOCSEARCH_UI_CLIENT_ID"
 )
 
 // DefaultUploadMaxMB is large enough for the biggest manual docsearch has
@@ -201,6 +208,40 @@ func (c *Config) Validate() error {
 		return ErrOpenToTheNetwork
 	}
 	return nil
+}
+
+// BrowserOrigins are the Origin values a browser request may carry: the
+// configured allowlist, and the addresses of the server itself, which the
+// library UI it serves sends every request from. Those are the public URL's
+// origin and, on a loopback listener, both loopback spellings of its port.
+//
+// The server's own addresses are safe to add for the reason the allowlist
+// exists: a rebinding page carries its attacker's origin, never one of these,
+// and only this process answers on its own loopback port.
+func (c Config) BrowserOrigins() []string {
+	origins := slices.Clone(c.AllowedOrigins)
+	add := func(origin string) {
+		listed := slices.ContainsFunc(origins, func(o string) bool {
+			return strings.EqualFold(strings.TrimSpace(o), origin)
+		})
+		if !listed {
+			origins = append(origins, origin)
+		}
+	}
+	if parsed, err := url.Parse(
+		c.PublicURL,
+	); err == nil && parsed.Scheme != "" &&
+		parsed.Host != "" {
+		add(parsed.Scheme + "://" + parsed.Host)
+	}
+	if _, port, err := net.SplitHostPort(
+		c.Addr,
+	); err == nil && IsLoopbackAddr(c.Addr) &&
+		port != "" {
+		add("http://127.0.0.1:" + port)
+		add("http://localhost:" + port)
+	}
+	return origins
 }
 
 // resolvePublicURL settles where a browser reaches the server when nobody

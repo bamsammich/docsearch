@@ -206,6 +206,18 @@ func (*stubDocuments) Remove(
 	return connect.NewResponse(&documentv1.RemoveResponse{}), nil
 }
 
+func (*stubDocuments) Rename(
+	context.Context, *connect.Request[documentv1.RenameRequest],
+) (*connect.Response[documentv1.RenameResponse], error) {
+	return connect.NewResponse(&documentv1.RenameResponse{}), nil
+}
+
+func (*stubDocuments) Read(
+	context.Context, *connect.Request[documentv1.ReadRequest],
+) (*connect.Response[documentv1.ReadResponse], error) {
+	return connect.NewResponse(&documentv1.ReadResponse{}), nil
+}
+
 // stubIngest streams two progress messages and one result, unless asked for
 // the source that ends the stream saying nothing.
 type stubIngest struct{}

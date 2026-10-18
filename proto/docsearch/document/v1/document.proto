@@ -69,6 +69,8 @@ message Measurements {
   // Chunks of a paginated document that name no page.
   int64 missing_locator = 8;
   int64 chunks_with_images = 9;
+  // Chunks with no heading path, which no heading or section_filter reaches.
+  int64 headless_chunks = 10;
 }
 
 // Finding is one graded defect, its evidence, and what it costs a caller.
@@ -151,6 +153,44 @@ message RemoveRequest {
 
 message RemoveResponse {}
 
+message RenameRequest {
+  string doc_id = 1;
+  string title = 2;
+}
+
+message RenameResponse {}
+
+message ReadRequest {
+  string doc_id = 1;
+  // The first chunk to return, by ordinal. Ignored when at_chunk_id is set.
+  int64 from_ordinal = 2;
+  // Opens the document at this chunk instead, the way a search result
+  // names one.
+  optional int64 at_chunk_id = 3;
+  // How many chunks to return. Unset or out of range takes the default.
+  int64 limit = 4;
+}
+
+// ReadChunk is one chunk exactly as the index holds it.
+message ReadChunk {
+  int64 chunk_id = 1;
+  int64 ordinal = 2;
+  string heading_path = 3;
+  optional string section = 4;
+  optional int64 page_start = 5;
+  optional string url = 6;
+  optional string fragment = 7;
+  string text = 8;
+}
+
+message ReadResponse {
+  repeated ReadChunk chunks = 1;
+  // The ordinal the run starts at, which at_chunk_id resolves to.
+  int64 from_ordinal = 2;
+  // How many chunks the document holds in all.
+  int64 chunk_count = 3;
+}
+
 // DocumentService reads and reports on what the index holds.
 service DocumentService {
   // List is every ready document.
@@ -167,4 +207,10 @@ service DocumentService {
 
   // Remove deletes a document from the index.
   rpc Remove(RemoveRequest) returns (RemoveResponse) {}
+
+  // Rename changes what a document is called. Its doc_id stays as it was.
+  rpc Rename(RenameRequest) returns (RenameResponse) {}
+
+  // Read is a run of a document's chunks in order, as agents receive them.
+  rpc Read(ReadRequest) returns (ReadResponse) {}
 }

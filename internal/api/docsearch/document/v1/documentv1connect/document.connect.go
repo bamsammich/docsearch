@@ -43,6 +43,10 @@ const (
 	DocumentServiceInspectProcedure = "/docsearch.document.v1.DocumentService/Inspect"
 	// DocumentServiceRemoveProcedure is the fully-qualified name of the DocumentService's Remove RPC.
 	DocumentServiceRemoveProcedure = "/docsearch.document.v1.DocumentService/Remove"
+	// DocumentServiceRenameProcedure is the fully-qualified name of the DocumentService's Rename RPC.
+	DocumentServiceRenameProcedure = "/docsearch.document.v1.DocumentService/Rename"
+	// DocumentServiceReadProcedure is the fully-qualified name of the DocumentService's Read RPC.
+	DocumentServiceReadProcedure = "/docsearch.document.v1.DocumentService/Read"
 )
 
 // DocumentServiceClient is a client for the docsearch.document.v1.DocumentService service.
@@ -58,6 +62,10 @@ type DocumentServiceClient interface {
 	Inspect(context.Context, *connect.Request[v1.InspectRequest]) (*connect.Response[v1.InspectResponse], error)
 	// Remove deletes a document from the index.
 	Remove(context.Context, *connect.Request[v1.RemoveRequest]) (*connect.Response[v1.RemoveResponse], error)
+	// Rename changes what a document is called. Its doc_id stays as it was.
+	Rename(context.Context, *connect.Request[v1.RenameRequest]) (*connect.Response[v1.RenameResponse], error)
+	// Read is a run of a document's chunks in order, as agents receive them.
+	Read(context.Context, *connect.Request[v1.ReadRequest]) (*connect.Response[v1.ReadResponse], error)
 }
 
 // NewDocumentServiceClient constructs a client for the docsearch.document.v1.DocumentService
@@ -95,6 +103,18 @@ func NewDocumentServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(documentServiceMethods.ByName("Remove")),
 			connect.WithClientOptions(opts...),
 		),
+		rename: connect.NewClient[v1.RenameRequest, v1.RenameResponse](
+			httpClient,
+			baseURL+DocumentServiceRenameProcedure,
+			connect.WithSchema(documentServiceMethods.ByName("Rename")),
+			connect.WithClientOptions(opts...),
+		),
+		read: connect.NewClient[v1.ReadRequest, v1.ReadResponse](
+			httpClient,
+			baseURL+DocumentServiceReadProcedure,
+			connect.WithSchema(documentServiceMethods.ByName("Read")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -104,6 +124,8 @@ type documentServiceClient struct {
 	verify  *connect.Client[v1.VerifyRequest, v1.VerifyResponse]
 	inspect *connect.Client[v1.InspectRequest, v1.InspectResponse]
 	remove  *connect.Client[v1.RemoveRequest, v1.RemoveResponse]
+	rename  *connect.Client[v1.RenameRequest, v1.RenameResponse]
+	read    *connect.Client[v1.ReadRequest, v1.ReadResponse]
 }
 
 // List calls docsearch.document.v1.DocumentService.List.
@@ -126,6 +148,16 @@ func (c *documentServiceClient) Remove(ctx context.Context, req *connect.Request
 	return c.remove.CallUnary(ctx, req)
 }
 
+// Rename calls docsearch.document.v1.DocumentService.Rename.
+func (c *documentServiceClient) Rename(ctx context.Context, req *connect.Request[v1.RenameRequest]) (*connect.Response[v1.RenameResponse], error) {
+	return c.rename.CallUnary(ctx, req)
+}
+
+// Read calls docsearch.document.v1.DocumentService.Read.
+func (c *documentServiceClient) Read(ctx context.Context, req *connect.Request[v1.ReadRequest]) (*connect.Response[v1.ReadResponse], error) {
+	return c.read.CallUnary(ctx, req)
+}
+
 // DocumentServiceHandler is an implementation of the docsearch.document.v1.DocumentService service.
 type DocumentServiceHandler interface {
 	// List is every ready document.
@@ -139,6 +171,10 @@ type DocumentServiceHandler interface {
 	Inspect(context.Context, *connect.Request[v1.InspectRequest]) (*connect.Response[v1.InspectResponse], error)
 	// Remove deletes a document from the index.
 	Remove(context.Context, *connect.Request[v1.RemoveRequest]) (*connect.Response[v1.RemoveResponse], error)
+	// Rename changes what a document is called. Its doc_id stays as it was.
+	Rename(context.Context, *connect.Request[v1.RenameRequest]) (*connect.Response[v1.RenameResponse], error)
+	// Read is a run of a document's chunks in order, as agents receive them.
+	Read(context.Context, *connect.Request[v1.ReadRequest]) (*connect.Response[v1.ReadResponse], error)
 }
 
 // NewDocumentServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -172,6 +208,18 @@ func NewDocumentServiceHandler(svc DocumentServiceHandler, opts ...connect.Handl
 		connect.WithSchema(documentServiceMethods.ByName("Remove")),
 		connect.WithHandlerOptions(opts...),
 	)
+	documentServiceRenameHandler := connect.NewUnaryHandler(
+		DocumentServiceRenameProcedure,
+		svc.Rename,
+		connect.WithSchema(documentServiceMethods.ByName("Rename")),
+		connect.WithHandlerOptions(opts...),
+	)
+	documentServiceReadHandler := connect.NewUnaryHandler(
+		DocumentServiceReadProcedure,
+		svc.Read,
+		connect.WithSchema(documentServiceMethods.ByName("Read")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/docsearch.document.v1.DocumentService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DocumentServiceListProcedure:
@@ -182,6 +230,10 @@ func NewDocumentServiceHandler(svc DocumentServiceHandler, opts ...connect.Handl
 			documentServiceInspectHandler.ServeHTTP(w, r)
 		case DocumentServiceRemoveProcedure:
 			documentServiceRemoveHandler.ServeHTTP(w, r)
+		case DocumentServiceRenameProcedure:
+			documentServiceRenameHandler.ServeHTTP(w, r)
+		case DocumentServiceReadProcedure:
+			documentServiceReadHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -205,4 +257,12 @@ func (UnimplementedDocumentServiceHandler) Inspect(context.Context, *connect.Req
 
 func (UnimplementedDocumentServiceHandler) Remove(context.Context, *connect.Request[v1.RemoveRequest]) (*connect.Response[v1.RemoveResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.document.v1.DocumentService.Remove is not implemented"))
+}
+
+func (UnimplementedDocumentServiceHandler) Rename(context.Context, *connect.Request[v1.RenameRequest]) (*connect.Response[v1.RenameResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.document.v1.DocumentService.Rename is not implemented"))
+}
+
+func (UnimplementedDocumentServiceHandler) Read(context.Context, *connect.Request[v1.ReadRequest]) (*connect.Response[v1.ReadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.document.v1.DocumentService.Read is not implemented"))
 }

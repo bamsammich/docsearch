@@ -35,6 +35,7 @@ type UploadSuite struct {
 	links    *mocks.MockLinks
 	store    *mocks.MockStore
 	enqueued []string
+	titles   []string
 }
 
 func TestUpload(t *testing.T) { suite.Run(t, new(UploadSuite)) }
@@ -43,14 +44,16 @@ func (s *UploadSuite) SetupTest() {
 	s.links = mocks.NewMockLinks(s.T())
 	s.store = mocks.NewMockStore(s.T())
 	s.enqueued = nil
+	s.titles = nil
 }
 
 func (s *UploadSuite) doors() upload.Doors {
 	return upload.Doors{
 		Links:  s.links,
 		Stores: func(string) (upload.Store, error) { return s.store, nil },
-		Enqueue: func(_ context.Context, _, target string) (int64, error) {
+		Enqueue: func(_ context.Context, _, target, title string) (int64, error) {
 			s.enqueued = append(s.enqueued, target)
+			s.titles = append(s.titles, title)
 			return 42, nil
 		},
 		Supports: func(name string) bool { return filepath.Ext(name) == ".pdf" },
@@ -197,6 +200,17 @@ func (s *UploadSuite) TestTheDirectDoorUsesTheCallersKey() {
 	got := serve(s.doors().Direct(), request)
 	s.Equal(http.StatusAccepted, got.Code)
 	s.Equal([]string{"upload:paperless-17"}, s.enqueued)
+}
+
+func (s *UploadSuite) TestTheDirectDoorQueuesTheTitleItWasGiven() {
+	request := httptest.NewRequestWithContext(
+		owner.With(s.T().Context(), user), http.MethodPut,
+		"/upload?name=manual.pdf&title=%20Gateway%20manual%20", strings.NewReader(pdf))
+	s.store.EXPECT().Put(mock.Anything, mock.Anything).Return(nil)
+
+	got := serve(s.doors().Direct(), request)
+	s.Equal(http.StatusAccepted, got.Code)
+	s.Equal([]string{"Gateway manual"}, s.titles)
 }
 
 func (s *UploadSuite) TestAnUploadTargetNamesItsKey() {

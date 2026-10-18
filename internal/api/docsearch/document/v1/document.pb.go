@@ -328,8 +328,10 @@ type Measurements struct {
 	// Chunks of a paginated document that name no page.
 	MissingLocator   int64 `protobuf:"varint,8,opt,name=missing_locator,json=missingLocator,proto3" json:"missing_locator,omitempty"`
 	ChunksWithImages int64 `protobuf:"varint,9,opt,name=chunks_with_images,json=chunksWithImages,proto3" json:"chunks_with_images,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Chunks with no heading path, which no heading or section_filter reaches.
+	HeadlessChunks int64 `protobuf:"varint,10,opt,name=headless_chunks,json=headlessChunks,proto3" json:"headless_chunks,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Measurements) Reset() {
@@ -421,6 +423,13 @@ func (x *Measurements) GetMissingLocator() int64 {
 func (x *Measurements) GetChunksWithImages() int64 {
 	if x != nil {
 		return x.ChunksWithImages
+	}
+	return 0
+}
+
+func (x *Measurements) GetHeadlessChunks() int64 {
+	if x != nil {
+		return x.HeadlessChunks
 	}
 	return 0
 }
@@ -1085,6 +1094,329 @@ func (*RemoveResponse) Descriptor() ([]byte, []int) {
 	return file_docsearch_document_v1_document_proto_rawDescGZIP(), []int{15}
 }
 
+type RenameRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DocId         string                 `protobuf:"bytes,1,opt,name=doc_id,json=docId,proto3" json:"doc_id,omitempty"`
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RenameRequest) Reset() {
+	*x = RenameRequest{}
+	mi := &file_docsearch_document_v1_document_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RenameRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RenameRequest) ProtoMessage() {}
+
+func (x *RenameRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_document_v1_document_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RenameRequest.ProtoReflect.Descriptor instead.
+func (*RenameRequest) Descriptor() ([]byte, []int) {
+	return file_docsearch_document_v1_document_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *RenameRequest) GetDocId() string {
+	if x != nil {
+		return x.DocId
+	}
+	return ""
+}
+
+func (x *RenameRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+type RenameResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RenameResponse) Reset() {
+	*x = RenameResponse{}
+	mi := &file_docsearch_document_v1_document_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RenameResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RenameResponse) ProtoMessage() {}
+
+func (x *RenameResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_document_v1_document_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RenameResponse.ProtoReflect.Descriptor instead.
+func (*RenameResponse) Descriptor() ([]byte, []int) {
+	return file_docsearch_document_v1_document_proto_rawDescGZIP(), []int{17}
+}
+
+type ReadRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	DocId string                 `protobuf:"bytes,1,opt,name=doc_id,json=docId,proto3" json:"doc_id,omitempty"`
+	// The first chunk to return, by ordinal. Ignored when at_chunk_id is set.
+	FromOrdinal int64 `protobuf:"varint,2,opt,name=from_ordinal,json=fromOrdinal,proto3" json:"from_ordinal,omitempty"`
+	// Opens the document at this chunk instead, the way a search result
+	// names one.
+	AtChunkId *int64 `protobuf:"varint,3,opt,name=at_chunk_id,json=atChunkId,proto3,oneof" json:"at_chunk_id,omitempty"`
+	// How many chunks to return. Unset or out of range takes the default.
+	Limit         int64 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadRequest) Reset() {
+	*x = ReadRequest{}
+	mi := &file_docsearch_document_v1_document_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadRequest) ProtoMessage() {}
+
+func (x *ReadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_document_v1_document_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadRequest.ProtoReflect.Descriptor instead.
+func (*ReadRequest) Descriptor() ([]byte, []int) {
+	return file_docsearch_document_v1_document_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ReadRequest) GetDocId() string {
+	if x != nil {
+		return x.DocId
+	}
+	return ""
+}
+
+func (x *ReadRequest) GetFromOrdinal() int64 {
+	if x != nil {
+		return x.FromOrdinal
+	}
+	return 0
+}
+
+func (x *ReadRequest) GetAtChunkId() int64 {
+	if x != nil && x.AtChunkId != nil {
+		return *x.AtChunkId
+	}
+	return 0
+}
+
+func (x *ReadRequest) GetLimit() int64 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+// ReadChunk is one chunk exactly as the index holds it.
+type ReadChunk struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ChunkId       int64                  `protobuf:"varint,1,opt,name=chunk_id,json=chunkId,proto3" json:"chunk_id,omitempty"`
+	Ordinal       int64                  `protobuf:"varint,2,opt,name=ordinal,proto3" json:"ordinal,omitempty"`
+	HeadingPath   string                 `protobuf:"bytes,3,opt,name=heading_path,json=headingPath,proto3" json:"heading_path,omitempty"`
+	Section       *string                `protobuf:"bytes,4,opt,name=section,proto3,oneof" json:"section,omitempty"`
+	PageStart     *int64                 `protobuf:"varint,5,opt,name=page_start,json=pageStart,proto3,oneof" json:"page_start,omitempty"`
+	Url           *string                `protobuf:"bytes,6,opt,name=url,proto3,oneof" json:"url,omitempty"`
+	Fragment      *string                `protobuf:"bytes,7,opt,name=fragment,proto3,oneof" json:"fragment,omitempty"`
+	Text          string                 `protobuf:"bytes,8,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadChunk) Reset() {
+	*x = ReadChunk{}
+	mi := &file_docsearch_document_v1_document_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadChunk) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadChunk) ProtoMessage() {}
+
+func (x *ReadChunk) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_document_v1_document_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadChunk.ProtoReflect.Descriptor instead.
+func (*ReadChunk) Descriptor() ([]byte, []int) {
+	return file_docsearch_document_v1_document_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ReadChunk) GetChunkId() int64 {
+	if x != nil {
+		return x.ChunkId
+	}
+	return 0
+}
+
+func (x *ReadChunk) GetOrdinal() int64 {
+	if x != nil {
+		return x.Ordinal
+	}
+	return 0
+}
+
+func (x *ReadChunk) GetHeadingPath() string {
+	if x != nil {
+		return x.HeadingPath
+	}
+	return ""
+}
+
+func (x *ReadChunk) GetSection() string {
+	if x != nil && x.Section != nil {
+		return *x.Section
+	}
+	return ""
+}
+
+func (x *ReadChunk) GetPageStart() int64 {
+	if x != nil && x.PageStart != nil {
+		return *x.PageStart
+	}
+	return 0
+}
+
+func (x *ReadChunk) GetUrl() string {
+	if x != nil && x.Url != nil {
+		return *x.Url
+	}
+	return ""
+}
+
+func (x *ReadChunk) GetFragment() string {
+	if x != nil && x.Fragment != nil {
+		return *x.Fragment
+	}
+	return ""
+}
+
+func (x *ReadChunk) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+type ReadResponse struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Chunks []*ReadChunk           `protobuf:"bytes,1,rep,name=chunks,proto3" json:"chunks,omitempty"`
+	// The ordinal the run starts at, which at_chunk_id resolves to.
+	FromOrdinal int64 `protobuf:"varint,2,opt,name=from_ordinal,json=fromOrdinal,proto3" json:"from_ordinal,omitempty"`
+	// How many chunks the document holds in all.
+	ChunkCount    int64 `protobuf:"varint,3,opt,name=chunk_count,json=chunkCount,proto3" json:"chunk_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadResponse) Reset() {
+	*x = ReadResponse{}
+	mi := &file_docsearch_document_v1_document_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadResponse) ProtoMessage() {}
+
+func (x *ReadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_document_v1_document_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadResponse.ProtoReflect.Descriptor instead.
+func (*ReadResponse) Descriptor() ([]byte, []int) {
+	return file_docsearch_document_v1_document_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ReadResponse) GetChunks() []*ReadChunk {
+	if x != nil {
+		return x.Chunks
+	}
+	return nil
+}
+
+func (x *ReadResponse) GetFromOrdinal() int64 {
+	if x != nil {
+		return x.FromOrdinal
+	}
+	return 0
+}
+
+func (x *ReadResponse) GetChunkCount() int64 {
+	if x != nil {
+		return x.ChunkCount
+	}
+	return 0
+}
+
 var File_docsearch_document_v1_document_proto protoreflect.FileDescriptor
 
 const file_docsearch_document_v1_document_proto_rawDesc = "" +
@@ -1120,7 +1452,7 @@ const file_docsearch_document_v1_document_proto_rawDesc = "" +
 	"SizedChunk\x12\x18\n" +
 	"\aordinal\x18\x01 \x01(\x03R\aordinal\x12\x16\n" +
 	"\x06tokens\x18\x02 \x01(\x03R\x06tokens\x12!\n" +
-	"\fheading_path\x18\x03 \x01(\tR\vheadingPath\"\xb9\x03\n" +
+	"\fheading_path\x18\x03 \x01(\tR\vheadingPath\"\xe2\x03\n" +
 	"\fMeasurements\x12\x1f\n" +
 	"\vchunk_count\x18\x01 \x01(\x03R\n" +
 	"chunkCount\x12:\n" +
@@ -1131,7 +1463,9 @@ const file_docsearch_document_v1_document_proto_rawDesc = "" +
 	"\fordinal_gaps\x18\x06 \x03(\x03R\vordinalGaps\x12-\n" +
 	"\x12scattered_sections\x18\a \x03(\tR\x11scatteredSections\x12'\n" +
 	"\x0fmissing_locator\x18\b \x01(\x03R\x0emissingLocator\x12,\n" +
-	"\x12chunks_with_images\x18\t \x01(\x03R\x10chunksWithImages\"m\n" +
+	"\x12chunks_with_images\x18\t \x01(\x03R\x10chunksWithImages\x12'\n" +
+	"\x0fheadless_chunks\x18\n" +
+	" \x01(\x03R\x0eheadlessChunks\"m\n" +
 	"\aFinding\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x126\n" +
 	"\bseverity\x18\x02 \x01(\x0e2\x1a.docsearch.type.v1.VerdictR\bseverity\x12\x16\n" +
@@ -1172,12 +1506,44 @@ const file_docsearch_document_v1_document_proto_rawDesc = "" +
 	"\x06report\x18\x01 \x01(\v2$.docsearch.document.v1.InspectReportR\x06report\"&\n" +
 	"\rRemoveRequest\x12\x15\n" +
 	"\x06doc_id\x18\x01 \x01(\tR\x05docId\"\x10\n" +
-	"\x0eRemoveResponse2\xf2\x02\n" +
+	"\x0eRemoveResponse\"<\n" +
+	"\rRenameRequest\x12\x15\n" +
+	"\x06doc_id\x18\x01 \x01(\tR\x05docId\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\"\x10\n" +
+	"\x0eRenameResponse\"\x92\x01\n" +
+	"\vReadRequest\x12\x15\n" +
+	"\x06doc_id\x18\x01 \x01(\tR\x05docId\x12!\n" +
+	"\ffrom_ordinal\x18\x02 \x01(\x03R\vfromOrdinal\x12#\n" +
+	"\vat_chunk_id\x18\x03 \x01(\x03H\x00R\tatChunkId\x88\x01\x01\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\x03R\x05limitB\x0e\n" +
+	"\f_at_chunk_id\"\xa2\x02\n" +
+	"\tReadChunk\x12\x19\n" +
+	"\bchunk_id\x18\x01 \x01(\x03R\achunkId\x12\x18\n" +
+	"\aordinal\x18\x02 \x01(\x03R\aordinal\x12!\n" +
+	"\fheading_path\x18\x03 \x01(\tR\vheadingPath\x12\x1d\n" +
+	"\asection\x18\x04 \x01(\tH\x00R\asection\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"page_start\x18\x05 \x01(\x03H\x01R\tpageStart\x88\x01\x01\x12\x15\n" +
+	"\x03url\x18\x06 \x01(\tH\x02R\x03url\x88\x01\x01\x12\x1f\n" +
+	"\bfragment\x18\a \x01(\tH\x03R\bfragment\x88\x01\x01\x12\x12\n" +
+	"\x04text\x18\b \x01(\tR\x04textB\n" +
+	"\n" +
+	"\b_sectionB\r\n" +
+	"\v_page_startB\x06\n" +
+	"\x04_urlB\v\n" +
+	"\t_fragment\"\x8c\x01\n" +
+	"\fReadResponse\x128\n" +
+	"\x06chunks\x18\x01 \x03(\v2 .docsearch.document.v1.ReadChunkR\x06chunks\x12!\n" +
+	"\ffrom_ordinal\x18\x02 \x01(\x03R\vfromOrdinal\x12\x1f\n" +
+	"\vchunk_count\x18\x03 \x01(\x03R\n" +
+	"chunkCount2\x9e\x04\n" +
 	"\x0fDocumentService\x12Q\n" +
 	"\x04List\x12\".docsearch.document.v1.ListRequest\x1a#.docsearch.document.v1.ListResponse\"\x00\x12W\n" +
 	"\x06Verify\x12$.docsearch.document.v1.VerifyRequest\x1a%.docsearch.document.v1.VerifyResponse\"\x00\x12Z\n" +
 	"\aInspect\x12%.docsearch.document.v1.InspectRequest\x1a&.docsearch.document.v1.InspectResponse\"\x00\x12W\n" +
-	"\x06Remove\x12$.docsearch.document.v1.RemoveRequest\x1a%.docsearch.document.v1.RemoveResponse\"\x00B\xef\x01\n" +
+	"\x06Remove\x12$.docsearch.document.v1.RemoveRequest\x1a%.docsearch.document.v1.RemoveResponse\"\x00\x12W\n" +
+	"\x06Rename\x12$.docsearch.document.v1.RenameRequest\x1a%.docsearch.document.v1.RenameResponse\"\x00\x12Q\n" +
+	"\x04Read\x12\".docsearch.document.v1.ReadRequest\x1a#.docsearch.document.v1.ReadResponse\"\x00B\xef\x01\n" +
 	"\x19com.docsearch.document.v1B\rDocumentProtoP\x01ZMgithub.com/bamsammich/docsearch/internal/api/docsearch/document/v1;documentv1\xa2\x02\x03DDX\xaa\x02\x15Docsearch.Document.V1\xca\x02\x15Docsearch\\Document\\V1\xe2\x02!Docsearch\\Document\\V1\\GPBMetadata\xea\x02\x17Docsearch::Document::V1b\x06proto3"
 
 var (
@@ -1192,7 +1558,7 @@ func file_docsearch_document_v1_document_proto_rawDescGZIP() []byte {
 	return file_docsearch_document_v1_document_proto_rawDescData
 }
 
-var file_docsearch_document_v1_document_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_docsearch_document_v1_document_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_docsearch_document_v1_document_proto_goTypes = []any{
 	(*Document)(nil),              // 0: docsearch.document.v1.Document
 	(*TokenSpread)(nil),           // 1: docsearch.document.v1.TokenSpread
@@ -1210,42 +1576,52 @@ var file_docsearch_document_v1_document_proto_goTypes = []any{
 	(*InspectResponse)(nil),       // 13: docsearch.document.v1.InspectResponse
 	(*RemoveRequest)(nil),         // 14: docsearch.document.v1.RemoveRequest
 	(*RemoveResponse)(nil),        // 15: docsearch.document.v1.RemoveResponse
-	(v1.SourceKind)(0),            // 16: docsearch.type.v1.SourceKind
-	(v1.Quality)(0),               // 17: docsearch.type.v1.Quality
-	(*timestamppb.Timestamp)(nil), // 18: google.protobuf.Timestamp
-	(v1.Verdict)(0),               // 19: docsearch.type.v1.Verdict
-	(v1.Level)(0),                 // 20: docsearch.type.v1.Level
+	(*RenameRequest)(nil),         // 16: docsearch.document.v1.RenameRequest
+	(*RenameResponse)(nil),        // 17: docsearch.document.v1.RenameResponse
+	(*ReadRequest)(nil),           // 18: docsearch.document.v1.ReadRequest
+	(*ReadChunk)(nil),             // 19: docsearch.document.v1.ReadChunk
+	(*ReadResponse)(nil),          // 20: docsearch.document.v1.ReadResponse
+	(v1.SourceKind)(0),            // 21: docsearch.type.v1.SourceKind
+	(v1.Quality)(0),               // 22: docsearch.type.v1.Quality
+	(*timestamppb.Timestamp)(nil), // 23: google.protobuf.Timestamp
+	(v1.Verdict)(0),               // 24: docsearch.type.v1.Verdict
+	(v1.Level)(0),                 // 25: docsearch.type.v1.Level
 }
 var file_docsearch_document_v1_document_proto_depIdxs = []int32{
-	16, // 0: docsearch.document.v1.Document.source_kind:type_name -> docsearch.type.v1.SourceKind
-	17, // 1: docsearch.document.v1.Document.quality:type_name -> docsearch.type.v1.Quality
-	18, // 2: docsearch.document.v1.Document.ingested_at:type_name -> google.protobuf.Timestamp
+	21, // 0: docsearch.document.v1.Document.source_kind:type_name -> docsearch.type.v1.SourceKind
+	22, // 1: docsearch.document.v1.Document.quality:type_name -> docsearch.type.v1.Quality
+	23, // 2: docsearch.document.v1.Document.ingested_at:type_name -> google.protobuf.Timestamp
 	1,  // 3: docsearch.document.v1.Measurements.tokens:type_name -> docsearch.document.v1.TokenSpread
 	2,  // 4: docsearch.document.v1.Measurements.longest:type_name -> docsearch.document.v1.SizedChunk
 	2,  // 5: docsearch.document.v1.Measurements.shortest:type_name -> docsearch.document.v1.SizedChunk
-	19, // 6: docsearch.document.v1.Finding.severity:type_name -> docsearch.type.v1.Verdict
+	24, // 6: docsearch.document.v1.Finding.severity:type_name -> docsearch.type.v1.Verdict
 	0,  // 7: docsearch.document.v1.VerifyReport.document:type_name -> docsearch.document.v1.Document
 	3,  // 8: docsearch.document.v1.VerifyReport.measurements:type_name -> docsearch.document.v1.Measurements
 	4,  // 9: docsearch.document.v1.VerifyReport.findings:type_name -> docsearch.document.v1.Finding
-	19, // 10: docsearch.document.v1.VerifyReport.verdict:type_name -> docsearch.type.v1.Verdict
-	20, // 11: docsearch.document.v1.InspectFinding.level:type_name -> docsearch.type.v1.Level
+	24, // 10: docsearch.document.v1.VerifyReport.verdict:type_name -> docsearch.type.v1.Verdict
+	25, // 11: docsearch.document.v1.InspectFinding.level:type_name -> docsearch.type.v1.Level
 	6,  // 12: docsearch.document.v1.InspectReport.findings:type_name -> docsearch.document.v1.InspectFinding
 	0,  // 13: docsearch.document.v1.ListResponse.documents:type_name -> docsearch.document.v1.Document
 	5,  // 14: docsearch.document.v1.VerifyResponse.report:type_name -> docsearch.document.v1.VerifyReport
 	7,  // 15: docsearch.document.v1.InspectResponse.report:type_name -> docsearch.document.v1.InspectReport
-	8,  // 16: docsearch.document.v1.DocumentService.List:input_type -> docsearch.document.v1.ListRequest
-	10, // 17: docsearch.document.v1.DocumentService.Verify:input_type -> docsearch.document.v1.VerifyRequest
-	12, // 18: docsearch.document.v1.DocumentService.Inspect:input_type -> docsearch.document.v1.InspectRequest
-	14, // 19: docsearch.document.v1.DocumentService.Remove:input_type -> docsearch.document.v1.RemoveRequest
-	9,  // 20: docsearch.document.v1.DocumentService.List:output_type -> docsearch.document.v1.ListResponse
-	11, // 21: docsearch.document.v1.DocumentService.Verify:output_type -> docsearch.document.v1.VerifyResponse
-	13, // 22: docsearch.document.v1.DocumentService.Inspect:output_type -> docsearch.document.v1.InspectResponse
-	15, // 23: docsearch.document.v1.DocumentService.Remove:output_type -> docsearch.document.v1.RemoveResponse
-	20, // [20:24] is the sub-list for method output_type
-	16, // [16:20] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	19, // 16: docsearch.document.v1.ReadResponse.chunks:type_name -> docsearch.document.v1.ReadChunk
+	8,  // 17: docsearch.document.v1.DocumentService.List:input_type -> docsearch.document.v1.ListRequest
+	10, // 18: docsearch.document.v1.DocumentService.Verify:input_type -> docsearch.document.v1.VerifyRequest
+	12, // 19: docsearch.document.v1.DocumentService.Inspect:input_type -> docsearch.document.v1.InspectRequest
+	14, // 20: docsearch.document.v1.DocumentService.Remove:input_type -> docsearch.document.v1.RemoveRequest
+	16, // 21: docsearch.document.v1.DocumentService.Rename:input_type -> docsearch.document.v1.RenameRequest
+	18, // 22: docsearch.document.v1.DocumentService.Read:input_type -> docsearch.document.v1.ReadRequest
+	9,  // 23: docsearch.document.v1.DocumentService.List:output_type -> docsearch.document.v1.ListResponse
+	11, // 24: docsearch.document.v1.DocumentService.Verify:output_type -> docsearch.document.v1.VerifyResponse
+	13, // 25: docsearch.document.v1.DocumentService.Inspect:output_type -> docsearch.document.v1.InspectResponse
+	15, // 26: docsearch.document.v1.DocumentService.Remove:output_type -> docsearch.document.v1.RemoveResponse
+	17, // 27: docsearch.document.v1.DocumentService.Rename:output_type -> docsearch.document.v1.RenameResponse
+	20, // 28: docsearch.document.v1.DocumentService.Read:output_type -> docsearch.document.v1.ReadResponse
+	23, // [23:29] is the sub-list for method output_type
+	17, // [17:23] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_docsearch_document_v1_document_proto_init() }
@@ -1255,13 +1631,15 @@ func file_docsearch_document_v1_document_proto_init() {
 	}
 	file_docsearch_document_v1_document_proto_msgTypes[0].OneofWrappers = []any{}
 	file_docsearch_document_v1_document_proto_msgTypes[7].OneofWrappers = []any{}
+	file_docsearch_document_v1_document_proto_msgTypes[18].OneofWrappers = []any{}
+	file_docsearch_document_v1_document_proto_msgTypes[19].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_docsearch_document_v1_document_proto_rawDesc), len(file_docsearch_document_v1_document_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -1,0 +1,35 @@
+{
+  "name": "docsearch-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "The library UI docsearch-server embeds and serves.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
+    "test": "vitest run",
+    "generate": "cd .. && buf generate --template web/buf.gen.yaml"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.16.0",
+    "@connectrpc/connect": "2.2.0",
+    "@connectrpc/connect-web": "2.2.0",
+    "@fontsource/libre-franklin": "5.3.0",
+    "@fontsource/red-hat-mono": "5.3.0",
+    "oidc-client-ts": "3.5.0"
+  },
+  "devDependencies": {
+    "@bufbuild/protoc-gen-es": "2.16.0",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "svelte": "5.57.1",
+    "svelte-check": "4.7.6",
+    "typescript": "5.9.3",
+    "vite": "8.3.2",
+    "vitest": "5.0.3"
+  },
+  "engines": {
+    "node": ">=22.12"
+  }
+}

@@ -9,3 +9,7 @@ deploy
 scripts
 mise.toml
 sqlc.yaml
+# The UI is rebuilt inside the image; a host's own install and build would
+# only bloat the context.
+web/node_modules
+internal/webui/dist
