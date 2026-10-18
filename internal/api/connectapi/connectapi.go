@@ -208,24 +208,38 @@ func asConnectError(err error) error {
 }
 
 // The proto enums share their numbering with the domain's, so each
-// conversion above is a cast. These assertions are what make the cast safe:
-// a value renumbered on either side stops the build here rather than
-// mislabelling a document's grade in a client.
+// conversion above is a cast. These pairs are what make the cast safe: a
+// negative constant cannot convert to uint8, so a pair fails the build when
+// its two values differ in either direction, rather than mislabelling a
+// document's grade in a client.
 const (
 	_ = uint8(typev1.Quality_QUALITY_OK - typev1.Quality(domain.QualityOK))
+	_ = uint8(typev1.Quality(domain.QualityOK) - typev1.Quality_QUALITY_OK)
 	_ = uint8(typev1.Quality_QUALITY_DEGRADED - typev1.Quality(domain.QualityDegraded))
+	_ = uint8(typev1.Quality(domain.QualityDegraded) - typev1.Quality_QUALITY_DEGRADED)
 	_ = uint8(typev1.Quality_QUALITY_FAILED - typev1.Quality(domain.QualityFailed))
+	_ = uint8(typev1.Quality(domain.QualityFailed) - typev1.Quality_QUALITY_FAILED)
 
 	_ = uint8(typev1.SourceKind_SOURCE_KIND_FILE - typev1.SourceKind(domain.SourceKindFile))
+	_ = uint8(typev1.SourceKind(domain.SourceKindFile) - typev1.SourceKind_SOURCE_KIND_FILE)
 	_ = uint8(typev1.SourceKind_SOURCE_KIND_SITE - typev1.SourceKind(domain.SourceKindSite))
+	_ = uint8(typev1.SourceKind(domain.SourceKindSite) - typev1.SourceKind_SOURCE_KIND_SITE)
 
 	_ = uint8(ingestv1.Phase_PHASE_DISCOVER - ingestv1.Phase(ingest.PhaseDiscover))
+	_ = uint8(ingestv1.Phase(ingest.PhaseDiscover) - ingestv1.Phase_PHASE_DISCOVER)
 	_ = uint8(ingestv1.Phase_PHASE_FETCH - ingestv1.Phase(ingest.PhaseFetch))
+	_ = uint8(ingestv1.Phase(ingest.PhaseFetch) - ingestv1.Phase_PHASE_FETCH)
 	_ = uint8(ingestv1.Phase_PHASE_EXTRACT - ingestv1.Phase(ingest.PhaseExtract))
+	_ = uint8(ingestv1.Phase(ingest.PhaseExtract) - ingestv1.Phase_PHASE_EXTRACT)
 	_ = uint8(ingestv1.Phase_PHASE_CHUNK - ingestv1.Phase(ingest.PhaseChunk))
+	_ = uint8(ingestv1.Phase(ingest.PhaseChunk) - ingestv1.Phase_PHASE_CHUNK)
 	_ = uint8(ingestv1.Phase_PHASE_INDEX - ingestv1.Phase(ingest.PhaseIndex))
+	_ = uint8(ingestv1.Phase(ingest.PhaseIndex) - ingestv1.Phase_PHASE_INDEX)
 
 	_ = uint8(ingestv1.Outcome_OUTCOME_INGESTED - ingestv1.Outcome(ingest.Ingested))
+	_ = uint8(ingestv1.Outcome(ingest.Ingested) - ingestv1.Outcome_OUTCOME_INGESTED)
 	_ = uint8(ingestv1.Outcome_OUTCOME_REPLACED - ingestv1.Outcome(ingest.Replaced))
+	_ = uint8(ingestv1.Outcome(ingest.Replaced) - ingestv1.Outcome_OUTCOME_REPLACED)
 	_ = uint8(ingestv1.Outcome_OUTCOME_UNCHANGED - ingestv1.Outcome(ingest.Unchanged))
+	_ = uint8(ingestv1.Outcome(ingest.Unchanged) - ingestv1.Outcome_OUTCOME_UNCHANGED)
 )

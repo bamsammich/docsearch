@@ -8,6 +8,7 @@ package job
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/bamsammich/docsearch/internal/domain"
 )
@@ -18,17 +19,20 @@ const defaultLimit = 50
 
 // Job is one row of the queue.
 type Job struct {
+	// LeaseUntil is when a running job's claim lapses, zero for a job no
+	// worker holds. A running job past it has most likely lost its worker.
+	LeaseUntil      time.Time
 	ProgressCurrent *int
 	ProgressTotal   *int
-	Source          string
-	Title           string
+	CreatedAt       string
 	DocID           string
 	// Status is 'queued', 'running', 'done', 'failed' or 'cancelled'.
 	Status    string
 	Phase     string
 	Error     string
-	CreatedAt string
+	Title     string
 	UpdatedAt string
+	Source    string
 	Warnings  []string
 	JobID     int64
 	Attempts  int
@@ -44,6 +48,8 @@ type Queue interface {
 	// counting itself.
 	Add(ctx context.Context, source, title string) (id int64, position int, err error)
 	List(ctx context.Context, includeCompleted bool, limit int) ([]Job, error)
+	// Job is one job, by id.
+	Job(ctx context.Context, id int64) (Job, error)
 	// RequestCancel asks a job to stop and reports what it reads as now.
 	RequestCancel(ctx context.Context, id int64) (status string, err error)
 }
@@ -102,6 +108,15 @@ func (s *Service) List(ctx context.Context, includeCompleted bool, limit int) ([
 		return nil, fmt.Errorf("list jobs: %w", err)
 	}
 	return jobs, nil
+}
+
+// Get is one job.
+func (s *Service) Get(ctx context.Context, id int64) (Job, error) {
+	j, err := s.queue.Job(ctx, id)
+	if err != nil {
+		return Job{}, fmt.Errorf("read job %d: %w", id, err)
+	}
+	return j, nil
 }
 
 // Cancel asks a running job to stop, and reports what it reads as now.

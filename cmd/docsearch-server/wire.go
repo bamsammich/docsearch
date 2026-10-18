@@ -218,6 +218,7 @@ func newMCPRoute(
 		LibraryRoots: cfg.LibraryRoots,
 		Log:          log,
 		UploadLinks:  ups.issuer.Issue,
+		Jobs:         libs.Jobs,
 	})
 	return route{
 		path: "/mcp",

@@ -3,7 +3,6 @@ package pgstore
 import (
 	"context"
 	"database/sql"
-	"strings"
 	"testing"
 
 	"github.com/bamsammich/docsearch/internal/pgtest"
@@ -218,41 +217,45 @@ func bestKeywordRank(res []SearchResult) int {
 	return 0
 }
 
-// A finding captured at ingest is worthless if it stops at the database. The
-// worker is headless, so this passthrough is the only way a caller learns that
-// a document's structure does not separate its own chunks.
-func TestSummarizeWarningsSurfacesStructureNotes(t *testing.T) {
-	raw := sql.NullString{Valid: true, String: `{
-		"quality": "degraded",
-		"notes": ["35 chunks share only 10 distinct heading paths (0.29 per chunk)"],
-		"scattered_sections": ["4.2"]
-	}`}
-	quality, notes := summarizeWarnings(raw)
-	if quality != "degraded" {
-		t.Fatalf("quality = %q, want degraded", quality)
-	}
-	var joined string
-	for _, n := range notes {
-		joined += n + "\n"
-	}
-	if !strings.Contains(joined, "35 chunks share only 10 distinct heading paths") {
-		t.Errorf("structure note did not reach the caller, got: %v", notes)
-	}
-	if !strings.Contains(joined, "sections spanning non-adjacent chunks") {
-		t.Errorf("existing findings must survive alongside notes, got: %v", notes)
-	}
-}
-
-func TestSummarizeWarningsOnUningestedDocument(t *testing.T) {
-	quality, notes := summarizeWarnings(sql.NullString{})
-	if quality != "unknown" || notes != nil {
-		t.Errorf("got (%q, %v), want (unknown, nil)", quality, notes)
-	}
-}
-
 // builtinUser owns every row these cases write, which is what phase 04
 // serves until authentication arrives.
 const builtinUser = "default"
+
+// A section filter is matched as written. Under LIKE, the underscore in
+// "10_ Rules" would be a wildcard and sweep in "100 Rules".
+func TestASectionFilterHasNoWildcards(t *testing.T) {
+	pg := pgtest.Start(t)
+	if err := schema.Create(t.Context(), pg.Owner); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+	write(t, pg.Owner, `INSERT INTO documents
+		   (user_id,doc_id,title,format,source_path,sha256,status,chunk_count)
+		 VALUES ($1,'wild','Wild','pdf','/x','wild','ready',3)`, builtinUser)
+	for i, heading := range []string{
+		"Wild > 10_ Rules", "Wild > 10_ Rules > Detail", "Wild > 100 Rules > Detail",
+	} {
+		write(t, pg.Owner, `INSERT INTO chunks
+			   (user_id,doc_id,ordinal,section,heading_path,text,kind,image_count)
+			 VALUES ($1,'wild',$2,$3,$4,'calibrate the fixture before use','prose',0)`,
+			builtinUser, i, itoa(i+1), heading)
+	}
+	st := New(pg.App, builtinUser)
+
+	res, err := st.Search(t.Context(), SearchParams{
+		Query: "calibrate fixture", DocID: "wild", SectionFilter: "Wild > 10_ Rules", K: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range res {
+		if strings.Contains(r.HeadingPath, "100 Rules") {
+			t.Errorf("the filter matched %q, a section it does not name", r.HeadingPath)
+		}
+	}
+	if len(res) != 2 {
+		t.Errorf("got %d results, want the section and its child", len(res))
+	}
+}
 
 // A chunk whose section a matching back-of-book entry names is lifted, both
 // in a search of its document and in a search of the whole library, which

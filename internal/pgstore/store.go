@@ -18,6 +18,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib" // the driver the server and worker use
 
+	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
 	"github.com/bamsammich/docsearch/internal/schema"
@@ -63,17 +64,8 @@ func Open(dsn, userID string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
-// The statuses and the grade a caller sees, written once.
-const (
-	statusQueued  = "queued"
-	statusRunning = "running"
-	// statusCancelled is a job stopped before it finished.
-	statusCancelled = "cancelled"
-	qualityUnknown  = "unknown"
-)
-
-// timeFormat is how a timestamp reads when a tool prints one.
-const timeFormat = "2006-01-02T15:04:05Z"
+// qualityUnknown is the grade list_documents shows for a document with none.
+const qualityUnknown = "unknown"
 
 // nullInt converts a nullable integer to the *int the tool schemas
 // use, where absent means "not applicable to this document" rather than zero.
@@ -135,10 +127,13 @@ func (s *Store) Ready(ctx context.Context) error {
 	}
 
 	version, err := s.q.SchemaVersion(ctx)
-	if err != nil {
-		// Covers both no row and no schema_version table at all: either way
-		// this is a database from before versioning.
+	if schema.Unversioned(err) {
+		// No row, or no schema_version table at all: either way this is a
+		// database from before versioning.
 		return &ErrSchemaVersion{Found: 0, Required: RequiredSchemaVersion}
+	}
+	if err != nil {
+		return fmt.Errorf("read the schema version: %w", err)
 	}
 	if int(version) != RequiredSchemaVersion {
 		return &ErrSchemaVersion{Found: int(version), Required: RequiredSchemaVersion}
@@ -185,7 +180,9 @@ func (s *Store) ListDocuments(ctx context.Context) ([]Document, error) {
 			PageCount:  nullInt(r.PageCount),
 			ChunkCount: nullInt(r.ChunkCount),
 		}
-		d.Quality, d.Warnings = summarizeWarnings(r.Warnings)
+		var quality domain.Quality
+		quality, d.Warnings = domain.Summary(r.Warnings.String)
+		d.Quality = qualityLabel(quality)
 		out = append(out, d)
 	}
 	for i := range out {
@@ -312,4 +309,13 @@ func (s *Store) requireReady(ctx context.Context, docID string) error {
 		return fmt.Errorf("%w: no ready document %q", ErrNotFound, docID)
 	}
 	return nil
+}
+
+// qualityLabel is a grade as list_documents shows it, naming an ungraded
+// document's grade unknown rather than leaving it blank.
+func qualityLabel(q domain.Quality) string {
+	if q == 0 {
+		return qualityUnknown
+	}
+	return q.String()
 }
