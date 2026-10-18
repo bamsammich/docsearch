@@ -23,6 +23,7 @@
   --bad-bg: #f9e4e1;
   --lost: #c27b72;
   --on-bad: #ffffff;
+  --on-warn: #1a1400;
   --code-bg: #1a1c1f;
   --code-fg: #e4e6e8;
   --code-key: #9fc2ef;
@@ -484,3 +485,8 @@ a.btn { text-decoration: none; }
   .toc-fold summary { margin: 0; }
   .toc-fold[open] summary { margin-bottom: 8px; }
 }
+
+/* Instance label: an operator's name for this server, on every page, so a test
+   instance is never taken for the library agents search. */
+.instance { display: flex; align-items: center; justify-content: center; gap: 8px; padding: calc(env(safe-area-inset-top, 0px) + 6px) 16px 6px; background: var(--warn-fill); color: var(--on-warn); font-size: 14px; text-align: center; flex-wrap: wrap; }
+.instance .mono { opacity: .8; }

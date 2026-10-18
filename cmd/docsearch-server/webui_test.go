@@ -60,6 +60,20 @@ func (s *WebUISuite) TestTheConfigNeedsNoCredential() {
 		`"origin_allowed":false}`, rec.Body.String())
 }
 
+// A labelled instance tells the page what to call it, so a test server can't
+// be taken for the one agents search.
+func (s *WebUISuite) TestAnInstanceLabelReachesThePage() {
+	ui := newWebUI(config.Config{Auth: owner.Token, InstanceLabel: "Test instance"})
+	mux := http.NewServeMux()
+	for _, r := range ui.routes {
+		mux.Handle(r.path, r.handler)
+	}
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequestWithContext(s.T().Context(),
+		http.MethodGet, "/ui/config", nil))
+	s.Contains(rec.Body.String(), `"instance_label":"Test instance"`)
+}
+
 func (s *WebUISuite) TestThePageNeedsNoCredential() {
 	rec := s.do(http.MethodGet, "/", "", "")
 	s.NotEqual(http.StatusUnauthorized, rec.Code)

@@ -46,6 +46,8 @@ type Config struct {
 	Resource string `json:"resource,omitempty"`
 	// PublicURL is where the server expects a browser to open the UI.
 	PublicURL string `json:"public_url,omitempty"`
+	// InstanceLabel names this server on every page, when it is set.
+	InstanceLabel string `json:"instance_label,omitempty"`
 	// Scopes are requested beside openid.
 	Scopes []string `json:"scopes,omitempty"`
 	// Origins are the browser origins the server accepts requests from. Not

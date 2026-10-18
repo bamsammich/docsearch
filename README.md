@@ -331,6 +331,7 @@ an in-flight job can checkpoint or roll back instead of being killed mid-write.
 | bearer token | — | `DOCSEARCH_TOKEN` |
 | Origin allowlist | `--allowed-origins` | `DOCSEARCH_ALLOWED_ORIGINS` |
 | library UI's client at the oidc provider | `--ui-client-id` | `DOCSEARCH_UI_CLIENT_ID` |
+| label the library UI shows on every page, such as `Test instance` | `--instance-label` | `DOCSEARCH_INSTANCE_LABEL` |
 | permit public bind | `--allow-public-bind` | `DOCSEARCH_ALLOW_PUBLIC_BIND=true` |
 
 `--auth` is `none`, `token`, `oidc` or `password`, and defaults to `token`,

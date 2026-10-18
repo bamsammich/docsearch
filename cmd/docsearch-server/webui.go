@@ -18,10 +18,11 @@ type webUI struct {
 // browser in: the same way it signs in an MCP client.
 func newWebUI(cfg config.Config) webUI {
 	ui := webui.Config{
-		Auth:        cfg.Auth.String(),
-		PublicURL:   cfg.PublicURL,
-		Origins:     cfg.BrowserOrigins(),
-		UploadMaxMB: cfg.UploadMaxMB,
+		Auth:          cfg.Auth.String(),
+		PublicURL:     cfg.PublicURL,
+		Origins:       cfg.BrowserOrigins(),
+		UploadMaxMB:   cfg.UploadMaxMB,
+		InstanceLabel: cfg.InstanceLabel,
 	}
 	switch cfg.Auth {
 	case owner.OIDC:

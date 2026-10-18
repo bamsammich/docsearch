@@ -16,6 +16,8 @@ export interface UiConfig {
   /** Whether the address this page was opened at is one the server accepts. */
   originAllowed: boolean;
   uploadMaxMB: number;
+  /** What the operator named this server, shown on every page; empty for none. */
+  instanceLabel: string;
 }
 
 interface WireConfig {
@@ -27,6 +29,7 @@ interface WireConfig {
   public_url?: string;
   origin_allowed?: boolean;
   upload_max_mb?: number;
+  instance_label?: string;
 }
 
 const modes: readonly AuthMode[] = ["none", "token", "oidc", "password"];
@@ -46,6 +49,7 @@ export function parseConfig(wire: WireConfig): UiConfig {
     // An older server says nothing; assume the address is fine rather than warn.
     originAllowed: wire.origin_allowed ?? true,
     uploadMaxMB: wire.upload_max_mb ?? 0,
+    instanceLabel: (wire.instance_label ?? "").trim(),
   };
 }
 

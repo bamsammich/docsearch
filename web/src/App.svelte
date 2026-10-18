@@ -43,11 +43,19 @@
   const config = $derived(session.config);
   const titles = { library: "Library", ingest: "Ingest", search: "Search preview", read: "Reader" } as const;
 
+  const instance = $derived(config?.instanceLabel ?? "");
+
   $effect(() => {
-    document.title = session.status === "signed-in" ? `${titles[router.view]} · docsearch` : "docsearch";
+    const page = session.status === "signed-in" ? `${titles[router.view]} · docsearch` : "docsearch";
+    document.title = instance ? `${instance} · ${page}` : page;
   });
 </script>
 
+{#if instance}
+  <div class="instance" role="note">
+    <Icon name="alert" /><strong>{instance}</strong><span class="mono">{location.host}</span>
+  </div>
+{/if}
 <div class="shell">
   {#if bootError}
     <div class="signin">

@@ -45,6 +45,10 @@ type Config struct {
 	// provider in auth mode oidc. Without it the UI cannot sign anyone in
 	// there, and says so.
 	UIClientID string
+	// InstanceLabel names this server on every page of the library UI, so a
+	// test or staging instance can't be taken for the one agents search.
+	// Empty shows nothing.
+	InstanceLabel string
 }
 
 // OIDC is how a deployment in auth mode oidc reaches its provider, and who
@@ -121,6 +125,8 @@ const (
 	EnvUploadMaxMB = "DOCSEARCH_UPLOAD_MAX_MB"
 	// EnvUIClientID names the library UI's client at the provider.
 	EnvUIClientID = "DOCSEARCH_UI_CLIENT_ID"
+	// EnvInstanceLabel names this server in the library UI.
+	EnvInstanceLabel = "DOCSEARCH_INSTANCE_LABEL"
 )
 
 // DefaultUploadMaxMB is large enough for the biggest manual docsearch has

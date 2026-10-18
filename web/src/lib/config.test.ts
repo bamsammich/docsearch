@@ -14,7 +14,12 @@ describe("parseConfig", () => {
       publicUrl: "",
       originAllowed: true,
       uploadMaxMB: 100,
+      instanceLabel: "",
     });
+  });
+
+  it("reads the instance label, trimmed", () => {
+    expect(parseConfig({ auth: "token", instance_label: " Test instance " }).instanceLabel).toBe("Test instance");
   });
 
   it("reads whether this page's address is accepted", () => {
