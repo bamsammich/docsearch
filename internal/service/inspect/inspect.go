@@ -15,6 +15,7 @@ import (
 
 	"github.com/bamsammich/docsearch/internal/adapter/pdf"
 	"github.com/bamsammich/docsearch/internal/domain"
+	"github.com/bamsammich/docsearch/internal/libroot"
 	"github.com/bamsammich/docsearch/internal/pystr"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 	"github.com/bamsammich/docsearch/internal/site"
@@ -43,12 +44,16 @@ type Service struct {
 	reader  Reader
 	formats Formats
 	crawler Crawler
+	// roots bound which files may be read, as they bound an ingest: a path
+	// the deployment does not offer cannot be ingested, so it is not
+	// inspected either.
+	roots []string
 }
 
 // New builds the service. crawler may be nil where a deployment inspects
 // files only, and a URL is then refused rather than silently skipped.
-func New(reader Reader, formats Formats, crawler Crawler) *Service {
-	return &Service{reader: reader, formats: formats, crawler: crawler}
+func New(reader Reader, formats Formats, crawler Crawler, roots []string) *Service {
+	return &Service{reader: reader, formats: formats, crawler: crawler, roots: roots}
 }
 
 // Inspect reports what could be derived from a target, writing nothing.
@@ -60,7 +65,15 @@ func (s *Service) Inspect(ctx context.Context, target string) (*domain.InspectRe
 }
 
 // file reports what a document on disk offers.
-func (s *Service) file(ctx context.Context, path string) (*domain.InspectReport, error) {
+//
+// The path is resolved under the roots first, and every refusal reads the
+// same, so a caller cannot use inspect to learn whether a file exists outside
+// them.
+func (s *Service) file(ctx context.Context, target string) (*domain.InspectReport, error) {
+	path, err := libroot.Resolve(s.roots, target)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", target, err)
+	}
 	if !s.formats.Supports(path) {
 		report := &domain.InspectReport{Target: path, Format: "unsupported"}
 		report.Add(domain.LevelBlocked, "format", fmt.Sprintf(

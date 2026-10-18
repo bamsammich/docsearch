@@ -18,8 +18,8 @@
   <!-- launchd does not read EnvironmentFile the way systemd does, so the
        token is sourced from its 0600 file by a shell wrapper. It stays out of
        this world-readable plist and out of `launchctl print` output. The
-       same file carries DOCSEARCH_DSN, whose password belongs there for the
-       same reason. -->
+       same file carries DOCSEARCH_DSN, the request role's, whose password
+       belongs there for the same reason. -->
   <key>ProgramArguments</key>
   <array>
     <string>/bin/sh</string>

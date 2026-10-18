@@ -88,7 +88,7 @@ func (l *Libraries) Documents(user string) (*document.Service, error) {
 	}
 	return document.New(
 		postgres.NewDocuments(l.db, user),
-		inspect.New(l.reader, l.formats, nil),
+		inspect.New(l.reader, l.formats, nil, l.roots),
 	), nil
 }
 

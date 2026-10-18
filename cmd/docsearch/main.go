@@ -88,7 +88,7 @@ func migrateCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "dsn",
 				Usage:   "Postgres `DSN` of the database to migrate",
-				Sources: cli.EnvVars(config.EnvDSN),
+				Sources: cli.EnvVars(config.EnvOwnerDSN, config.EnvDSN),
 			},
 			&cli.BoolFlag{
 				Name:  "check",
@@ -102,7 +102,8 @@ func migrateCommand() *cli.Command {
 func migrate(ctx context.Context, cmd *cli.Command) error {
 	dsn := cmd.String("dsn")
 	if dsn == "" {
-		return fmt.Errorf("no database: pass --dsn or set %s", config.EnvDSN)
+		return fmt.Errorf("no database: pass --dsn, or set %s or %s",
+			config.EnvOwnerDSN, config.EnvDSN)
 	}
 
 	// Nothing to create: the cluster provisions the database, along with the
