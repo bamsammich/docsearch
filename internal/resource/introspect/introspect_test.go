@@ -86,3 +86,22 @@ func (s *IntrospectSuite) TestAFailedRequestIsNotAnInvalidToken() {
 	s.Require().Error(err)
 	s.NotErrorIs(err, auth.ErrInvalidToken)
 }
+
+// An inactive token stays inactive, so asking again would only cost the
+// issuer a request. A failed request is not remembered: the issuer said
+// nothing, and the next try may get an answer.
+func (s *IntrospectSuite) TestAnInactiveTokenIsAskedAboutOnce() {
+	s.introspector.EXPECT().Introspect(mock.Anything, "opaque-1").
+		Return(oidc.IntrospectionResponse{Active: false}, nil).Once()
+	for range 3 {
+		_, err := s.reader.Read(s.T().Context(), "opaque-1")
+		s.Require().ErrorIs(err, auth.ErrInvalidToken)
+	}
+
+	s.introspector.EXPECT().Introspect(mock.Anything, "opaque-2").
+		Return(oidc.IntrospectionResponse{}, errors.New("503")).Twice()
+	for range 2 {
+		_, err := s.reader.Read(s.T().Context(), "opaque-2")
+		s.Require().Error(err)
+	}
+}

@@ -24,6 +24,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/library"
 	"github.com/bamsammich/docsearch/internal/mcpserver"
 	"github.com/bamsammich/docsearch/internal/owner"
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/repository/postgres"
 	"github.com/bamsammich/docsearch/internal/source/site"
 	"github.com/bamsammich/docsearch/internal/upload"
@@ -114,6 +115,7 @@ func newPool(lc fx.Lifecycle, cfg config.Config) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
+	pgsession.Bound(db, pgsession.ServerConnections)
 	if err := db.Ping(); err != nil {
 		return nil, errors.Join(fmt.Errorf("open database: %w", err), db.Close())
 	}

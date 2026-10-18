@@ -9,8 +9,11 @@ package introspect
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
+	"time"
 
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/zitadel/oidc/v3/pkg/client/rs"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
@@ -33,10 +36,22 @@ func (c client) Introspect(ctx context.Context, token string) (oidc.Introspectio
 	return rs.Introspect[oidc.IntrospectionResponse](ctx, c.server, token)
 }
 
+// A token the issuer called inactive stays inactive: expiry and revocation
+// do not reverse. Remembering the answer for a while keeps a client retrying
+// a dead token, or anyone replaying one, from costing a request to the issuer
+// each time. The bound keeps a caller sending many distinct tokens from
+// growing the memory.
+const (
+	refusedFor  = 5 * time.Minute
+	refusedKept = 10000
+)
+
 // Reader introspects tokens at one issuer.
 type Reader struct {
 	introspector Introspector
-	issuer       string
+	// refused holds the digests of tokens the issuer said were inactive.
+	refused *expirable.LRU[[sha256.Size]byte, bool]
+	issuer  string
 }
 
 // Discover finds the issuer's introspection endpoint. clientID and secret are
@@ -52,8 +67,15 @@ func Discover(ctx context.Context, issuer, clientID, secret string) (*Reader, er
 
 // New reads tokens from issuer through introspector.
 func New(issuer string, introspector Introspector) *Reader {
-	return &Reader{introspector: introspector, issuer: issuer}
+	return &Reader{
+		introspector: introspector,
+		refused:      expirable.NewLRU[[sha256.Size]byte, bool](refusedKept, nil, refusedFor),
+		issuer:       issuer,
+	}
 }
+
+// errInactive is a token the issuer called inactive.
+var errInactive = fmt.Errorf("%w: inactive", auth.ErrInvalidToken)
 
 // Read asks the issuer about the token.
 //
@@ -61,12 +83,17 @@ func New(issuer string, introspector Introspector) *Reader {
 // said nothing about the token, so the client is not told its credential is
 // bad.
 func (r *Reader) Read(ctx context.Context, token string) (resource.Claims, error) {
+	digest := sha256.Sum256([]byte(token))
+	if r.refused.Contains(digest) {
+		return resource.Claims{}, errInactive
+	}
 	answer, err := r.introspector.Introspect(ctx, token)
 	if err != nil {
 		return resource.Claims{}, fmt.Errorf("introspect: %w", err)
 	}
 	if !answer.Active {
-		return resource.Claims{}, fmt.Errorf("%w: inactive", auth.ErrInvalidToken)
+		r.refused.Add(digest, true)
+		return resource.Claims{}, errInactive
 	}
 	// iss is optional in an introspection response. The endpoint asked
 	// belongs to this issuer, so a response without one speaks for it.

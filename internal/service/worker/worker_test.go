@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -395,4 +396,25 @@ func (s *WorkerSuite) TestTheDocumentIsRecordedWhileTheIngestRuns() {
 		})
 
 	s.Require().NoError(s.run(worker.Options{}))
+}
+
+// A job that runs past its timeout is stopped and failed for good, so an
+// extraction that wedged cannot hold the worker and every account it serves.
+func (s *WorkerSuite) TestAJobPastItsTimeoutFailsForGood() {
+	s.claims(&worker.Job{ID: 7, Source: "/library/manual.pdf", Attempts: 1})
+	s.buildsASource()
+	s.neverCancelled()
+	s.ingester.EXPECT().Run(mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(ctx context.Context, _ ingest.Source, _ ingest.Options) (*ingest.Result, error) {
+			<-ctx.Done()
+			return nil, ingest.ErrCancelled
+		})
+	s.jobs.EXPECT().
+		Finish(mock.Anything, int64(7), worker.Failed,
+			mock.MatchedBy(func(reason string) bool {
+				return strings.Contains(reason, "longest a job may run")
+			}), true).
+		Return(nil)
+
+	s.Require().NoError(s.run(worker.Options{JobTimeout: 20 * time.Millisecond}))
 }
