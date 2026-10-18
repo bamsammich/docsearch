@@ -3,6 +3,7 @@ package pgstore
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 
 	"github.com/bamsammich/docsearch/internal/pgtest"
