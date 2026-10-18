@@ -113,9 +113,11 @@ type Store interface {
 
 	SaveRefresh(ctx context.Context, refresh Refresh) error
 	Refresh(ctx context.Context, tokenHash string) (Refresh, bool, error)
-	// TakeRefresh removes a refresh token and returns it, which is what
-	// makes rotation single-use: two exchanges of one token cannot both win.
-	TakeRefresh(ctx context.Context, tokenHash string) (Refresh, bool, error)
+	// RotateRefresh spends the refresh token tokenHash names and saves next
+	// in its place, together: a token is never spent without its replacement
+	// saved, and two exchanges of one token cannot both win. It reports false
+	// for a token already spent.
+	RotateRefresh(ctx context.Context, tokenHash string, next Refresh) (bool, error)
 	DeleteRefresh(ctx context.Context, tokenHash string) error
 	DeleteRefreshOf(ctx context.Context, userID, clientID string) error
 

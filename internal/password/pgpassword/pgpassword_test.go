@@ -1,6 +1,8 @@
 package pgpassword_test
 
 import (
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -69,14 +71,24 @@ func (s *StoreSuite) TestTheBuiltinLibraryIsTakenOnce() {
 func (s *StoreSuite) TestFailuresLockAndANewPasswordUnlocks() {
 	ctx := s.T().Context()
 	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
-	until := time.Now().Add(time.Hour).Truncate(time.Second)
+	at := time.Now().Truncate(time.Second)
+	attempt := password.Attempt{At: at, LockUntil: at.Add(time.Hour), Threshold: 2}
 	for range 2 {
-		s.Require().NoError(s.app.Failed(ctx, "alice", 2, until))
+		open, err := s.app.Begin(ctx, "alice", attempt)
+		s.Require().NoError(err)
+		s.True(open)
 	}
 	record, _, err := s.app.Find(ctx, "alice")
 	s.Require().NoError(err)
 	s.Equal(2, record.Failures)
-	s.True(record.LockedUntil.Equal(until), "the second failure reached the threshold")
+	s.True(record.LockedUntil.Equal(attempt.LockUntil), "the second attempt reached the threshold")
+
+	open, err := s.app.Begin(ctx, "alice", attempt)
+	s.Require().NoError(err)
+	s.False(open, "a locked account refuses the attempt")
+	record, _, err = s.app.Find(ctx, "alice")
+	s.Require().NoError(err)
+	s.Equal(2, record.Failures, "a refused attempt counts for nothing")
 
 	s.Require().NoError(s.admin.SetHash(ctx, "alice", "new-hash"))
 	record, _, err = s.app.Find(ctx, "alice")
@@ -84,6 +96,57 @@ func (s *StoreSuite) TestFailuresLockAndANewPasswordUnlocks() {
 	s.Zero(record.Failures)
 	s.True(record.LockedUntil.IsZero())
 	s.Equal("new-hash", record.Hash)
+}
+
+// A lock that has run out starts the count again, so one wrong guess after
+// it ends does not lock the account straight back.
+func (s *StoreSuite) TestAnExpiredLockStartsTheCountAgain() {
+	ctx := s.T().Context()
+	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
+	at := time.Now().Truncate(time.Second)
+	attempt := password.Attempt{At: at, LockUntil: at.Add(time.Minute), Threshold: 2}
+	for range 2 {
+		_, err := s.app.Begin(ctx, "alice", attempt)
+		s.Require().NoError(err)
+	}
+
+	later := password.Attempt{
+		At: at.Add(2 * time.Minute), LockUntil: at.Add(3 * time.Minute), Threshold: 2,
+	}
+	open, err := s.app.Begin(ctx, "alice", later)
+	s.Require().NoError(err)
+	s.True(open)
+	record, _, err := s.app.Find(ctx, "alice")
+	s.Require().NoError(err)
+	s.Equal(1, record.Failures)
+	s.True(record.LockedUntil.IsZero(), "one attempt is under the threshold")
+}
+
+// Guesses sent at once are each counted before any is checked, so no more
+// than the threshold of them get to compare a password.
+func (s *StoreSuite) TestGuessesSentAtOnceCannotPassTheThreshold() {
+	ctx := s.T().Context()
+	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
+	at := time.Now().Truncate(time.Second)
+	attempt := password.Attempt{At: at, LockUntil: at.Add(time.Hour), Threshold: 3}
+	var opened atomic.Int32
+	var guesses sync.WaitGroup
+	failures := make(chan error, 20)
+	for range 20 {
+		guesses.Go(func() {
+			open, err := s.app.Begin(ctx, "alice", attempt)
+			failures <- err
+			if open {
+				opened.Add(1)
+			}
+		})
+	}
+	guesses.Wait()
+	close(failures)
+	for err := range failures {
+		s.Require().NoError(err)
+	}
+	s.Equal(int32(3), opened.Load())
 }
 
 // Removing an account ends its sign-in, and the library stays.

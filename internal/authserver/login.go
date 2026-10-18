@@ -30,7 +30,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		s.showLogin(w, r, r.URL.Query().Get("authRequestID"), "", "", http.StatusOK)
 	case http.MethodPost:
-		s.signIn(w, r)
+		s.signIn.ServeHTTP(w, r)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -62,7 +62,7 @@ func (s *Server) showLogin(
 // describe names the app asking and the host its code goes to, the two
 // things a person needs to notice a request they did not start.
 func (s *Server) describe(r *http.Request, request Request) (string, string) {
-	name := "an app"
+	name := ""
 	if registered, found, err := s.store.Client(
 		r.Context(),
 		request.ClientID,
@@ -77,7 +77,9 @@ func (s *Server) describe(r *http.Request, request Request) (string, string) {
 	return name, sendsTo
 }
 
-func (s *Server) signIn(w http.ResponseWriter, r *http.Request) {
+// checkSignIn checks a posted password and, once it is right, sends the
+// browser back through the provider.
+func (s *Server) checkSignIn(w http.ResponseWriter, r *http.Request) {
 	if !s.sameOrigin(r) {
 		http.Error(w, "sign in from docsearch's own page", http.StatusForbidden)
 		return
@@ -165,9 +167,11 @@ strong { color: var(--ink); }
 </style></head><body><main>
 <h1>Sign in to docsearch</h1>
 {{if .Open}}
-<p><strong>{{.Client}}</strong> is asking to read and add to your library. Your
-browser goes back to <strong>{{.SendsTo}}</strong> once you sign in. If you did not
-just connect an app, close this page.</p>
+<p>An app is asking to read and add to your library.{{if .Client}} It calls itself
+<strong>{{.Client}}</strong>, a name any app can choose, so docsearch has not
+checked it.{{end}} Your browser goes back to <strong>{{.SendsTo}}</strong> once you
+sign in. If you did not just connect an app, or you do not recognise that address,
+close this page.</p>
 <form method="post" action="/login">
 <input type="hidden" name="authRequestID" value="{{.RequestID}}">
 <label for="username">Username

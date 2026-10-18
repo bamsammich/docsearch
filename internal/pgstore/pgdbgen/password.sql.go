@@ -11,6 +11,42 @@ import (
 	"time"
 )
 
+const beginSignIn = `-- name: BeginSignIn :one
+UPDATE password_accounts
+   SET failed_attempts = CASE WHEN locked_until IS NULL THEN failed_attempts + 1 ELSE 1 END,
+       locked_until = CASE
+           WHEN (CASE WHEN locked_until IS NULL THEN failed_attempts + 1 ELSE 1 END)
+                >= $1::int
+           THEN $2::timestamptz END
+ WHERE username = $3
+   AND (locked_until IS NULL OR locked_until <= $4::timestamptz)
+RETURNING failed_attempts
+`
+
+type BeginSignInParams struct {
+	Threshold int32
+	LockUntil time.Time
+	Username  string
+	Now       time.Time
+}
+
+// An attempt is counted before its password is checked, in the statement that
+// reads whether the account is locked, so guesses sent at once cannot all slip
+// in under the threshold. A lock that has run out starts the count again, so
+// a single wrong guess cannot hold an account locked indefinitely. No row is
+// a locked account: the attempt is refused and counts for nothing.
+func (q *Queries) BeginSignIn(ctx context.Context, arg BeginSignInParams) (int32, error) {
+	row := q.db.QueryRowContext(ctx, beginSignIn,
+		arg.Threshold,
+		arg.LockUntil,
+		arg.Username,
+		arg.Now,
+	)
+	var failed_attempts int32
+	err := row.Scan(&failed_attempts)
+	return failed_attempts, err
+}
+
 const claimBuiltinForPassword = `-- name: ClaimBuiltinForPassword :one
 SELECT COALESCE(claim_builtin('docsearch', 'default'), '')::text AS user_id
 `
@@ -150,26 +186,6 @@ func (q *Queries) PasswordAccountExists(ctx context.Context, userID string) (boo
 	var present bool
 	err := row.Scan(&present)
 	return present, err
-}
-
-const recordFailedSignIn = `-- name: RecordFailedSignIn :exec
-UPDATE password_accounts
-   SET failed_attempts = failed_attempts + 1,
-       locked_until = CASE WHEN failed_attempts + 1 >= $1::int
-                           THEN $2::timestamptz ELSE locked_until END
- WHERE username = $3
-`
-
-type RecordFailedSignInParams struct {
-	Threshold int32
-	LockUntil time.Time
-	Username  string
-}
-
-// A failure past the threshold locks the account until lock_until.
-func (q *Queries) RecordFailedSignIn(ctx context.Context, arg RecordFailedSignInParams) error {
-	_, err := q.db.ExecContext(ctx, recordFailedSignIn, arg.Threshold, arg.LockUntil, arg.Username)
-	return err
 }
 
 const setPasswordHash = `-- name: SetPasswordHash :execrows

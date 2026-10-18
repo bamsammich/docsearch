@@ -101,6 +101,7 @@ type OauthClient struct {
 	ClientName   string
 	RedirectUris json.RawMessage
 	CreatedAt    time.Time
+	SignedInAt   sql.NullTime
 }
 
 type OauthKey struct {
