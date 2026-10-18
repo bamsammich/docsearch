@@ -331,6 +331,13 @@ never says whether the username exists. There is no self-service reset,
 since that needs a mail server; `docsearch account passwd` is the reset.
 Removing an account stops its tokens at once rather than when they expire.
 
+With accounts, in `password` or `oidc` mode, the server takes no filesystem
+paths. Every account would read the same `--root` directories, so anyone
+signed in could index any file under them. Accounts add documents by URL,
+by upload, or through `docsearch-sync`. To let every account read the roots
+anyway, set `--shared-paths` (`DOCSEARCH_SHARED_PATHS`) with `--root`. A
+server given roots without it refuses to start.
+
 ### Signing in through your own provider
 
 In `oidc` mode your identity provider is the OAuth authorization server, and
@@ -477,9 +484,13 @@ done
 Both set `RunAtLoad` and `KeepAlive`, so they start at login and respawn if
 killed. Logs go to `~/Library/Logs/docsearch/`.
 
-launchd has no `EnvironmentFile`, so both agents source the token and
-`DOCSEARCH_DSN` from their 0600 file in a shell wrapper. Both stay out of the
-plists and out of `launchctl print` output. The agents expect a Postgres
+launchd has no `EnvironmentFile`, so both agents source the token and the
+DSNs from their 0600 file in a shell wrapper. They stay out of the plists and
+out of `launchctl print` output. The file holds two DSNs: `DOCSEARCH_DSN` for
+the request role, which the server and the worker use, and
+`DOCSEARCH_OWNER_DSN` for the owner, which only `docsearch migrate` and
+`docsearch account` read. A bearer token must be at least 32 characters;
+`openssl rand -base64 48` makes one. The agents expect a Postgres
 reachable at that DSN; `deploy/docker/compose.yaml` is the simpler route on
 macOS, since it brings its own.
 

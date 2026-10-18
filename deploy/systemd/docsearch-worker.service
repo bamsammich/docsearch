@@ -5,8 +5,10 @@ After=network.target
 
 [Service]
 Type=simple
-# The DSN carries a password, so it lives in the mode-0600 file beside the
+# The DSNs carry passwords, so they live in the mode-0600 file beside the
 # token rather than in this unit, which `systemctl cat` prints to anyone.
+# Both commands read them from the environment, not from a flag, so neither
+# reaches ps: migrate reads DOCSEARCH_OWNER_DSN, the worker DOCSEARCH_DSN.
 Environment=DOCSEARCH_ROOT=%h/Documents/library
 Environment=DOCSEARCH_LOG_LEVEL=INFO
 EnvironmentFile=%h/.config/docsearch/token.env
@@ -18,9 +20,8 @@ EnvironmentFile=%h/.config/docsearch/token.env
 # migration that cannot be applied exits nonzero and the unit does not start,
 # which is the intended outcome: a worker writing through a schema it does
 # not match is worse than a worker that is down.
-ExecStartPre=%h/.local/bin/docsearch migrate --dsn ${DOCSEARCH_DSN}
+ExecStartPre=%h/.local/bin/docsearch migrate
 ExecStart=%h/.local/bin/docsearch-worker \
-  --dsn ${DOCSEARCH_DSN} \
   --root ${DOCSEARCH_ROOT}
 
 Restart=on-failure

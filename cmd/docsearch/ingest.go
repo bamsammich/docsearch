@@ -10,6 +10,7 @@ import (
 
 	"github.com/bamsammich/docsearch/internal/api/connectclient"
 	"github.com/bamsammich/docsearch/internal/domain"
+	"github.com/bamsammich/docsearch/internal/service/document"
 )
 
 // progressStride is how far an ingest advances before another line is
@@ -95,8 +96,8 @@ func refreshDocument(ctx context.Context, cmd *cli.Command) error {
 	return nil
 }
 
-// crawlableSource is the document to re-crawl, refusing one there is nothing
-// to re-crawl for.
+// crawlableSource is the site to re-crawl for a document, refusing one there
+// is nothing to re-crawl for.
 func crawlableSource(
 	ctx context.Context,
 	client *connectclient.Client,
@@ -106,6 +107,13 @@ func crawlableSource(
 	if err != nil {
 		return "", err
 	}
+	return siteOf(docs, docID)
+}
+
+// siteOf is the URL a crawled document was read from. The document's
+// identifier is derived from that URL but is not one, so ingesting it would
+// read a path of that name instead of the site.
+func siteOf(docs []document.Document, docID string) (string, error) {
 	for _, doc := range docs {
 		if doc.DocID != docID {
 			continue
@@ -115,7 +123,7 @@ func crawlableSource(
 				"%s was ingested from a file, not a site; run `docsearch add` on the "+
 					"file instead, since a file has nothing to re-crawl", docID)
 		}
-		return docID, nil
+		return doc.Source, nil
 	}
 	return "", fmt.Errorf("no such document: %s", docID)
 }

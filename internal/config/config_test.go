@@ -35,7 +35,7 @@ func validCfg(t *testing.T) *Config {
 		Addr:         "127.0.0.1:8765",
 		DSN:          "postgres://docsearch@localhost/docsearch",
 		LibraryRoots: []string{root},
-		BearerToken:  "tok",
+		BearerToken:  "a-bearer-token-long-enough-to-pass-the-check",
 	}
 }
 
@@ -243,6 +243,7 @@ func oidcCfg(t *testing.T) *Config {
 	c.Auth = owner.OIDC
 	c.BearerToken = ""
 	c.OIDC = OIDC{Issuer: "https://issuer.example", Resource: "https://docs.example.com/mcp"}
+	c.LibraryRoots = nil
 	return c
 }
 
@@ -272,5 +273,44 @@ func TestAnOIDCConfigurationThatCannotWorkIsRefused(t *testing.T) {
 				t.Error("Validate() = nil, want an error")
 			}
 		})
+	}
+}
+
+// A bearer token is the whole of mode token's security, so one that is
+// short or still the example's placeholder is refused at startup.
+func TestAWeakOrPlaceholderTokenIsRefused(t *testing.T) {
+	for name, token := range map[string]string{
+		"short":       "tok",
+		"placeholder": "CHANGE-ME-generate-a-real-token-before-applying",
+	} {
+		c := validCfg(t)
+		c.BearerToken = token
+		if err := c.Validate(); err == nil {
+			t.Errorf("%s token: Validate() = nil, want a refusal", name)
+		}
+	}
+}
+
+// A deployment with accounts takes no paths unless the operator says every
+// account may read the same roots.
+func TestAccountsTakeNoPathsUnlessShared(t *testing.T) {
+	for _, mode := range []owner.Mode{owner.OIDC, owner.Password} {
+		c := oidcCfg(t)
+		c.Auth = mode
+		if err := c.Validate(); err != nil {
+			t.Errorf("%v with no roots: Validate() error = %v, want nil", mode, err)
+		}
+
+		c = oidcCfg(t)
+		c.Auth = mode
+		c.LibraryRoots = []string{t.TempDir()}
+		if err := c.Validate(); !errors.Is(err, ErrSharedPaths) {
+			t.Errorf("%v with roots: Validate() error = %v, want ErrSharedPaths", mode, err)
+		}
+
+		c.SharedPaths = true
+		if err := c.Validate(); err != nil {
+			t.Errorf("%v with shared roots: Validate() error = %v, want nil", mode, err)
+		}
 	}
 }

@@ -23,8 +23,9 @@
        that need no migration.
 
        The worker is the only writer, which is what makes this the one correct
-       place to run it. Both commands read DOCSEARCH_DSN from the token file,
-       which keeps its password out of this plist. -->
+       place to run it. Both commands read their DSN from the token file,
+       which keeps the passwords out of this plist: migrate reads
+       DOCSEARCH_OWNER_DSN, the worker DOCSEARCH_DSN, the request role's. -->
   <key>ProgramArguments</key>
   <array>
     <string>/bin/sh</string>
