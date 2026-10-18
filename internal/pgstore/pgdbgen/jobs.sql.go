@@ -11,7 +11,7 @@ import (
 )
 
 const activeJobs = `-- name: ActiveJobs :many
-SELECT id, source_path, title, doc_id, status, phase, progress_cur, progress_tot, attempts, permanent, cancel_req, error, warnings, lease_until, created_at, updated_at, user_id FROM ingest_jobs
+SELECT id, source_path, title, doc_id, status, phase, progress_cur, progress_tot, attempts, permanent, cancel_req, error, warnings, lease_until, created_at, updated_at, user_id, force FROM ingest_jobs
  WHERE status IN ('queued','running')
  ORDER BY created_at, id
 `
@@ -43,6 +43,7 @@ func (q *Queries) ActiveJobs(ctx context.Context) ([]IngestJob, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.UserID,
+			&i.Force,
 		); err != nil {
 			return nil, err
 		}
@@ -59,8 +60,8 @@ func (q *Queries) ActiveJobs(ctx context.Context) ([]IngestJob, error) {
 
 const enqueueJob = `-- name: EnqueueJob :one
 
-INSERT INTO ingest_jobs (user_id, source_path, title, status, created_at, updated_at)
-VALUES ($1, $2, $3, 'queued', now(), now())
+INSERT INTO ingest_jobs (user_id, source_path, title, force, status, created_at, updated_at)
+VALUES ($1, $2, $3, $4, 'queued', now(), now())
 RETURNING id
 `
 
@@ -68,20 +69,26 @@ type EnqueueJobParams struct {
 	UserID     string
 	SourcePath string
 	Title      sql.NullString
+	Force      bool
 }
 
 // The queue as a caller reads it, through internal/repository/postgres.
 // Returns the id rather than reporting a row count: Postgres has no
 // last-insert-id, and RETURNING is how a caller learns what it queued.
 func (q *Queries) EnqueueJob(ctx context.Context, arg EnqueueJobParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, enqueueJob, arg.UserID, arg.SourcePath, arg.Title)
+	row := q.db.QueryRowContext(ctx, enqueueJob,
+		arg.UserID,
+		arg.SourcePath,
+		arg.Title,
+		arg.Force,
+	)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
 }
 
 const jobByID = `-- name: JobByID :one
-SELECT id, source_path, title, doc_id, status, phase, progress_cur, progress_tot, attempts, permanent, cancel_req, error, warnings, lease_until, created_at, updated_at, user_id FROM ingest_jobs WHERE id = $1
+SELECT id, source_path, title, doc_id, status, phase, progress_cur, progress_tot, attempts, permanent, cancel_req, error, warnings, lease_until, created_at, updated_at, user_id, force FROM ingest_jobs WHERE id = $1
 `
 
 // The three job reads select * so they share one generated row type and one
@@ -108,6 +115,7 @@ func (q *Queries) JobByID(ctx context.Context, id int64) (IngestJob, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.UserID,
+		&i.Force,
 	)
 	return i, err
 }
@@ -138,7 +146,7 @@ func (q *Queries) QueuePosition(ctx context.Context, id int64) (int64, error) {
 }
 
 const recentJobs = `-- name: RecentJobs :many
-SELECT id, source_path, title, doc_id, status, phase, progress_cur, progress_tot, attempts, permanent, cancel_req, error, warnings, lease_until, created_at, updated_at, user_id FROM ingest_jobs
+SELECT id, source_path, title, doc_id, status, phase, progress_cur, progress_tot, attempts, permanent, cancel_req, error, warnings, lease_until, created_at, updated_at, user_id, force FROM ingest_jobs
  ORDER BY (status IN ('queued','running')) DESC, updated_at DESC
  LIMIT $1
 `
@@ -170,6 +178,7 @@ func (q *Queries) RecentJobs(ctx context.Context, limit int32) ([]IngestJob, err
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.UserID,
+			&i.Force,
 		); err != nil {
 			return nil, err
 		}

@@ -85,8 +85,10 @@ func (s *WorkerSuite) TestAFinishedIngestLeavesTheJobToItsOwnTransaction() {
 	s.Require().NoError(s.run(worker.Options{}))
 }
 
-func (s *WorkerSuite) TestTheJobCarriesTheIdentifierAndTitleIntoTheIngest() {
-	s.claims(&worker.Job{ID: 7, Source: "/library/guide.md", Title: "Operator Guide"})
+func (s *WorkerSuite) TestTheJobCarriesItsIdentifierTitleAndForceIntoTheIngest() {
+	s.claims(&worker.Job{
+		ID: 7, Source: "/library/guide.md", Title: "Operator Guide", Force: true,
+	})
 	s.buildsASource()
 	s.neverCancelled()
 
@@ -101,6 +103,7 @@ func (s *WorkerSuite) TestTheJobCarriesTheIdentifierAndTitleIntoTheIngest() {
 
 	s.Require().NoError(s.run(worker.Options{}))
 	s.Equal("Operator Guide", seen.Title)
+	s.True(seen.Force, "a forced job re-reads bytes the index already holds")
 	s.Require().NotNil(seen.JobID)
 	s.Equal(int64(7), *seen.JobID)
 }

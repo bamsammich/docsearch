@@ -42,6 +42,12 @@ message EnqueueRequest {
   // documentation site.
   string source = 1;
   string title = 2;
+  // Force reads the source again even where the index already holds its
+  // bytes, which is how a change to extraction or grading reaches a
+  // document whose file never changed. The document stays searchable until
+  // the new read replaces it. Without force, held bytes are skipped unless
+  // an older pipeline read them.
+  bool force = 3;
 }
 
 // QueuedJob is one job Enqueue created.

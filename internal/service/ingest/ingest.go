@@ -105,7 +105,7 @@ const (
 	// Replaced is a document re-read at an identity the index already held.
 	Replaced
 	// Unchanged is a source whose bytes are already indexed, under whatever
-	// identity they were first read from.
+	// identity they were first read from, by a pipeline as new as this one.
 	Unchanged
 )
 
@@ -154,9 +154,14 @@ type Document struct {
 
 // Existing is a document already in the index.
 type Existing struct {
-	DocID      string
-	Title      string
+	DocID string
+	Title string
+	// Identity is the path or URL the document was read from.
+	Identity   string
 	ChunkCount int
+	// PipelineVersion is the domain.PipelineVersion its structure report
+	// was written by, 0 where the report recorded none.
+	PipelineVersion int
 }
 
 // Ready makes a document visible to search.
@@ -253,6 +258,9 @@ type Options struct {
 	Title string
 	// JobAttempt is the attempt JobID was claimed as.
 	JobAttempt int
+	// Force re-reads bytes the index already holds. Without it, held bytes
+	// are read again only when an older pipeline read them.
+	Force bool
 }
 
 // Service runs ingests against one repository.
@@ -282,19 +290,19 @@ func (s *Service) Run(ctx context.Context, src Source, opts Options) (*Result, e
 		return nil, ErrCancelled
 	}
 
-	if result, err := s.alreadyHeld(ctx, src.Digest()); err != nil || result != nil {
-		return result, err
-	}
-
-	// Replacement is keyed on identity rather than on the title's slug: a
-	// retitled source must replace its own rows rather than slugify into a
-	// second identifier and orphan the originals.
-	replacing, err := s.repo.DocIDForIdentity(ctx, src.Identity())
+	held, err := s.repo.ReadyWithDigest(ctx, src.Digest())
 	if err != nil {
-		return nil, fmt.Errorf("look up %s: %w", src.Identity(), err)
+		return nil, fmt.Errorf("look up content hash: %w", err)
+	}
+	if skips(held, opts) {
+		return s.alreadyHeld(ctx, held)
 	}
 
-	prepared, err := s.prepare(ctx, src, opts, replacing)
+	dest, err := s.destination(ctx, src, held)
+	if err != nil {
+		return nil, err
+	}
+	prepared, err := s.prepare(ctx, src, opts, dest)
 	if err != nil {
 		return nil, err
 	}
@@ -310,8 +318,43 @@ func (s *Service) Run(ctx context.Context, src Source, opts Options) (*Result, e
 		DocID:       prepared.doc.DocID,
 		Title:       prepared.doc.Title,
 		ChunkCount:  len(prepared.chunks),
-		Outcome:     outcomeOf(replacing),
+		Outcome:     outcomeOf(dest.replacing),
+		Note:        rereadNote(held, opts),
 	}, nil
+}
+
+// destination is where one read is written.
+type destination struct {
+	// identity is the path or URL the document is filed under.
+	identity string
+	// title is the name a held document already carries, which a re-read
+	// keeps unless the caller names another. Empty for anything else.
+	title string
+	// replacing is the document the read takes the place of, or "".
+	replacing string
+}
+
+// destination is where a read lands. Bytes the index already holds replace
+// the document holding them, under its identity and name, so a re-read never
+// files the same bytes twice. Anything else replaces what was last read from
+// the source's identity.
+//
+// Replacement is keyed on identity rather than on the title's slug: a
+// retitled source must replace its own rows rather than slugify into a
+// second identifier and orphan the originals.
+func (s *Service) destination(
+	ctx context.Context,
+	src Source,
+	held *Existing,
+) (destination, error) {
+	if held != nil {
+		return destination{identity: held.Identity, title: held.Title, replacing: held.DocID}, nil
+	}
+	replacing, err := s.repo.DocIDForIdentity(ctx, src.Identity())
+	if err != nil {
+		return destination{}, fmt.Errorf("look up %s: %w", src.Identity(), err)
+	}
+	return destination{identity: src.Identity(), replacing: replacing}, nil
 }
 
 // prepared is one source, read and cut, with nothing written yet.
@@ -329,7 +372,7 @@ func (s *Service) prepare(
 	ctx context.Context,
 	src Source,
 	opts Options,
-	replacing string,
+	dest destination,
 ) (*prepared, error) {
 	extraction, err := src.Extract(ctx, opts.Progress)
 	if err != nil {
@@ -344,8 +387,8 @@ func (s *Service) prepare(
 		return nil, &StructureError{Message: report.FailureMessage()}
 	}
 
-	title := pystr.Strip(firstNonEmpty(opts.Title, extraction.Title, src.Identity()))
-	docID, err := s.uniqueDocID(ctx, title, replacing)
+	title := pystr.Strip(firstNonEmpty(opts.Title, dest.title, extraction.Title, dest.identity))
+	docID, err := s.uniqueDocID(ctx, title, dest.replacing)
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +396,7 @@ func (s *Service) prepare(
 	opts.Progress.report(PhaseChunk, 0, 1)
 	chunks := domain.Chunks(*extraction)
 	if len(chunks) == 0 {
-		return nil, &StructureError{Message: noChunksMessage(src.Identity(), report)}
+		return nil, &StructureError{Message: noChunksMessage(dest.identity, report)}
 	}
 	report.MeasureChunks(chunks)
 
@@ -365,12 +408,12 @@ func (s *Service) prepare(
 			DocID:     docID,
 			Title:     title,
 			Format:    extraction.Format,
-			Identity:  src.Identity(),
+			Identity:  dest.identity,
 			Digest:    src.Digest(),
 			Kind:      src.Kind(),
 		},
 		chunks:    chunks,
-		replacing: replacing,
+		replacing: dest.replacing,
 	}, nil
 }
 
@@ -455,24 +498,35 @@ func (s *Service) uniqueDocID(ctx context.Context, title, replacing string) (str
 	return nextFree(base, taken), nil
 }
 
-// alreadyHeld is the result for bytes the index already holds, or nil when
-// it holds none.
+// alreadyHeld is the result for bytes the index already holds, read by a
+// pipeline as new as this one.
 //
 // Reading the same bytes again is still a read, and a client that asks
 // whether docsearch holds the latest copy decides by when it was last read.
 // Left unstamped, a sync would push the same document every time.
-func (s *Service) alreadyHeld(ctx context.Context, digest string) (*Result, error) {
-	same, err := s.repo.ReadyWithDigest(ctx, digest)
-	if err != nil {
-		return nil, fmt.Errorf("look up content hash: %w", err)
-	}
-	if same == nil {
-		return nil, nil //nolint:nilnil // no document holds these bytes, which is not a failure
-	}
+func (s *Service) alreadyHeld(ctx context.Context, same *Existing) (*Result, error) {
 	if err := s.repo.Confirm(ctx, same.DocID, s.now()); err != nil {
 		return nil, fmt.Errorf("confirm %s: %w", same.DocID, err)
 	}
 	return unchanged(same), nil
+}
+
+// skips reports whether an ingest stops at bytes the index already holds:
+// unforced, and read last by a pipeline as new as this one.
+func skips(held *Existing, opts Options) bool {
+	return held != nil && !opts.Force && held.PipelineVersion >= domain.PipelineVersion
+}
+
+// rereadNote explains a re-read of held bytes that the caller did not force,
+// and is empty for anything else.
+func rereadNote(held *Existing, opts Options) string {
+	if held == nil || opts.Force {
+		return ""
+	}
+	return fmt.Sprintf(
+		"content hash already ingested as '%s', but by pipeline version %d; "+
+			"read again by version %d",
+		held.DocID, held.PipelineVersion, domain.PipelineVersion)
 }
 
 // unchanged is the result for bytes the index already holds.

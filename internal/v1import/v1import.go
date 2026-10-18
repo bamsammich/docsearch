@@ -121,7 +121,7 @@ func rewrite(source string, roots []RootMap) string {
 
 // Enqueuer queues a source for v2's worker.
 type Enqueuer interface {
-	Enqueue(ctx context.Context, target, title string) ([]job.Queued, error)
+	Enqueue(ctx context.Context, target, title string, force bool) ([]job.Queued, error)
 }
 
 // Outcome is what happened to one entry.
@@ -139,7 +139,7 @@ func Run(ctx context.Context, enqueuer Enqueuer, entries []Entry) []Outcome {
 	for _, entry := range entries {
 		outcome := Outcome{Entry: entry}
 		if entry.Skipped == "" {
-			outcome.Jobs, outcome.Err = enqueuer.Enqueue(ctx, entry.Source, entry.Title)
+			outcome.Jobs, outcome.Err = enqueuer.Enqueue(ctx, entry.Source, entry.Title, false)
 		}
 		outcomes = append(outcomes, outcome)
 	}

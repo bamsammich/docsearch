@@ -105,13 +105,25 @@ func (s *IngestSuite) TestADocumentIsWrittenThenMadeVisible() {
 	s.Contains(string(published.Warnings), `"quality":"ok"`)
 }
 
+// held is the operator guide as the index already holds it, read by
+// pipeline version.
+func held(version int) *ingest.Existing {
+	return &ingest.Existing{
+		DocID:           "operator-guide",
+		Title:           "Operator Guide",
+		Identity:        "/library/guide.md",
+		ChunkCount:      7,
+		PipelineVersion: version,
+	}
+}
+
 // Bytes already indexed are not read again, but the read is still stamped:
 // a client deciding whether docsearch holds the latest copy decides by when
 // it was last read.
 func (s *IngestSuite) TestBytesAlreadyIndexedAreNotIngestedAgain() {
 	s.acquires("abc123", "/library/copy.md")
 	s.repo.EXPECT().ReadyWithDigest(mock.Anything, "abc123").
-		Return(&ingest.Existing{DocID: "operator-guide", Title: "Operator Guide", ChunkCount: 7}, nil)
+		Return(held(domain.PipelineVersion), nil)
 	s.repo.EXPECT().Confirm(mock.Anything, "operator-guide", stamped).Return(nil)
 
 	result, err := s.service().Run(s.T().Context(), s.source, ingest.Options{})
@@ -119,6 +131,82 @@ func (s *IngestSuite) TestBytesAlreadyIndexedAreNotIngestedAgain() {
 	s.Equal(ingest.Unchanged, result.Outcome)
 	s.Equal(7, result.ChunkCount)
 	s.Contains(result.Note, "already ingested as 'operator-guide'")
+}
+
+// rereads expects held bytes to be read again over the document that holds
+// them, and returns what the new version was created and published as.
+func (s *IngestSuite) rereads() (*ingest.Document, *ingest.Ready) {
+	staging := ingest.Staging("operator-guide")
+	var created ingest.Document
+	var published ingest.Ready
+	s.repo.EXPECT().Create(mock.Anything, mock.Anything, staging).
+		Run(func(_ context.Context, doc ingest.Document, _ string) { created = doc }).
+		Return(nil)
+	s.repo.EXPECT().AddChunks(mock.Anything, staging, mock.Anything).Return(nil)
+	s.repo.EXPECT().AddPagesAndTerms(mock.Anything, staging, mock.Anything, mock.Anything).
+		Return(nil)
+	s.repo.EXPECT().MarkReady(mock.Anything, mock.Anything).
+		Run(func(_ context.Context, ready ingest.Ready) { published = ready }).
+		Return(nil)
+	return &created, &published
+}
+
+// A forced ingest reads held bytes again, which is how a change to
+// extraction or grading reaches a document whose file never changed. The
+// old version stays searchable until the new one replaces it.
+func (s *IngestSuite) TestAForcedIngestReadsHeldBytesAgain() {
+	s.acquires("abc123", "/library/guide.md")
+	s.extracts("Operator Handbook")
+	s.repo.EXPECT().ReadyWithDigest(mock.Anything, "abc123").
+		Return(held(domain.PipelineVersion), nil)
+	created, published := s.rereads()
+
+	result, err := s.service().Run(s.T().Context(), s.source, ingest.Options{Force: true})
+	s.Require().NoError(err)
+	s.Equal(ingest.Replaced, result.Outcome)
+	s.Equal("operator-guide", result.DocID)
+	s.Empty(result.Note, "the caller asked for the re-read")
+	s.Equal("operator-guide", published.Replaces)
+	s.Equal("Operator Guide", created.Title,
+		"the name it already carries, rather than the one the file gives itself")
+	s.Equal(domain.PipelineVersion,
+		domain.StoredPipelineVersion(string(published.Warnings)))
+	s.repo.AssertNotCalled(s.T(), "Confirm", mock.Anything, mock.Anything, mock.Anything)
+}
+
+// Bytes an older pipeline read are read again without being forced, so a
+// change to extraction or grading reaches them on their next ingest.
+func (s *IngestSuite) TestHeldBytesAnOlderPipelineReadAreReadAgain() {
+	s.acquires("abc123", "/library/guide.md")
+	s.extracts("Operator Guide")
+	s.repo.EXPECT().ReadyWithDigest(mock.Anything, "abc123").
+		Return(held(domain.PipelineVersion-1), nil)
+	_, published := s.rereads()
+
+	result, err := s.service().Run(s.T().Context(), s.source, ingest.Options{})
+	s.Require().NoError(err)
+	s.Equal(ingest.Replaced, result.Outcome)
+	s.Equal("operator-guide", published.Replaces)
+	s.Contains(result.Note, "by pipeline version 0")
+}
+
+// Held bytes arriving from another path replace the document that holds
+// them, under its own path, so a re-read never files the same bytes twice.
+func (s *IngestSuite) TestAReReadKeepsTheHeldDocumentsIdentity() {
+	s.acquires("abc123", "/library/copy.md")
+	s.extracts("Operator Guide")
+	s.repo.EXPECT().ReadyWithDigest(mock.Anything, "abc123").
+		Return(held(domain.PipelineVersion), nil)
+	created, _ := s.rereads()
+
+	_, err := s.service().Run(s.T().Context(), s.source, ingest.Options{
+		Force: true,
+		Title: "Field Manual",
+	})
+	s.Require().NoError(err)
+	s.Equal("/library/guide.md", created.Identity)
+	s.Equal("Field Manual", created.Title, "a title the caller names still wins")
+	s.repo.AssertNotCalled(s.T(), "DocIDForIdentity", mock.Anything, mock.Anything)
 }
 
 func (s *IngestSuite) TestARetitledSourceReplacesItsOwnRows() {

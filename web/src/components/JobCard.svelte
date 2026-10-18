@@ -111,7 +111,7 @@
     {#if refused}
       <button class="btn small" onclick={() => queue.dismiss(job.job_id)}>Dismiss</button>
     {:else if job.status === "failed"}
-      <button class="btn small" disabled={busy} onclick={() => act(() => queue.enqueue(job.source_path, job.title ?? ""), "Queued again.")}>
+      <button class="btn small" disabled={busy} onclick={() => act(() => queue.enqueue(job.source_path, job.title ?? "", true), "Queued again.")}>
         <Icon name="refresh" /> Try again
       </button>
       <button class="btn small quiet" onclick={() => queue.dismiss(job.job_id)}>Dismiss</button>

@@ -19,7 +19,7 @@ import (
 // Jobs drives the queue. The port is declared here because this package is
 // what calls it; internal/service/job.Service satisfies it.
 type Jobs interface {
-	Enqueue(ctx context.Context, target, title string) ([]job.Queued, error)
+	Enqueue(ctx context.Context, target, title string, force bool) ([]job.Queued, error)
 	List(ctx context.Context, includeCompleted bool, limit int) ([]job.Job, error)
 	Cancel(ctx context.Context, id int64) (string, error)
 }
@@ -64,7 +64,8 @@ func (s *JobServer) Enqueue(
 	if err != nil {
 		return nil, err
 	}
-	queued, err := queue.Enqueue(ctx, req.Msg.GetSource(), req.Msg.GetTitle())
+	queued, err := queue.Enqueue(
+		ctx, req.Msg.GetSource(), req.Msg.GetTitle(), req.Msg.GetForce())
 	if err != nil {
 		return nil, s.asConnectError(err)
 	}

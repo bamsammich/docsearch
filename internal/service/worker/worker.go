@@ -56,6 +56,8 @@ type Job struct {
 	Source   string
 	ID       int64
 	Attempts int
+	// Force re-reads bytes the index already holds.
+	Force bool
 }
 
 // Outcome is how a job ended, as the queue records it.
@@ -232,6 +234,7 @@ func (s *Service) execute(ctx context.Context, job *Job) error {
 		Title:      job.Title,
 		JobID:      &job.ID,
 		JobAttempt: job.Attempts,
+		Force:      job.Force,
 		Progress:   s.progress(jobCtx, job.ID),
 		OnDocID:    s.recordDocID(jobCtx, job.ID),
 	})

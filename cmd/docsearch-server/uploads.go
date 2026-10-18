@@ -61,7 +61,7 @@ func enqueuer(
 		if err != nil {
 			return 0, err
 		}
-		queued, err := jobs.Enqueue(ctx, target, title)
+		queued, err := jobs.Enqueue(ctx, target, title, false)
 		if err != nil {
 			return 0, err
 		}

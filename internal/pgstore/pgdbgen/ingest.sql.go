@@ -492,12 +492,15 @@ func (q *Queries) MovePages(ctx context.Context, arg MovePagesParams) error {
 
 const readyDocumentWithDigest = `-- name: ReadyDocumentWithDigest :one
 
-SELECT doc_id, title FROM documents WHERE sha256 = $1 AND status = 'ready'
+SELECT doc_id, title, source_path, warnings
+  FROM documents WHERE sha256 = $1 AND status = 'ready'
 `
 
 type ReadyDocumentWithDigestRow struct {
-	DocID string
-	Title string
+	DocID      string
+	Title      string
+	SourcePath string
+	Warnings   sql.NullString
 }
 
 // Writes the ingest service makes, through internal/repository/postgres.
@@ -513,10 +516,17 @@ type ReadyDocumentWithDigestRow struct {
 // second copy of the filter in 45 queries is 45 places for it to be wrong.
 // A write names user_id because a row has to carry its owner, and the policy
 // then refuses a value that disagrees with the session.
+// warnings is read whole because the pipeline version that wrote the
+// report is one of its keys.
 func (q *Queries) ReadyDocumentWithDigest(ctx context.Context, sha256 string) (ReadyDocumentWithDigestRow, error) {
 	row := q.db.QueryRowContext(ctx, readyDocumentWithDigest, sha256)
 	var i ReadyDocumentWithDigestRow
-	err := row.Scan(&i.DocID, &i.Title)
+	err := row.Scan(
+		&i.DocID,
+		&i.Title,
+		&i.SourcePath,
+		&i.Warnings,
+	)
 	return i, err
 }
 

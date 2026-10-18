@@ -93,8 +93,11 @@ type StructureReport struct {
 	UncalibratedScriptShare float64  `json:"uncalibrated_script_share"`
 	// PagesDeclared and PagesFetched are site ingest only: pages some
 	// coverage source said exist, and pages that arrived.
-	PagesDeclared   int             `json:"pages_declared"`
-	PagesFetched    int             `json:"pages_fetched"`
+	PagesDeclared int `json:"pages_declared"`
+	PagesFetched  int `json:"pages_fetched"`
+	// PipelineVersion is the PipelineVersion of the build that wrote the
+	// report.
+	PipelineVersion int             `json:"pipeline_version"`
 	StructureSource StructureSource `json:"structure_source"`
 }
 
@@ -117,6 +120,7 @@ func NewStructureReport(diagnostics map[string]any) *StructureReport {
 	}
 	if site := mapOf(diagnostics["site"]); len(site) > 0 {
 		return &StructureReport{
+			PipelineVersion:  PipelineVersion,
 			StructureSource:  source,
 			TOCSections:      intOf(site["pages_declared"]),
 			BodySections:     intOf(site["pages_fetched"]),
@@ -128,6 +132,7 @@ func NewStructureReport(diagnostics map[string]any) *StructureReport {
 	}
 	xv := mapOf(diagnostics["cross_validation"])
 	return &StructureReport{
+		PipelineVersion:              PipelineVersion,
 		StructureSource:              source,
 		TOCSections:                  intOf(xv["toc_sections"]),
 		BodySections:                 intOf(xv["body_sections"]),

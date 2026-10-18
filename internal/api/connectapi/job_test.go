@@ -47,7 +47,7 @@ func (s *JobAPISuite) SetupTest() {
 }
 
 func (s *JobAPISuite) TestQueueingReportsTheJobAndItsPosition() {
-	s.jobs.EXPECT().Enqueue(mock.Anything, "/library/guide.md", "Guide").
+	s.jobs.EXPECT().Enqueue(mock.Anything, "/library/guide.md", "Guide", false).
 		Return([]job.Queued{{Source: "/library/guide.md", JobID: 7, Position: 3}}, nil)
 
 	res, err := s.client.Enqueue(s.T().Context(), connect.NewRequest(&ingestv1.EnqueueRequest{
@@ -59,10 +59,20 @@ func (s *JobAPISuite) TestQueueingReportsTheJobAndItsPosition() {
 	s.Equal(int64(3), res.Msg.GetJobs()[0].GetQueuePosition())
 }
 
+func (s *JobAPISuite) TestAForcedRequestQueuesAForcedJob() {
+	s.jobs.EXPECT().Enqueue(mock.Anything, "/library/guide.md", "", true).
+		Return([]job.Queued{{Source: "/library/guide.md", JobID: 7, Position: 1}}, nil)
+
+	_, err := s.client.Enqueue(s.T().Context(), connect.NewRequest(&ingestv1.EnqueueRequest{
+		Source: "/library/guide.md", Force: true,
+	}))
+	s.Require().NoError(err)
+}
+
 func (s *JobAPISuite) TestADirectoryReportsEveryJobItQueued() {
 	// A caller that queued a library has to be able to say what it got, so
 	// each file beneath the directory comes back named.
-	s.jobs.EXPECT().Enqueue(mock.Anything, "/library", "").Return([]job.Queued{
+	s.jobs.EXPECT().Enqueue(mock.Anything, "/library", "", false).Return([]job.Queued{
 		{Source: "/library/a.md", JobID: 1, Position: 1},
 		{Source: "/library/b.pdf", JobID: 2, Position: 2},
 	}, nil)
@@ -77,7 +87,7 @@ func (s *JobAPISuite) TestADirectoryReportsEveryJobItQueued() {
 }
 
 func (s *JobAPISuite) TestATargetNoAdapterReadsIsTheCallersMistake() {
-	s.jobs.EXPECT().Enqueue(mock.Anything, mock.Anything, mock.Anything).
+	s.jobs.EXPECT().Enqueue(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, ingest.ErrUnsupportedFormat)
 
 	_, err := s.client.Enqueue(s.T().Context(),

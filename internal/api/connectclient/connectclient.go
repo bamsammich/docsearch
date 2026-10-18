@@ -123,11 +123,17 @@ func (c *Client) Remove(ctx context.Context, docID string) error {
 	return err
 }
 
-// Enqueue puts everything a target names on the queue.
-func (c *Client) Enqueue(ctx context.Context, target, title string) ([]job.Queued, error) {
+// Enqueue puts everything a target names on the queue. A forced job re-reads
+// bytes the index already holds.
+func (c *Client) Enqueue(
+	ctx context.Context,
+	target, title string,
+	force bool,
+) ([]job.Queued, error) {
 	res, err := c.jobs.Enqueue(ctx, connect.NewRequest(&ingestv1.EnqueueRequest{
 		Source: target,
 		Title:  title,
+		Force:  force,
 	}))
 	if err != nil {
 		return nil, err

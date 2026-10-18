@@ -48,8 +48,8 @@ func (_m *MockQueue) EXPECT() *MockQueue_Expecter {
 }
 
 // Add provides a mock function for the type MockQueue
-func (_mock *MockQueue) Add(ctx context.Context, source string, title string) (int64, int, error) {
-	ret := _mock.Called(ctx, source, title)
+func (_mock *MockQueue) Add(ctx context.Context, source string, title string, force bool) (int64, int, error) {
+	ret := _mock.Called(ctx, source, title, force)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Add")
@@ -58,21 +58,21 @@ func (_mock *MockQueue) Add(ctx context.Context, source string, title string) (i
 	var r0 int64
 	var r1 int
 	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (int64, int, error)); ok {
-		return returnFunc(ctx, source, title)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, bool) (int64, int, error)); ok {
+		return returnFunc(ctx, source, title, force)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) int64); ok {
-		r0 = returnFunc(ctx, source, title)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, bool) int64); ok {
+		r0 = returnFunc(ctx, source, title, force)
 	} else {
 		r0 = ret.Get(0).(int64)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) int); ok {
-		r1 = returnFunc(ctx, source, title)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, bool) int); ok {
+		r1 = returnFunc(ctx, source, title, force)
 	} else {
 		r1 = ret.Get(1).(int)
 	}
-	if returnFunc, ok := ret.Get(2).(func(context.Context, string, string) error); ok {
-		r2 = returnFunc(ctx, source, title)
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string, string, bool) error); ok {
+		r2 = returnFunc(ctx, source, title, force)
 	} else {
 		r2 = ret.Error(2)
 	}
@@ -88,11 +88,12 @@ type MockQueue_Add_Call struct {
 //   - ctx context.Context
 //   - source string
 //   - title string
-func (_e *MockQueue_Expecter) Add(ctx any, source any, title any) *MockQueue_Add_Call {
-	return &MockQueue_Add_Call{Call: _e.mock.On("Add", ctx, source, title)}
+//   - force bool
+func (_e *MockQueue_Expecter) Add(ctx any, source any, title any, force any) *MockQueue_Add_Call {
+	return &MockQueue_Add_Call{Call: _e.mock.On("Add", ctx, source, title, force)}
 }
 
-func (_c *MockQueue_Add_Call) Run(run func(ctx context.Context, source string, title string)) *MockQueue_Add_Call {
+func (_c *MockQueue_Add_Call) Run(run func(ctx context.Context, source string, title string, force bool)) *MockQueue_Add_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -106,10 +107,15 @@ func (_c *MockQueue_Add_Call) Run(run func(ctx context.Context, source string, t
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
+		var arg3 bool
+		if args[3] != nil {
+			arg3 = args[3].(bool)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -120,7 +126,7 @@ func (_c *MockQueue_Add_Call) Return(id int64, position int, err error) *MockQue
 	return _c
 }
 
-func (_c *MockQueue_Add_Call) RunAndReturn(run func(ctx context.Context, source string, title string) (int64, int, error)) *MockQueue_Add_Call {
+func (_c *MockQueue_Add_Call) RunAndReturn(run func(ctx context.Context, source string, title string, force bool) (int64, int, error)) *MockQueue_Add_Call {
 	_c.Call.Return(run)
 	return _c
 }

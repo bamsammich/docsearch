@@ -49,7 +49,7 @@ var migrations embed.FS
 // section did when it began holding section numbers rather than page
 // numbers, is invisible to any structural check while silently changing what
 // queries return.
-const Version = 15
+const Version = 16
 
 // History is readable, so a version mismatch can be diagnosed without
 // reading the git log.
@@ -75,6 +75,7 @@ var History = map[int]string{
 	13: "password mode: local accounts and the authorization server's state",
 	14: "the authorization server's lists are JSON, readable through database/sql",
 	15: "a client records its first sign-in, so one never used can be cleared",
+	16: "ingest_jobs.force re-reads bytes the index already holds",
 }
 
 // The tables this package names. Written once, so a typo cannot reach a

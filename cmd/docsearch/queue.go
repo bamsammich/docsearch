@@ -16,8 +16,17 @@ func enqueueCommand() *cli.Command {
 		Usage:     "queue a file, directory or documentation site for the worker",
 		ArgsUsage: argTarget,
 		Description: "Returns as soon as the work is queued. `docsearch add` is the " +
-			"other path: it waits, and prints what the ingest is doing.",
-		Flags:  append(serverFlags(), titleFlag()),
+			"other path: it waits, and prints what the ingest is doing.\n\n" +
+			"A file whose bytes the index already holds is skipped, unless an older " +
+			"pipeline read it. --force reads it again regardless, and the old " +
+			"version stays searchable until the new one replaces it.",
+		Flags: append(serverFlags(),
+			titleFlag(),
+			&cli.BoolFlag{
+				Name:  flagForce,
+				Usage: "re-read sources even where the index already holds their bytes",
+			},
+		),
 		Action: enqueueTarget,
 	}
 }
@@ -27,7 +36,8 @@ func enqueueTarget(ctx context.Context, cmd *cli.Command) error {
 	if target == "" {
 		return errNoTarget
 	}
-	queued, err := clientFor(cmd).Enqueue(ctx, target, cmd.String(flagTitle))
+	queued, err := clientFor(cmd).Enqueue(
+		ctx, target, cmd.String(flagTitle), cmd.Bool(flagForce))
 	if err != nil {
 		return err
 	}

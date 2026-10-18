@@ -109,6 +109,7 @@ func (j *Jobs) Claim(
 		Source:   row.SourcePath,
 		ID:       row.ID,
 		Attempts: int(row.Attempts),
+		Force:    row.Force,
 	}, nil
 }
 
@@ -296,6 +297,7 @@ func (j *Jobs) inTx(ctx context.Context, write func(*pgdbgen.Queries) error) err
 func (j *Jobs) Add(
 	ctx context.Context,
 	source, title string,
+	force bool,
 ) (id int64, position int, err error) {
 	// RETURNING, because Postgres has no last-insert-id.
 	var ahead int64
@@ -305,6 +307,7 @@ func (j *Jobs) Add(
 			UserID:     j.userID,
 			SourcePath: source,
 			Title:      nullString(title),
+			Force:      force,
 		})
 		if queueErr != nil {
 			return queueErr
