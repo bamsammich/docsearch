@@ -184,6 +184,74 @@ func (_c *MockDocumentServiceHandler_List_Call) RunAndReturn(run func(context1 c
 	return _c
 }
 
+// Read provides a mock function for the type MockDocumentServiceHandler
+func (_mock *MockDocumentServiceHandler) Read(context1 context.Context, request *connect.Request[documentv1.ReadRequest]) (*connect.Response[documentv1.ReadResponse], error) {
+	ret := _mock.Called(context1, request)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Read")
+	}
+
+	var r0 *connect.Response[documentv1.ReadResponse]
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *connect.Request[documentv1.ReadRequest]) (*connect.Response[documentv1.ReadResponse], error)); ok {
+		return returnFunc(context1, request)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *connect.Request[documentv1.ReadRequest]) *connect.Response[documentv1.ReadResponse]); ok {
+		r0 = returnFunc(context1, request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*connect.Response[documentv1.ReadResponse])
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *connect.Request[documentv1.ReadRequest]) error); ok {
+		r1 = returnFunc(context1, request)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockDocumentServiceHandler_Read_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Read'
+type MockDocumentServiceHandler_Read_Call struct {
+	*mock.Call
+}
+
+// Read is a helper method to define mock.On call
+//   - context1 context.Context
+//   - request *connect.Request[documentv1.ReadRequest]
+func (_e *MockDocumentServiceHandler_Expecter) Read(context1 any, request any) *MockDocumentServiceHandler_Read_Call {
+	return &MockDocumentServiceHandler_Read_Call{Call: _e.mock.On("Read", context1, request)}
+}
+
+func (_c *MockDocumentServiceHandler_Read_Call) Run(run func(context1 context.Context, request *connect.Request[documentv1.ReadRequest])) *MockDocumentServiceHandler_Read_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *connect.Request[documentv1.ReadRequest]
+		if args[1] != nil {
+			arg1 = args[1].(*connect.Request[documentv1.ReadRequest])
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDocumentServiceHandler_Read_Call) Return(response *connect.Response[documentv1.ReadResponse], err error) *MockDocumentServiceHandler_Read_Call {
+	_c.Call.Return(response, err)
+	return _c
+}
+
+func (_c *MockDocumentServiceHandler_Read_Call) RunAndReturn(run func(context1 context.Context, request *connect.Request[documentv1.ReadRequest]) (*connect.Response[documentv1.ReadResponse], error)) *MockDocumentServiceHandler_Read_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Remove provides a mock function for the type MockDocumentServiceHandler
 func (_mock *MockDocumentServiceHandler) Remove(context1 context.Context, request *connect.Request[documentv1.RemoveRequest]) (*connect.Response[documentv1.RemoveResponse], error) {
 	ret := _mock.Called(context1, request)
@@ -248,6 +316,74 @@ func (_c *MockDocumentServiceHandler_Remove_Call) Return(response *connect.Respo
 }
 
 func (_c *MockDocumentServiceHandler_Remove_Call) RunAndReturn(run func(context1 context.Context, request *connect.Request[documentv1.RemoveRequest]) (*connect.Response[documentv1.RemoveResponse], error)) *MockDocumentServiceHandler_Remove_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Rename provides a mock function for the type MockDocumentServiceHandler
+func (_mock *MockDocumentServiceHandler) Rename(context1 context.Context, request *connect.Request[documentv1.RenameRequest]) (*connect.Response[documentv1.RenameResponse], error) {
+	ret := _mock.Called(context1, request)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Rename")
+	}
+
+	var r0 *connect.Response[documentv1.RenameResponse]
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *connect.Request[documentv1.RenameRequest]) (*connect.Response[documentv1.RenameResponse], error)); ok {
+		return returnFunc(context1, request)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *connect.Request[documentv1.RenameRequest]) *connect.Response[documentv1.RenameResponse]); ok {
+		r0 = returnFunc(context1, request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*connect.Response[documentv1.RenameResponse])
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *connect.Request[documentv1.RenameRequest]) error); ok {
+		r1 = returnFunc(context1, request)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockDocumentServiceHandler_Rename_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Rename'
+type MockDocumentServiceHandler_Rename_Call struct {
+	*mock.Call
+}
+
+// Rename is a helper method to define mock.On call
+//   - context1 context.Context
+//   - request *connect.Request[documentv1.RenameRequest]
+func (_e *MockDocumentServiceHandler_Expecter) Rename(context1 any, request any) *MockDocumentServiceHandler_Rename_Call {
+	return &MockDocumentServiceHandler_Rename_Call{Call: _e.mock.On("Rename", context1, request)}
+}
+
+func (_c *MockDocumentServiceHandler_Rename_Call) Run(run func(context1 context.Context, request *connect.Request[documentv1.RenameRequest])) *MockDocumentServiceHandler_Rename_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *connect.Request[documentv1.RenameRequest]
+		if args[1] != nil {
+			arg1 = args[1].(*connect.Request[documentv1.RenameRequest])
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDocumentServiceHandler_Rename_Call) Return(response *connect.Response[documentv1.RenameResponse], err error) *MockDocumentServiceHandler_Rename_Call {
+	_c.Call.Return(response, err)
+	return _c
+}
+
+func (_c *MockDocumentServiceHandler_Rename_Call) RunAndReturn(run func(context1 context.Context, request *connect.Request[documentv1.RenameRequest]) (*connect.Response[documentv1.RenameResponse], error)) *MockDocumentServiceHandler_Rename_Call {
 	_c.Call.Return(run)
 	return _c
 }

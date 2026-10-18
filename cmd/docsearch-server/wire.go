@@ -59,11 +59,13 @@ func serve(cfg config.Config, log *slog.Logger) error {
 			newLibraries,
 			newAccess,
 			newUploads,
+			newWebUI,
 			grouped(newMCPRoute),
 			grouped(newIngestRoute),
 			grouped(newDocumentRoute),
 			grouped(newJobRoute),
 			grouped(newUploadRoute),
+			grouped(newOriginalRoute),
 			fx.Annotate(newMux, fx.ParamTags(routeGroup)),
 			fx.Annotate(newServer, fx.ParamTags("", "", routeGroup)),
 		),
@@ -220,13 +222,22 @@ func newMCPRoute(
 		UploadLinks:  ups.issuer.Issue,
 		Jobs:         libs.Jobs,
 	})
-	return route{
-		path: "/mcp",
-		handler: mcp.NewStreamableHTTPHandler(
-			func(*http.Request) *mcp.Server { return srv },
-			&mcp.StreamableHTTPOptions{Logger: log, Stateless: true},
-		),
-	}
+	return route{path: "/mcp", handler: mcpHandler(srv, log)}
+}
+
+// mcpHandler serves one MCP server over streamable HTTP, statelessly.
+//
+// The SDK's own DNS-rebinding guard is off. It refuses any request that
+// reaches a loopback listener under a hostname that is not loopback, which is
+// every request a reverse proxy on the same machine forwards, so a server
+// behind Tailscale serve or Caddy would refuse its own clients. Rebinding is
+// still refused: newMux wraps this route in RequireAllowedOrigin, and a
+// rebinding page always carries its attacker's origin.
+func mcpHandler(srv *mcp.Server, log *slog.Logger) http.Handler {
+	return mcp.NewStreamableHTTPHandler(
+		func(*http.Request) *mcp.Server { return srv },
+		&mcp.StreamableHTTPOptions{Logger: log, Stateless: true, DisableLocalhostProtection: true},
+	)
 }
 
 // newIngestRoute wires the two halves an ingest needs, both of them the
@@ -274,13 +285,20 @@ func newMux(
 	libs *library.Libraries,
 	guard access,
 	ups uploads,
+	ui webUI,
 	log *slog.Logger,
 ) *http.ServeMux {
 	mux := http.NewServeMux()
+	origins := cfg.BrowserOrigins()
 	for _, r := range routes {
-		mux.Handle(r.path, httpx.RequireAllowedOrigin(cfg.AllowedOrigins, guard.guard(r.handler)))
+		mux.Handle(r.path, httpx.RequireAllowedOrigin(origins, guard.guard(r.handler)))
 	}
 	for _, r := range guard.public {
+		mux.Handle(r.path, r.handler)
+	}
+	// The library UI is static and carries no data; what it reads, it reads
+	// through the guarded routes above.
+	for _, r := range ui.routes {
 		mux.Handle(r.path, r.handler)
 	}
 	// A signed link is its own credential, and the page it serves posts to
@@ -344,7 +362,8 @@ func newServer(
 			}
 			log.Info("docsearch-server listening",
 				"addr", listener.Addr().String(),
-				"roots", cfg.LibraryRoots, "allowed_origins", cfg.AllowedOrigins,
+				"roots", cfg.LibraryRoots, "allowed_origins", cfg.BrowserOrigins(),
+				"library_ui", cfg.PublicURL+"/",
 				"routes", mountedPaths(routes))
 			go serveUntilStopped(srv, listener, log, shutdown)
 			return nil

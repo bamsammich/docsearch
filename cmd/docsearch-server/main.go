@@ -97,6 +97,16 @@ func command() *cli.Command {
 				Usage:   "`URL` a browser reaches this server at, for upload links",
 				Sources: cli.EnvVars(config.EnvPublicURL),
 			},
+			&cli.StringFlag{
+				Name:    "ui-client-id",
+				Usage:   "the library UI's public client `ID` at the oidc provider",
+				Sources: cli.EnvVars(config.EnvUIClientID),
+			},
+			&cli.StringFlag{
+				Name:    "instance-label",
+				Usage:   "a `LABEL` the library UI shows on every page, such as \"Test instance\"",
+				Sources: cli.EnvVars(config.EnvInstanceLabel),
+			},
 			&cli.Int64Flag{
 				Name:    "upload-max-mb",
 				Value:   config.DefaultUploadMaxMB,
@@ -177,6 +187,8 @@ func run(_ context.Context, cmd *cli.Command) error {
 		SharedPaths:     cmd.Bool("shared-paths"),
 		PublicURL:       cmd.String("public-url"),
 		UploadMaxMB:     cmd.Int64("upload-max-mb"),
+		UIClientID:      cmd.String("ui-client-id"),
+		InstanceLabel:   strings.TrimSpace(cmd.String("instance-label")),
 		OIDC: config.OIDC{
 			Issuer:             cmd.String("oidc-issuer"),
 			Resource:           cmd.String("oidc-resource"),

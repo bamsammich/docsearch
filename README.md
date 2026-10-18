@@ -32,8 +32,8 @@ minutes and would starve request handling.
 ## Setup
 
 ```bash
-mise install          # go 1.26, golangci-lint, buf, sqlc, mockery
-mise run build        # docsearch-server, docsearch-worker, docsearch, docsearch-sync
+mise install          # go 1.26, node 22, golangci-lint, buf, sqlc, mockery
+mise run build        # the library UI, then docsearch-server, docsearch-worker, docsearch, docsearch-sync
 ```
 
 `pdffonts` (poppler) is useful for inspecting a PDF's text layer and is not in
@@ -123,13 +123,54 @@ A link works once and for 15 minutes, and the database keeps only a hash of
 it. The authenticated `PUT /upload` also takes `?key=`: a later upload under
 the same key replaces that document instead of adding a second. Without a
 key, the file's content hash is the key, so uploading the same bytes twice
-gives one document.
+gives one document. `?title=` names the document; without it, the document
+takes the title it gives itself.
+
+`GET /original/<doc_id>` returns the file a document was read from, to the
+account that owns it. A PDF comes back as a PDF and a Word file as a download.
+Every other format comes back as plain text, so an uploaded HTML file never
+runs in the browser. A site's original redirects to its URL.
 
 `--public-url` (`DOCSEARCH_PUBLIC_URL`) is where a browser reaches the
 server, and links are built on it. It defaults to the origin of
 `--oidc-resource` in `oidc` mode, and to loopback on the listening port
 otherwise. `--upload-max-mb` (`DOCSEARCH_UPLOAD_MAX_MB`) caps a file at 100
 MB unless set.
+
+## The library UI
+
+`docsearch-server` serves a web page at its public URL (`--public-url`, printed
+at startup as `library_ui`). It shows which documents your agents can search
+and how well, the ingest queue, and a search preview that calls the same MCP
+`search` tool an agent does.
+
+| tab | what it answers |
+|---|---|
+| Library | Which documents need attention, and what an agent loses on each. A coverage strip splits every document into pages reachable by chapter, pages reachable without usable chapters, and pages that never reached the index. Rename a document here; its `doc_id` stays the same. |
+| Reader | A document's chunks in order, as agents receive them, beside its outline. Chunks without a heading and pages that never reached the index are marked. A search result opens the reader at its chunk. Original opens the file the document was read from. |
+| Ingest | Add a site or upload a file, with an optional title, and follow each job through discover, fetch, extract, chunk and index. Failures are listed first. |
+| Search preview | Run a query, optionally inside one document and section, and see the ranked results and the raw response an agent receives. |
+
+The page signs in with the credential an MCP client uses, and the server
+keeps no session for it:
+
+| `--auth` | in the browser |
+|---|---|
+| `none` | no sign-in |
+| `token` | paste `DOCSEARCH_TOKEN`; it stays in that tab's `sessionStorage` |
+| `oidc` | authorization code with PKCE at the provider, as a public client named by `--ui-client-id`, with `<public URL>/` as its redirect URI |
+| `password` | authorization code with PKCE at docsearch itself; the page registers itself once as a public client at `/register` and keeps the client id in the browser |
+
+The page and its assets carry no data and need no credential. Every read and
+write it makes goes through the same guarded routes as an MCP client. The
+server's own public origin is admitted past the Origin allowlist, so open the
+page at that address: one reached through another hostname is refused until
+that origin is added to `--allowed-origins`.
+
+The UI is a Svelte app in `web/`, built into `internal/webui/dist` and
+embedded with `go:embed`. A binary built without it answers `/` with a note
+to run `mise run web`. `npm run dev` in `web/` serves it with hot reload and
+proxies the API to a server on `127.0.0.1:8765`.
 
 ## Syncing from Paperless-ngx
 
@@ -289,6 +330,8 @@ an in-flight job can checkpoint or roll back instead of being killed mid-write.
 | library roots | `--root` (repeatable) | `DOCSEARCH_ROOT` (`:`-separated) |
 | bearer token | — | `DOCSEARCH_TOKEN` |
 | Origin allowlist | `--allowed-origins` | `DOCSEARCH_ALLOWED_ORIGINS` |
+| library UI's client at the oidc provider | `--ui-client-id` | `DOCSEARCH_UI_CLIENT_ID` |
+| label the library UI shows on every page, such as `Test instance` | `--instance-label` | `DOCSEARCH_INSTANCE_LABEL` |
 | permit public bind | `--allow-public-bind` | `DOCSEARCH_ALLOW_PUBLIC_BIND=true` |
 
 `--auth` is `none`, `token`, `oidc` or `password`, and defaults to `token`,

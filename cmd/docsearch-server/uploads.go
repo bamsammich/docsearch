@@ -53,13 +53,15 @@ func newUploads(
 var errNothingQueued = errors.New("the upload was stored but no job was queued")
 
 // enqueuer queues one target into a user's library and names the job.
-func enqueuer(libs *library.Libraries) func(context.Context, string, string) (int64, error) {
-	return func(ctx context.Context, user, target string) (int64, error) {
+func enqueuer(
+	libs *library.Libraries,
+) func(context.Context, string, string, string) (int64, error) {
+	return func(ctx context.Context, user, target, title string) (int64, error) {
 		jobs, err := libs.Jobs(user)
 		if err != nil {
 			return 0, err
 		}
-		queued, err := jobs.Enqueue(ctx, target, "")
+		queued, err := jobs.Enqueue(ctx, target, title)
 		if err != nil {
 			return 0, err
 		}

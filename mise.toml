@@ -7,6 +7,7 @@ mockery = "3.8.0"
 buf = "1.73.0"
 protoc-gen-go = "1.36.12"
 protoc-gen-connect-go = "1.21.0"
+node = "22"
 
 [env]
 DOCSEARCH_DB = "{{config_root}}/var/docsearch.db"
@@ -34,6 +35,7 @@ run = [
   # that breaks somewhere else.
   "scripts/generated-is-current.sh",
   "mise run test",
+  "mise run web:check",
 ]
 
 [tasks.lint]
@@ -58,8 +60,30 @@ run = [
 description = "Run the Go tests"
 run = ["go test ./..."]
 
+[tasks.web]
+description = "Build the library UI that docsearch-server embeds"
+dir = "web"
+run = [
+  "npm ci --no-audit --no-fund",
+  "npm run build",
+]
+
+[tasks."web:check"]
+description = "Type-check and test the library UI, and check its generated client is current"
+dir = "web"
+run = [
+  "npm ci --no-audit --no-fund",
+  "npm run check",
+  "npm test",
+  # The TypeScript client is generated from the same proto as the Go one.
+  "npm run generate",
+  "git diff --exit-code -- src/gen",
+]
+
 [tasks.build]
 description = "Build the server, worker, CLI and Paperless sync binaries"
+# The server embeds the UI, so it is built first.
+depends = ["web"]
 run = [
   "go build -o bin/docsearch-server ./cmd/docsearch-server",
   "go build -o bin/docsearch-worker ./cmd/docsearch-worker",

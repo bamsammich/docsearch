@@ -57,6 +57,12 @@ type Repository interface {
 	SectionHasChunks(ctx context.Context, docID, section string) (bool, error)
 	// Delete removes every trace of a document.
 	Delete(ctx context.Context, docID string) error
+	// Rename changes what a document is called.
+	Rename(ctx context.Context, docID, title string) error
+	// Passages are the chunks whose ordinals run from from through to.
+	Passages(ctx context.Context, docID string, from, to int) ([]Passage, error)
+	// ChunkOrdinal is where a chunk sits in its document.
+	ChunkOrdinal(ctx context.Context, docID string, chunkID int64) (int, error)
 }
 
 // Inspector reports what ingest would make of a target, writing nothing.
@@ -86,6 +92,34 @@ type VerifyReport struct {
 	Verdict domain.Verdict `json:"verdict"`
 }
 
+// Passage is one chunk as a reader sees it.
+type Passage struct {
+	Section     *string
+	PageStart   *int
+	URL         *string
+	Fragment    *string
+	HeadingPath string
+	Text        string
+	ID          int64
+	Ordinal     int
+}
+
+// Reading is a run of a document's chunks.
+type Reading struct {
+	Passages []Passage
+	// From is the ordinal the run starts at.
+	From int
+	// ChunkCount is how many chunks the document holds in all.
+	ChunkCount int
+}
+
+// ReadLimit bounds how many chunks one read returns; DefaultReadLimit is
+// what a read that names no limit gets.
+const (
+	DefaultReadLimit = 40
+	ReadLimit        = 200
+)
+
 // Service answers questions about stored documents.
 type Service struct {
 	repo      Repository
@@ -106,6 +140,11 @@ func (s *Service) List(ctx context.Context) ([]Document, error) {
 	return docs, nil
 }
 
+// Get is one document, whatever its status.
+func (s *Service) Get(ctx context.Context, docID string) (*Document, error) {
+	return s.repo.Get(ctx, docID)
+}
+
 // Remove deletes a document from the index.
 func (s *Service) Remove(ctx context.Context, docID string) error {
 	if _, err := s.repo.Get(ctx, docID); err != nil {
@@ -113,6 +152,47 @@ func (s *Service) Remove(ctx context.Context, docID string) error {
 	}
 	if err := s.repo.Delete(ctx, docID); err != nil {
 		return fmt.Errorf("remove %s: %w", docID, err)
+	}
+	return nil
+}
+
+// Read is a run of a document's chunks, starting at an ordinal or at the
+// chunk atChunk names.
+func (s *Service) Read(
+	ctx context.Context,
+	docID string,
+	from int,
+	atChunk *int64,
+	limit int,
+) (*Reading, error) {
+	doc, err := s.repo.Get(ctx, docID)
+	if err != nil {
+		return nil, err
+	}
+	if atChunk != nil {
+		if from, err = s.repo.ChunkOrdinal(ctx, docID, *atChunk); err != nil {
+			return nil, err
+		}
+	}
+	if limit <= 0 || limit > ReadLimit {
+		limit = DefaultReadLimit
+	}
+	from = max(from, 0)
+	passages, err := s.repo.Passages(ctx, docID, from, from+limit-1)
+	if err != nil {
+		return nil, fmt.Errorf("read the chunks of %s: %w", docID, err)
+	}
+	reading := &Reading{Passages: passages, From: from}
+	if doc.ChunkCount != nil {
+		reading.ChunkCount = *doc.ChunkCount
+	}
+	return reading, nil
+}
+
+// Rename changes what a document is called.
+func (s *Service) Rename(ctx context.Context, docID, title string) error {
+	if err := s.repo.Rename(ctx, docID, title); err != nil {
+		return fmt.Errorf("rename %s: %w", docID, err)
 	}
 	return nil
 }

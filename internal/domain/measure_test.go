@@ -128,3 +128,13 @@ func (s *MeasureSuite) TestTheExtremesAreCappedAndStable() {
 	s.Equal(29, m.Longest[0].Ordinal)
 	s.Equal(0, m.Shortest[0].Ordinal)
 }
+
+func (s *MeasureSuite) TestAChunkWithNoHeadingIsCountedHeadless() {
+	chunks := []domain.Chunk{
+		{HeadingPath: "Guide > Install", Text: "Run it.", Ordinal: 0},
+		{HeadingPath: "", Text: "Loose text.", Ordinal: 1},
+		{HeadingPath: "   ", Text: "Whitespace is no heading either.", Ordinal: 2},
+	}
+
+	s.Equal(2, domain.Measure(chunks, nil).HeadlessChunks)
+}

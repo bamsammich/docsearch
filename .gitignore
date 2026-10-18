@@ -30,3 +30,15 @@ __pycache__/
 .DS_Store
 # Holds absolute paths to whatever is installed on one machine.
 .vscode/
+
+# The library UI: dependencies, and the build docsearch-server embeds, which
+# CI and the server image rebuild from web/.
+/web/node_modules/
+/internal/webui/dist/*
+!/internal/webui/dist/.gitkeep
+
+# Impeccable's working state. The design record (DESIGN.md, the sidecar and
+# the surface brief) is committed; mocks, captures, critiques and caches are not.
+/.impeccable/*
+!/.impeccable/design.json
+!/.impeccable/surfaces/

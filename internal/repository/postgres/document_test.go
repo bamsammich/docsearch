@@ -146,6 +146,48 @@ func (s *DocumentsSuite) TestASectionResolvesItsWholeSubtree() {
 	s.False(absent)
 }
 
+func (s *DocumentsSuite) TestPassagesComeBackInOrderWithinTheRange() {
+	s.ingested("manual", []domain.Chunk{
+		chunkAt(0, "1", 1), chunkAt(1, "2", 2), chunkAt(2, "3", 3), chunkAt(3, "4", 4),
+	}, "")
+
+	passages, err := s.docs.Passages(s.T().Context(), "manual", 1, 2)
+	s.Require().NoError(err)
+	s.Require().Len(passages, 2)
+	s.Equal(1, passages[0].Ordinal)
+	s.Equal(2, passages[1].Ordinal)
+	s.Equal("2", *passages[0].Section)
+	s.Equal(2, *passages[0].PageStart)
+	s.Equal("Manual > Install", passages[0].HeadingPath)
+	s.NotZero(passages[0].ID)
+}
+
+func (s *DocumentsSuite) TestAChunkIsFoundByItsIdentifier() {
+	s.ingested("manual", []domain.Chunk{chunkAt(0, "1", 1), chunkAt(1, "2", 2)}, "")
+	passages, err := s.docs.Passages(s.T().Context(), "manual", 1, 1)
+	s.Require().NoError(err)
+	s.Require().Len(passages, 1)
+
+	ordinal, err := s.docs.ChunkOrdinal(s.T().Context(), "manual", passages[0].ID)
+	s.Require().NoError(err)
+	s.Equal(1, ordinal)
+
+	_, err = s.docs.ChunkOrdinal(s.T().Context(), "other", passages[0].ID)
+	s.Require().ErrorIs(err, postgres.ErrNotFound, "a chunk is found only in its own document")
+}
+
+func (s *DocumentsSuite) TestARenameKeepsTheIdentifier() {
+	s.ingested("manual", []domain.Chunk{chunkAt(0, "1", 1)}, "")
+
+	s.Require().NoError(s.docs.Rename(s.T().Context(), "manual", "Gateway manual"))
+	doc, err := s.docs.Get(s.T().Context(), "manual")
+	s.Require().NoError(err)
+	s.Equal("Gateway manual", doc.Title)
+
+	err = s.docs.Rename(s.T().Context(), "gone", "Anything")
+	s.Require().ErrorIs(err, postgres.ErrNotFound)
+}
+
 func (s *DocumentsSuite) TestIndexTermSectionsComeBackDistinctAndSorted() {
 	s.ingested("manual", []domain.Chunk{chunkAt(0, "1", 1)}, "")
 	s.Require().NoError(s.write.AddPagesAndTerms(s.T().Context(), "manual", nil, [][2]string{

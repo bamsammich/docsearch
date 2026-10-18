@@ -1,11 +1,22 @@
 # The MCP server. Pure Go with no cgo, so the binary is static and the
 # runtime image needs no libc.
+
+# The library UI the server embeds. Built first, because go:embed reads the
+# finished files at compile time.
+FROM node:22-alpine AS web
+WORKDIR /src/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY web ./
+RUN npm run build
+
 FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
+COPY --from=web /src/internal/webui/dist ./internal/webui/dist
 RUN CGO_ENABLED=0 GOOS=linux go build \
       -trimpath -ldflags="-s -w" \
       -o /out/docsearch-server ./cmd/docsearch-server

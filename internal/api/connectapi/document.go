@@ -3,8 +3,11 @@ package connectapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -26,6 +29,14 @@ type Documents interface {
 	Verify(ctx context.Context, docID string) (*document.VerifyReport, error)
 	Inspect(ctx context.Context, target string) (*domain.InspectReport, error)
 	Remove(ctx context.Context, docID string) error
+	Rename(ctx context.Context, docID, title string) error
+	Read(
+		ctx context.Context,
+		docID string,
+		from int,
+		atChunk *int64,
+		limit int,
+	) (*document.Reading, error)
 }
 
 // DocumentsFor builds the document service for the user a request acts for.
@@ -138,6 +149,72 @@ func (s *DocumentServer) Remove(
 	return connect.NewResponse(&documentv1.RemoveResponse{}), nil
 }
 
+// TitleLimit is the longest title a rename accepts, in characters.
+const TitleLimit = 300
+
+func (s *DocumentServer) Rename(
+	ctx context.Context,
+	req *connect.Request[documentv1.RenameRequest],
+) (*connect.Response[documentv1.RenameResponse], error) {
+	title := strings.TrimSpace(req.Msg.GetTitle())
+	switch {
+	case req.Msg.GetDocId() == "":
+		return nil, connect.NewError(
+			connect.CodeInvalidArgument, errors.New("doc_id names the document to rename"))
+	case title == "":
+		return nil, connect.NewError(
+			connect.CodeInvalidArgument, errors.New("title is the new name, and is empty"))
+	case utf8.RuneCountInString(title) > TitleLimit:
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("title runs past %d characters", TitleLimit))
+	}
+	documents, err := s.forOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := documents.Rename(ctx, req.Msg.GetDocId(), title); err != nil {
+		return nil, s.asConnectError(err)
+	}
+	return connect.NewResponse(&documentv1.RenameResponse{}), nil
+}
+
+func (s *DocumentServer) Read(
+	ctx context.Context,
+	req *connect.Request[documentv1.ReadRequest],
+) (*connect.Response[documentv1.ReadResponse], error) {
+	if req.Msg.GetDocId() == "" {
+		return nil, connect.NewError(
+			connect.CodeInvalidArgument, errors.New("doc_id names the document to read"))
+	}
+	documents, err := s.forOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	reading, err := documents.Read(ctx, req.Msg.GetDocId(),
+		int(req.Msg.GetFromOrdinal()), req.Msg.AtChunkId, int(req.Msg.GetLimit()))
+	if err != nil {
+		return nil, s.asConnectError(err)
+	}
+	chunks := make([]*documentv1.ReadChunk, len(reading.Passages))
+	for i, p := range reading.Passages {
+		chunks[i] = &documentv1.ReadChunk{
+			ChunkId:     p.ID,
+			Ordinal:     int64(p.Ordinal),
+			HeadingPath: p.HeadingPath,
+			Section:     p.Section,
+			PageStart:   optionalInt(p.PageStart),
+			Url:         p.URL,
+			Fragment:    p.Fragment,
+			Text:        p.Text,
+		}
+	}
+	return connect.NewResponse(&documentv1.ReadResponse{
+		Chunks:      chunks,
+		FromOrdinal: int64(reading.From),
+		ChunkCount:  int64(reading.ChunkCount),
+	}), nil
+}
+
 // asConnectError says what the caller should do about a failure. A document
 // the index does not hold, or a path outside the roots, is the caller's
 // mistake, not the server's.
@@ -216,6 +293,7 @@ func measurementsMessage(m domain.Measurements) *documentv1.Measurements {
 		OrdinalGaps:       int64s(m.OrdinalGaps),
 		ScatteredSections: m.ScatteredSections,
 		MissingLocator:    int64(m.MissingLocator),
+		HeadlessChunks:    int64(m.HeadlessChunks),
 		ChunksWithImages:  int64(m.ChunksWithImages),
 	}
 }

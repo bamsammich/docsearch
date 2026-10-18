@@ -82,7 +82,8 @@ func RequireAllowedOrigin(allowed []string, next http.Handler) http.Handler {
 
 // LogRequests emits one structured line per request.
 //
-// It records method, path, tool name, duration and outcome. It never records
+// It records method, path, tool name, Origin, duration and outcome. The
+// Origin is what tells an operator why a browser was refused. It never records
 // the Authorization header or the request body, so a bearer token and the
 // full text of a query stay out of the log.
 func LogRequests(log *slog.Logger, next http.Handler) http.Handler {
@@ -94,6 +95,7 @@ func LogRequests(log *slog.Logger, next http.Handler) http.Handler {
 			"method", r.Method,
 			"path", redact(r.URL.Path),
 			"tool", r.Header.Get("MCP-Tool-Name"),
+			"origin", r.Header.Get("Origin"),
 			"session", r.Header.Get("Mcp-Session-Id"),
 			"status", rec.status,
 			"duration_ms", time.Since(start).Milliseconds(),

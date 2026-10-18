@@ -74,6 +74,25 @@ func (q *Queries) ListReadyDocuments(ctx context.Context) ([]ListReadyDocumentsR
 	return items, nil
 }
 
+const renameDocument = `-- name: RenameDocument :execrows
+UPDATE documents SET title = $2 WHERE doc_id = $1
+`
+
+type RenameDocumentParams struct {
+	DocID string
+	Title string
+}
+
+// A rename changes only what the document is called. The doc_id stays, so a
+// caller holding it still finds the document.
+func (q *Queries) RenameDocument(ctx context.Context, arg RenameDocumentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, renameDocument, arg.DocID, arg.Title)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const schemaVersion = `-- name: SchemaVersion :one
 SELECT version FROM schema_version LIMIT 1
 `
