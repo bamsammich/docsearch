@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/bamsammich/docsearch/internal/libroot"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 	"github.com/bamsammich/docsearch/internal/urlguard"
 )
@@ -76,6 +77,9 @@ type Jobs interface {
 		cur, tot int,
 		lease time.Duration,
 	) error
+	// RenewLease extends a running job's lease. It fails with
+	// ingest.ErrLostClaim once another worker has the job.
+	RenewLease(ctx context.Context, id int64, lease time.Duration) error
 	// RecordDocID notes which document a running job is writing.
 	RecordDocID(ctx context.Context, id int64, docID string) error
 	// CancelRequested reports whether the operator has asked for the job to
@@ -200,8 +204,9 @@ func (s *Service) execute(ctx context.Context, job *Job) error {
 	source, err := s.sources.For(job.Source, true)
 	if err != nil {
 		// A target no source can be built from is refused the same way every
-		// time, so trying again would read the same job row and fail again.
-		return s.fail(ctx, job, err, true)
+		// time, except a file inside a root that is not there yet: a volume
+		// that mounts a minute late is worth the retry.
+		return s.fail(ctx, job, err, !errors.Is(err, libroot.ErrMissing))
 	}
 
 	// Only the operator cancels a job. The worker shutting down waits for it
@@ -212,69 +217,106 @@ func (s *Service) execute(ctx context.Context, job *Job) error {
 	watcher := s.watchForCancel(jobCtx, job.ID, stop)
 
 	result, err := s.ingester.Run(jobCtx, source, ingest.Options{
-		Title:    job.Title,
-		JobID:    &job.ID,
-		Progress: s.progress(jobCtx, job.ID),
-		OnDocID:  s.recordDocID(jobCtx, job.ID),
+		Title:      job.Title,
+		JobID:      &job.ID,
+		JobAttempt: job.Attempts,
+		Progress:   s.progress(jobCtx, job.ID),
+		OnDocID:    s.recordDocID(jobCtx, job.ID),
 	})
 	stop()
-	cancelledByOperator := <-watcher
+	watched := <-watcher
 
 	// A finished ingest is finished, however late a cancel request arrived:
 	// its document is already published in the transaction that completed
-	// the job.
+	// the job. A job another worker took over belongs to that worker, and
+	// this one writes nothing more to it.
 	switch {
 	case err == nil:
 		return s.done(jobCtx, job, result)
-	case cancelledByOperator || errors.Is(err, ingest.ErrCancelled):
+	case watched == lost || errors.Is(err, ingest.ErrLostClaim):
+		s.log.Warn("another worker took the job over; leaving it to them", "job", job.ID)
+		return nil
+	case watched == cancelled || errors.Is(err, ingest.ErrCancelled):
 		return s.cancelled(jobCtx, job)
 	default:
 		return s.fail(jobCtx, job, err, permanent(err))
 	}
 }
 
-// watchForCancel polls the job row and stops the ingest when the operator
-// asks. The channel carries whether they did, once the watch ends.
+// watchResult is how a job's watch ended.
+type watchResult int
+
+const (
+	// running is a watch that ended with the ingest, nothing having happened.
+	running watchResult = iota + 1
+	// cancelled is the operator asking for the job to stop.
+	cancelled
+	// lost is the job claimed by another worker after this one's lease
+	// lapsed.
+	lost
+)
+
+// watchForCancel watches the job while it runs: it renews the lease, and it
+// stops the ingest when the operator asks or when another worker has taken
+// the job over. The channel carries which, once the watch ends.
 //
-// Polling rather than a trigger: the request arrives in another process,
-// through a row, and a database this small has nothing to push with.
+// The lease is renewed here as well as by progress reports because a long
+// extraction reports nothing until it is done, and a lease that lapsed
+// mid-extraction would hand the job to a second worker. Polling rather
+// than a trigger: the request arrives in another process, through a row,
+// and a database this small has nothing to push with.
 func (s *Service) watchForCancel(
 	ctx context.Context,
 	id int64,
 	stop context.CancelFunc,
-) <-chan bool {
-	asked := make(chan bool, 1)
+) <-chan watchResult {
+	ended := make(chan watchResult, 1)
 	go func() {
-		defer close(asked)
-		asked <- s.awaitCancel(ctx, id, stop)
+		defer close(ended)
+		ended <- s.watch(ctx, id, stop)
 	}()
-	return asked
+	return ended
 }
 
-// awaitCancel polls until the operator cancels the job or the ingest ends,
-// and reports which happened.
+// watch polls until the ingest ends, the operator cancels, or the job is
+// lost.
 //
 // A read that fails is not a cancellation: the operator has said nothing,
 // and abandoning a running ingest over an unreadable row would throw away
 // the work rather than protect it.
-func (s *Service) awaitCancel(ctx context.Context, id int64, stop context.CancelFunc) bool {
+func (s *Service) watch(ctx context.Context, id int64, stop context.CancelFunc) watchResult {
 	for {
 		if err := sleep(ctx, s.opts.CancelPoll); err != nil {
-			return false
+			return running
 		}
-		// The read runs on a context the ingest's cancellation does not
-		// reach, because reading the row is how a cancellation is noticed.
-		requested, err := s.jobs.CancelRequested(context.WithoutCancel(ctx), id)
-		if err != nil {
-			s.log.Warn("could not read the cancel request", "job", id, "error", err)
-			continue
-		}
-		if requested {
-			s.log.Info("operator cancelled the job", "job", id)
+		// These run on a context the ingest's cancellation does not reach,
+		// because reading the row is how a cancellation is noticed.
+		if result, ended := s.check(context.WithoutCancel(ctx), id); ended {
 			stop()
-			return true
+			return result
 		}
 	}
+}
+
+// check renews the lease and reads the cancel request, and reports whether
+// the job has to stop and why.
+func (s *Service) check(ctx context.Context, id int64) (watchResult, bool) {
+	if err := s.jobs.RenewLease(ctx, id, s.opts.Lease); errors.Is(err, ingest.ErrLostClaim) {
+		s.log.Warn("lost the job to another worker", "job", id)
+		return lost, true
+	} else if err != nil {
+		s.log.Warn("could not renew the lease", "job", id, "error", err)
+	}
+	requested, err := s.jobs.CancelRequested(ctx, id)
+	if err != nil {
+		s.log.Warn("could not read the cancel request", "job", id, "error", err)
+		return running, false
+	}
+	if requested {
+		s.log.Info("operator cancelled the job", "job", id)
+		return cancelled, true
+	}
+	return running, false
 }
 
 // progress writes how far the job has got, no more often than

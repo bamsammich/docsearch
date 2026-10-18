@@ -18,6 +18,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bamsammich/docsearch/internal/paperless"
 	"github.com/bamsammich/docsearch/internal/service/document"
@@ -105,43 +106,86 @@ var ErrNothingShown = errors.New("paperless showed no documents; refusing to ret
 // key is the upload key of one Paperless document.
 func (o Options) key(id int) string { return o.Prefix + "-" + strconv.Itoa(id) }
 
+// jobWindow is how much of the queue a sync reads: enough that every job
+// a sync could have queued is in it.
+const jobWindow = 10000
+
+// queueState is what the queue says about the sources a sync pushes.
+type queueState struct {
+	// busy are sources a queued or running job is reading.
+	busy map[string]bool
+	// refused are sources whose last job failed permanently, with when.
+	refused map[string]time.Time
+}
+
+// readQueue sorts a newest-first listing. The first job seen for a source is
+// its latest, which is the one that says what the source is doing now.
+func readQueue(jobs []job.Job) queueState {
+	state := queueState{busy: map[string]bool{}, refused: map[string]time.Time{}}
+	seen := map[string]bool{}
+	for _, j := range jobs {
+		if !seen[j.Source] {
+			seen[j.Source] = true
+			state.note(j)
+		}
+	}
+	return state
+}
+
+// note records what a source's latest job says about it.
+func (q queueState) note(j job.Job) {
+	if j.Status == "queued" || j.Status == "running" {
+		q.busy[j.Source] = true
+		return
+	}
+	if j.Status != "failed" || !j.Permanent {
+		return
+	}
+	if at, err := time.Parse(time.RFC3339, j.UpdatedAt); err == nil {
+		q.refused[j.Source] = at
+	}
+}
+
 // Plan decides what each document needs, from what Paperless shows, what the
-// library holds and which uploads are still being read.
+// library holds and what the queue is doing.
 func Plan(
 	shown []paperless.Document,
 	held []document.Document,
-	active []job.Job,
+	jobs []job.Job,
 	options Options,
 ) []Action {
 	bySource := map[string]document.Document{}
 	for _, d := range held {
 		bySource[d.Source] = d
 	}
-	busy := map[string]bool{}
-	for _, j := range active {
-		busy[j.Source] = true
-	}
+	queue := readQueue(jobs)
 	keep := map[string]bool{}
 	actions := make([]Action, 0, len(shown))
 	for _, d := range shown {
 		key := options.key(d.ID)
 		keep[upload.Target(key)] = true
-		actions = append(actions, decide(d, key, bySource, busy, options))
+		actions = append(actions, decide(d, key, bySource, queue, options))
 	}
-	return append(actions, retirements(held, keep, busy, options)...)
+	return append(actions, retirements(held, keep, queue.busy, options)...)
 }
 
 func decide(
 	d paperless.Document,
 	key string,
 	bySource map[string]document.Document,
-	busy map[string]bool,
+	queue queueState,
 	options Options,
 ) Action {
 	action := Action{Kind: Push, Key: key, ID: d.ID}
 	target := upload.Target(key)
-	if busy[target] {
+	if queue.busy[target] {
 		action.Kind, action.Reason = Skip, "already being read"
+		return action
+	}
+	// A document docsearch refused gets the same answer for the same file,
+	// so it is pushed again only once Paperless has changed it.
+	if at, refused := queue.refused[target]; refused && !d.Modified.After(at) {
+		action.Kind, action.Reason = Skip, "refused last time, and unchanged since"
 		return action
 	}
 	if held, ok := bySource[target]; ok && held.IngestedAt.After(d.Modified) {
@@ -220,11 +264,11 @@ func (s *Syncer) Plan(ctx context.Context) ([]Action, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list library documents: %w", err)
 	}
-	active, err := s.library.Jobs(ctx, false, 0)
+	jobs, err := s.library.Jobs(ctx, true, jobWindow)
 	if err != nil {
 		return nil, fmt.Errorf("list ingest jobs: %w", err)
 	}
-	actions := Plan(shown, held, active, s.options)
+	actions := Plan(shown, held, jobs, s.options)
 	if len(shown) == 0 && len(actions) > 0 && !s.options.AllowEmpty {
 		return nil, ErrNothingShown
 	}

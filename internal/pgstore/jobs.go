@@ -112,9 +112,17 @@ func (s *Store) RequestCancel(ctx context.Context, id int64) (string, error) {
 	if status != statusQueued && status != statusRunning {
 		return status, nil
 	}
-	return status, pgsession.Run(ctx, s.db, s.q, s.userID, func(q *pgdbgen.Queries) error {
+	err = pgsession.Run(ctx, s.db, s.q, s.userID, func(q *pgdbgen.Queries) error {
 		return q.RequestJobCancel(ctx, id)
 	})
+	if err != nil {
+		return "", err
+	}
+	// A queued job is cancelled on the spot, since no worker holds it.
+	if status == statusQueued {
+		return statusCancelled, nil
+	}
+	return status, nil
 }
 
 // mapJob turns a queue row into what ingest_status reports.

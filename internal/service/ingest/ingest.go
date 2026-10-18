@@ -172,8 +172,11 @@ type Ready struct {
 	// old rows are deleted and DocID's are moved under Replaces in the same
 	// transaction that publishes them, so a reader sees the old version or
 	// the new one and never neither. Empty for a document new to the index.
-	Replaces   string
-	Warnings   []byte
+	Replaces string
+	Warnings []byte
+	// JobAttempt is the attempt the job was claimed as, which completing it
+	// is fenced by.
+	JobAttempt int
 	ChunkCount int
 }
 
@@ -181,6 +184,11 @@ type Ready struct {
 // is published. A slug never contains a tilde, so it cannot collide with a
 // real document.
 const stagingSuffix = "~next"
+
+// ErrLostClaim is a job another worker took over: this worker's lease on it
+// lapsed and the job was claimed again. The worker that lost it must write
+// nothing more to it.
+var ErrLostClaim = errors.New("another worker has taken this job over")
 
 // Staging is the identifier a replacement of docID is written under.
 func Staging(docID string) string { return docID + stagingSuffix }
@@ -243,6 +251,8 @@ type Options struct {
 	JobID *int64
 	// Title overrides the name the document is given.
 	Title string
+	// JobAttempt is the attempt JobID was claimed as.
+	JobAttempt int
 }
 
 // Service runs ingests against one repository.
@@ -417,6 +427,7 @@ func (s *Service) fill(ctx context.Context, p *prepared, writeID string, opts Op
 	}
 	ready := Ready{
 		JobID:      opts.JobID,
+		JobAttempt: opts.JobAttempt,
 		Warnings:   warnings,
 		DocID:      writeID,
 		Replaces:   p.replacing,

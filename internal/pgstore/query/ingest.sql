@@ -56,11 +56,13 @@ UPDATE documents
 
 -- Run in the same transaction as MarkDocumentReady, so a document can never
 -- be searchable while the job that wrote it still reads as running.
--- name: CompleteJob :exec
+-- Fenced like every worker write: a worker that lost its job must not
+-- complete it, so publishing rolls back when this matches nothing.
+-- name: CompleteJob :execrows
 UPDATE ingest_jobs
    SET status = 'done', phase = NULL, doc_id = $1, error = NULL, warnings = $2,
        lease_until = NULL, updated_at = now()
- WHERE id = $3;
+ WHERE id = sqlc.arg(id) AND attempts = sqlc.arg(attempt) AND status = 'running';
 
 -- Ordering matters, because every one of these tables references documents:
 -- deleting the document row first is refused by the foreign key. Chunks go
