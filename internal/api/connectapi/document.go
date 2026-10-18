@@ -348,17 +348,24 @@ func optionalInt(v *int) *int64 {
 }
 
 // The proto enums share their numbering with the domain's, so each
-// conversion above is a cast. These assertions are what make the cast safe:
-// a value renumbered on either side stops the build here rather than
-// mislabelling a report in a client.
+// conversion above is a cast. These pairs are what make the cast safe: a
+// negative constant cannot convert to uint8, so a pair fails the build when
+// its two values differ in either direction, rather than mislabelling a
+// report in a client.
 const (
 	_ = uint8(typev1.Verdict_VERDICT_GOOD - typev1.Verdict(domain.VerdictGood))
+	_ = uint8(typev1.Verdict(domain.VerdictGood) - typev1.Verdict_VERDICT_GOOD)
 	_ = uint8(typev1.Verdict_VERDICT_DEGRADED - typev1.Verdict(domain.VerdictDegraded))
+	_ = uint8(typev1.Verdict(domain.VerdictDegraded) - typev1.Verdict_VERDICT_DEGRADED)
 	_ = uint8(typev1.Verdict_VERDICT_UNUSABLE - typev1.Verdict(domain.VerdictUnusable))
+	_ = uint8(typev1.Verdict(domain.VerdictUnusable) - typev1.Verdict_VERDICT_UNUSABLE)
 
 	_ = uint8(typev1.Level_LEVEL_OK - typev1.Level(domain.LevelOK))
+	_ = uint8(typev1.Level(domain.LevelOK) - typev1.Level_LEVEL_OK)
 	_ = uint8(typev1.Level_LEVEL_WARN - typev1.Level(domain.LevelWarn))
+	_ = uint8(typev1.Level(domain.LevelWarn) - typev1.Level_LEVEL_WARN)
 	_ = uint8(typev1.Level_LEVEL_BLOCKED - typev1.Level(domain.LevelBlocked))
+	_ = uint8(typev1.Level(domain.LevelBlocked) - typev1.Level_LEVEL_BLOCKED)
 )
 
 // forOwner is the document service of the user a request acts for.

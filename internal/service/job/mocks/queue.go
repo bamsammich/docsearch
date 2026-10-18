@@ -125,6 +125,72 @@ func (_c *MockQueue_Add_Call) RunAndReturn(run func(ctx context.Context, source 
 	return _c
 }
 
+// Job provides a mock function for the type MockQueue
+func (_mock *MockQueue) Job(ctx context.Context, id int64) (job.Job, error) {
+	ret := _mock.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Job")
+	}
+
+	var r0 job.Job
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64) (job.Job, error)); ok {
+		return returnFunc(ctx, id)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64) job.Job); ok {
+		r0 = returnFunc(ctx, id)
+	} else {
+		r0 = ret.Get(0).(job.Job)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, int64) error); ok {
+		r1 = returnFunc(ctx, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockQueue_Job_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Job'
+type MockQueue_Job_Call struct {
+	*mock.Call
+}
+
+// Job is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id int64
+func (_e *MockQueue_Expecter) Job(ctx any, id any) *MockQueue_Job_Call {
+	return &MockQueue_Job_Call{Call: _e.mock.On("Job", ctx, id)}
+}
+
+func (_c *MockQueue_Job_Call) Run(run func(ctx context.Context, id int64)) *MockQueue_Job_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockQueue_Job_Call) Return(job1 job.Job, err error) *MockQueue_Job_Call {
+	_c.Call.Return(job1, err)
+	return _c
+}
+
+func (_c *MockQueue_Job_Call) RunAndReturn(run func(ctx context.Context, id int64) (job.Job, error)) *MockQueue_Job_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // List provides a mock function for the type MockQueue
 func (_mock *MockQueue) List(ctx context.Context, includeCompleted bool, limit int) ([]job.Job, error) {
 	ret := _mock.Called(ctx, includeCompleted, limit)

@@ -305,3 +305,21 @@ func (s *JobsSuite) TestCancellingAJobTheQueueDoesNotHoldSaysSo() {
 	s.Require().Error(err)
 	s.Empty(status)
 }
+
+// One job reads back by id with its lease, which is what lets ingest_status
+// tell a live job from one whose worker died.
+func (s *JobsSuite) TestOneJobReadsBackWithItsLease() {
+	id := s.queued("/library/guide.md")
+	claimed, err := s.jobs.Claim(s.T().Context(), lease, 3)
+	s.Require().NoError(err)
+	s.Require().NotNil(claimed)
+
+	got, err := s.jobs.Job(s.T().Context(), id)
+	s.Require().NoError(err)
+	s.Equal("running", got.Status)
+	s.Equal("/library/guide.md", got.Source)
+	s.WithinDuration(time.Now().Add(lease), got.LeaseUntil, time.Minute)
+
+	_, err = s.jobs.Job(s.T().Context(), id+1000)
+	s.Require().ErrorIs(err, postgres.ErrNotFound)
+}

@@ -134,7 +134,8 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("open database: %w", err)
 	}
 
-	extractor, err := pdf.New()
+	// One job runs at a time, so one document is ever open.
+	extractor, err := pdf.New(1)
 	if err != nil {
 		return fmt.Errorf("start the PDF engine: %w", err)
 	}

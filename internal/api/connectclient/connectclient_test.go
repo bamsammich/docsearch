@@ -7,9 +7,11 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/bamsammich/docsearch/internal/api/connectclient"
+	"github.com/bamsammich/docsearch/internal/api/connectclient/mocks"
 	documentv1 "github.com/bamsammich/docsearch/internal/api/docsearch/document/v1"
 	"github.com/bamsammich/docsearch/internal/api/docsearch/document/v1/documentv1connect"
 	ingestv1 "github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1"
@@ -18,12 +20,16 @@ import (
 	"github.com/bamsammich/docsearch/internal/domain"
 )
 
-// ClientSuite drives the real Connect stack over HTTP against a server that
-// answers with fixed messages, so what is under test is the conversion and
-// the headers rather than anything a mock was told to do.
+// ClientSuite drives the real Connect stack over HTTP against mocked
+// handlers, so what is under test is the conversion and the headers: each
+// case states what the server answered, and checks what the client made of
+// it.
 type ClientSuite struct {
 	suite.Suite
-	client *connectclient.Client
+	documents *mocks.MockDocumentServiceHandler
+	ingest    *mocks.MockIngestServiceHandler
+	jobs      *mocks.MockJobServiceHandler
+	client    *connectclient.Client
 	// seen is the Authorization header of the last request to arrive.
 	seen string
 }
@@ -31,10 +37,13 @@ type ClientSuite struct {
 func TestClient(t *testing.T) { suite.Run(t, new(ClientSuite)) }
 
 func (s *ClientSuite) SetupTest() {
+	s.documents = mocks.NewMockDocumentServiceHandler(s.T())
+	s.ingest = mocks.NewMockIngestServiceHandler(s.T())
+	s.jobs = mocks.NewMockJobServiceHandler(s.T())
 	mux := http.NewServeMux()
-	mux.Handle(documentv1connect.NewDocumentServiceHandler(&stubDocuments{}))
-	mux.Handle(ingestv1connect.NewIngestServiceHandler(&stubIngest{}))
-	mux.Handle(ingestv1connect.NewJobServiceHandler(&stubJobs{}))
+	mux.Handle(documentv1connect.NewDocumentServiceHandler(s.documents))
+	mux.Handle(ingestv1connect.NewIngestServiceHandler(s.ingest))
+	mux.Handle(ingestv1connect.NewJobServiceHandler(s.jobs))
 
 	server := httptest.NewServer(s.recordAuthorization(mux))
 	s.T().Cleanup(server.Close)
@@ -50,7 +59,27 @@ func (s *ClientSuite) recordAuthorization(next http.Handler) http.Handler {
 	})
 }
 
+// listsOneManual answers List with one document, with a page count and no
+// chunk count.
+func (s *ClientSuite) listsOneManual() {
+	pages := int64(318)
+	s.documents.EXPECT().List(mock.Anything, mock.Anything).
+		Return(connect.NewResponse(&documentv1.ListResponse{
+			Documents: []*documentv1.Document{{
+				DocId:      "manual",
+				Title:      "A Manual",
+				Format:     "pdf",
+				Status:     "ready",
+				PageCount:  &pages,
+				Quality:    typev1.Quality_QUALITY_DEGRADED,
+				SourceKind: typev1.SourceKind_SOURCE_KIND_SITE,
+				Warnings:   []string{"21 pages are covered by no chunk"},
+			}},
+		}), nil)
+}
+
 func (s *ClientSuite) TestAListedDocumentKeepsItsTypedGrade() {
+	s.listsOneManual()
 	docs, err := s.client.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(docs, 1)
@@ -64,12 +93,33 @@ func (s *ClientSuite) TestAListedDocumentKeepsItsTypedGrade() {
 
 func (s *ClientSuite) TestAnAbsentCountArrivesAbsentRatherThanZero() {
 	// A Markdown document has no pages, which is not a page count of zero.
+	s.listsOneManual()
 	docs, err := s.client.List(s.T().Context())
 	s.Require().NoError(err)
 	s.Nil(docs[0].ChunkCount)
 }
 
 func (s *ClientSuite) TestAVerifyReportArrivesWholeEnoughToPrint() {
+	s.documents.EXPECT().Verify(mock.Anything, mock.Anything).
+		Return(connect.NewResponse(&documentv1.VerifyResponse{
+			Report: &documentv1.VerifyReport{
+				Document: &documentv1.Document{DocId: "manual", Format: "pdf", Status: "ready"},
+				Measurements: &documentv1.Measurements{
+					ChunkCount: 412,
+					Tokens:     &documentv1.TokenSpread{Total: 225776, Mean: 548},
+				},
+				Problems: []string{"1 index section joins no chunk"},
+				Findings: []*documentv1.Finding{{
+					Code:     "oversized",
+					Severity: typev1.Verdict_VERDICT_DEGRADED,
+					Detail:   "41 chunks exceed 1,200 tokens",
+				}},
+				Verdict:            typev1.Verdict_VERDICT_DEGRADED,
+				IndexTerms:         880,
+				UnjoinableSections: []string{"7. Troubleshooting"},
+			},
+		}), nil)
+
 	report, err := s.client.Verify(s.T().Context(), "manual")
 	s.Require().NoError(err)
 	s.Equal(880, report.IndexTerms)
@@ -85,6 +135,22 @@ func (s *ClientSuite) TestAVerifyReportArrivesWholeEnoughToPrint() {
 func (s *ClientSuite) TestAnInspectReportKnowsItIsBlockedFromItsFindings() {
 	// The wire carries `blocked` as a computed field; the domain recomputes
 	// it from the findings, so the two must agree without it being read.
+	s.documents.EXPECT().Inspect(mock.Anything, mock.Anything).
+		Return(connect.NewResponse(&documentv1.InspectResponse{
+			Report: &documentv1.InspectReport{
+				Target:          "scan.pdf",
+				Format:          "pdf",
+				PredictedSource: "unknown",
+				PredictedTier:   domain.TierInferred,
+				Findings: []*documentv1.InspectFinding{{
+					Level:  typev1.Level_LEVEL_BLOCKED,
+					Label:  "text layer",
+					Detail: "absent on every page",
+				}},
+				Blocked: true,
+			},
+		}), nil)
+
 	report, err := s.client.Inspect(s.T().Context(), "scan.pdf")
 	s.Require().NoError(err)
 	s.True(report.Blocked())
@@ -92,6 +158,14 @@ func (s *ClientSuite) TestAnInspectReportKnowsItIsBlockedFromItsFindings() {
 }
 
 func (s *ClientSuite) TestEnqueueNamesEveryJobItQueued() {
+	s.jobs.EXPECT().Enqueue(mock.Anything, mock.Anything).
+		Return(connect.NewResponse(&ingestv1.EnqueueResponse{
+			Jobs: []*ingestv1.QueuedJob{
+				{Source: "/library/a.md", JobId: 1, QueuePosition: 1},
+				{Source: "/library/b.pdf", JobId: 2, QueuePosition: 2},
+			},
+		}), nil)
+
 	queued, err := s.client.Enqueue(s.T().Context(), "/library", "")
 	s.Require().NoError(err)
 	s.Require().Len(queued, 2)
@@ -101,6 +175,11 @@ func (s *ClientSuite) TestEnqueueNamesEveryJobItQueued() {
 }
 
 func (s *ClientSuite) TestAQueuedJobArrivesWithoutProgress() {
+	s.jobs.EXPECT().ListJobs(mock.Anything, mock.Anything).
+		Return(connect.NewResponse(&ingestv1.ListJobsResponse{
+			Jobs: []*ingestv1.Job{{JobId: 7, Source: "/library/guide.md", Status: "queued"}},
+		}), nil)
+
 	jobs, err := s.client.Jobs(s.T().Context(), false, 0)
 	s.Require().NoError(err)
 	s.Require().Len(jobs, 1)
@@ -109,6 +188,34 @@ func (s *ClientSuite) TestAQueuedJobArrivesWithoutProgress() {
 }
 
 func (s *ClientSuite) TestAnIngestReportsEveryPhaseAndThenItsResult() {
+	s.ingest.EXPECT().Ingest(mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(
+			_ context.Context,
+			_ *connect.Request[ingestv1.IngestRequest],
+			stream *connect.ServerStream[ingestv1.IngestResponse],
+		) error {
+			for _, p := range []*ingestv1.Progress{
+				{Phase: ingestv1.Phase_PHASE_FETCH, Current: 1, Total: 4},
+				{Phase: ingestv1.Phase_PHASE_INDEX, Current: 4, Total: 4},
+			} {
+				if err := stream.Send(&ingestv1.IngestResponse{
+					Message: &ingestv1.IngestResponse_Progress{Progress: p},
+				}); err != nil {
+					return err
+				}
+			}
+			return stream.Send(&ingestv1.IngestResponse{
+				Message: &ingestv1.IngestResponse_Result{Result: &ingestv1.Result{
+					DocId:      "guide",
+					Title:      "Guide",
+					ChunkCount: 36,
+					Outcome:    ingestv1.Outcome_OUTCOME_INGESTED,
+					Quality:    typev1.Quality_QUALITY_OK,
+					Findings:   []string{"2 chunks carry no heading path"},
+				}},
+			})
+		})
+
 	var phases []string
 	result, err := s.client.Ingest(s.T().Context(), "/library/guide.md", "Guide", true,
 		func(p connectclient.Progress) { phases = append(phases, p.Phase) })
@@ -124,158 +231,16 @@ func (s *ClientSuite) TestAnIngestReportsEveryPhaseAndThenItsResult() {
 }
 
 func (s *ClientSuite) TestAStreamThatEndsWithoutAResultIsAnError() {
+	s.ingest.EXPECT().Ingest(mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	_, err := s.client.Ingest(s.T().Context(), "silent", "", true, nil)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "without a result")
 }
 
 func (s *ClientSuite) TestCancellingReportsWhatTheJobReadsAsNow() {
+	s.jobs.EXPECT().CancelJob(mock.Anything, mock.Anything).
+		Return(connect.NewResponse(&ingestv1.CancelJobResponse{Status: "cancelling"}), nil)
 	status, err := s.client.Cancel(s.T().Context(), 7)
 	s.Require().NoError(err)
 	s.Equal("cancelling", status)
-}
-
-// stubDocuments answers with one document, one report of each kind.
-type stubDocuments struct{}
-
-func (*stubDocuments) List(
-	context.Context, *connect.Request[documentv1.ListRequest],
-) (*connect.Response[documentv1.ListResponse], error) {
-	pages := int64(318)
-	return connect.NewResponse(&documentv1.ListResponse{
-		Documents: []*documentv1.Document{{
-			DocId:      "manual",
-			Title:      "A Manual",
-			Format:     "pdf",
-			Status:     "ready",
-			PageCount:  &pages,
-			Quality:    typev1.Quality_QUALITY_DEGRADED,
-			SourceKind: typev1.SourceKind_SOURCE_KIND_SITE,
-			Warnings:   []string{"21 pages are covered by no chunk"},
-		}},
-	}), nil
-}
-
-func (*stubDocuments) Verify(
-	context.Context, *connect.Request[documentv1.VerifyRequest],
-) (*connect.Response[documentv1.VerifyResponse], error) {
-	return connect.NewResponse(&documentv1.VerifyResponse{
-		Report: &documentv1.VerifyReport{
-			Document: &documentv1.Document{DocId: "manual", Format: "pdf", Status: "ready"},
-			Measurements: &documentv1.Measurements{
-				ChunkCount: 412,
-				Tokens:     &documentv1.TokenSpread{Total: 225776, Mean: 548},
-			},
-			Problems: []string{"1 index section joins no chunk"},
-			Findings: []*documentv1.Finding{
-				{
-					Code:     "oversized",
-					Severity: typev1.Verdict_VERDICT_DEGRADED,
-					Detail:   "41 chunks exceed 1,200 tokens",
-				},
-			},
-			Verdict:            typev1.Verdict_VERDICT_DEGRADED,
-			IndexTerms:         880,
-			UnjoinableSections: []string{"7. Troubleshooting"},
-		},
-	}), nil
-}
-
-func (*stubDocuments) Inspect(
-	context.Context, *connect.Request[documentv1.InspectRequest],
-) (*connect.Response[documentv1.InspectResponse], error) {
-	return connect.NewResponse(&documentv1.InspectResponse{
-		Report: &documentv1.InspectReport{
-			Target:          "scan.pdf",
-			Format:          "pdf",
-			PredictedSource: "unknown",
-			PredictedTier:   domain.TierInferred,
-			Findings: []*documentv1.InspectFinding{{
-				Level:  typev1.Level_LEVEL_BLOCKED,
-				Label:  "text layer",
-				Detail: "absent on every page",
-			}},
-			Blocked: true,
-		},
-	}), nil
-}
-
-func (*stubDocuments) Remove(
-	context.Context, *connect.Request[documentv1.RemoveRequest],
-) (*connect.Response[documentv1.RemoveResponse], error) {
-	return connect.NewResponse(&documentv1.RemoveResponse{}), nil
-}
-
-func (*stubDocuments) Rename(
-	context.Context, *connect.Request[documentv1.RenameRequest],
-) (*connect.Response[documentv1.RenameResponse], error) {
-	return connect.NewResponse(&documentv1.RenameResponse{}), nil
-}
-
-func (*stubDocuments) Read(
-	context.Context, *connect.Request[documentv1.ReadRequest],
-) (*connect.Response[documentv1.ReadResponse], error) {
-	return connect.NewResponse(&documentv1.ReadResponse{}), nil
-}
-
-// stubIngest streams two progress messages and one result, unless asked for
-// the source that ends the stream saying nothing.
-type stubIngest struct{}
-
-func (*stubIngest) Ingest(
-	_ context.Context,
-	req *connect.Request[ingestv1.IngestRequest],
-	stream *connect.ServerStream[ingestv1.IngestResponse],
-) error {
-	if req.Msg.GetSource() == "silent" {
-		return nil
-	}
-	for _, p := range []*ingestv1.Progress{
-		{Phase: ingestv1.Phase_PHASE_FETCH, Current: 1, Total: 4},
-		{Phase: ingestv1.Phase_PHASE_INDEX, Current: 4, Total: 4},
-	} {
-		if err := stream.Send(&ingestv1.IngestResponse{
-			Message: &ingestv1.IngestResponse_Progress{Progress: p},
-		}); err != nil {
-			return err
-		}
-	}
-	return stream.Send(&ingestv1.IngestResponse{
-		Message: &ingestv1.IngestResponse_Result{Result: &ingestv1.Result{
-			DocId:      "guide",
-			Title:      "Guide",
-			ChunkCount: 36,
-			Outcome:    ingestv1.Outcome_OUTCOME_INGESTED,
-			Quality:    typev1.Quality_QUALITY_OK,
-			Findings:   []string{"2 chunks carry no heading path"},
-		}},
-	})
-}
-
-// stubJobs answers with one queued job.
-type stubJobs struct{}
-
-func (*stubJobs) Enqueue(
-	context.Context, *connect.Request[ingestv1.EnqueueRequest],
-) (*connect.Response[ingestv1.EnqueueResponse], error) {
-	return connect.NewResponse(&ingestv1.EnqueueResponse{
-		Jobs: []*ingestv1.QueuedJob{
-			{Source: "/library/a.md", JobId: 1, QueuePosition: 1},
-			{Source: "/library/b.pdf", JobId: 2, QueuePosition: 2},
-		},
-	}), nil
-}
-
-func (*stubJobs) ListJobs(
-	context.Context, *connect.Request[ingestv1.ListJobsRequest],
-) (*connect.Response[ingestv1.ListJobsResponse], error) {
-	return connect.NewResponse(&ingestv1.ListJobsResponse{
-		Jobs: []*ingestv1.Job{{JobId: 7, Source: "/library/guide.md", Status: "queued"}},
-	}), nil
-}
-
-func (*stubJobs) CancelJob(
-	context.Context, *connect.Request[ingestv1.CancelJobRequest],
-) (*connect.Response[ingestv1.CancelJobResponse], error) {
-	return connect.NewResponse(&ingestv1.CancelJobResponse{Status: "cancelling"}), nil
 }

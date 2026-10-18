@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
@@ -70,8 +71,7 @@ func fenced(rows int64, err error) error {
 // NewJobs reads and writes one user's queue through db.
 //
 // The user is bound here rather than passed per call, because a repository
-// serves one request and a request belongs to one user. Step 4f hands it
-// down from the service layer; until then it is the built-in user.
+// serves one request and a request belongs to one user.
 func NewJobs(db *sql.DB, userID string) *Jobs {
 	return &Jobs{db: db, q: pgdbgen.New(db), userID: userID}
 }
@@ -356,6 +356,21 @@ func (j *Jobs) rows(
 	return rows, nil
 }
 
+// Job is one job, by id.
+func (j *Jobs) Job(ctx context.Context, id int64) (job.Job, error) {
+	row, err := pgsession.Read(ctx, j.db, j.q, j.userID,
+		func(q *pgdbgen.Queries) (pgdbgen.IngestJob, error) {
+			return q.JobByID(ctx, id)
+		})
+	if errors.Is(err, sql.ErrNoRows) {
+		return job.Job{}, fmt.Errorf("%w: job %d", ErrNotFound, id)
+	}
+	if err != nil {
+		return job.Job{}, fmt.Errorf("read job %d: %w", id, err)
+	}
+	return jobOf(row), nil
+}
+
 // RequestCancel asks a job to stop and reports what it reads as now.
 func (j *Jobs) RequestCancel(ctx context.Context, id int64) (string, error) {
 	status, err := pgsession.Read(
@@ -408,6 +423,9 @@ func jobOf(row pgdbgen.IngestJob) job.Job {
 		Attempts:        int(row.Attempts),
 		Permanent:       row.Permanent,
 	}
-	j.Quality, j.Warnings = summarize(row.Warnings)
+	if row.LeaseUntil.Valid {
+		j.LeaseUntil = row.LeaseUntil.Time
+	}
+	j.Quality, j.Warnings = domain.Summary(row.Warnings.String)
 	return j
 }

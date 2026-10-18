@@ -3,39 +3,35 @@ package pgstore
 import (
 	"testing"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/bamsammich/docsearch/internal/pgtest"
 	"github.com/bamsammich/docsearch/internal/schema"
 )
 
-// Ready is reachable without a token, so it runs before any user is known.
-// Neither table it reads carries a policy, which is what makes that sound.
-func TestReadyPassesOnAMigratedDatabase(t *testing.T) {
-	pg := pgtest.Start(t)
-	if err := schema.Create(t.Context(), pg.Owner); err != nil {
-		t.Fatal(err)
-	}
-
-	store := New(pg.App, "default")
-	if err := store.Ready(t.Context()); err != nil {
-		t.Errorf("a migrated database is not ready: %v", err)
-	}
+// ReadySuite covers the readiness probe. Ready is reachable without a token,
+// so it runs before any user is known; neither table it reads carries a
+// policy, which is what makes that sound.
+type ReadySuite struct {
+	suite.Suite
+	pg *pgtest.DB
 }
 
-func TestReadyNamesTheTableThatIsMissing(t *testing.T) {
-	pg := pgtest.Start(t)
-	if err := schema.Create(t.Context(), pg.Owner); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := pg.Owner.ExecContext(t.Context(), `DROP TABLE pages`); err != nil {
-		t.Fatal(err)
-	}
+func TestReady(t *testing.T) { suite.Run(t, new(ReadySuite)) }
 
-	store := New(pg.App, "default")
-	err := store.Ready(t.Context())
-	if err == nil {
-		t.Fatal("a database missing a table reads as ready")
-	}
-	if got := err.Error(); got != "schema incomplete: pages is missing" {
-		t.Errorf("said %q", got)
-	}
+func (s *ReadySuite) SetupTest() {
+	s.pg = pgtest.Start(s.T())
+	s.Require().NoError(schema.Create(s.T().Context(), s.pg.Owner))
+}
+
+func (s *ReadySuite) TestReadyPassesOnAMigratedDatabase() {
+	s.NoError(New(s.pg.App, builtinUser).Ready(s.T().Context()))
+}
+
+func (s *ReadySuite) TestReadyNamesTheTableThatIsMissing() {
+	_, err := s.pg.Owner.ExecContext(s.T().Context(), `DROP TABLE pages`)
+	s.Require().NoError(err)
+	err = New(s.pg.App, builtinUser).Ready(s.T().Context())
+	s.Require().Error(err, "a database missing a table reads as ready")
+	s.Equal("schema incomplete: pages is missing", err.Error())
 }

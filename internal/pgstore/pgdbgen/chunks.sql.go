@@ -62,7 +62,7 @@ func (q *Queries) ChunkOrdinal(ctx context.Context, arg ChunkOrdinalParams) (int
 
 const chunksInSection = `-- name: ChunksInSection :many
 SELECT heading_path, text FROM chunks
- WHERE doc_id = $1 AND (chunks.section = $2 OR chunks.section LIKE $2 || '.%')
+ WHERE doc_id = $1 AND (chunks.section = $2 OR starts_with(chunks.section, $2 || '.'))
  ORDER BY ordinal
 `
 
@@ -80,6 +80,8 @@ type ChunksInSectionRow struct {
 // reference to "4" covers "4" and "4.1" and must not touch "41". The trailing
 // dot is what makes it a boundary. Kept identical to store.SectionCovers,
 // which the in-memory index-term boost applies by the same rule.
+// starts_with rather than LIKE, which would read a % or _ in the reference
+// as a wildcard.
 func (q *Queries) ChunksInSection(ctx context.Context, arg ChunksInSectionParams) ([]ChunksInSectionRow, error) {
 	rows, err := q.db.QueryContext(ctx, chunksInSection, arg.DocID, arg.Section)
 	if err != nil {
@@ -105,7 +107,7 @@ func (q *Queries) ChunksInSection(ctx context.Context, arg ChunksInSectionParams
 
 const chunksMatchingHeading = `-- name: ChunksMatchingHeading :many
 SELECT heading_path, text FROM chunks
- WHERE doc_id = $1 AND lower(heading_path) LIKE '%' || lower($2) || '%'
+ WHERE doc_id = $1 AND strpos(lower(heading_path), lower($2)) > 0
  ORDER BY ordinal
 `
 
@@ -119,6 +121,7 @@ type ChunksMatchingHeadingRow struct {
 	Text        string
 }
 
+// strpos for the same reason: the heading is matched as written.
 func (q *Queries) ChunksMatchingHeading(ctx context.Context, arg ChunksMatchingHeadingParams) ([]ChunksMatchingHeadingRow, error) {
 	rows, err := q.db.QueryContext(ctx, chunksMatchingHeading, arg.DocID, arg.Lower)
 	if err != nil {

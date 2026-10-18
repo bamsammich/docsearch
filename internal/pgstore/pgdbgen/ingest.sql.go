@@ -523,7 +523,7 @@ func (q *Queries) ReadyDocumentWithDigest(ctx context.Context, sha256 string) (R
 const sectionHasChunks = `-- name: SectionHasChunks :one
 SELECT EXISTS(
   SELECT 1 FROM chunks
-   WHERE doc_id = $1 AND (chunks.section = $2 OR chunks.section LIKE $2 || '.%'))
+   WHERE doc_id = $1 AND (chunks.section = $2 OR starts_with(chunks.section, $2 || '.')))
 `
 
 type SectionHasChunksParams struct {

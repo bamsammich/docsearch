@@ -185,3 +185,18 @@ func TestAMigrationNamesTheExtensionTheClusterDidNotInstall(t *testing.T) {
 		t.Errorf("the error does not say what to do: %s", err)
 	}
 }
+
+// A database with no schema_version table predates the stamp. One that does
+// not answer is something else, and reading it as unversioned would send an
+// operator to migrate a database that may be current.
+func (s *SchemaSuite) TestADatabaseThatDoesNotAnswerIsNotUnversioned() {
+	_, recorded, err := schema.Recorded(s.T().Context(), s.db)
+	s.Require().NoError(err, "no schema_version table reads as unversioned")
+	s.False(recorded)
+
+	pg := pgtest.Start(s.T())
+	s.Require().NoError(pg.Owner.Close())
+	_, _, err = schema.Recorded(s.T().Context(), pg.Owner)
+	s.Require().Error(err, "a closed database is a failure, not an empty record")
+	s.False(schema.Unversioned(err))
+}

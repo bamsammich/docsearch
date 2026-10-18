@@ -1,12 +1,9 @@
-// Package sqlite stores an ingest in the SQLite index the server reads.
+// Package postgres stores an ingest in the Postgres database every library
+// lives in.
 //
 // Each method is one transaction, because that is what the ingest service
 // asks of a repository: it decides what happens, and the repository decides
 // what happens atomically. Nothing here decides anything about a document.
-//
-// Postgres arrives in phase 04 behind the same port, so the transaction
-// boundaries and the ordering rules are written down here rather than left
-// to the caller to repeat.
 package postgres
 
 import (
@@ -29,7 +26,7 @@ import (
 // reader of documents.ingested_at expects.
 const timeFormat = "2006-01-02T15:04:05Z"
 
-// Repository writes documents to one SQLite database.
+// Repository writes one user's documents.
 type Repository struct {
 	db *sql.DB
 	q  *pgdbgen.Queries
@@ -39,38 +36,9 @@ type Repository struct {
 	userID string
 }
 
-// New writes through db, which the caller opens and closes. Open it with
-// this package's Open, or with a DSN asking for the same pragmas.
+// New writes through db, which the caller opens and closes.
 func New(db *sql.DB, userID string) *Repository {
 	return &Repository{db: db, q: pgdbgen.New(db), userID: userID}
-}
-
-// Open connects to an index for writing.
-//
-// _txlock=immediate is what makes every transaction here take its write lock
-// at BEGIN. A deferred transaction that upgrades to a write part way through
-// cannot wait for the other writer under WAL: it fails at once rather than
-// blocking on busy_timeout, and the ingest would die on a lock a retry would
-// have got. The Python worker asks for the same thing by writing BEGIN
-// IMMEDIATE itself.
-//
-// busy_timeout is not optional either: the server reads while the worker
-// holds brief write transactions, and both processes have to agree.
-func Open(path string) (*sql.DB, error) {
-	dsn := path +
-		"?_pragma=busy_timeout(5000)" +
-		"&_pragma=journal_mode(WAL)" +
-		"&_pragma=foreign_keys(ON)" +
-		"&_txlock=immediate" +
-		"&_time_format=sqlite"
-	db, err := sql.Open("sqlite", dsn)
-	if err != nil {
-		return nil, fmt.Errorf("open %s: %w", path, err)
-	}
-	if err := db.Ping(); err != nil {
-		return nil, errors.Join(fmt.Errorf("open %s: %w", path, err), db.Close())
-	}
-	return db, nil
 }
 
 // Confirm stamps a document as read at, changing nothing it holds.

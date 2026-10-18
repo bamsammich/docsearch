@@ -125,9 +125,15 @@ func newPool(lc fx.Lifecycle, cfg config.Config) (*sql.DB, error) {
 	return db, nil
 }
 
+// serverPDFInstances is how many PDFs the server reads at once. It reads
+// one only to inspect it or for a synchronous ingest, both of which an
+// operator runs by hand; two keeps one slow manual from making every other
+// inspect wait out the instance timeout.
+const serverPDFInstances = 2
+
 // newExtractor starts the PDF engine.
 func newExtractor(lc fx.Lifecycle) (*pdf.Extractor, error) {
-	extractor, err := pdf.New()
+	extractor, err := pdf.New(serverPDFInstances)
 	if err != nil {
 		return nil, fmt.Errorf("start the PDF engine: %w", err)
 	}
@@ -214,6 +220,7 @@ func newMCPRoute(
 		LibraryRoots: cfg.LibraryRoots,
 		Log:          log,
 		UploadLinks:  ups.issuer.Issue,
+		Jobs:         libs.Jobs,
 	})
 	return route{path: "/mcp", handler: mcpHandler(srv, log)}
 }

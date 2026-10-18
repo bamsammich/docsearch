@@ -66,3 +66,21 @@ packages:
   github.com/bamsammich/docsearch/internal/password:
     interfaces:
       Store:
+  github.com/bamsammich/docsearch/internal/urlguard:
+    interfaces:
+      Resolver:
+  # The generated Connect handlers, mocked for the client's tests, which
+  # serve them over real HTTP and state what each RPC answered.
+  github.com/bamsammich/docsearch/internal/api/docsearch/document/v1/documentv1connect:
+    config:
+      dir: internal/api/connectclient/mocks
+      include-auto-generated: true
+    interfaces:
+      DocumentServiceHandler:
+  github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1/ingestv1connect:
+    config:
+      dir: internal/api/connectclient/mocks
+      include-auto-generated: true
+    interfaces:
+      IngestServiceHandler:
+      JobServiceHandler:
