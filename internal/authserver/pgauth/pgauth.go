@@ -20,17 +20,25 @@ import (
 // could still finish is removed.
 const pruneAfter = time.Hour
 
+// pruneClientsAfter is how long a registered client has to sign someone in
+// before the next registration clears it.
+const pruneClientsAfter = 24 * time.Hour
+
 // Store is authserver.Store on Postgres.
 type Store struct {
-	q *pgdbgen.Queries
+	db *sql.DB
+	q  *pgdbgen.Queries
 }
 
 // New keeps the server's state through db, as the request role.
 func New(db *sql.DB) *Store {
-	return &Store{q: pgdbgen.New(db)}
+	return &Store{db: db, q: pgdbgen.New(db)}
 }
 
 func (s *Store) RegisterClient(ctx context.Context, client authserver.Client) error {
+	if err := s.q.PruneOAuthClients(ctx, client.CreatedAt.Add(-pruneClientsAfter)); err != nil {
+		return fmt.Errorf("prune clients: %w", err)
+	}
 	uris, err := json.Marshal(client.RedirectURIs)
 	if err != nil {
 		return err
@@ -121,14 +129,20 @@ func (s *Store) SaveCode(ctx context.Context, id, codeHash string) error {
 	}))
 }
 
+// CompleteRequest records who signed in, and marks the request's client as
+// one someone uses, in one transaction.
 func (s *Store) CompleteRequest(ctx context.Context, id, userID string, at time.Time) error {
-	return wrap(
-		"complete sign-in",
-		s.q.CompleteOAuthRequest(ctx, pgdbgen.CompleteOAuthRequestParams{
+	return s.inTx(ctx, "complete sign-in", func(q *pgdbgen.Queries) error {
+		if err := q.CompleteOAuthRequest(ctx, pgdbgen.CompleteOAuthRequestParams{
 			ID: id, UserID: sql.NullString{String: userID, Valid: true},
 			AuthTime: sql.NullTime{Time: at, Valid: true},
-		}),
-	)
+		}); err != nil {
+			return err
+		}
+		return q.MarkOAuthClientSignedIn(ctx, pgdbgen.MarkOAuthClientSignedInParams{
+			At: at, RequestID: id,
+		})
+	})
 }
 
 func (s *Store) DeleteRequest(ctx context.Context, id string) error {
@@ -136,6 +150,10 @@ func (s *Store) DeleteRequest(ctx context.Context, id string) error {
 }
 
 func (s *Store) SaveRefresh(ctx context.Context, refresh authserver.Refresh) error {
+	return wrap("save refresh token", saveRefresh(ctx, s.q, refresh))
+}
+
+func saveRefresh(ctx context.Context, q *pgdbgen.Queries, refresh authserver.Refresh) error {
 	scopes, err := json.Marshal(refresh.Scopes)
 	if err != nil {
 		return err
@@ -144,7 +162,7 @@ func (s *Store) SaveRefresh(ctx context.Context, refresh authserver.Refresh) err
 	if err != nil {
 		return err
 	}
-	return wrap("save refresh token", s.q.InsertRefreshToken(ctx, pgdbgen.InsertRefreshTokenParams{
+	return q.InsertRefreshToken(ctx, pgdbgen.InsertRefreshTokenParams{
 		TokenHash: refresh.TokenHash,
 		ClientID:  refresh.ClientID,
 		UserID:    refresh.UserID,
@@ -152,18 +170,45 @@ func (s *Store) SaveRefresh(ctx context.Context, refresh authserver.Refresh) err
 		Audience:  audience,
 		AuthTime:  refresh.AuthTime,
 		ExpiresAt: refresh.ExpiresAt,
-	}))
+	})
 }
 
 func (s *Store) Refresh(ctx context.Context, tokenHash string) (authserver.Refresh, bool, error) {
 	return refreshOf(s.q.RefreshToken(ctx, tokenHash))
 }
 
-func (s *Store) TakeRefresh(
+// RotateRefresh spends one refresh token and saves its replacement in one
+// transaction, reporting false for a token that was already spent.
+func (s *Store) RotateRefresh(
 	ctx context.Context,
 	tokenHash string,
-) (authserver.Refresh, bool, error) {
-	return refreshOf(s.q.TakeRefreshToken(ctx, tokenHash))
+	next authserver.Refresh,
+) (bool, error) {
+	found := false
+	err := s.inTx(ctx, "rotate refresh token", func(q *pgdbgen.Queries) error {
+		_, err := q.TakeRefreshToken(ctx, tokenHash)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		found = true
+		return saveRefresh(ctx, q, next)
+	})
+	return found, err
+}
+
+// inTx runs write in one transaction, naming what failed as doing.
+func (s *Store) inTx(ctx context.Context, doing string, write func(*pgdbgen.Queries) error) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("%s: %w", doing, err)
+	}
+	if err := write(s.q.WithTx(tx)); err != nil {
+		return errors.Join(fmt.Errorf("%s: %w", doing, err), tx.Rollback())
+	}
+	return wrap(doing, tx.Commit())
 }
 
 func refreshOf(row pgdbgen.OauthRefreshToken, err error) (authserver.Refresh, bool, error) {

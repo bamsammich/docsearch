@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"path"
 	"strings"
@@ -215,13 +216,30 @@ func resolveTarget(dir, target string) string {
 	return strings.TrimPrefix(path.Join("/"+dir, target), "/")
 }
 
+// maxPartBytes bounds one part of a package once decompressed. A real
+// document's body is a few megabytes of XML, while a crafted zip can declare
+// and deliver gigabytes from a few kilobytes. The parsed tree costs several
+// times the text, so the bound is on what is read, not on what the header
+// claims; the header is only an early refusal.
+const maxPartBytes = 64 << 20
+
+// errPartTooLarge is a part past maxPartBytes.
+var errPartTooLarge = fmt.Errorf("a part is larger than %d MB once decompressed", maxPartBytes>>20)
+
 func readXML(pkg *zip.Reader, part string) (*xmlNode, error) {
 	f, err := pkg.Open(part)
 	if err != nil {
 		return nil, fmt.Errorf("open part %s: %w", part, err)
 	}
 	defer f.Close()
-	root, err := decodeXML(f)
+	if info, err := f.Stat(); err == nil && info.Size() > maxPartBytes {
+		return nil, fmt.Errorf("%s: %w", part, errPartTooLarge)
+	}
+	limited := &io.LimitedReader{R: f, N: maxPartBytes + 1}
+	root, err := decodeXML(limited)
+	if limited.N <= 0 {
+		return nil, fmt.Errorf("%s: %w", part, errPartTooLarge)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", part, err)
 	}

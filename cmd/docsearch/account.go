@@ -37,7 +37,7 @@ func accountCommand() *cli.Command {
 	dsn := &cli.StringFlag{
 		Name:    "dsn",
 		Usage:   "Postgres `DSN`, as the database owner",
-		Sources: cli.EnvVars(config.EnvDSN),
+		Sources: cli.EnvVars(config.EnvOwnerDSN, config.EnvDSN),
 	}
 	secret := []cli.Flag{
 		&cli.BoolFlag{Name: "generate", Usage: "make up a password and print it once"},

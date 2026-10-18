@@ -88,19 +88,26 @@ func (s *Store) Find(ctx context.Context, username string) (password.Record, boo
 	}, true, nil
 }
 
-// Failed counts a failure, locking the account once it reaches threshold.
-func (s *Store) Failed(
+// Begin counts a sign-in attempt against username, reporting false for an
+// account that is locked.
+func (s *Store) Begin(
 	ctx context.Context,
 	username string,
-	threshold int,
-	lockUntil time.Time,
-) error {
-	if err := s.q.RecordFailedSignIn(ctx, pgdbgen.RecordFailedSignInParams{
-		Threshold: pgsession.Narrow(threshold), LockUntil: lockUntil, Username: username,
-	}); err != nil {
-		return fmt.Errorf("record failed sign-in: %w", err)
+	attempt password.Attempt,
+) (bool, error) {
+	_, err := s.q.BeginSignIn(ctx, pgdbgen.BeginSignInParams{
+		Threshold: pgsession.Narrow(attempt.Threshold),
+		LockUntil: attempt.LockUntil,
+		Username:  username,
+		Now:       attempt.At,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
 	}
-	return nil
+	if err != nil {
+		return false, fmt.Errorf("count sign-in attempt: %w", err)
+	}
+	return true, nil
 }
 
 // Succeeded clears the failures a correct password ends.

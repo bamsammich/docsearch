@@ -36,6 +36,12 @@ type PageText struct {
 // Roughly the combined span cap for get_context, in estimated tokens.
 const contextTokenCap = 6000
 
+// maxContextSide caps how many chunks either side of the anchor are read.
+// The token cap trims the span well before this many chunks of any real
+// size; the bound is on what a request makes the database read, which the
+// token cap applies only afterwards.
+const maxContextSide = 50
+
 // maxContextPages caps the page-addressed form.
 const maxContextPages = 20
 
@@ -49,7 +55,8 @@ func (s *Store) GetContext(ctx context.Context, docID string, chunkID int64,
 	if err != nil {
 		return nil, false, err
 	}
-	span, err := s.contextSpan(ctx, docID, anchor, max(before, 0), max(after, 0))
+	span, err := s.contextSpan(ctx, docID, anchor,
+		min(max(before, 0), maxContextSide), min(max(after, 0), maxContextSide))
 	if err != nil {
 		return nil, false, err
 	}
@@ -105,27 +112,27 @@ func (s *Store) contextSpan(ctx context.Context, docID string,
 	return out, nil
 }
 
-// trimToCap drops chunks from whichever end is further from the anchor until
-// the span fits, so the chunk the caller asked for always survives the cap.
+// trimToCap drops chunks from the front while they precede the anchor, then
+// from the back, until the span fits, so the chunk the caller asked for
+// always survives the cap. Each chunk is estimated once.
 func trimToCap(span []ContextChunk, anchor int) ([]ContextChunk, bool) {
-	truncated := false
-	for estimateSpan(span) > contextTokenCap && len(span) > 1 {
-		truncated = true
-		if span[0].Ordinal < anchor {
-			span = span[1:]
+	tokens := make([]int, len(span))
+	total := 0
+	for i, c := range span {
+		tokens[i] = estimateTokens(c.Text)
+		total += tokens[i]
+	}
+	first, last := 0, len(span)-1
+	for total > contextTokenCap && last > first {
+		if span[first].Ordinal < anchor {
+			total -= tokens[first]
+			first++
 		} else {
-			span = span[:len(span)-1]
+			total -= tokens[last]
+			last--
 		}
 	}
-	return span, truncated
-}
-
-func estimateSpan(chunks []ContextChunk) int {
-	total := 0
-	for _, c := range chunks {
-		total += estimateTokens(c.Text)
-	}
-	return total
+	return span[first : last+1], first > 0 || last < len(span)-1
 }
 
 // GetPages returns raw page text for paginated documents.

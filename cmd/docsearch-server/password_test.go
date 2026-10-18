@@ -333,3 +333,91 @@ func (s *PasswordSuite) TestTheSDKsClientDiscoversAndRegisters() {
 	s.Require().NoError(err)
 	s.NotEmpty(registered.ClientID)
 }
+
+// A malformed authorization request is refused on docsearch's own page. Sent
+// back to the client's redirect URI instead, a link to docsearch would forward
+// a browser to wherever whoever registered the client chose.
+func (s *PasswordSuite) TestAMalformedAuthorizationIsRefusedNotRedirected() {
+	found := s.discover()
+	clientID := s.register(found.Registration)
+	_, challenge := pkce()
+	valid := url.Values{
+		"response_type": {"code"}, "client_id": {clientID}, "redirect_uri": {callback},
+		"code_challenge": {challenge}, "code_challenge_method": {"S256"},
+	}
+	for name, change := range map[string]func(url.Values){
+		"no PKCE":       func(q url.Values) { q.Del("code_challenge") },
+		"plain PKCE":    func(q url.Values) { q.Set("code_challenge_method", "plain") },
+		"implicit flow": func(q url.Values) { q.Set("response_type", "token") },
+		"long state":    func(q url.Values) { q.Set("state", strings.Repeat("s", 2048)) },
+	} {
+		query := url.Values{}
+		for k, v := range valid {
+			query[k] = v
+		}
+		change(query)
+		response := s.do(http.MethodGet, found.Authorization+"?"+query.Encode(), nil, nil)
+		s.Equal(http.StatusBadRequest, response.StatusCode, name)
+		s.Empty(response.Header.Get("Location"), name)
+	}
+}
+
+// A client that never signed anyone in is cleared a day after it registered,
+// and one in use is kept.
+func (s *PasswordSuite) TestAClientNobodyUsedIsCleared() {
+	found, used, _ := s.signedIn()
+	unused := s.register(found.Registration)
+	_, err := s.pg.Owner.ExecContext(s.T().Context(),
+		`UPDATE oauth_clients SET created_at = now() - interval '2 days'`)
+	s.Require().NoError(err)
+
+	s.register(found.Registration)
+	var left []string
+	rows, err := s.pg.Owner.QueryContext(s.T().Context(), `SELECT client_id FROM oauth_clients`)
+	s.Require().NoError(err)
+	defer func() { s.NoError(rows.Close()) }()
+	for rows.Next() {
+		var id string
+		s.Require().NoError(rows.Scan(&id))
+		left = append(left, id)
+	}
+	s.Require().NoError(rows.Err())
+	s.Contains(left, used)
+	s.NotContains(left, unused)
+}
+
+// Registration is open, so one address registering over and over is held to
+// a rate.
+func (s *PasswordSuite) TestRegistrationIsRateLimited() {
+	found := s.discover()
+	body := `{"redirect_uris":["` + callback + `"]}`
+	limited := 0
+	for range 40 {
+		response := s.do(http.MethodPost, found.Registration, strings.NewReader(body), nil)
+		if response.StatusCode == http.StatusTooManyRequests {
+			limited++
+		}
+	}
+	s.Equal(10, limited, "thirty an hour are let through")
+}
+
+// Two exchanges of one refresh token at once: exactly one gets a new token.
+func (s *PasswordSuite) TestARefreshTokenSpentTwiceAtOnceWinsOnce() {
+	found, clientID, issued := s.signedIn()
+	refresh := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {issued.Refresh},
+		"client_id": {clientID}}
+	statuses := make(chan int, 2)
+	for range 2 {
+		go func() {
+			response, err := http.PostForm(found.Token, refresh) //nolint:noctx // test client
+			if err != nil {
+				statuses <- 0
+				return
+			}
+			statuses <- response.StatusCode
+			_ = response.Body.Close()
+		}()
+	}
+	got := []int{<-statuses, <-statuses}
+	s.ElementsMatch([]int{http.StatusOK, http.StatusBadRequest}, got)
+}

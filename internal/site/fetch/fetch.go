@@ -35,6 +35,10 @@ const (
 	DefaultMaxFetches = 5000
 	// DefaultTimeout bounds one request.
 	DefaultTimeout = 20 * time.Second
+	// DefaultMaxBodyBytes matches the largest file an upload accepts by
+	// default, so a document is not refused by URL that would be taken as a
+	// file.
+	DefaultMaxBodyBytes = 100 << 20
 )
 
 // ErrFetch is returned for a URL that could not be fetched, with a reason
@@ -73,6 +77,10 @@ type Options struct {
 	Timeout      time.Duration
 	MaxRedirects int
 	MaxFetches   int
+	// MaxBodyBytes refuses a response larger than this, measured after the
+	// transport decompresses it, so a small compressed body cannot expand
+	// into memory without bound.
+	MaxBodyBytes int64
 	// IgnoreRobots fetches without asking robots.txt. Reserved for a
 	// caller fetching its own site.
 	IgnoreRobots bool
@@ -91,6 +99,7 @@ type Fetcher struct {
 	maxRedirects int
 	maxFetches   int
 	fetches      int
+	maxBody      int64
 	ignoreRobots bool
 }
 
@@ -105,7 +114,11 @@ func New(cache Cache, opts Options) *Fetcher {
 		interval:     orDuration(opts.Interval, DefaultInterval),
 		maxRedirects: orInt(opts.MaxRedirects, DefaultMaxRedirects),
 		maxFetches:   orInt(opts.MaxFetches, DefaultMaxFetches),
+		maxBody:      DefaultMaxBodyBytes,
 		ignoreRobots: opts.IgnoreRobots,
+	}
+	if opts.MaxBodyBytes > 0 {
+		f.maxBody = opts.MaxBodyBytes
 	}
 	if f.guard == nil {
 		resolver := opts.Resolver
@@ -276,9 +289,13 @@ func (f *Fetcher) do(req *http.Request) (*response, error) {
 		// Neither carries a body worth reading.
 		return out, nil
 	}
-	body, err := io.ReadAll(res.Body)
+	body, err := io.ReadAll(io.LimitReader(res.Body, f.maxBody+1))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %w", ErrFetch, req.URL, err)
+	}
+	if int64(len(body)) > f.maxBody {
+		return nil, fmt.Errorf("%w: %s: the response is larger than %d MB",
+			ErrFetch, req.URL, f.maxBody>>20)
 	}
 	out.Body = body
 	return out, nil

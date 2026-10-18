@@ -61,6 +61,11 @@ func (s *UploadSuite) doors() upload.Doors {
 
 func hashOf(t string) string { return upload.Digest([]byte(t)) }
 
+// linkOpen is a link that still works when checked.
+func (s *UploadSuite) linkOpen() {
+	s.links.EXPECT().Open(mock.Anything, hashOf(token)).Return(true, nil).Once()
+}
+
 func serve(handler http.Handler, request *http.Request) *httptest.ResponseRecorder {
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
@@ -95,6 +100,7 @@ func (s *UploadSuite) TestAnIssuedLinkStoresOnlyItsHash() {
 }
 
 func (s *UploadSuite) TestALinkUploadsOneFileIntoItsUsersLibrary() {
+	s.linkOpen()
 	s.links.EXPECT().Redeem(mock.Anything, hashOf(token)).Return(user, true, nil)
 	s.store.EXPECT().Put(mock.Anything, upload.File{
 		Key: hashOf(pdf), Filename: "manual.pdf", SHA256: hashOf(pdf), Content: []byte(pdf),
@@ -110,26 +116,59 @@ func (s *UploadSuite) TestALinkUploadsOneFileIntoItsUsersLibrary() {
 // A file nobody can read is refused before the link is spent, so the person
 // still has the link to try another file with.
 func (s *UploadSuite) TestAnUnreadableFileLeavesTheLinkUnspent() {
+	s.linkOpen()
 	got := serve(s.doors().Link(), s.put("photo.heic", "bytes"))
 	s.Equal(http.StatusUnsupportedMediaType, got.Code)
 	s.links.AssertNotCalled(s.T(), "Redeem", mock.Anything, mock.Anything)
 }
 
-func (s *UploadSuite) TestASpentOrExpiredLinkIsRefused() {
-	s.links.EXPECT().Redeem(mock.Anything, hashOf(token)).Return("", false, nil)
-	got := serve(s.doors().Link(), s.put("manual.pdf", pdf))
+// A link that no longer works is refused before a byte of the body is read,
+// so a caller with no link cannot make the server buffer a file.
+func (s *UploadSuite) TestAClosedLinkIsRefusedBeforeTheBodyIsRead() {
+	s.links.EXPECT().Open(mock.Anything, hashOf(token)).Return(false, nil)
+	body := &countingReader{Reader: strings.NewReader(strings.Repeat("x", 512))}
+	request := httptest.NewRequestWithContext(s.T().Context(), http.MethodPut,
+		upload.LinkPrefix+token+"?name=manual.pdf", body)
+
+	got := serve(s.doors().Link(), request)
 	s.Equal(http.StatusNotFound, got.Code)
 	s.Contains(got.Body.String(), "expired or was already used")
+	s.Zero(body.read, "nothing was read")
+	s.links.AssertNotCalled(s.T(), "Redeem", mock.Anything, mock.Anything)
 	s.Empty(s.enqueued)
 }
 
+// A link that closed between the check and the spend, used by a second
+// upload racing this one, is still refused.
+func (s *UploadSuite) TestALinkSpentInTheMeantimeIsRefused() {
+	s.linkOpen()
+	s.links.EXPECT().Redeem(mock.Anything, hashOf(token)).Return("", false, nil)
+	got := serve(s.doors().Link(), s.put("manual.pdf", pdf))
+	s.Equal(http.StatusNotFound, got.Code)
+	s.Empty(s.enqueued)
+}
+
+// countingReader counts what was read from it.
+type countingReader struct {
+	io.Reader
+	read int
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.Reader.Read(p)
+	c.read += n
+	return n, err
+}
+
 func (s *UploadSuite) TestAFileOverTheLimitIsRefused() {
+	s.linkOpen()
 	got := serve(s.doors().Link(), s.put("manual.pdf", strings.Repeat("x", 2<<10)))
 	s.Equal(http.StatusRequestEntityTooLarge, got.Code)
 	s.links.AssertNotCalled(s.T(), "Redeem", mock.Anything, mock.Anything)
 }
 
 func (s *UploadSuite) TestAPutMustNameItsFile() {
+	s.linkOpen()
 	request := httptest.NewRequestWithContext(s.T().Context(), http.MethodPut,
 		upload.LinkPrefix+token, strings.NewReader(pdf))
 	got := serve(s.doors().Link(), request)
@@ -166,6 +205,7 @@ func (s *UploadSuite) TestABrowserFormEndsOnAPage() {
 		upload.LinkPrefix+token, &body)
 	request.Header.Set("Content-Type", form.FormDataContentType())
 	request.Header.Set("Accept", "text/html")
+	s.linkOpen()
 	s.links.EXPECT().Redeem(mock.Anything, hashOf(token)).Return(user, true, nil)
 	s.store.EXPECT().Put(mock.Anything, mock.Anything).Return(nil)
 
@@ -176,6 +216,7 @@ func (s *UploadSuite) TestABrowserFormEndsOnAPage() {
 
 // A store that fails says so in the log, and the caller gets no detail.
 func (s *UploadSuite) TestAStoreFailureStaysOutOfTheResponse() {
+	s.linkOpen()
 	s.links.EXPECT().Redeem(mock.Anything, hashOf(token)).Return(user, true, nil)
 	s.store.EXPECT().Put(mock.Anything, mock.Anything).
 		Return(errors.New("pq: relation uploads on 10.0.0.7"))
