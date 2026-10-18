@@ -112,13 +112,35 @@ func (s *Store) Search(ctx context.Context, p SearchParams) ([]SearchResult, err
 	if p.K > maxK {
 		p.K = maxK
 	}
-	if p.DocID == "" {
-		return s.searchAcrossDocuments(ctx, p)
+	match, err := ftsQuery(p.Query)
+	if err != nil {
+		return nil, err
 	}
-	return s.searchOneDocument(ctx, p)
+	// Every statement a search makes runs in one transaction, so a search
+	// across the library opens and closes one rather than three for each
+	// document it holds.
+	var out []SearchResult
+	err = pgsession.ReadOnly(ctx, s.db, s.userID, func(tx *sql.Tx) error {
+		run := searcher{tx: tx, q: s.q.WithTx(tx)}
+		var searchErr error
+		if p.DocID == "" {
+			out, searchErr = run.acrossDocuments(ctx, p, match)
+		} else {
+			out, searchErr = run.oneDocument(ctx, p, match)
+		}
+		return searchErr
+	})
+	return out, err
 }
 
-// searchAcrossDocuments merges per-document results by within-document rank.
+// searcher is one search's statements, all in the transaction that named the
+// user.
+type searcher struct {
+	tx *sql.Tx
+	q  *pgdbgen.Queries
+}
+
+// acrossDocuments merges per-document results by within-document rank.
 //
 // BM25 scores are not comparable across documents: IDF is computed over the
 // whole table, so a term rare globally but common inside a small document lifts
@@ -131,10 +153,19 @@ func (s *Store) Search(ctx context.Context, p SearchParams) ([]SearchResult, err
 // is not a substitute -- the caller who most needs scoping is exactly the one
 // who does not yet know which document holds the answer.
 //
-// Cost is one query per ready document. That is fine at this scale and would
-// need revisiting for a library of hundreds.
-func (s *Store) searchAcrossDocuments(ctx context.Context, p SearchParams) ([]SearchResult, error) {
-	ready, err := s.readyTitles(ctx)
+// Cost is one candidate query per ready document, plus one for the titles and
+// one for the index entries of all of them. That is fine at this scale and
+// would need revisiting for a library of hundreds.
+func (r searcher) acrossDocuments(
+	ctx context.Context,
+	p SearchParams,
+	match string,
+) ([]SearchResult, error) {
+	ready, err := r.readyTitles(ctx)
+	if err != nil {
+		return nil, err
+	}
+	boosts, err := r.indexSections(ctx, "", p.Query)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +174,11 @@ func (s *Store) searchAcrossDocuments(ctx context.Context, p SearchParams) ([]Se
 	for _, id := range slices.Sorted(maps.Keys(ready)) {
 		scoped := p
 		scoped.DocID = id
-		res, err := s.searchOneDocument(ctx, scoped)
+		res, err := r.candidates(ctx, scoped, match, resultLabel{
+			title:         ready[id],
+			boostSections: boosts[id],
+			keepKeywords:  p.IncludeKeywordReference,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -159,38 +194,43 @@ func (s *Store) searchAcrossDocuments(ctx context.Context, p SearchParams) ([]Se
 	return out, nil
 }
 
-func (s *Store) searchOneDocument(ctx context.Context, p SearchParams) ([]SearchResult, error) {
-	match, err := ftsQuery(p.Query)
+// oneDocument searches the document p names.
+//
+// The candidate query reads chunks alone, because joining documents makes the
+// planner scan rather than walk the BM25 index. So the title and the ready
+// check, which the join used to supply, are asked for once beforehand.
+func (r searcher) oneDocument(
+	ctx context.Context,
+	p SearchParams,
+	match string,
+) ([]SearchResult, error) {
+	title, ready, err := r.documentLabel(ctx, p.DocID)
+	if err != nil || !ready {
+		return nil, err
+	}
+	boosts, err := r.indexSections(ctx, p.DocID, p.Query)
 	if err != nil {
 		return nil, err
 	}
+	return r.candidates(ctx, p, match, resultLabel{
+		title:         title,
+		boostSections: boosts[p.DocID],
+		keepKeywords:  p.IncludeKeywordReference,
+	})
+}
 
-	// The search query reads chunks alone, because joining documents makes
-	// the planner scan rather than walk the BM25 index. So the title and the
-	// ready check, which the join used to supply, are asked for here: one
-	// row per document rather than one per result.
-	title, ready, err := s.documentLabel(ctx, p.DocID)
-	if err != nil {
-		return nil, err
-	}
-	if !ready {
-		return nil, nil
-	}
-
-	boostSections, err := s.matchingIndexSections(ctx, p.DocID, p.Query)
-	if err != nil {
-		return nil, err
-	}
-
+// candidates are one document's top k, ranked.
+func (r searcher) candidates(
+	ctx context.Context,
+	p SearchParams,
+	match string,
+	label resultLabel,
+) ([]SearchResult, error) {
 	statement, args := candidateQuery(p, match)
 	var out []SearchResult
-	err = pgsession.Query(ctx, s.db, s.userID, statement, args, func(rows *sql.Rows) error {
+	err := pgsession.Rows(ctx, r.tx, statement, args, func(rows *sql.Rows) error {
 		var scanErr error
-		out, scanErr = scanResults(rows, resultLabel{
-			title:         title,
-			boostSections: boostSections,
-			keepKeywords:  p.IncludeKeywordReference,
-		})
+		out, scanErr = scanResults(rows, label)
 		return scanErr
 	})
 	if err != nil {
@@ -254,27 +294,35 @@ func rankCandidates(out []SearchResult, k int) []SearchResult {
 	return out
 }
 
-// matchingIndexSections finds back-of-book index entries matching the query
-// and returns the sections they point at.
+// indexSections finds back-of-book index entries matching the query and
+// returns the sections they point at, by document: every document's at once,
+// or the one docID names.
 //
 // Section references are resolved through SectionCovers by the caller, not by
 // an ad hoc string comparison, so this shares one rule with the Python side.
-func (s *Store) matchingIndexSections(ctx context.Context, docID, query string) ([]string, error) {
-	conds, args := termConditions(docID, query)
+func (r searcher) indexSections(
+	ctx context.Context,
+	docID, query string,
+) (map[string][]string, error) {
+	conds, args := termConditions(query)
 	if len(conds) == 0 {
 		return nil, nil
 	}
-	q := `SELECT DISTINCT section FROM index_terms WHERE doc_id = $1 AND (` +
+	q := `SELECT DISTINCT doc_id, section FROM index_terms WHERE (` +
 		strings.Join(conds, " OR ") + `)`
+	if docID != "" {
+		args = append(args, docID)
+		q += fmt.Sprintf(" AND doc_id = $%d", len(args))
+	}
 
-	var out []string
-	err := pgsession.Query(ctx, s.db, s.userID, q, args, func(rows *sql.Rows) error {
+	out := map[string][]string{}
+	err := pgsession.Rows(ctx, r.tx, q, args, func(rows *sql.Rows) error {
 		for rows.Next() {
-			var sec string
-			if err := rows.Scan(&sec); err != nil {
+			var doc, section string
+			if err := rows.Scan(&doc, &section); err != nil {
 				return err
 			}
-			out = append(out, sec)
+			out[doc] = append(out[doc], section)
 		}
 		return nil
 	})
@@ -288,17 +336,16 @@ func (s *Store) matchingIndexSections(ctx context.Context, docID, query string) 
 // substring, which is what finds "caching" under an entry reading "cache,
 // write-through". Words shorter than three characters are dropped: as a
 // substring they match most of a back-of-book index.
-func termConditions(docID, query string) ([]string, []any) {
+func termConditions(query string) ([]string, []any) {
 	words := wordRe.FindAllString(strings.ToLower(query), -1)
-	args := []any{docID}
+	args := make([]any, 0, len(words))
 	conds := make([]string, 0, len(words))
 	for _, w := range words {
 		if len(w) < 3 {
 			continue
 		}
-		// docID is already $1, so a word lands one past what is there.
-		conds = append(conds, fmt.Sprintf("position($%d IN lower(term)) > 0", len(args)+1))
 		args = append(args, w)
+		conds = append(conds, fmt.Sprintf("position($%d IN lower(term)) > 0", len(args)))
 	}
 	return conds, args
 }
@@ -418,11 +465,8 @@ func tierAt(perDoc [][]SearchResult, depth int) []SearchResult {
 }
 
 // readyTitles is every searchable document, by identifier.
-func (s *Store) readyTitles(ctx context.Context) (map[string]string, error) {
-	rows, err := pgsession.Read(ctx, s.db, s.q, s.userID,
-		func(q *pgdbgen.Queries) ([]pgdbgen.ListReadyDocumentsRow, error) {
-			return q.ListReadyDocuments(ctx)
-		})
+func (r searcher) readyTitles(ctx context.Context) (map[string]string, error) {
+	rows, err := r.q.ListReadyDocuments(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list the searchable documents: %w", err)
 	}
@@ -434,11 +478,8 @@ func (s *Store) readyTitles(ctx context.Context) (map[string]string, error) {
 }
 
 // documentLabel is a document's title, and whether it is searchable at all.
-func (s *Store) documentLabel(ctx context.Context, docID string) (string, bool, error) {
-	row, err := pgsession.Read(ctx, s.db, s.q, s.userID,
-		func(q *pgdbgen.Queries) (pgdbgen.DocumentByIDRow, error) {
-			return q.DocumentByID(ctx, docID)
-		})
+func (r searcher) documentLabel(ctx context.Context, docID string) (string, bool, error) {
+	row, err := r.q.DocumentByID(ctx, docID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}

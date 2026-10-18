@@ -28,7 +28,7 @@ type AdapterSuite struct {
 }
 
 func (s *AdapterSuite) SetupSuite() {
-	ex, err := pdf.New()
+	ex, err := pdf.New(1)
 	s.Require().NoError(err)
 	s.pdf, s.registry = ex, adapter.New(ex)
 }

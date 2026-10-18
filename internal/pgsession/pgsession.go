@@ -126,19 +126,17 @@ func Narrow(v int) int32 {
 	return int32(v)
 }
 
-// Query runs one statement whose rows are scanned inside the transaction
-// that named the user, for the two searches whose SQL is assembled rather
-// than generated.
+// ReadOnly opens a read-only transaction scoped to userID and runs work in
+// it, for a read that asks several questions and wants one round trip to
+// begin and one to end rather than one pair per question.
 //
-// The scan happens before the transaction closes, because a *sql.Rows from a
-// finished transaction yields nothing. A read commits nothing, so the happy
-// path rolls back and reports a rollback that genuinely failed.
-func Query(
+// A read commits nothing, so the happy path rolls back and reports a rollback
+// that genuinely failed.
+func ReadOnly(
 	ctx context.Context,
 	db *sql.DB,
-	userID, statement string,
-	args []any,
-	scan func(*sql.Rows) error,
+	userID string,
+	work func(*sql.Tx) error,
 ) error {
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
@@ -147,14 +145,16 @@ func Query(
 	if err := setUser(ctx, tx, userID); err != nil {
 		return errors.Join(err, Rollback(tx))
 	}
-	if err := scanRows(ctx, tx, statement, args, scan); err != nil {
+	if err := work(tx); err != nil {
 		return errors.Join(err, Rollback(tx))
 	}
 	return Rollback(tx)
 }
 
-// scanRows runs the statement and hands its rows to scan.
-func scanRows(
+// Rows runs one statement whose SQL is assembled rather than generated, and
+// hands its rows to scan before the transaction can close: a *sql.Rows from a
+// finished transaction yields nothing.
+func Rows(
 	ctx context.Context,
 	tx *sql.Tx,
 	statement string,
