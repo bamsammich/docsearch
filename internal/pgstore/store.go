@@ -27,7 +27,7 @@ import (
 // ErrNotFound is returned when a requested document or job does not exist.
 var ErrNotFound = errors.New("not found")
 
-// Store wraps the shared SQLite database.
+// Store reads one user's library.
 //
 // q holds the queries generated from the migrations. The two
 // statements it cannot express -- Search, which composes its WHERE clause from
@@ -37,8 +37,7 @@ type Store struct {
 	db *sql.DB
 	q  *pgdbgen.Queries
 	// userID is the library every statement reads. Bound once, because a
-	// store serves one request and a request belongs to one user; step 4f
-	// hands it down from the service layer.
+	// store serves one request and a request belongs to one user.
 	userID string
 }
 

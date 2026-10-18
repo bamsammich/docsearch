@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
 	"github.com/bamsammich/docsearch/internal/pgtest"
@@ -32,11 +33,14 @@ import (
 // are meaningless and most statements match nothing or violate a constraint;
 // the assertion is that Postgres understood the statement and was handed the
 // arguments it asked for.
-func TestEveryGeneratedQueryExecutes(t *testing.T) {
-	pg := pgtest.Start(t)
-	if err := schema.Create(t.Context(), pg.Owner); err != nil {
-		t.Fatal(err)
-	}
+func TestGenerated(t *testing.T) { suite.Run(t, new(GeneratedSuite)) }
+
+// GeneratedSuite runs every generated query against a real database.
+type GeneratedSuite struct{ suite.Suite }
+
+func (s *GeneratedSuite) TestEveryGeneratedQueryExecutes() {
+	pg := pgtest.Start(s.T())
+	s.Require().NoError(schema.Create(s.T().Context(), pg.Owner))
 
 	queries := reflect.TypeFor[*pgdbgen.Queries]()
 	ran := 0
@@ -48,13 +52,9 @@ func TestEveryGeneratedQueryExecutes(t *testing.T) {
 			continue
 		}
 		ran++
-		t.Run(method.Name, func(t *testing.T) {
-			runGenerated(t, pg, method)
-		})
+		s.Run(method.Name, func() { s.runGenerated(pg, method) })
 	}
-	if ran == 0 {
-		t.Fatal("no generated queries were found to run")
-	}
+	s.NotZero(ran, "no generated queries were found to run")
 }
 
 // takesContext reports whether a method is a generated query: one that takes
@@ -67,38 +67,34 @@ func takesContext(signature reflect.Type) bool {
 
 // runGenerated calls one query inside a transaction that names a user and is
 // rolled back, so a statement that does write leaves nothing behind.
-func runGenerated(t *testing.T, pg *pgtest.DB, method reflect.Method) {
-	t.Helper()
-	pgtest.ReadAs(t, pg.Owner, "default", func(tx *sql.Tx) {
+func (s *GeneratedSuite) runGenerated(pg *pgtest.DB, method reflect.Method) {
+	pgtest.ReadAs(s.T(), pg.Owner, builtinUser, func(tx *sql.Tx) {
 		args := []reflect.Value{
 			reflect.ValueOf(pgdbgen.New(pg.Owner).WithTx(tx)),
-			reflect.ValueOf(t.Context()),
+			reflect.ValueOf(s.T().Context()),
 		}
 		for i := 2; i < method.Type.NumIn(); i++ {
 			args = append(args, reflect.New(method.Type.In(i)).Elem())
 		}
 		out := method.Func.Call(args)
 		if err, ok := out[len(out)-1].Interface().(error); ok && err != nil {
-			requireDatabaseAnswer(t, method.Name, err)
+			s.databaseAnswered(method.Name, err)
 		}
 	})
 }
 
-// requireDatabaseAnswer passes an error the database decided on and fails one
-// the driver raised.
+// databaseAnswered passes an error the database decided on and fails one the
+// driver raised.
 //
 // A constraint violation, an undefined row, a type mismatch in a zero value:
 // all of those are the database answering a statement it understood, which is
 // all this test asks for. An argument count that disagrees with the SQL never
 // reaches the database, so it arrives as a driver error instead, and that is
 // the defect generation introduces.
-func requireDatabaseAnswer(t *testing.T, name string, err error) {
-	t.Helper()
+func (s *GeneratedSuite) databaseAnswered(name string, err error) {
 	if errors.Is(err, sql.ErrNoRows) {
 		return
 	}
 	var fromPostgres *pgconn.PgError
-	if !errors.As(err, &fromPostgres) {
-		t.Errorf("%s: the database never saw this statement: %v", name, err)
-	}
+	s.ErrorAs(err, &fromPostgres, "%s: the database never saw this statement", name)
 }

@@ -1,69 +1,75 @@
 package mcpserver
 
 import (
-	"context"
 	"errors"
 	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/bamsammich/docsearch/internal/urlguard"
+	"github.com/bamsammich/docsearch/internal/urlguard/mocks"
 )
+
+// ServerSuite covers the tool descriptions, how a target is classified, and
+// what add_document refuses at the boundary.
+type ServerSuite struct {
+	suite.Suite
+	resolver *mocks.MockResolver
+}
+
+func TestServer(t *testing.T) { suite.Run(t, new(ServerSuite)) }
+
+func (s *ServerSuite) SetupTest() {
+	s.resolver = mocks.NewMockResolver(s.T())
+}
+
+// deps has no job service on purpose: a refusal must happen before anything
+// is queued, so reaching the queue at all would panic the case.
+func (s *ServerSuite) deps() Deps {
+	return Deps{
+		LibraryRoots: []string{"/library"},
+		Log:          slog.New(slog.DiscardHandler),
+		Resolver:     s.resolver,
+	}
+}
 
 // add_document rejects every bad path with one error that says nothing about
 // the path, so the only way a caller can act on a rejection is to know where
 // files are allowed to live. That has to come from the tool description.
-func TestDescribeRootsNamesEveryConfiguredRoot(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		roots []string
-		want  []string
-	}{
-		{"one root", []string{"/lib"}, []string{"/lib"}},
-		{"several roots", []string{"/lib", "/downloads", "/scans"},
-			[]string{"/lib", "/downloads", "/scans"}},
-	} {
-		got := describeRoots(tc.roots)
-		for _, want := range tc.want {
-			if !strings.Contains(got, want) {
-				t.Errorf("%s: description %q does not name root %q", tc.name, got, want)
-			}
+func (s *ServerSuite) TestDescribeRootsNamesEveryConfiguredRoot() {
+	for _, roots := range [][]string{{"/lib"}, {"/lib", "/downloads", "/scans"}} {
+		got := describeRoots(roots)
+		for _, root := range roots {
+			s.Contains(got, root)
 		}
 	}
 }
 
 // The description has to say what to do about a file that is somewhere else,
 // or a caller still has nowhere to go after a rejection.
-func TestDescribeRootsSaysHowToRecover(t *testing.T) {
+func (s *ServerSuite) TestDescribeRootsSaysHowToRecover() {
 	for _, roots := range [][]string{{"/lib"}, {"/lib", "/downloads"}} {
-		got := describeRoots(roots)
-		if !strings.Contains(got, "copied") {
-			t.Errorf("description for %v does not say a file elsewhere must be copied in: %q",
-				roots, got)
-		}
+		s.Contains(describeRoots(roots), "copied", "a file elsewhere must be copied in")
 	}
 }
 
-// Validate refuses to start with no roots, so this branch should be
-// unreachable; it must still not claim a path would be accepted.
-func TestDescribeRootsWithNoneConfiguredPromisesNothing(t *testing.T) {
+// A deployment with accounts takes no paths unless they are shared, and must
+// not claim a path would be accepted.
+func (s *ServerSuite) TestDescribeRootsWithNoneConfiguredPromisesNothing() {
 	got := describeRoots(nil)
-	if !strings.Contains(got, "takes no filesystem paths") ||
-		!strings.Contains(got, "upload_link") {
-		t.Errorf(
-			"description with no roots = %q, want it to refuse paths and name upload_link",
-			got,
-		)
-	}
+	s.Contains(got, "takes no filesystem paths")
+	s.Contains(got, "upload_link")
 }
 
 // -- target classification ------------------------------------------------
 
 // A path never carries a scheme, so anything that does was meant as a URL and
 // belongs in front of the address guard rather than the path resolver.
-func TestATargetWithASchemeIsTreatedAsAURL(t *testing.T) {
+func (s *ServerSuite) TestATargetWithASchemeIsTreatedAsAURL() {
 	for _, target := range []string{
 		"https://docs.example.com/docs",
 		"http://docs.example.com",
@@ -72,13 +78,11 @@ func TestATargetWithASchemeIsTreatedAsAURL(t *testing.T) {
 		"file:///etc/passwd",
 		"gopher://docs.example.com/x",
 	} {
-		if !isURL(target) {
-			t.Errorf("isURL(%q) = false, want true", target)
-		}
+		s.True(isURL(target), target)
 	}
 }
 
-func TestAPathIsNotMistakenForAURL(t *testing.T) {
+func (s *ServerSuite) TestAPathIsNotMistakenForAURL() {
 	for _, target := range []string{
 		"/library/manual.pdf",
 		"manual.pdf",
@@ -86,9 +90,7 @@ func TestAPathIsNotMistakenForAURL(t *testing.T) {
 		"/library/a b/manual.pdf",
 		"./manual.pdf",
 	} {
-		if isURL(target) {
-			t.Errorf("isURL(%q) = true, want false", target)
-		}
+		s.False(isURL(target), target)
 	}
 }
 
@@ -96,7 +98,7 @@ func TestAPathIsNotMistakenForAURL(t *testing.T) {
 // redirect hop. None of the three may assume another ran: a job row is not
 // proof that anything validated it, and this is the only one that sees the
 // caller.
-func TestABlockedURLIsRefusedBeforeAnythingIsQueued(t *testing.T) {
+func (s *ServerSuite) TestABlockedURLIsRefusedBeforeAnythingIsQueued() {
 	for _, target := range []string{
 		"http://169.254.169.254/latest/meta-data/",
 		"http://127.0.0.1/x",
@@ -105,45 +107,35 @@ func TestABlockedURLIsRefusedBeforeAnythingIsQueued(t *testing.T) {
 		"file:///etc/passwd",
 		"gopher://example.com/x",
 	} {
-		// Store is nil on purpose: a refusal must happen before anything is
-		// enqueued, so reaching the store at all would panic this test.
-		d := Deps{LibraryRoots: []string{"/library"}, Log: slog.New(slog.DiscardHandler)}
-		_, _, err := d.addDocument(context.Background(), nil, addDocumentInput{Target: target})
-		if !errors.Is(err, urlguard.ErrBlocked) {
-			t.Errorf("addDocument(%q) error = %v, want ErrBlocked", target, err)
-		}
+		_, _, err := s.deps().addDocument(s.T().Context(), nil, addDocumentInput{Target: target})
+		s.ErrorIs(err, urlguard.ErrBlocked, target)
 	}
 }
 
 // Every rejection looks the same, or the tool reports which internal names
 // exist.
-func TestURLRejectionsAreIndistinguishable(t *testing.T) {
-	d := Deps{LibraryRoots: []string{"/library"}, Log: slog.New(slog.DiscardHandler)}
-	var msgs []string
+func (s *ServerSuite) TestURLRejectionsAreIndistinguishable() {
+	s.resolver.EXPECT().LookupNetIP(mock.Anything, mock.Anything, "absent.example.com").
+		Return(nil, errors.New("no such host"))
+	var messages []string
 	for _, target := range []string{
 		"http://169.254.169.254/x",
 		"https://printer.local/x",
 		"file:///etc/passwd",
-		"https://nonexistent-host-xyz.invalid/x",
+		"https://absent.example.com/x",
 	} {
-		_, _, err := d.addDocument(context.Background(), nil, addDocumentInput{Target: target})
-		if err == nil {
-			t.Fatalf("addDocument(%q) unexpectedly succeeded", target)
-		}
-		msgs = append(msgs, err.Error())
+		_, _, err := s.deps().addDocument(s.T().Context(), nil, addDocumentInput{Target: target})
+		s.Require().Error(err, target)
+		messages = append(messages, err.Error())
 	}
-	for i := 1; i < len(msgs); i++ {
-		if msgs[i] != msgs[0] {
-			t.Errorf("rejection messages differ and leak the reason:\n %q\n %q", msgs[0], msgs[i])
-		}
+	for _, m := range messages[1:] {
+		s.Equal(messages[0], m, "the messages differ and leak the reason")
 	}
 }
 
-func TestAnEmptyTargetIsRejected(t *testing.T) {
-	d := Deps{LibraryRoots: []string{"/library"}, Log: slog.New(slog.DiscardHandler)}
-	if _, _, err := d.addDocument(context.Background(), nil, addDocumentInput{}); err == nil {
-		t.Error("empty target should be rejected")
-	}
+func (s *ServerSuite) TestAnEmptyTargetIsRejected() {
+	_, _, err := s.deps().addDocument(s.T().Context(), nil, addDocumentInput{})
+	s.Error(err)
 }
 
 // -- server instructions --------------------------------------------------
@@ -152,33 +144,27 @@ func TestAnEmptyTargetIsRejected(t *testing.T) {
 // and the way to lose them is a one-word regression: New passed nil server
 // options for as long as it existed, and nothing about that reads as broken.
 // So assert on what a connected client sees rather than on the constant.
-func TestAConnectedClientReceivesTheServerInstructions(t *testing.T) {
-	ctx := context.Background()
+func (s *ServerSuite) TestAConnectedClientReceivesTheServerInstructions() {
+	ctx := s.T().Context()
 	clientT, serverT := mcp.NewInMemoryTransports()
 
-	server := New(Deps{LibraryRoots: []string{"/library"}, Log: slog.New(slog.DiscardHandler)})
-	ss, err := server.Connect(ctx, serverT, nil)
-	if err != nil {
-		t.Fatalf("server connect: %v", err)
-	}
-	defer func() { _ = ss.Close() }()
+	ss, err := New(s.deps()).Connect(ctx, serverT, nil)
+	s.Require().NoError(err)
+	defer func() { s.NoError(ss.Close()) }()
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0"}, nil)
 	cs, err := client.Connect(ctx, clientT, nil)
-	if err != nil {
-		t.Fatalf("client connect: %v", err)
-	}
-	defer func() { _ = cs.Close() }()
+	s.Require().NoError(err)
+	defer func() { s.NoError(cs.Close()) }()
 
-	if got := cs.InitializeResult().Instructions; got != serverInstructions {
-		t.Errorf("client received instructions %q, want the server's", got)
-	}
+	s.Equal(serverInstructions, cs.InitializeResult().Instructions)
 }
 
 // The instructions exist for two habits a session settles before it calls any
 // tool: whether it looks here before the web, and what it puts back. A revision
 // that drops either one leaves the corpus unread or fills it with write-ups.
-func TestTheInstructionsStateBothHabits(t *testing.T) {
+func (s *ServerSuite) TestTheInstructionsStateBothHabits() {
+	lowered := strings.ToLower(serverInstructions)
 	for _, want := range []string{
 		"list_documents", // where a session starts, by name
 		"the web",        // and that it comes second
@@ -186,16 +172,14 @@ func TestTheInstructionsStateBothHabits(t *testing.T) {
 		"never your own", // and what not to
 		"asynchronous",   // nothing is searchable when it returns
 	} {
-		if !strings.Contains(strings.ToLower(serverInstructions), strings.ToLower(want)) {
-			t.Errorf("instructions do not mention %q", want)
-		}
+		s.Contains(lowered, strings.ToLower(want))
 	}
 }
 
 // The description is the only place a caller learns a URL is accepted at all,
 // and the only place it learns where a path may live. Both or the tool is
 // unusable for one of its two inputs.
-func TestTheToolDescriptionNamesBothKindsOfTarget(t *testing.T) {
+func (s *ServerSuite) TestTheToolDescriptionNamesBothKindsOfTarget() {
 	got := describeAddDocument([]string{"/library", "/scans"})
 	for _, want := range []string{
 		"http(s) URL",  // a URL is accepted
@@ -204,8 +188,6 @@ func TestTheToolDescriptionNamesBothKindsOfTarget(t *testing.T) {
 		"/scans",
 		"ASYNCHRONOUS", // and that nothing is searchable on return
 	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("description does not mention %q", want)
-		}
+		s.Contains(got, want)
 	}
 }

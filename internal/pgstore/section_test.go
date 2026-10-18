@@ -1,83 +1,60 @@
 package pgstore
 
-import "testing"
+import (
+	"testing"
 
-// The precision suite that guards SectionCovers, which exists twice because
-// the rule does: once in Go and once as the SQL in ChunksInSection.
+	"github.com/stretchr/testify/suite"
+)
+
+// SectionSuite is the precision suite that guards SectionCovers, which exists
+// twice because the rule does: once in Go and once as the SQL in
+// ChunksInSection.
 //
 // Every assertion here is about what must NOT match. A coverage metric cannot
 // police this: over-matching increases the number of resolved joins, so it
 // moves the reassuring way while results get worse.
+type SectionSuite struct{ suite.Suite }
+
+func TestSection(t *testing.T) { suite.Run(t, new(SectionSuite)) }
 
 var fixture = []string{"4", "4.1", "4.2", "4.10", "41", "41.11", "43", "43.6", "43.6.1", "5"}
 
 func covered(ref string) []string {
 	var out []string
-	for _, s := range fixture {
-		if SectionCovers(ref, s) {
-			out = append(out, s)
+	for _, section := range fixture {
+		if SectionCovers(ref, section) {
+			out = append(out, section)
 		}
 	}
 	return out
 }
 
-func equal(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
+func (s *SectionSuite) TestChapterReferenceCoversOnlyItsOwnSubtree() {
+	s.Equal([]string{"4", "4.1", "4.2", "4.10"}, covered("4"))
 }
 
-func TestChapterReferenceCoversOnlyItsOwnSubtree(t *testing.T) {
-	want := []string{"4", "4.1", "4.2", "4.10"}
-	if got := covered("4"); !equal(got, want) {
-		t.Fatalf("covered(%q) = %v, want %v", "4", got, want)
-	}
-}
-
-func TestChapterReferenceDoesNotReachNumericallySimilarChapters(t *testing.T) {
+// The match must be component-wise, not a string prefix.
+func (s *SectionSuite) TestChapterReferenceDoesNotReachNumericallySimilarChapters() {
 	got := covered("4")
 	for _, forbidden := range []string{"41", "41.11", "43", "43.6", "43.6.1"} {
-		for _, s := range got {
-			if s == forbidden {
-				t.Errorf("reference to chapter 4 resolved into %q; "+
-					"the match must be component-wise, not a string prefix", forbidden)
-			}
-		}
+		s.NotContains(got, forbidden)
 	}
 }
 
-func TestDeepReferenceIsExact(t *testing.T) {
-	if got, want := covered("43.6"), []string{"43.6", "43.6.1"}; !equal(got, want) {
-		t.Errorf("covered(43.6) = %v, want %v", got, want)
-	}
-	if got, want := covered("43.6.1"), []string{"43.6.1"}; !equal(got, want) {
-		t.Errorf("covered(43.6.1) = %v, want %v", got, want)
-	}
+func (s *SectionSuite) TestDeepReferenceIsExact() {
+	s.Equal([]string{"43.6", "43.6.1"}, covered("43.6"))
+	s.Equal([]string{"43.6.1"}, covered("43.6.1"))
 }
 
-func TestTwoDigitChapterDoesNotAbsorbItsOwnPrefix(t *testing.T) {
-	if got, want := covered("41"), []string{"41", "41.11"}; !equal(got, want) {
-		t.Errorf("covered(41) = %v, want %v", got, want)
-	}
+func (s *SectionSuite) TestTwoDigitChapterDoesNotAbsorbItsOwnPrefix() {
+	s.Equal([]string{"41", "41.11"}, covered("41"))
 }
 
-func TestLeafReferenceResolvesToItselfOnly(t *testing.T) {
-	if got, want := covered("5"), []string{"5"}; !equal(got, want) {
-		t.Errorf("covered(5) = %v, want %v", got, want)
-	}
-	if got, want := covered("4.1"), []string{"4.1"}; !equal(got, want) {
-		t.Errorf("covered(4.1) = %v, want %v", got, want)
-	}
+func (s *SectionSuite) TestLeafReferenceResolvesToItselfOnly() {
+	s.Equal([]string{"5"}, covered("5"))
+	s.Equal([]string{"4.1"}, covered("4.1"))
 }
 
-func TestEmptyReferenceCoversNothing(t *testing.T) {
-	if got := covered(""); len(got) != 0 {
-		t.Errorf("empty reference covered %v, want nothing", got)
-	}
+func (s *SectionSuite) TestEmptyReferenceCoversNothing() {
+	s.Empty(covered(""))
 }
