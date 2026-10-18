@@ -1,0 +1,42 @@
+{
+ "not_found": {
+  "file": "404.html",
+  "status": 404
+ },
+ "routes": {
+  "/docs/": {
+   "file": "index.html"
+  },
+  "/docs/api": {
+   "file": "api.html"
+  },
+  "/docs/changelog": {
+   "file": "changes.html"
+  },
+  "/docs/changes": {
+   "file": "changes.html"
+  },
+  "/docs/faq": {
+   "file": "faq.html"
+  },
+  "/docs/install": {
+   "file": "install.html"
+  },
+  "/docs/install/linux": {
+   "file": "install-linux.html"
+  },
+  "/docs/install/macos": {
+   "file": "install-macos.html"
+  },
+  "/docs/usage": {
+   "file": "usage.html"
+  },
+  "/robots.txt": {
+   "file": "robots.txt"
+  },
+  "/sitemap.xml": {
+   "file": "sitemap.xml"
+  }
+ },
+ "seed": "/docs/"
+}

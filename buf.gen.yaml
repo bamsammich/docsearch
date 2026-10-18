@@ -1,0 +1,15 @@
+# Regenerate with `mise run generate`. The result is committed, and both
+# `mise run check` and CI fail on a proto edited without regenerating.
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/bamsammich/docsearch/internal/api
+plugins:
+  - local: protoc-gen-go
+    out: internal/api
+    opt: paths=source_relative
+  - local: protoc-gen-connect-go
+    out: internal/api
+    opt: paths=source_relative

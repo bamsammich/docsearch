@@ -1,0 +1,420 @@
+package worker_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/suite"
+
+	"github.com/bamsammich/docsearch/internal/libroot"
+	"github.com/bamsammich/docsearch/internal/service/ingest"
+	"github.com/bamsammich/docsearch/internal/service/worker"
+	"github.com/bamsammich/docsearch/internal/service/worker/mocks"
+	"github.com/bamsammich/docsearch/internal/urlguard"
+)
+
+// WorkerSuite covers what one job's run records, and what it records when
+// the ingest does not finish.
+type WorkerSuite struct {
+	suite.Suite
+	jobs     *mocks.MockJobs
+	ingester *mocks.MockIngester
+	sources  *mocks.MockSources
+}
+
+func TestWorker(t *testing.T) { suite.Run(t, new(WorkerSuite)) }
+
+func (s *WorkerSuite) SetupTest() {
+	s.jobs = mocks.NewMockJobs(s.T())
+	s.ingester = mocks.NewMockIngester(s.T())
+	s.sources = mocks.NewMockSources(s.T())
+	// The watcher renews the lease every poll; a case about losing the job
+	// builds its own queue.
+	s.jobs.EXPECT().RenewLease(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+}
+
+// run works one job and returns.
+func (s *WorkerSuite) run(opts worker.Options) error {
+	opts.Once = true
+	opts.Log = slog.New(slog.NewTextHandler(io.Discard, nil))
+	if opts.CancelPoll == 0 {
+		// The default asks every two seconds, which a suite should not wait
+		// for. The interval is what a test varies; whether cancelling works
+		// is not.
+		opts.CancelPoll = time.Millisecond
+	}
+	return worker.New(s.jobs, s.ingester, s.sources, opts).Run(s.T().Context())
+}
+
+// claims is one job waiting on the queue.
+func (s *WorkerSuite) claims(job *worker.Job) {
+	s.jobs.EXPECT().
+		Claim(mock.Anything, mock.Anything, mock.Anything).
+		Return(job, nil).
+		Once()
+}
+
+// buildsASource is a target the registry can read.
+func (s *WorkerSuite) buildsASource() {
+	s.sources.EXPECT().For(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+}
+
+// neverCancelled is an operator who leaves the job alone.
+func (s *WorkerSuite) neverCancelled() {
+	s.jobs.EXPECT().CancelRequested(mock.Anything, mock.Anything).Return(false, nil).Maybe()
+}
+
+func (s *WorkerSuite) TestAFinishedIngestLeavesTheJobToItsOwnTransaction() {
+	// The ingest completes the job in the transaction that makes the document
+	// visible, so the worker must not complete it a second time.
+	s.claims(&worker.Job{ID: 7, Source: "/library/guide.md", Attempts: 1})
+	s.buildsASource()
+	s.neverCancelled()
+	s.ingester.EXPECT().Run(mock.Anything, mock.Anything, mock.Anything).
+		Return(&ingest.Result{
+			DocID: "operator-guide", ChunkCount: 18, Outcome: ingest.Ingested,
+		}, nil)
+
+	s.Require().NoError(s.run(worker.Options{}))
+}
+
+func (s *WorkerSuite) TestTheJobCarriesTheIdentifierAndTitleIntoTheIngest() {
+	s.claims(&worker.Job{ID: 7, Source: "/library/guide.md", Title: "Operator Guide"})
+	s.buildsASource()
+	s.neverCancelled()
+
+	var seen ingest.Options
+	s.ingester.EXPECT().Run(mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(
+			_ context.Context, _ ingest.Source, opts ingest.Options,
+		) (*ingest.Result, error) {
+			seen = opts
+			return &ingest.Result{DocID: "guide", Outcome: ingest.Ingested}, nil
+		})
+
+	s.Require().NoError(s.run(worker.Options{}))
+	s.Equal("Operator Guide", seen.Title)
+	s.Require().NotNil(seen.JobID)
+	s.Equal(int64(7), *seen.JobID)
+}
+
+func (s *WorkerSuite) TestAnUnchangedSourceCompletesTheJobOnItsOwn() {
+	// Nothing was re-indexed, so the ingest's final transaction never ran and
+	// the job would otherwise read as running forever.
+	s.claims(&worker.Job{ID: 7, Source: "/library/copy.md"})
+	s.buildsASource()
+	s.neverCancelled()
+	s.ingester.EXPECT().Run(mock.Anything, mock.Anything, mock.Anything).
+		Return(&ingest.Result{DocID: "guide", Outcome: ingest.Unchanged}, nil)
+	s.jobs.EXPECT().CompleteWithoutDocument(mock.Anything, int64(7), "guide").Return(nil)
+
+	s.Require().NoError(s.run(worker.Options{}))
+}
+
+// An address the guard refuses is refused on every attempt, so retrying
+// only delays the answer. A host that did not resolve may resolve in a
+// minute, and is tried again.
+func (s *WorkerSuite) TestARefusedAddressFailsAtOnceAndAnUnresolvedOneRetries() {
+	cases := map[string]struct {
+		cause     error
+		permanent bool
+	}{
+		"refused by policy": {fmt.Errorf("fetch seed: %w", urlguard.ErrBlocked), true},
+		"did not resolve":   {fmt.Errorf("fetch seed: %w", urlguard.ErrUnresolved), false},
+	}
+	for name, c := range cases {
+		s.Run(name, func() {
+			s.SetupTest()
+			s.claims(&worker.Job{ID: 7, Source: "https://docs.example.com/", Attempts: 1})
+			s.buildsASource()
+			s.neverCancelled()
+			s.ingester.EXPECT().
+				Run(mock.Anything, mock.Anything, mock.Anything).
+				Return(nil, c.cause)
+			s.jobs.EXPECT().
+				Finish(mock.Anything, int64(7), mock.Anything, mock.Anything, c.permanent).
+				Return(nil)
+			s.Require().NoError(s.run(worker.Options{}))
+		})
+	}
+}
+
+// Both read as the same refusal, so the uniform error the tools promise
+// holds whichever one a caller hit.
+func (s *WorkerSuite) TestAnUnresolvedHostReadsAsARefusal() {
+	s.Equal(urlguard.ErrBlocked.Error(), urlguard.ErrUnresolved.Error())
+	s.ErrorIs(urlguard.ErrUnresolved, urlguard.ErrBlocked)
+}
+
+// Shutting the worker down waits for the running job rather than cutting
+// it off: a deploy must not record a job as cancelled by its operator, nor
+// spend one of its attempts.
+func (s *WorkerSuite) TestShuttingDownLetsTheRunningJobFinish() {
+	s.claims(&worker.Job{ID: 7, Source: "/library/guide.md", Attempts: 1})
+	s.buildsASource()
+	s.neverCancelled()
+	shutdown, stopWorker := context.WithCancel(s.T().Context())
+	defer stopWorker()
+	var cutOff bool
+	s.ingester.EXPECT().Run(mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(ctx context.Context, _ ingest.Source, _ ingest.Options) (*ingest.Result, error) {
+			stopWorker()
+			time.Sleep(20 * time.Millisecond)
+			cutOff = ctx.Err() != nil
+			return &ingest.Result{DocID: "guide", Outcome: ingest.Ingested}, nil
+		})
+
+	err := worker.New(s.jobs, s.ingester, s.sources, worker.Options{
+		Log: slog.New(slog.DiscardHandler), CancelPoll: time.Millisecond,
+	}).Run(shutdown)
+	s.Require().NoError(err)
+	s.False(cutOff, "the job's context outlived the worker's")
+	s.jobs.AssertNotCalled(s.T(), "Cancel", mock.Anything, mock.Anything)
+}
+
+// A cancel request read just as the ingest committed does not undo it: the
+// document is already published, in the transaction that completed the job.
+func (s *WorkerSuite) TestAFinishedJobIsNotCancelledAfterTheFact() {
+	s.claims(&worker.Job{ID: 7, Source: "/library/guide.md", Attempts: 1})
+	s.buildsASource()
+	s.jobs.EXPECT().CancelRequested(mock.Anything, int64(7)).Return(true, nil).Maybe()
+	s.ingester.EXPECT().Run(mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(context.Context, ingest.Source, ingest.Options) (*ingest.Result, error) {
+			time.Sleep(20 * time.Millisecond)
+			return &ingest.Result{DocID: "guide", Outcome: ingest.Ingested}, nil
+		})
+
+	s.Require().NoError(s.run(worker.Options{}))
+	s.jobs.AssertNotCalled(s.T(), "Cancel", mock.Anything, mock.Anything)
+}
+
+// A worker whose job another worker took over stops, and writes nothing
+// more to the job: finishing, failing or cancelling it would overwrite the
+// worker that now owns it.
+func (s *WorkerSuite) TestAWorkerThatLostItsJobWritesNothingMore() {
+	s.jobs = mocks.NewMockJobs(s.T())
+	s.claims(&worker.Job{ID: 7, Source: "/library/guide.md", Attempts: 1})
+	s.buildsASource()
+	s.jobs.EXPECT().RenewLease(mock.Anything, int64(7), mock.Anything).Return(ingest.ErrLostClaim)
+	s.jobs.EXPECT().CancelRequested(mock.Anything, mock.Anything).Return(false, nil).Maybe()
+	s.ingester.EXPECT().Run(mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(ctx context.Context, _ ingest.Source, _ ingest.Options) (*ingest.Result, error) {
+			<-ctx.Done()
+			return nil, ingest.ErrCancelled
+		})
+
+	s.Require().NoError(s.run(worker.Options{}))
+	s.jobs.AssertNotCalled(s.T(), "Cancel", mock.Anything, mock.Anything)
+	s.jobs.AssertNotCalled(s.T(), "Finish", mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything)
+}
+
+// A file inside a root that is not there yet, such as on a volume that has
+// not mounted, is tried again; a path outside every root is not.
+func (s *WorkerSuite) TestAMissingFileIsRetriedAndAnOutsideOneIsNot() {
+	cases := map[string]struct {
+		cause     error
+		permanent bool
+	}{
+		"missing inside a root": {libroot.ErrMissing, false},
+		"outside every root":    {libroot.ErrOutsideRoot, true},
+	}
+	for name, c := range cases {
+		s.Run(name, func() {
+			s.SetupTest()
+			s.claims(&worker.Job{ID: 7, Source: "/library/guide.md", Attempts: 1})
+			s.sources.EXPECT().For(mock.Anything, mock.Anything).Return(nil, c.cause)
+			s.jobs.EXPECT().
+				Finish(mock.Anything, int64(7), mock.Anything, mock.Anything, c.permanent).
+				Return(nil)
+			s.Require().NoError(s.run(worker.Options{}))
+		})
+	}
+}
+
+func (s *WorkerSuite) TestARefusedStructureIsNotTriedAgain() {
+	// The next attempt would read the same bytes and refuse them again.
+	s.claims(&worker.Job{ID: 7, Source: "/library/empty.md", Attempts: 1})
+	s.buildsASource()
+	s.neverCancelled()
+	s.ingester.EXPECT().Run(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, &ingest.StructureError{Message: "produced no chunks"})
+
+	var permanent bool
+	var outcome worker.Outcome
+	s.jobs.EXPECT().Finish(mock.Anything, int64(7), mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(
+			_ context.Context, _ int64, o worker.Outcome, _ string, p bool,
+		) error {
+			outcome, permanent = o, p
+			return nil
+		})
+
+	s.Require().NoError(s.run(worker.Options{}))
+	s.True(permanent)
+	s.Equal(worker.Failed, outcome, "not requeued, though attempts remain")
+}
+
+func (s *WorkerSuite) TestATransientFailureGoesBackOnTheQueue() {
+	s.claims(&worker.Job{ID: 7, Source: "/library/guide.md", Attempts: 1})
+	s.buildsASource()
+	s.neverCancelled()
+	s.ingester.EXPECT().Run(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, errors.New("database is locked"))
+
+	var outcome worker.Outcome
+	var reason string
+	s.jobs.EXPECT().Finish(mock.Anything, int64(7), mock.Anything, mock.Anything, false).
+		RunAndReturn(func(
+			_ context.Context, _ int64, o worker.Outcome, r string, _ bool,
+		) error {
+			outcome, reason = o, r
+			return nil
+		})
+
+	s.Require().NoError(s.run(worker.Options{}))
+	s.Equal(worker.Requeued, outcome)
+	s.Contains(reason, "database is locked")
+}
+
+func (s *WorkerSuite) TestTheLastAttemptLeavesTheJobFailed() {
+	s.claims(&worker.Job{ID: 7, Source: "/library/guide.md", Attempts: 3})
+	s.buildsASource()
+	s.neverCancelled()
+	s.ingester.EXPECT().Run(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, errors.New("database is locked"))
+
+	var outcome worker.Outcome
+	s.jobs.EXPECT().Finish(mock.Anything, int64(7), mock.Anything, mock.Anything, false).
+		RunAndReturn(func(
+			_ context.Context, _ int64, o worker.Outcome, _ string, _ bool,
+		) error {
+			outcome = o
+			return nil
+		})
+
+	s.Require().NoError(s.run(worker.Options{MaxAttempts: 3}))
+	s.Equal(worker.Failed, outcome, "transient, but out of attempts")
+}
+
+func (s *WorkerSuite) TestATargetNoSourceCanBeBuiltFromNeverRuns() {
+	s.claims(&worker.Job{ID: 7, Source: "/etc/passwd"})
+	s.sources.EXPECT().For("/etc/passwd", true).
+		Return(nil, errors.New("path is not inside a configured library root"))
+	s.jobs.EXPECT().Finish(mock.Anything, int64(7), worker.Failed, mock.Anything, true).
+		Return(nil)
+
+	s.Require().NoError(s.run(worker.Options{}))
+}
+
+func (s *WorkerSuite) TestACancelRequestStopsTheIngestAndClearsWhatItWrote() {
+	s.claims(&worker.Job{ID: 7, Source: "/library/manual.pdf"})
+	s.buildsASource()
+	s.jobs.EXPECT().CancelRequested(mock.Anything, int64(7)).Return(true, nil)
+	s.ingester.EXPECT().Run(mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(
+			ctx context.Context, _ ingest.Source, _ ingest.Options,
+		) (*ingest.Result, error) {
+			<-ctx.Done()
+			return nil, ingest.ErrCancelled
+		})
+	s.jobs.EXPECT().Cancel(mock.Anything, int64(7)).Return(nil)
+
+	s.Require().NoError(s.run(worker.Options{}))
+}
+
+func (s *WorkerSuite) TestAnEmptyQueueIsNotAnError() {
+	s.jobs.EXPECT().Claim(mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+	s.Require().NoError(s.run(worker.Options{}))
+}
+
+func (s *WorkerSuite) TestAQueueThatCannotBeReadStopsTheWorker() {
+	// A worker that cannot reach its queue has nothing to do but exit, and
+	// exiting is what a supervisor restarts.
+	s.jobs.EXPECT().Claim(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, errors.New("database is locked"))
+
+	err := s.run(worker.Options{})
+	s.Require().ErrorContains(err, "claim a job")
+}
+
+func (s *WorkerSuite) TestProgressIsThrottledButThePhasesLastReportAlwaysLands() {
+	// A status tool showing only "running" for forty minutes is
+	// indistinguishable from a hang, and each write renews the lease.
+	s.claims(&worker.Job{ID: 7, Source: "https://example.com/docs/"})
+	s.buildsASource()
+	s.neverCancelled()
+
+	var phases []string
+	s.jobs.EXPECT().
+		RecordProgress(mock.Anything, int64(7), mock.Anything,
+			mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(
+			_ context.Context, _ int64, phase string, _, _ int, _ time.Duration,
+		) error {
+			phases = append(phases, phase)
+			return nil
+		}).Maybe()
+
+	s.ingester.EXPECT().Run(mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(
+			_ context.Context, _ ingest.Source, opts ingest.Options,
+		) (*ingest.Result, error) {
+			// Three fetch reports in quick succession: the first lands, the
+			// middle one is throttled away, and the last lands because it
+			// completes the phase.
+			opts.Progress(ingest.PhaseFetch, 1, 10)
+			opts.Progress(ingest.PhaseFetch, 2, 10)
+			opts.Progress(ingest.PhaseFetch, 10, 10)
+			return &ingest.Result{DocID: "docs", Outcome: ingest.Ingested}, nil
+		})
+
+	s.Require().NoError(s.run(worker.Options{}))
+	s.Equal([]string{"fetch", "fetch"}, phases)
+}
+
+func (s *WorkerSuite) TestTheDocumentIsRecordedWhileTheIngestRuns() {
+	// A job that dies mid-write still says which document it was writing,
+	// which is what lets the next worker clean up after it.
+	s.claims(&worker.Job{ID: 7, Source: "/library/guide.md"})
+	s.buildsASource()
+	s.neverCancelled()
+	s.jobs.EXPECT().RecordDocID(mock.Anything, int64(7), "operator-guide").Return(nil)
+	s.ingester.EXPECT().Run(mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(
+			_ context.Context, _ ingest.Source, opts ingest.Options,
+		) (*ingest.Result, error) {
+			opts.OnDocID("operator-guide")
+			return &ingest.Result{DocID: "operator-guide", Outcome: ingest.Ingested}, nil
+		})
+
+	s.Require().NoError(s.run(worker.Options{}))
+}
+
+// A job that runs past its timeout is stopped and failed for good, so an
+// extraction that wedged cannot hold the worker and every account it serves.
+func (s *WorkerSuite) TestAJobPastItsTimeoutFailsForGood() {
+	s.claims(&worker.Job{ID: 7, Source: "/library/manual.pdf", Attempts: 1})
+	s.buildsASource()
+	s.neverCancelled()
+	s.ingester.EXPECT().Run(mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(ctx context.Context, _ ingest.Source, _ ingest.Options) (*ingest.Result, error) {
+			<-ctx.Done()
+			return nil, ingest.ErrCancelled
+		})
+	s.jobs.EXPECT().
+		Finish(mock.Anything, int64(7), worker.Failed,
+			mock.MatchedBy(func(reason string) bool {
+				return strings.Contains(reason, "longest a job may run")
+			}), true).
+		Return(nil)
+
+	s.Require().NoError(s.run(worker.Options{JobTimeout: 20 * time.Millisecond}))
+}

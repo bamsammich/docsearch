@@ -1,13 +1,22 @@
 package config
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
+
+	"github.com/stretchr/testify/suite"
+
+	"github.com/bamsammich/docsearch/internal/owner"
 )
 
-func TestIsLoopbackAddr(t *testing.T) {
+// ConfigSuite covers what Validate accepts, refuses and resolves.
+type ConfigSuite struct{ suite.Suite }
+
+func TestConfig(t *testing.T) { suite.Run(t, new(ConfigSuite)) }
+
+func (s *ConfigSuite) TestIsLoopbackAddr() {
 	cases := map[string]bool{
 		"127.0.0.1:8765": true,
 		"localhost:8765": true,
@@ -20,179 +29,271 @@ func TestIsLoopbackAddr(t *testing.T) {
 		"192.168.1.5:80": false,
 	}
 	for addr, want := range cases {
-		if got := IsLoopbackAddr(addr); got != want {
-			t.Errorf("IsLoopbackAddr(%q) = %v, want %v", addr, got, want)
-		}
+		s.Equal(want, IsLoopbackAddr(addr), addr)
 	}
 }
 
-func validCfg(t *testing.T) *Config {
-	t.Helper()
-	root := t.TempDir()
+// valid is a configuration Validate accepts, with a root of its own.
+func (s *ConfigSuite) valid() *Config {
 	return &Config{
 		Addr:         "127.0.0.1:8765",
-		DBPath:       filepath.Join(root, "d.db"),
-		LibraryRoots: []string{root},
-		BearerToken:  "tok",
+		DSN:          "postgres://docsearch@localhost/docsearch",
+		LibraryRoots: []string{s.T().TempDir()},
+		BearerToken:  "a-bearer-token-long-enough-to-pass-the-check",
 	}
 }
 
-func TestRefusesPublicBindWithoutExplicitFlag(t *testing.T) {
+// oidc is an oidc deployment with every setting it cannot run without.
+func (s *ConfigSuite) oidc() *Config {
+	c := s.valid()
+	c.Auth = owner.OIDC
+	c.BearerToken = ""
+	c.OIDC = OIDC{Issuer: "https://issuer.example", Resource: "https://docs.example.com/mcp"}
+	c.LibraryRoots = nil
+	return c
+}
+
+// resolved is a fresh directory, as Validate will resolve it.
+func (s *ConfigSuite) resolved() string {
+	dir, err := filepath.EvalSymlinks(s.T().TempDir())
+	s.Require().NoError(err)
+	return dir
+}
+
+// linkTo is a symlink to target, skipping the case where none can be made.
+func (s *ConfigSuite) linkTo(target string) string {
+	link := filepath.Join(s.T().TempDir(), "link")
+	if err := os.Symlink(target, link); err != nil {
+		s.T().Skipf("symlinks unavailable: %v", err)
+	}
+	return link
+}
+
+func (s *ConfigSuite) TestRefusesPublicBindWithoutExplicitFlag() {
 	for _, addr := range []string{"0.0.0.0:8765", ":8765", "[::]:8765", "192.168.1.5:8765"} {
-		c := validCfg(t)
+		c := s.valid()
 		c.Addr = addr
-		if err := c.Validate(); !errors.Is(err, ErrPublicBind) {
-			t.Errorf("Validate() with addr %q error = %v, want ErrPublicBind", addr, err)
-		}
+		s.ErrorIs(c.Validate(), ErrPublicBind, addr)
 	}
 }
 
-func TestPublicBindAllowedWithExplicitFlag(t *testing.T) {
-	c := validCfg(t)
+func (s *ConfigSuite) TestPublicBindAllowedWithExplicitFlag() {
+	c := s.valid()
 	c.Addr = "0.0.0.0:8765"
 	c.AllowPublicBind = true
-	if err := c.Validate(); err != nil {
-		t.Errorf("Validate() error = %v, want nil with --allow-public-bind", err)
-	}
+	s.NoError(c.Validate())
 }
 
-func TestLoopbackBindNeedsNoFlag(t *testing.T) {
-	if err := validCfg(t).Validate(); err != nil {
-		t.Errorf("Validate() error = %v, want nil", err)
-	}
+func (s *ConfigSuite) TestLoopbackBindNeedsNoFlag() {
+	s.NoError(s.valid().Validate())
 }
 
-func TestMissingTokenIsRejected(t *testing.T) {
-	c := validCfg(t)
+func (s *ConfigSuite) TestMissingTokenIsRejected() {
+	c := s.valid()
 	c.BearerToken = ""
-	if err := c.Validate(); err == nil {
-		t.Error("Validate() = nil, want an error when no bearer token is set")
-	}
+	s.Error(c.Validate())
 }
 
-func TestLibraryRootIsResolvedThroughSymlinks(t *testing.T) {
-	real := t.TempDir()
-	realResolved, err := filepath.EvalSymlinks(real)
-	if err != nil {
-		t.Fatal(err)
-	}
-	link := filepath.Join(t.TempDir(), "link")
-	if err := os.Symlink(realResolved, link); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
-	}
-	c := validCfg(t)
-	c.LibraryRoots = []string{link}
-	if err := c.Validate(); err != nil {
-		t.Fatalf("Validate() error = %v", err)
-	}
-	if len(c.LibraryRoots) != 1 || c.LibraryRoots[0] != realResolved {
-		t.Errorf("LibraryRoots = %v, want [%q]", c.LibraryRoots, realResolved)
-	}
+func (s *ConfigSuite) TestLibraryRootIsResolvedThroughSymlinks() {
+	target := s.resolved()
+	c := s.valid()
+	c.LibraryRoots = []string{s.linkTo(target)}
+	s.Require().NoError(c.Validate())
+	s.Equal([]string{target}, c.LibraryRoots)
 }
 
-func TestNonexistentLibraryRootIsRejected(t *testing.T) {
-	c := validCfg(t)
-	c.LibraryRoots = []string{filepath.Join(t.TempDir(), "absent")}
-	if err := c.Validate(); err == nil {
-		t.Error("Validate() = nil, want an error for a nonexistent library root")
-	}
+func (s *ConfigSuite) TestNonexistentLibraryRootIsRejected() {
+	c := s.valid()
+	c.LibraryRoots = []string{filepath.Join(s.T().TempDir(), "absent")}
+	s.Error(c.Validate())
 }
 
-func TestRootsParseFromOnePathList(t *testing.T) {
-	sep := string(filepath.ListSeparator)
-	for _, tc := range []struct {
-		name string
-		in   string
-		want int
-	}{
-		{"single path stays one root", "/a", 1},
-		{"two paths", "/a" + sep + "/b", 2},
-		{"blank entries are dropped", "/a" + sep + sep + " " + sep + "/b", 2},
-		{"empty is no roots", "", 0},
-	} {
-		if got := len(SplitRoots(tc.in)); got != tc.want {
-			t.Errorf("%s: SplitRoots(%q) = %d roots, want %d", tc.name, tc.in, got, tc.want)
-		}
-	}
-}
-
-func TestEveryRootIsResolvedThroughSymlinks(t *testing.T) {
-	a, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	link := filepath.Join(t.TempDir(), "link")
-	if err := os.Symlink(b, link); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
-	}
-	c := validCfg(t)
-	c.LibraryRoots = []string{a, link}
-	if err := c.Validate(); err != nil {
-		t.Fatalf("Validate() error = %v", err)
-	}
-	if c.LibraryRoots[1] != b {
-		t.Errorf("second root = %q, want it resolved to %q", c.LibraryRoots[1], b)
-	}
+func (s *ConfigSuite) TestEveryRootIsResolvedThroughSymlinks() {
+	a, b := s.resolved(), s.resolved()
+	c := s.valid()
+	c.LibraryRoots = []string{a, s.linkTo(b)}
+	s.Require().NoError(c.Validate())
+	s.Equal(b, c.LibraryRoots[1], "the second root is resolved too")
 }
 
 // A server that quietly serves three of four configured directories is worse
 // than one that will not start: the missing root surfaces much later, as an
 // unexplained rejection.
-func TestOneUnusableRootFailsStartup(t *testing.T) {
-	good, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	c := validCfg(t)
-	c.LibraryRoots = []string{good, filepath.Join(t.TempDir(), "absent")}
-	if err := c.Validate(); err == nil {
-		t.Error("Validate() = nil, want an error when one configured root is unusable")
-	}
+func (s *ConfigSuite) TestOneUnusableRootFailsStartup() {
+	c := s.valid()
+	c.LibraryRoots = []string{s.resolved(), filepath.Join(s.T().TempDir(), "absent")}
+	s.Error(c.Validate())
 }
 
-func TestNoRootsIsRejected(t *testing.T) {
-	c := validCfg(t)
+func (s *ConfigSuite) TestNoRootsIsRejected() {
+	c := s.valid()
 	c.LibraryRoots = nil
-	if err := c.Validate(); err == nil {
-		t.Error("Validate() = nil, want an error when no library root is configured")
-	}
+	s.Error(c.Validate())
 }
 
 // A file passes EvalSymlinks and Abs, and libroot treats a path equal to the
 // root as inside it -- so a file named as a root would quietly make exactly
 // that file ingestable.
-func TestAFileIsNotAValidLibraryRoot(t *testing.T) {
-	f := filepath.Join(t.TempDir(), "notes.txt")
-	if err := os.WriteFile(f, []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	c := validCfg(t)
+func (s *ConfigSuite) TestAFileIsNotAValidLibraryRoot() {
+	f := filepath.Join(s.T().TempDir(), "notes.txt")
+	s.Require().NoError(os.WriteFile(f, []byte("x"), 0o600))
+	c := s.valid()
 	c.LibraryRoots = []string{f}
-	if err := c.Validate(); err == nil {
-		t.Error("Validate() = nil, want an error for a file named as a library root")
+	s.Error(c.Validate())
+}
+
+func (s *ConfigSuite) TestDuplicateRootsCollapseToOne() {
+	dir := s.resolved()
+	c := s.valid()
+	// The same directory three ways: itself, again, and through a symlink.
+	c.LibraryRoots = []string{dir, dir, s.linkTo(dir)}
+	s.Require().NoError(c.Validate())
+	s.Len(c.LibraryRoots, 1)
+}
+
+// An unset mode is token, which is what every v1 install already runs: the
+// one thing it must not become is the mode that asks for no credential.
+func (s *ConfigSuite) TestAnUnsetAuthModeIsToken() {
+	c := s.valid()
+	s.Require().NoError(c.Validate())
+	s.Equal(owner.Token, c.Auth)
+}
+
+func (s *ConfigSuite) TestTokenModeNeedsAToken() {
+	c := s.valid()
+	c.Auth = owner.Token
+	c.BearerToken = ""
+	s.Error(c.Validate())
+}
+
+// Mode none asks for no credential, so it needs none configured.
+func (s *ConfigSuite) TestNoneModeNeedsNoToken() {
+	c := s.valid()
+	c.Auth = owner.None
+	c.BearerToken = ""
+	s.NoError(c.Validate())
+}
+
+// --allow-public-bind opts into being reachable, not into serving a library
+// to whoever arrives. Mode none on a public address is an open document
+// store, and no flag says that clearly enough to act on.
+func (s *ConfigSuite) TestNoneModeIsRefusedOffLoopbackEvenWithTheFlag() {
+	for _, addr := range []string{"0.0.0.0:8765", ":8765", "192.168.1.5:8765"} {
+		c := s.valid()
+		c.Auth = owner.None
+		c.Addr = addr
+		c.AllowPublicBind = true
+		s.ErrorIs(c.Validate(), ErrOpenToTheNetwork, addr)
 	}
 }
 
-func TestDuplicateRootsCollapseToOne(t *testing.T) {
-	dir, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
+func (s *ConfigSuite) TestNoneModeIsAllowedOnLoopback() {
+	c := s.valid()
+	c.Auth = owner.None
+	c.Addr = "127.0.0.1:8765"
+	s.NoError(c.Validate())
+}
+
+// Mode oidc reads tokens from a provider, so it needs no static token.
+func (s *ConfigSuite) TestOIDCModeNeedsNoToken() {
+	s.NoError(s.oidc().Validate())
+}
+
+// Each of these could only fail on the first request, so each fails at
+// startup instead.
+func (s *ConfigSuite) TestAnOIDCConfigurationThatCannotWorkIsRefused() {
+	cases := map[string]func(*OIDC){
+		"no issuer":                    func(o *OIDC) { o.Issuer = "" },
+		"no resource":                  func(o *OIDC) { o.Resource = "" },
+		"a client ID without a secret": func(o *OIDC) { o.ClientID = "docsearch" },
+		"a secret without a client ID": func(o *OIDC) { o.ClientSecret = "secret" },
+		"a claim name with no value":   func(o *OIDC) { o.RequiredClaimName = "groups" },
+		"a claim value with no name":   func(o *OIDC) { o.RequiredClaimValue = "docsearch-users" },
 	}
-	link := filepath.Join(t.TempDir(), "link")
-	if err := os.Symlink(dir, link); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
+	for name, spoil := range cases {
+		c := s.oidc()
+		spoil(&c.OIDC)
+		s.Error(c.Validate(), name)
 	}
-	c := validCfg(t)
-	// The same directory three ways: itself, again, and through a symlink.
-	c.LibraryRoots = []string{dir, dir, link}
-	if err := c.Validate(); err != nil {
-		t.Fatalf("Validate() error = %v", err)
+}
+
+func TestBrowserOriginsAddTheServersOwnOrigin(t *testing.T) {
+	cfg := Config{
+		AllowedOrigins: []string{"https://claude.ai"},
+		PublicURL:      "https://docs.example.org/base",
 	}
-	if len(c.LibraryRoots) != 1 {
-		t.Errorf("LibraryRoots = %v, want one entry", c.LibraryRoots)
+	got := cfg.BrowserOrigins()
+	want := []string{"https://claude.ai", "https://docs.example.org"}
+	if !slices.Equal(got, want) {
+		t.Errorf("BrowserOrigins() = %v, want %v", got, want)
+	}
+}
+
+func TestBrowserOriginsDoNotRepeatAListedOrigin(t *testing.T) {
+	cfg := Config{
+		AllowedOrigins: []string{"HTTPS://Docs.Example.org"},
+		PublicURL:      "https://docs.example.org",
+	}
+	if got := cfg.BrowserOrigins(); len(got) != 1 {
+		t.Errorf("BrowserOrigins() = %v, want the one listed origin", got)
+	}
+}
+
+func TestBrowserOriginsLeaveTheAllowlistUntouched(t *testing.T) {
+	cfg := Config{AllowedOrigins: []string{"https://claude.ai"}, PublicURL: "http://127.0.0.1:8765"}
+	_ = cfg.BrowserOrigins()
+	if len(cfg.AllowedOrigins) != 1 {
+		t.Errorf("AllowedOrigins grew to %v", cfg.AllowedOrigins)
+	}
+}
+
+func TestBrowserOriginsAcceptBothLoopbackSpellingsOnALoopbackListener(t *testing.T) {
+	cfg := Config{PublicURL: "http://docs.tailnet.example:18765", Addr: "127.0.0.1:18765"}
+	got := cfg.BrowserOrigins()
+	want := []string{
+		"http://docs.tailnet.example:18765",
+		"http://127.0.0.1:18765",
+		"http://localhost:18765",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("BrowserOrigins() = %v, want %v", got, want)
+	}
+}
+
+func TestBrowserOriginsAddNoLoopbackOnAPublicListener(t *testing.T) {
+	cfg := Config{PublicURL: "https://docs.example.org", Addr: "0.0.0.0:8765"}
+	if got := cfg.BrowserOrigins(); len(got) != 1 {
+		t.Errorf("BrowserOrigins() = %v, want only the public origin", got)
+	}
+}
+
+// A bearer token is the whole of mode token's security, so one that is
+// short or still the example's placeholder is refused at startup.
+func (s *ConfigSuite) TestAWeakOrPlaceholderTokenIsRefused() {
+	for name, token := range map[string]string{
+		"short":       "tok",
+		"placeholder": "CHANGE-ME-generate-a-real-token-before-applying",
+	} {
+		c := s.valid()
+		c.BearerToken = token
+		s.Error(c.Validate(), name)
+	}
+}
+
+// A deployment with accounts takes no paths unless the operator says every
+// account may read the same roots.
+func (s *ConfigSuite) TestAccountsTakeNoPathsUnlessShared() {
+	for _, mode := range []owner.Mode{owner.OIDC, owner.Password} {
+		c := s.oidc()
+		c.Auth = mode
+		s.Require().NoError(c.Validate(), "%v with no roots", mode)
+
+		c = s.oidc()
+		c.Auth = mode
+		c.LibraryRoots = []string{s.T().TempDir()}
+		s.Require().ErrorIs(c.Validate(), ErrSharedPaths, "%v with roots", mode)
+
+		c.SharedPaths = true
+		s.NoError(c.Validate(), "%v with shared roots", mode)
 	}
 }

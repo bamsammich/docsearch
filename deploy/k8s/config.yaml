@@ -7,15 +7,20 @@ data:
   # there is no Ingress and no public listener. The server logs a warning for a
   # non-loopback bind, which is correct and expected here.
   #
-  # NOTE: this requires --allow-public-bind on the server args. If you would
-  # rather not grant that, set addr to 127.0.0.1:8765 and run the Tailscale
-  # proxy as a sidecar in this same Pod so it can reach loopback.
+  # NOTE: this requires allowPublicBind below. If you would rather not grant
+  # that, set addr to 127.0.0.1:8765, set allowPublicBind to "false", and run
+  # the Tailscale proxy as a sidecar in this same Pod so it can reach loopback.
   addr: "0.0.0.0:8765"
+  allowPublicBind: "true"
 
   # Origin allowlist. Native MCP clients send no Origin and are allowed
   # deliberately; this list constrains browsers only, and exists as a
   # DNS-rebinding defence that applies even on a private network.
   allowedOrigins: "https://claude.ai,https://app.claude.ai"
+
+  # Where a person's browser reaches the server. Upload links are built on
+  # it, so it must be an address the person can open, not the Pod's.
+  publicURL: "https://docsearch.example.com"
 ---
 apiVersion: v1
 kind: Secret
@@ -25,6 +30,22 @@ type: Opaque
 stringData:
   # Replace before applying. Generate with:  openssl rand -base64 48
   token: "CHANGE-ME-generate-a-real-token"
+---
+# Two connection strings, because two roles do different jobs. The owner may
+# change a table and runs migrations; a request runs as the restricted role,
+# which owns nothing and reaches rows only through the policies.
+#
+# A cluster operator that already issues Postgres credentials, such as
+# CloudNativePG, generates a secret of its own. Point the Deployment at that
+# one and delete this.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: docsearch-db
+type: Opaque
+stringData:
+  ownerDSN: "postgres://docsearch_owner:CHANGE-ME@postgres:5432/docsearch"
+  appDSN: "postgres://docsearch_app:CHANGE-ME@postgres:5432/docsearch"
 ---
 # Exposed over Tailscale, never an Ingress. The tool surface includes a
 # filesystem path parameter; it must not have a public listener.

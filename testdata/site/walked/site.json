@@ -1,0 +1,21 @@
+{
+ "not_found": {
+  "file": "soft404.html",
+  "status": 200
+ },
+ "routes": {
+  "/handbook/": {
+   "file": "index.html"
+  },
+  "/handbook/closing": {
+   "file": "closing.html"
+  },
+  "/handbook/opening": {
+   "file": "opening.html"
+  },
+  "/handbook/opening/checks": {
+   "file": "opening-checks.html"
+  }
+ },
+ "seed": "/handbook/"
+}

@@ -1,28 +1,60 @@
-package urlguard
+package urlguard_test
 
 import (
 	"bufio"
-	"context"
 	"errors"
 	"net/netip"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/suite"
+
+	"github.com/bamsammich/docsearch/internal/urlguard"
+	"github.com/bamsammich/docsearch/internal/urlguard/mocks"
 )
 
-const vectorFile = "../../testdata/urlguard-addresses.txt"
+const (
+	vectorFile     = "../../testdata/urlguard-addresses.txt"
+	hostVectorFile = "../../testdata/urlguard-hosts.txt"
+	public         = "93.184.216.34"
+)
 
-// The shared table is the contract between this package and the Python guard.
-// A verdict that differs between them means one process fetches what the other
-// refuses, which is the drift the file exists to prevent.
-func TestAddrVerdictsMatchTheSharedTable(t *testing.T) {
-	f, err := os.Open(vectorFile)
-	if err != nil {
-		t.Fatalf("read shared vectors: %v", err)
+// GuardSuite covers which URLs the guard lets a fetcher reach. The resolver
+// is a mock, so a case that must be refused before any lookup fails if one
+// is made.
+type GuardSuite struct {
+	suite.Suite
+	resolver *mocks.MockResolver
+}
+
+func TestGuard(t *testing.T) { suite.Run(t, new(GuardSuite)) }
+
+func (s *GuardSuite) SetupTest() {
+	s.resolver = mocks.NewMockResolver(s.T())
+}
+
+// resolves answers host with addrs.
+func (s *GuardSuite) resolves(host string, addrs ...string) {
+	parsed := make([]netip.Addr, 0, len(addrs))
+	for _, a := range addrs {
+		parsed = append(parsed, netip.MustParseAddr(a))
 	}
-	defer func() { _ = f.Close() }()
+	s.resolver.EXPECT().LookupNetIP(mock.Anything, mock.Anything, host).Return(parsed, nil)
+}
 
-	seen := 0
+func (s *GuardSuite) check(raw string) (*urlguard.Target, error) {
+	return urlguard.Check(s.T().Context(), raw, s.resolver)
+}
+
+// vectors reads a shared table: one subject and its verdict per line, then
+// a reason.
+func (s *GuardSuite) vectors(path string) [][]string {
+	f, err := os.Open(path)
+	s.Require().NoError(err)
+	defer func() { s.NoError(f.Close()) }()
+	var rows [][]string
 	scan := bufio.NewScanner(f)
 	for scan.Scan() {
 		line := strings.TrimSpace(scan.Text())
@@ -30,140 +62,81 @@ func TestAddrVerdictsMatchTheSharedTable(t *testing.T) {
 			continue
 		}
 		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			t.Fatalf("malformed vector line: %q", line)
-		}
-		raw, want := fields[0], fields[1]
-		addr, err := netip.ParseAddr(raw)
-		if err != nil {
-			t.Errorf("%s: not parseable as an address: %v", raw, err)
-			continue
-		}
-		got := AddrAllowed(addr)
-		if got != (want == "allow") {
-			t.Errorf("AddrAllowed(%s) = %v, want %s (%s)",
-				raw, got, want, strings.Join(fields[2:], " "))
-		}
-		seen++
+		s.Require().GreaterOrEqual(len(fields), 2, "malformed vector line: %q", line)
+		rows = append(rows, fields)
 	}
-	if err := scan.Err(); err != nil {
-		t.Fatal(err)
-	}
-	// A truncated or unreadable file would otherwise pass by testing nothing.
-	if seen < 40 {
-		t.Fatalf("only %d vectors exercised; the shared table should hold far more", seen)
-	}
+	s.Require().NoError(scan.Err())
+	return rows
 }
 
-const hostVectorFile = "../../testdata/urlguard-hosts.txt"
+// The shared table is the contract between this package and the Python guard.
+// A verdict that differs between them means one process fetches what the other
+// refuses, which is the drift the file exists to prevent.
+func (s *GuardSuite) TestAddrVerdictsMatchTheSharedTable() {
+	rows := s.vectors(vectorFile)
+	for _, fields := range rows {
+		addr, err := netip.ParseAddr(fields[0])
+		s.Require().NoError(err, fields[0])
+		s.Equal(fields[1] == "allow", urlguard.AddrAllowed(addr),
+			"%s (%s)", fields[0], strings.Join(fields[2:], " "))
+	}
+	// A truncated or unreadable file would otherwise pass by testing nothing.
+	s.GreaterOrEqual(len(rows), 40, "the shared table should hold far more")
+}
 
 // The host half of the shared contract. Address parity had a file and host
 // parity did not, which is exactly where the two implementations drifted: a
 // trailing-dot difference, and a Unicode-separator bypass that let
 // "wiki．internal" past the suffix rule on the Python side.
-func TestHostVerdictsMatchTheSharedTable(t *testing.T) {
-	f, err := os.Open(hostVectorFile)
-	if err != nil {
-		t.Fatalf("read shared host vectors: %v", err)
+func (s *GuardSuite) TestHostVerdictsMatchTheSharedTable() {
+	rows := s.vectors(hostVectorFile)
+	for _, fields := range rows {
+		s.Equal(fields[1] == "allow", urlguard.HostAllowed(fields[0]),
+			"%q (%s)", fields[0], strings.Join(fields[2:], " "))
 	}
-	defer func() { _ = f.Close() }()
-
-	seen := 0
-	scan := bufio.NewScanner(f)
-	for scan.Scan() {
-		line := strings.TrimSpace(scan.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			t.Fatalf("malformed vector line: %q", line)
-		}
-		host, want := fields[0], fields[1]
-		if got := HostAllowed(host); got != (want == "allow") {
-			t.Errorf("HostAllowed(%q) = %v, want %s (%s)",
-				host, got, want, strings.Join(fields[2:], " "))
-		}
-		seen++
-	}
-	if err := scan.Err(); err != nil {
-		t.Fatal(err)
-	}
-	if seen < 25 {
-		t.Fatalf("only %d host vectors exercised; the shared table should hold more", seen)
-	}
+	s.GreaterOrEqual(len(rows), 25, "the shared table should hold more")
 }
 
-type fixedResolver map[string][]netip.Addr
-
-func (r fixedResolver) LookupNetIP(_ context.Context, _, host string) ([]netip.Addr, error) {
-	addrs, ok := r[host]
-	if !ok {
-		return nil, errors.New("no such host")
-	}
-	return addrs, nil
-}
-
-func mustAddrs(t *testing.T, ss ...string) []netip.Addr {
-	t.Helper()
-	out := make([]netip.Addr, 0, len(ss))
-	for _, s := range ss {
-		a, err := netip.ParseAddr(s)
-		if err != nil {
-			t.Fatal(err)
-		}
-		out = append(out, a)
-	}
-	return out
-}
-
-func TestPublicHostResolves(t *testing.T) {
-	res := fixedResolver{"docs.example.com": mustAddrs(t, "93.184.216.34")}
-	got, err := Check(context.Background(), "https://docs.example.com/guide", res)
-	if err != nil {
-		t.Fatalf("Check() error = %v, want nil", err)
-	}
-	if len(got.Addrs) != 1 || got.Addrs[0].String() != "93.184.216.34" {
-		t.Errorf("Addrs = %v, want the resolved public address", got.Addrs)
-	}
+func (s *GuardSuite) TestPublicHostResolves() {
+	s.resolves("docs.example.com", public)
+	got, err := s.check("https://docs.example.com/guide")
+	s.Require().NoError(err)
+	s.Equal([]netip.Addr{netip.MustParseAddr(public)}, got.Addrs)
 }
 
 // Accepting a host because one record is public leaves which address gets
 // dialled up to resolver ordering.
-func TestAHostResolvingToAnyBlockedAddressIsRefused(t *testing.T) {
+func (s *GuardSuite) TestAHostResolvingToAnyBlockedAddressIsRefused() {
 	for _, mixed := range [][]string{
-		{"93.184.216.34", "169.254.169.254"},
-		{"169.254.169.254", "93.184.216.34"},
-		{"93.184.216.34", "10.0.0.5"},
-		{"93.184.216.34", "::ffff:127.0.0.1"},
+		{public, "169.254.169.254"},
+		{"169.254.169.254", public},
+		{public, "10.0.0.5"},
+		{public, "::ffff:127.0.0.1"},
 	} {
-		res := fixedResolver{"docs.example.com": mustAddrs(t, mixed...)}
-		if _, err := Check(context.Background(), "https://docs.example.com", res); !errors.Is(err, ErrBlocked) {
-			t.Errorf("answers %v: error = %v, want ErrBlocked", mixed, err)
-		}
+		s.SetupTest()
+		s.resolves("docs.example.com", mixed...)
+		_, err := s.check("https://docs.example.com")
+		s.ErrorIs(err, urlguard.ErrBlocked, mixed)
 	}
 }
 
-func TestUnresolvableHostIsRefused(t *testing.T) {
-	res := fixedResolver{}
-	if _, err := Check(context.Background(), "https://nope.example.com", res); !errors.Is(err, ErrBlocked) {
-		t.Errorf("error = %v, want ErrBlocked", err)
-	}
+func (s *GuardSuite) TestUnresolvableHostIsRefused() {
+	s.resolver.EXPECT().LookupNetIP(mock.Anything, mock.Anything, "nope.example.com").
+		Return(nil, errors.New("no such host"))
+	_, err := s.check("https://nope.example.com")
+	s.ErrorIs(err, urlguard.ErrBlocked)
 }
 
-func TestEmptyAnswerIsRefused(t *testing.T) {
-	res := fixedResolver{"docs.example.com": {}}
-	if _, err := Check(context.Background(), "https://docs.example.com", res); !errors.Is(err, ErrBlocked) {
-		t.Errorf("error = %v, want ErrBlocked", err)
-	}
+func (s *GuardSuite) TestEmptyAnswerIsRefused() {
+	s.resolves("docs.example.com")
+	_, err := s.check("https://docs.example.com")
+	s.ErrorIs(err, urlguard.ErrBlocked)
 }
 
 // A literal is judged directly, so no lookup can move it.
-func TestAddressLiteralsAreJudgedWithoutResolving(t *testing.T) {
-	res := fixedResolver{}
-	if _, err := Check(context.Background(), "http://93.184.216.34/x", res); err != nil {
-		t.Errorf("public literal: error = %v, want nil", err)
-	}
+func (s *GuardSuite) TestAddressLiteralsAreJudgedWithoutResolving() {
+	_, err := s.check("http://" + public + "/x")
+	s.Require().NoError(err, "a public literal")
 	for _, raw := range []string{
 		"http://127.0.0.1/x",
 		"http://169.254.169.254/latest/meta-data/",
@@ -172,14 +145,12 @@ func TestAddressLiteralsAreJudgedWithoutResolving(t *testing.T) {
 		"http://10.0.0.1/x",
 		"http://100.64.1.1/x",
 	} {
-		if _, err := Check(context.Background(), raw, res); !errors.Is(err, ErrBlocked) {
-			t.Errorf("Check(%q) error = %v, want ErrBlocked", raw, err)
-		}
+		_, err := s.check(raw)
+		s.ErrorIs(err, urlguard.ErrBlocked, raw)
 	}
 }
 
-func TestOnlyHTTPSchemesAreFetched(t *testing.T) {
-	res := fixedResolver{"docs.example.com": mustAddrs(t, "93.184.216.34")}
+func (s *GuardSuite) TestOnlyHTTPSchemesAreFetched() {
 	for _, raw := range []string{
 		"file:///etc/passwd",
 		"ftp://docs.example.com/x",
@@ -188,65 +159,53 @@ func TestOnlyHTTPSchemesAreFetched(t *testing.T) {
 		"jar:https://docs.example.com/x!/y",
 		"//docs.example.com/x",
 	} {
-		if _, err := Check(context.Background(), raw, res); !errors.Is(err, ErrBlocked) {
-			t.Errorf("Check(%q) error = %v, want ErrBlocked", raw, err)
-		}
+		_, err := s.check(raw)
+		s.Require().ErrorIs(err, urlguard.ErrBlocked, raw)
 	}
 	for _, raw := range []string{"http://docs.example.com", "HTTPS://docs.example.com"} {
-		if _, err := Check(context.Background(), raw, res); err != nil {
-			t.Errorf("Check(%q) error = %v, want nil", raw, err)
-		}
+		s.SetupTest()
+		s.resolves("docs.example.com", public)
+		_, err := s.check(raw)
+		s.NoError(err, raw)
 	}
 }
 
 // Credentials in a URL are a common way to make a reader see one host while
 // the request goes to another.
-func TestCredentialsInTheURLAreRefused(t *testing.T) {
-	res := fixedResolver{"evil.example.com": mustAddrs(t, "93.184.216.34")}
-	if _, err := Check(context.Background(), "https://docs.example.com@evil.example.com/x", res); !errors.Is(err, ErrBlocked) {
-		t.Errorf("error = %v, want ErrBlocked", err)
-	}
+func (s *GuardSuite) TestCredentialsInTheURLAreRefused() {
+	_, err := s.check("https://docs.example.com@evil.example.com/x")
+	s.ErrorIs(err, urlguard.ErrBlocked)
 }
 
 // These names only ever mean a local network, and may resolve to anything at
-// all on a DNS the operator does not control.
-func TestLocalNameSpacesAreRefusedBeforeResolving(t *testing.T) {
-	res := fixedResolver{
-		"printer.local":  mustAddrs(t, "93.184.216.34"),
-		"wiki.internal":  mustAddrs(t, "93.184.216.34"),
-		"localhost":      mustAddrs(t, "93.184.216.34"),
-		"app.localhost":  mustAddrs(t, "93.184.216.34"),
-		"nas.home.arpa":  mustAddrs(t, "93.184.216.34"),
-		"docs.local.dev": mustAddrs(t, "93.184.216.34"),
-	}
+// all on a DNS the operator does not control, so they are refused before any
+// lookup is made.
+func (s *GuardSuite) TestLocalNameSpacesAreRefusedBeforeResolving() {
 	for _, host := range []string{
 		"printer.local", "wiki.internal", "localhost", "app.localhost", "nas.home.arpa",
 	} {
-		if _, err := Check(context.Background(), "https://"+host+"/x", res); !errors.Is(err, ErrBlocked) {
-			t.Errorf("host %q: error = %v, want ErrBlocked", host, err)
-		}
+		_, err := s.check("https://" + host + "/x")
+		s.Require().ErrorIs(err, urlguard.ErrBlocked, host)
 	}
 	// The suffix must match a label boundary, not a substring: local.dev is
 	// an ordinary public name.
-	if _, err := Check(context.Background(), "https://docs.local.dev/x", res); err != nil {
-		t.Errorf("docs.local.dev: error = %v, want nil", err)
-	}
+	s.resolves("docs.local.dev", public)
+	_, err := s.check("https://docs.local.dev/x")
+	s.NoError(err)
 }
 
-func TestTrailingDotDoesNotEvadeTheSuffixRule(t *testing.T) {
-	res := fixedResolver{"printer.local.": mustAddrs(t, "93.184.216.34")}
-	if _, err := Check(context.Background(), "https://printer.local./x", res); !errors.Is(err, ErrBlocked) {
-		t.Errorf("error = %v, want ErrBlocked for a rooted local name", err)
-	}
+func (s *GuardSuite) TestTrailingDotDoesNotEvadeTheSuffixRule() {
+	_, err := s.check("https://printer.local./x")
+	s.ErrorIs(err, urlguard.ErrBlocked)
 }
 
 // Every rejection must look the same, or the fetcher reports which internal
 // names exist.
-func TestRejectionDoesNotDiscloseWhy(t *testing.T) {
-	res := fixedResolver{
-		"private.example.com": mustAddrs(t, "10.0.0.1"),
-	}
-	var msgs []string
+func (s *GuardSuite) TestRejectionDoesNotDiscloseWhy() {
+	s.resolves("private.example.com", "10.0.0.1")
+	s.resolver.EXPECT().LookupNetIP(mock.Anything, mock.Anything, "absent.example.com").
+		Return(nil, errors.New("no such host"))
+	var messages []string
 	for _, raw := range []string{
 		"https://private.example.com/x", // resolves, but privately
 		"https://absent.example.com/x",  // does not resolve
@@ -254,15 +213,11 @@ func TestRejectionDoesNotDiscloseWhy(t *testing.T) {
 		"https://printer.local/x",       // refused on the name
 		"file:///etc/passwd",            // refused on the scheme
 	} {
-		_, err := Check(context.Background(), raw, res)
-		if err == nil {
-			t.Fatalf("Check(%q) unexpectedly succeeded", raw)
-		}
-		msgs = append(msgs, err.Error())
+		_, err := s.check(raw)
+		s.Require().Error(err, raw)
+		messages = append(messages, err.Error())
 	}
-	for i := 1; i < len(msgs); i++ {
-		if msgs[i] != msgs[0] {
-			t.Errorf("error messages differ and leak the reason:\n %q\n %q", msgs[0], msgs[i])
-		}
+	for _, m := range messages[1:] {
+		s.Equal(messages[0], m, "the messages differ and leak the reason")
 	}
 }

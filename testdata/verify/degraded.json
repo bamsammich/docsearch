@@ -1,0 +1,170 @@
+{
+ "report": {
+  "chunk_count": 412,
+  "chunks_with_images": 37,
+  "doc_id": "degraded-manual",
+  "findings": [
+   {
+    "code": "oversized",
+    "detail": "41 of 412 chunks (10%) exceed 1,200 tokens, which is where a retrieved chunk stops fitting a prompt window alongside the rest of a conversation and starts being truncated by whoever reads it.",
+    "severity": "degraded"
+   },
+   {
+    "code": "flat_hierarchy",
+    "detail": "388 of 412 chunks carry a one-level heading path, so a section filter can only ever name the document itself.",
+    "severity": "unusable"
+   }
+  ],
+  "format": "pdf",
+  "index_terms": 880,
+  "longest": [
+   {
+    "ordinal": 1,
+    "path": "4. Operation > 4.1 Step 1",
+    "tokens": 1602
+   },
+   {
+    "ordinal": 2,
+    "path": "4. Operation > 4.2 Step 2",
+    "tokens": 1591
+   },
+   {
+    "ordinal": 3,
+    "path": "4. Operation > 4.3 Step 3",
+    "tokens": 1580
+   },
+   {
+    "ordinal": 4,
+    "path": "4. Operation > 4.4 Step 4",
+    "tokens": 1569
+   },
+   {
+    "ordinal": 5,
+    "path": "4. Operation > 4.5 Step 5",
+    "tokens": 1558
+   },
+   {
+    "ordinal": 6,
+    "path": "4. Operation > 4.6 Step 6",
+    "tokens": 1547
+   },
+   {
+    "ordinal": 7,
+    "path": "4. Operation > 4.7 Step 7",
+    "tokens": 1536
+   },
+   {
+    "ordinal": 8,
+    "path": "4. Operation > 4.8 Step 8",
+    "tokens": 1525
+   },
+   {
+    "ordinal": 9,
+    "path": "4. Operation > 4.9 Step 9",
+    "tokens": 1514
+   },
+   {
+    "ordinal": 10,
+    "path": "4. Operation > 4.10 Step 10",
+    "tokens": 1503
+   }
+  ],
+  "missing_locator": 0,
+  "ordinal_gaps": [],
+  "page_count": 318,
+  "problems": [
+   "21 pages are covered by no chunk, so a search can never return them",
+   "2 index sections join no chunk"
+  ],
+  "scattered_sections": [],
+  "shortest": [
+   {
+    "ordinal": 201,
+    "path": "A. Appendix > A.1 Table 1",
+    "tokens": 67
+   },
+   {
+    "ordinal": 202,
+    "path": "A. Appendix > A.2 Table 2",
+    "tokens": 70
+   },
+   {
+    "ordinal": 203,
+    "path": "A. Appendix > A.3 Table 3",
+    "tokens": 73
+   },
+   {
+    "ordinal": 204,
+    "path": "A. Appendix > A.4 Table 4",
+    "tokens": 76
+   },
+   {
+    "ordinal": 205,
+    "path": "A. Appendix > A.5 Table 5",
+    "tokens": 79
+   },
+   {
+    "ordinal": 206,
+    "path": "A. Appendix > A.6 Table 6",
+    "tokens": 82
+   },
+   {
+    "ordinal": 207,
+    "path": "A. Appendix > A.7 Table 7",
+    "tokens": 85
+   },
+   {
+    "ordinal": 208,
+    "path": "A. Appendix > A.8 Table 8",
+    "tokens": 88
+   },
+   {
+    "ordinal": 209,
+    "path": "A. Appendix > A.9 Table 9",
+    "tokens": 91
+   },
+   {
+    "ordinal": 210,
+    "path": "A. Appendix > A.10 Table 10",
+    "tokens": 94
+   }
+  ],
+  "status": "ready",
+  "title": "A Manual With Findings",
+  "token_max": 1613,
+  "token_mean": 548,
+  "token_median": 511,
+  "token_min": 64,
+  "token_p95": 1204,
+  "total_tokens": 225776,
+  "uncovered_pages": [
+   40,
+   41,
+   42,
+   43,
+   44,
+   45,
+   46,
+   47,
+   48,
+   49,
+   50,
+   51,
+   52,
+   53,
+   54,
+   55,
+   56,
+   57,
+   58,
+   59,
+   60
+  ],
+  "unjoinable_index_sections": [
+   "7. Troubleshooting",
+   "8. Service"
+  ]
+ },
+ "text": "doc_id      degraded-manual\ntitle       A Manual With Findings\nformat      pdf   status: ready\npages       318\nchunks      412\ntokens      total=225,776  mean=548\n            min=64  median=511  p95=1204  max=1613\nimages      37 chunks reference at least one image\nindex       880 terms; 2 unjoinable\ngaps        21 pages covered by no chunk: 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51 ... (+9 more)\n\n10 longest chunks:\n    1602 tok  #1       4. Operation > 4.1 Step 1\n    1591 tok  #2       4. Operation > 4.2 Step 2\n    1580 tok  #3       4. Operation > 4.3 Step 3\n    1569 tok  #4       4. Operation > 4.4 Step 4\n    1558 tok  #5       4. Operation > 4.5 Step 5\n    1547 tok  #6       4. Operation > 4.6 Step 6\n    1536 tok  #7       4. Operation > 4.7 Step 7\n    1525 tok  #8       4. Operation > 4.8 Step 8\n    1514 tok  #9       4. Operation > 4.9 Step 9\n    1503 tok  #10      4. Operation > 4.10 Step 10\n\n10 shortest chunks:\n      67 tok  #201     A. Appendix > A.1 Table 1\n      70 tok  #202     A. Appendix > A.2 Table 2\n      73 tok  #203     A. Appendix > A.3 Table 3\n      76 tok  #204     A. Appendix > A.4 Table 4\n      79 tok  #205     A. Appendix > A.5 Table 5\n      82 tok  #206     A. Appendix > A.6 Table 6\n      85 tok  #207     A. Appendix > A.7 Table 7\n      88 tok  #208     A. Appendix > A.8 Table 8\n      91 tok  #209     A. Appendix > A.9 Table 9\n      94 tok  #210     A. Appendix > A.10 Table 10\n\nVERDICT     unusable - structure extraction effectively failed\n\n  [degraded] oversized\n      41 of 412 chunks (10%) exceed 1,200 tokens, which is where a retrieved chunk\n      stops fitting a prompt window alongside the rest of a conversation and\n      starts being truncated by whoever reads it.\n\n  [unusable] flat_hierarchy\n      388 of 412 chunks carry a one-level heading path, so a section filter can\n      only ever name the document itself.\n\nPROBLEMS:\n  - 21 pages are covered by no chunk, so a search can never return them\n  - 2 index sections join no chunk",
+ "verdict": "unusable"
+}

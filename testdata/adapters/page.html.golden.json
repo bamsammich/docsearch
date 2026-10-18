@@ -1,0 +1,199 @@
+{
+ "blocks": [
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Networking"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 0
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Session hosts share a show file .",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Networking",
+    "Session Setup"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 34
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "First, run:",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Networking",
+    "Session Setup"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 46
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "def hello():\n    print(\"hi\")",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Networking",
+    "Session Setup"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 75
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "A paragraph inside an item.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Networking",
+    "Session Setup"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 103
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Quoted advice.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Networking",
+    "Session Setup"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 118
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Returns a handle.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Networking",
+    "Session Setup"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 136
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "h = open()\nh.close()",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Networking",
+    "Session Setup"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 157
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Second cell",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Networking",
+    "Session Setup"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 169
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Term",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Networking",
+    "Session Setup"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 174
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Definition of the term.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Networking",
+    "Session Setup",
+    "Empty code"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 198
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "first()\n\nsecond()",
+   "url": null
+  }
+ ],
+ "diagnostics": {
+  "structure_source": "h1_h6_nesting"
+ },
+ "format": "html",
+ "index_terms": [],
+ "page_count": null,
+ "pages": {},
+ "title": "Network & Notes"
+}

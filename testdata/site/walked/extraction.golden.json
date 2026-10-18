@@ -1,0 +1,196 @@
+{
+ "blocks": [
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Handbook"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 0
+   },
+   "printed_page": null,
+   "section": "1",
+   "subdivision": false,
+   "text": "How the workshop runs, written down so nobody has to ask twice.",
+   "url": "{{ORIGIN}}/handbook/"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Handbook",
+    "Opening"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 64
+   },
+   "printed_page": null,
+   "section": "1",
+   "subdivision": false,
+   "text": "See opening .",
+   "url": "{{ORIGIN}}/handbook/"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Handbook",
+    "Closing"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 78
+   },
+   "printed_page": null,
+   "section": "1",
+   "subdivision": false,
+   "text": "See closing .",
+   "url": "{{ORIGIN}}/handbook/"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Handbook",
+    "Closing"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 92
+   },
+   "printed_page": null,
+   "section": "1",
+   "subdivision": false,
+   "text": "The rota has moved.",
+   "url": "{{ORIGIN}}/handbook/"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Handbook",
+    "Closing"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 112
+   },
+   "printed_page": null,
+   "section": "1",
+   "subdivision": false,
+   "text": "Unrelated: the shop .",
+   "url": "{{ORIGIN}}/handbook/"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Handbook",
+    "Opening",
+    "opening"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 134
+   },
+   "printed_page": null,
+   "section": "2.1.1",
+   "subdivision": false,
+   "text": "Unlock the side door, switch on the extraction and check the first aid kit is where it should be.",
+   "url": "{{ORIGIN}}/handbook/opening"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Handbook",
+    "Opening",
+    "opening"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 232
+   },
+   "printed_page": null,
+   "section": "2.1.1",
+   "subdivision": false,
+   "text": "Then read the checks .",
+   "url": "{{ORIGIN}}/handbook/opening"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Handbook",
+    "Closing",
+    "closing"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 255
+   },
+   "printed_page": null,
+   "section": "2.2.1",
+   "subdivision": false,
+   "text": "Sweep, empty the extraction, and leave the log on the bench for whoever opens tomorrow.",
+   "url": "{{ORIGIN}}/handbook/closing"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Opening",
+    "Checks"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 343
+   },
+   "printed_page": null,
+   "section": "4.1.1",
+   "subdivision": false,
+   "text": "Every powered machine is tested before the first person uses it, and the result goes in the log.",
+   "url": "{{ORIGIN}}/handbook/opening/checks"
+  }
+ ],
+ "diagnostics": {
+  "notes": [
+   "no sitemap or llms.txt; following links from fetched pages to depth 3",
+   "this site answers 200 for pages that do not exist; responses matching its not-found template are treated as unreachable",
+   "2 of 6 known page(s) could not be fetched (33%)",
+   "index_page places 75% of the page set",
+   "1 page(s) absent from index_page, placed by URL path"
+  ],
+  "site": {
+   "canonical_merges": 0,
+   "chrome_blocks_dropped": 0,
+   "chrome_distinct_blocks": 0,
+   "hierarchy_inferred": false,
+   "pages_declared": 6,
+   "pages_fetched": 4,
+   "pages_with_blocks": 4,
+   "placed_by_path": [
+    "{{ORIGIN}}/handbook/opening/checks"
+   ],
+   "seed": "{{ORIGIN}}/handbook/",
+   "unplaced_pages": [],
+   "unreachable": [
+    "{{ORIGIN}}/handbook/missing",
+    "{{ORIGIN}}/shop/"
+   ],
+   "unreachable_reasons": [
+    "{{ORIGIN}}/handbook/missing: soft 404: matches the site's not-found template",
+    "{{ORIGIN}}/shop/: soft 404: matches the site's not-found template"
+   ]
+  },
+  "structure_source": "index_page"
+ },
+ "format": "site",
+ "index_terms": [],
+ "page_count": null,
+ "pages": {},
+ "title": "Handbook"
+}

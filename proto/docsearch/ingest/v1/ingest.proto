@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+// Package docsearch.ingest.v1 is the typed API onto one ingest.
+//
+// Claude speaks MCP and cannot be asked to speak anything else, so MCP stays.
+// Every other client gets this instead of hand-built HTTP: the `docsearch`
+// CLI, `docsearch-sync` beside Paperless, and any later web UI through
+// Connect-Web.
+//
+// File bytes never travel in a message. An upload is a plain HTTP PUT to a
+// signed link, and the URL of what was uploaded is what arrives here.
+package docsearch.ingest.v1;
+
+import "docsearch/type/v1/common.proto";
+
+// Phase names the stage a progress report describes.
+enum Phase {
+  PHASE_UNSPECIFIED = 0;
+  PHASE_DISCOVER = 1;
+  PHASE_FETCH = 2;
+  PHASE_EXTRACT = 3;
+  PHASE_CHUNK = 4;
+  PHASE_INDEX = 5;
+}
+
+// Outcome says what an ingest did to the index.
+enum Outcome {
+  OUTCOME_UNSPECIFIED = 0;
+  // Ingested is a document the index did not hold.
+  OUTCOME_INGESTED = 1;
+  // Replaced is a document re-read at an address the index already held.
+  OUTCOME_REPLACED = 2;
+  // Unchanged is a source whose bytes are already indexed, under whatever
+  // address they were first read from.
+  OUTCOME_UNCHANGED = 3;
+}
+
+// IngestRequest names one source to read.
+message IngestRequest {
+  // Source is a path inside the configured library root, or the URL of a
+  // documentation site.
+  string source = 1;
+  // Title overrides the name the document is given. Empty takes the name the
+  // document gives itself.
+  string title = 2;
+  // Revalidate false re-chunks an already-crawled site without a single
+  // request. Ignored for a file.
+  bool revalidate = 3;
+}
+
+// Progress reports how far one phase has got.
+message Progress {
+  Phase phase = 1;
+  int64 current = 2;
+  // Total is 0 where nothing knows the total yet, which is ordinary while a
+  // crawl is still discovering pages.
+  int64 total = 3;
+}
+
+// Result is what one ingest did, sent once, last.
+message Result {
+  string doc_id = 1;
+  string title = 2;
+  int64 chunk_count = 3;
+  Outcome outcome = 4;
+  // Note explains an outcome the caller did not ask for, and is empty where
+  // the outcome speaks for itself.
+  string note = 5;
+  docsearch.type.v1.Quality quality = 6;
+  docsearch.type.v1.SourceKind source_kind = 7;
+  // Warnings is the structure report as it is persisted, so a client can show
+  // what `docsearch verify` would show without asking again.
+  string warnings = 8;
+  // Diagnostics is what the adapter observed while reading the source, as
+  // JSON: where the structure came from, how a table of contents compared
+  // with the body, how much of a site was reachable.
+  //
+  // JSON rather than a message per key, because the shape belongs to
+  // whichever adapter produced it. Typing it here would freeze every
+  // adapter's internals into the API, and a client shows these lines
+  // without reasoning about them.
+  string diagnostics = 9;
+  // Findings are what the structure report makes of those diagnostics, in
+  // the sentences it writes them as. The report grades what it reads, so a
+  // client that rendered `warnings` itself would be writing a second grader.
+  repeated string findings = 10;
+}
+
+// IngestResponse is one message of the stream: progress while the ingest
+// runs, and the result once.
+message IngestResponse {
+  oneof message {
+    Progress progress = 1;
+    Result result = 2;
+  }
+}
+
+// IngestService reads one source into the index.
+service IngestService {
+  // Ingest acquires, extracts, chunks and indexes one source, reporting
+  // progress as it goes.
+  //
+  // Streaming rather than a job id, because a caller that waits wants to see
+  // a 1,800-page manual advancing rather than poll for it. The queued path,
+  // for a caller that does not wait, is the worker.
+  //
+  // Cancelling the call cancels the ingest, and nothing it wrote survives.
+  rpc Ingest(IngestRequest) returns (stream IngestResponse) {}
+}

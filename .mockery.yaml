@@ -1,0 +1,86 @@
+# Mocks for the ports the service layer declares, so a service test states
+# what its collaborators did rather than standing up a database.
+#
+# Regenerate with `mise run generate`; the result is committed, and `mise run
+# check` fails on a port whose mock was not regenerated.
+all: false
+dir: "{{.InterfaceDir}}/mocks"
+filename: "{{.InterfaceName | snakecase}}.go"
+structname: "Mock{{.InterfaceName}}"
+pkgname: mocks
+packages:
+  github.com/bamsammich/docsearch/internal/service/ingest:
+    interfaces:
+      Repository:
+      Source:
+      Extractor:
+  github.com/bamsammich/docsearch/internal/api/connectapi:
+    interfaces:
+      Ingester:
+      Sources:
+      Documents:
+      Jobs:
+  github.com/bamsammich/docsearch/internal/service/job:
+    interfaces:
+      Queue:
+      Targets:
+  github.com/bamsammich/docsearch/internal/service/inspect:
+    interfaces:
+      Reader:
+      Formats:
+  github.com/bamsammich/docsearch/internal/service/document:
+    interfaces:
+      Repository:
+      Inspector:
+  github.com/bamsammich/docsearch/internal/service/worker:
+    interfaces:
+      Jobs:
+      Ingester:
+      Sources:
+      Accounts:
+  github.com/bamsammich/docsearch/internal/original:
+    interfaces:
+      Documents:
+      Uploads:
+  github.com/bamsammich/docsearch/internal/resource:
+    interfaces:
+      Reader:
+  github.com/bamsammich/docsearch/internal/resource/introspect:
+    interfaces:
+      Introspector:
+  github.com/bamsammich/docsearch/internal/account:
+    interfaces:
+      Store:
+  github.com/bamsammich/docsearch/internal/v1import:
+    interfaces:
+      Enqueuer:
+  github.com/bamsammich/docsearch/internal/upload:
+    interfaces:
+      Store:
+      Links:
+  github.com/bamsammich/docsearch/internal/docsync:
+    interfaces:
+      Paperless:
+      Library:
+      Uploader:
+  github.com/bamsammich/docsearch/internal/password:
+    interfaces:
+      Store:
+  github.com/bamsammich/docsearch/internal/urlguard:
+    interfaces:
+      Resolver:
+  # The generated Connect handlers, mocked for the client's tests, which
+  # serve them over real HTTP and state what each RPC answered.
+  github.com/bamsammich/docsearch/internal/api/docsearch/document/v1/documentv1connect:
+    config:
+      dir: internal/api/connectclient/mocks
+      include-auto-generated: true
+    interfaces:
+      DocumentServiceHandler:
+  github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1/ingestv1connect:
+    config:
+      dir: internal/api/connectclient/mocks
+      include-auto-generated: true
+    interfaces:
+      IngestServiceHandler:
+      JobServiceHandler:

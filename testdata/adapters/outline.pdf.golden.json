@@ -1,0 +1,107 @@
+{
+ "blocks": [
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Getting Started"
+   ],
+   "image_count": 0,
+   "locator": {
+    "page": 1,
+    "page_end": 1
+   },
+   "printed_page": 1,
+   "section": "1",
+   "subdivision": false,
+   "text": "The start notes cover amber and delta work.\nThe start notes cover birch and iris work.\nThe start notes cover cedar and birch work.\nThe start notes cover delta and grove work.\nThe start notes cover ember and lumen work.\nThe start notes cover fjord and ember work.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Getting Started",
+    "First Steps"
+   ],
+   "image_count": 0,
+   "locator": {
+    "page": 1,
+    "page_end": 1
+   },
+   "printed_page": 1,
+   "section": "1.1",
+   "subdivision": false,
+   "text": "The steps notes cover amber and delta work.\nThe steps notes cover birch and iris work.\nThe steps notes cover cedar and birch work.\nThe steps notes cover delta and grove work.\nThe steps notes cover ember and lumen work.\nThe steps notes cover fjord and ember work.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Configuration"
+   ],
+   "image_count": 0,
+   "locator": {
+    "page": 2,
+    "page_end": 2
+   },
+   "printed_page": 2,
+   "section": "2",
+   "subdivision": false,
+   "text": "The configuration notes cover amber and delta work.\nThe configuration notes cover birch and iris work.\nThe configuration notes cover cedar and birch work.\nThe configuration notes cover delta and grove work.\nThe configuration notes cover ember and lumen work.\nThe configuration notes cover fjord and ember work.\nThe configuration notes cover grove and juniper work.\nThe configuration notes cover harbor and cedar work.\nThe configuration notes cover iris and harbor work.\nThe configuration notes cover juniper and amber work.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Configuration",
+    "Advanced Options"
+   ],
+   "image_count": 0,
+   "locator": {
+    "page": 3,
+    "page_end": 3
+   },
+   "printed_page": 3,
+   "section": "2.1",
+   "subdivision": false,
+   "text": "The unmarked notes cover amber and delta work.\nThe unmarked notes cover birch and iris work.\nThe unmarked notes cover cedar and birch work.\nThe unmarked notes cover delta and grove work.\nThe unmarked notes cover ember and lumen work.\nThe unmarked notes cover fjord and ember work.\nThe unmarked notes cover grove and juniper work.\nThe unmarked notes cover harbor and cedar work.\nThe unmarked notes cover iris and harbor work.\nThe unmarked notes cover juniper and amber work.\nThe unmarked notes cover kestrel and fjord work.\nThe unmarked notes cover lumen and kestrel work.",
+   "url": null
+  }
+ ],
+ "diagnostics": {
+  "body_font_size": 10.0,
+  "boilerplate_lines_stripped": 0,
+  "figures": {
+   "distinct_xrefs": 0,
+   "dropped_as_duplicate_on_page": 0,
+   "dropped_as_furniture": 0,
+   "dropped_as_too_small": 0,
+   "figures_kept": 0,
+   "furniture_xrefs": [],
+   "pages_with_no_figure": 3,
+   "placements_total": 0
+  },
+  "heading_font_sizes": [],
+  "outline_placement": {
+   "contents_pages_skipped": 0,
+   "entries": 4,
+   "located_by_title": 3,
+   "placed_at_page_top": 1
+  },
+  "printed_page_offset": 0,
+  "structure_source": "outline",
+  "toc_entries": 4
+ },
+ "format": "pdf",
+ "index_terms": [],
+ "page_count": 3,
+ "pages": {
+  "1": "Getting Started\nThe start notes cover amber and delta work.\nThe start notes cover birch and iris work.\nThe start notes cover cedar and birch work.\nThe start notes cover delta and grove work.\nThe start notes cover ember and lumen work.\nThe start notes cover fjord and ember work.\nFirst Steps\nThe steps notes cover amber and delta work.\nThe steps notes cover birch and iris work.\nThe steps notes cover cedar and birch work.\nThe steps notes cover delta and grove work.\nThe steps notes cover ember and lumen work.\nThe steps notes cover fjord and ember work.\n",
+  "2": "Configuration\nThe configuration notes cover amber and delta work.\nThe configuration notes cover birch and iris work.\nThe configuration notes cover cedar and birch work.\nThe configuration notes cover delta and grove work.\nThe configuration notes cover ember and lumen work.\nThe configuration notes cover fjord and ember work.\nThe configuration notes cover grove and juniper work.\nThe configuration notes cover harbor and cedar work.\nThe configuration notes cover iris and harbor work.\nThe configuration notes cover juniper and amber work.\n",
+  "3": "The unmarked notes cover amber and delta work.\nThe unmarked notes cover birch and iris work.\nThe unmarked notes cover cedar and birch work.\nThe unmarked notes cover delta and grove work.\nThe unmarked notes cover ember and lumen work.\nThe unmarked notes cover fjord and ember work.\nThe unmarked notes cover grove and juniper work.\nThe unmarked notes cover harbor and cedar work.\nThe unmarked notes cover iris and harbor work.\nThe unmarked notes cover juniper and amber work.\nThe unmarked notes cover kestrel and fjord work.\nThe unmarked notes cover lumen and kestrel work.\n"
+ },
+ "title": "outline"
+}

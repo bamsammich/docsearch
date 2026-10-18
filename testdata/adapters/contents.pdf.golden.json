@@ -1,0 +1,113 @@
+{
+ "blocks": [
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "1. Introduction"
+   ],
+   "image_count": 0,
+   "locator": {
+    "page": 2,
+    "page_end": 2
+   },
+   "printed_page": 2,
+   "section": "1",
+   "subdivision": false,
+   "text": "The introduction notes cover amber and delta work.\nThe introduction notes cover birch and iris work.\nThe introduction notes cover cedar and birch work.\nThe introduction notes cover delta and grove work.\nThe introduction notes cover ember and lumen work.\nThe introduction notes cover fjord and ember work.\nThe introduction notes cover grove and juniper work.\nThe introduction notes cover harbor and cedar work.\nThe introduction notes cover iris and harbor work.\nThe introduction notes cover juniper and amber work.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "2. Controls"
+   ],
+   "image_count": 0,
+   "locator": {
+    "page": 3,
+    "page_end": 3
+   },
+   "printed_page": 3,
+   "section": "2",
+   "subdivision": false,
+   "text": "The controls notes cover amber and delta work.\nThe controls notes cover birch and iris work.\nThe controls notes cover cedar and birch work.\nThe controls notes cover delta and grove work.\nThe controls notes cover ember and lumen work.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "2. Controls",
+    "2.1. Faders"
+   ],
+   "image_count": 0,
+   "locator": {
+    "page": 3,
+    "page_end": 3
+   },
+   "printed_page": 3,
+   "section": "2.1",
+   "subdivision": false,
+   "text": "The faders notes cover amber and delta work.\nThe faders notes cover birch and iris work.\nThe faders notes cover cedar and birch work.\nThe faders notes cover delta and grove work.\nThe faders notes cover ember and lumen work.",
+   "url": null
+  }
+ ],
+ "diagnostics": {
+  "body_font_size": 10.0,
+  "body_headings_found": 4,
+  "boilerplate_lines_stripped": 0,
+  "candidates_rejected_by_ordering": [],
+  "cross_validation": {
+   "body_sections": 4,
+   "detected_more_than_once": [],
+   "in_body_not_in_toc": [],
+   "in_toc_not_in_body": [],
+   "toc_sections": 4
+  },
+  "figures": {
+   "distinct_xrefs": 0,
+   "dropped_as_duplicate_on_page": 0,
+   "dropped_as_furniture": 0,
+   "dropped_as_too_small": 0,
+   "figures_kept": 0,
+   "furniture_xrefs": [],
+   "pages_with_no_figure": 4,
+   "placements_total": 0
+  },
+  "heading_font_sizes": [
+   16.0
+  ],
+  "index": {
+   "entries": 4,
+   "refs_resolving_to_known_sections": 3,
+   "start_page": 4
+  },
+  "printed_page_offset": 0,
+  "structure_source": "front_toc",
+  "toc_entries": 4
+ },
+ "format": "pdf",
+ "index_terms": [
+  [
+   "channel strip",
+   "2.1"
+  ],
+  [
+   "master",
+   "2"
+  ],
+  [
+   "master",
+   "2.1"
+  ]
+ ],
+ "page_count": 4,
+ "pages": {
+  "1": "Contents\n1.\nIntroduction\n2\n2.\nControls\n3\n2.1.\nFaders\n3\n3.\nIndex\n4\n",
+  "2": "1. Introduction\nThe introduction notes cover amber and delta work.\nThe introduction notes cover birch and iris work.\nThe introduction notes cover cedar and birch work.\nThe introduction notes cover delta and grove work.\nThe introduction notes cover ember and lumen work.\nThe introduction notes cover fjord and ember work.\nThe introduction notes cover grove and juniper work.\nThe introduction notes cover harbor and cedar work.\nThe introduction notes cover iris and harbor work.\nThe introduction notes cover juniper and amber work.\n",
+  "3": "2. Controls\nThe controls notes cover amber and delta work.\nThe controls notes cover birch and iris work.\nThe controls notes cover cedar and birch work.\nThe controls notes cover delta and grove work.\nThe controls notes cover ember and lumen work.\n2.1. Faders\nThe faders notes cover amber and delta work.\nThe faders notes cover birch and iris work.\nThe faders notes cover cedar and birch work.\nThe faders notes cover delta and grove work.\nThe faders notes cover ember and lumen work.\n",
+  "4": "3. Index\nchannel strip\n2.1.\nmaster\n2. 2.1.\nunknown term\n9.\n"
+ },
+ "title": "contents"
+}

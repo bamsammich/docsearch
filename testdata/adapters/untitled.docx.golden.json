@@ -1,0 +1,80 @@
+{
+ "blocks": [
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Introduction"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 0
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "The console stores cues.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Introduction",
+    "Playback"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 25
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Press Go\tto fire\nthe next cue.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Introduction",
+    "Playback",
+    "",
+    "Deep section"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 56
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Nested below a skipped level.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Appendix"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 86
+   },
+   "printed_page": null,
+   "section": null,
+   "subdivision": false,
+   "text": "Last words.",
+   "url": null
+  }
+ ],
+ "diagnostics": {
+  "structure_source": "heading_styles"
+ },
+ "format": "docx",
+ "index_terms": [],
+ "page_count": null,
+ "pages": {},
+ "title": "From Core Properties"
+}

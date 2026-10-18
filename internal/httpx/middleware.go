@@ -82,7 +82,8 @@ func RequireAllowedOrigin(allowed []string, next http.Handler) http.Handler {
 
 // LogRequests emits one structured line per request.
 //
-// It records method, path, tool name, duration and outcome. It never records
+// It records method, path, tool name, Origin, duration and outcome. The
+// Origin is what tells an operator why a browser was refused. It never records
 // the Authorization header or the request body, so a bearer token and the
 // full text of a query stay out of the log.
 func LogRequests(log *slog.Logger, next http.Handler) http.Handler {
@@ -92,8 +93,9 @@ func LogRequests(log *slog.Logger, next http.Handler) http.Handler {
 		next.ServeHTTP(rec, r)
 		log.Info("request",
 			"method", r.Method,
-			"path", r.URL.Path,
+			"path", redact(r.URL.Path),
 			"tool", r.Header.Get("MCP-Tool-Name"),
+			"origin", r.Header.Get("Origin"),
 			"session", r.Header.Get("Mcp-Session-Id"),
 			"status", rec.status,
 			"duration_ms", time.Since(start).Milliseconds(),
@@ -116,4 +118,19 @@ func (r *statusRecorder) Flush() {
 	if f, ok := r.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// secretPaths are path prefixes whose next segment is a credential: a signed
+// upload link carries its token in the path, and a log is the wrong place
+// for a working credential.
+var secretPaths = []string{"/upload/"}
+
+// redact replaces a credential in a path with a placeholder.
+func redact(path string) string {
+	for _, prefix := range secretPaths {
+		if rest, ok := strings.CutPrefix(path, prefix); ok && rest != "" {
+			return prefix + "<redacted>"
+		}
+	}
+	return path
 }

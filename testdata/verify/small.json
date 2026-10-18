@@ -1,0 +1,141 @@
+{
+ "report": {
+  "chunk_count": 11,
+  "chunks_with_images": 0,
+  "doc_id": "short-note",
+  "findings": [],
+  "format": "md",
+  "index_terms": 0,
+  "longest": [
+   {
+    "ordinal": 1,
+    "path": "Notes > Part 1",
+    "tokens": 600
+   },
+   {
+    "ordinal": 2,
+    "path": "Notes > Part 2",
+    "tokens": 560
+   },
+   {
+    "ordinal": 3,
+    "path": "Notes > Part 3",
+    "tokens": 520
+   },
+   {
+    "ordinal": 4,
+    "path": "Notes > Part 4",
+    "tokens": 480
+   },
+   {
+    "ordinal": 5,
+    "path": "Notes > Part 5",
+    "tokens": 440
+   },
+   {
+    "ordinal": 6,
+    "path": "Notes > Part 6",
+    "tokens": 400
+   },
+   {
+    "ordinal": 7,
+    "path": "Notes > Part 7",
+    "tokens": 360
+   },
+   {
+    "ordinal": 8,
+    "path": "Notes > Part 8",
+    "tokens": 320
+   },
+   {
+    "ordinal": 9,
+    "path": "Notes > Part 9",
+    "tokens": 280
+   },
+   {
+    "ordinal": 10,
+    "path": "Notes > Part 10",
+    "tokens": 240
+   },
+   {
+    "ordinal": 11,
+    "path": "Notes > Part 11",
+    "tokens": 200
+   }
+  ],
+  "missing_locator": 0,
+  "ordinal_gaps": [],
+  "page_count": null,
+  "problems": [],
+  "scattered_sections": [],
+  "shortest": [
+   {
+    "ordinal": 1,
+    "path": "Notes > Part 1",
+    "tokens": 102
+   },
+   {
+    "ordinal": 2,
+    "path": "Notes > Part 2",
+    "tokens": 114
+   },
+   {
+    "ordinal": 3,
+    "path": "Notes > Part 3",
+    "tokens": 126
+   },
+   {
+    "ordinal": 4,
+    "path": "Notes > Part 4",
+    "tokens": 138
+   },
+   {
+    "ordinal": 5,
+    "path": "Notes > Part 5",
+    "tokens": 150
+   },
+   {
+    "ordinal": 6,
+    "path": "Notes > Part 6",
+    "tokens": 162
+   },
+   {
+    "ordinal": 7,
+    "path": "Notes > Part 7",
+    "tokens": 174
+   },
+   {
+    "ordinal": 8,
+    "path": "Notes > Part 8",
+    "tokens": 186
+   },
+   {
+    "ordinal": 9,
+    "path": "Notes > Part 9",
+    "tokens": 198
+   },
+   {
+    "ordinal": 10,
+    "path": "Notes > Part 10",
+    "tokens": 210
+   },
+   {
+    "ordinal": 11,
+    "path": "Notes > Part 11",
+    "tokens": 222
+   }
+  ],
+  "status": "ready",
+  "title": "Eleven Chunks",
+  "token_max": 640,
+  "token_mean": 268,
+  "token_median": 240,
+  "token_min": 90,
+  "token_p95": 602,
+  "total_tokens": 2948,
+  "uncovered_pages": [],
+  "unjoinable_index_sections": []
+ },
+ "text": "doc_id      short-note\ntitle       Eleven Chunks\nformat      md   status: ready\npages       None\nchunks      11\ntokens      total=2,948  mean=268\n            min=90  median=240  p95=602  max=640\nimages      0 chunks reference at least one image\ngaps        none - every page is covered by a chunk\n\n10 longest chunks:\n     600 tok  #1       Notes > Part 1\n     560 tok  #2       Notes > Part 2\n     520 tok  #3       Notes > Part 3\n     480 tok  #4       Notes > Part 4\n     440 tok  #5       Notes > Part 5\n     400 tok  #6       Notes > Part 6\n     360 tok  #7       Notes > Part 7\n     320 tok  #8       Notes > Part 8\n     280 tok  #9       Notes > Part 9\n     240 tok  #10      Notes > Part 10\n     200 tok  #11      Notes > Part 11\n\n10 shortest chunks:\n     102 tok  #1       Notes > Part 1\n     114 tok  #2       Notes > Part 2\n     126 tok  #3       Notes > Part 3\n     138 tok  #4       Notes > Part 4\n     150 tok  #5       Notes > Part 5\n     162 tok  #6       Notes > Part 6\n     174 tok  #7       Notes > Part 7\n     186 tok  #8       Notes > Part 8\n     198 tok  #9       Notes > Part 9\n     210 tok  #10      Notes > Part 10\n     222 tok  #11      Notes > Part 11\n\nVERDICT     good - chunking looks healthy\n            (only 11 chunks; below 25 the distribution is too small to grade)\n\nNo structural problems detected.",
+ "verdict": "good"
+}

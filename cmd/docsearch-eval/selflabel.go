@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bamsammich/docsearch/internal/store"
+	"github.com/bamsammich/docsearch/internal/pgstore"
 )
 
 // Self-labelled retrieval probe.
@@ -36,7 +36,7 @@ const selfLabelTerms = 4
 // who knows roughly what a section is called and remembers a distinctive word
 // from it. Longest-first because long terms are the most discriminating ones
 // BM25 has to work with; drawing common short words would measure little.
-func generateQuery(c store.SampledChunk) string {
+func generateQuery(c pgstore.SampledChunk) string {
 	leaf := c.HeadingPath
 	if i := strings.LastIndex(leaf, " > "); i >= 0 {
 		leaf = leaf[i+3:]
@@ -67,7 +67,7 @@ type selfLabelResult struct {
 	hits    map[int]int // depth -> count
 }
 
-func runSelfLabel(ctx context.Context, st *store.Store) {
+func runSelfLabel(ctx context.Context, st *pgstore.Store) {
 	fmt.Println("========================================================================")
 	fmt.Println("SELF-LABELLED RETRIEVAL PROBE")
 	fmt.Println("========================================================================")
@@ -94,54 +94,82 @@ func runSelfLabel(ctx context.Context, st *store.Store) {
 		fmt.Println("error:", err)
 		return
 	}
-	depths := []int{1, 3, 8, 20}
 	var results []selfLabelResult
-
 	for _, d := range docs {
-		total := 0
-		if d.ChunkCount != nil {
-			total = *d.ChunkCount
-		}
-		stride := 1
-		if total > selfLabelSample {
-			stride = total / selfLabelSample
-		}
-		sample, err := st.SampleChunks(ctx, d.DocID, stride)
+		res, err := probe(ctx, st, d.DocID, chunkCountOf(d))
 		if err != nil {
 			fmt.Printf("\n%s: error: %v\n", d.DocID, err)
 			continue
 		}
-		res := selfLabelResult{docID: d.DocID, hits: map[int]int{}}
-		for _, c := range sample {
-			q := generateQuery(c)
-			// A chunk with too little distinctive text to form a query cannot
-			// be probed. Counted rather than dropped: a corpus where many
-			// chunks are unprobeable is itself the finding.
-			if len(wordsOf(q)) < 2 {
-				res.skipped++
-				continue
-			}
-			res.total++
-			hits, err := st.Search(ctx, store.SearchParams{
-				Query: q, DocID: d.DocID, K: 20,
-			})
-			if err != nil {
-				continue
-			}
-			for i, h := range hits {
-				if h.ChunkID == c.ChunkID {
-					for _, k := range depths {
-						if i+1 <= k {
-							res.hits[k]++
-						}
-					}
-					break
-				}
-			}
-		}
 		results = append(results, res)
 	}
+	reportRecall(results)
+	reportVerdicts(results)
+}
 
+// depths are the ranks recall is reported at.
+var depths = []int{1, 3, 8, 20}
+
+func chunkCountOf(d pgstore.Document) int {
+	if d.ChunkCount == nil {
+		return 0
+	}
+	return *d.ChunkCount
+}
+
+// probe searches one document for a sample of its own chunks, using a query
+// built from each chunk's heading and body.
+func probe(
+	ctx context.Context,
+	st *pgstore.Store,
+	docID string,
+	chunks int,
+) (selfLabelResult, error) {
+	stride := 1
+	if chunks > selfLabelSample {
+		stride = chunks / selfLabelSample
+	}
+	sample, err := st.SampleChunks(ctx, docID, stride)
+	if err != nil {
+		return selfLabelResult{}, err
+	}
+	res := selfLabelResult{docID: docID, hits: map[int]int{}}
+	for _, c := range sample {
+		q := generateQuery(c)
+		// A chunk with too little distinctive text to form a query cannot be
+		// probed. Counted rather than dropped: a corpus where many chunks
+		// are unprobeable is itself the finding.
+		if len(wordsOf(q)) < 2 {
+			res.skipped++
+			continue
+		}
+		res.total++
+		hits, err := st.Search(ctx, pgstore.SearchParams{Query: q, DocID: docID, K: 20})
+		if err != nil {
+			continue
+		}
+		record(&res, hits, c.ChunkID)
+	}
+	return res, nil
+}
+
+// record counts the depths a chunk came back within, or none where the
+// search never returned it.
+func record(res *selfLabelResult, hits []pgstore.SearchResult, want int64) {
+	for i, h := range hits {
+		if h.ChunkID != want {
+			continue
+		}
+		for _, k := range depths {
+			if i+1 <= k {
+				res.hits[k]++
+			}
+		}
+		return
+	}
+}
+
+func reportRecall(results []selfLabelResult) {
 	fmt.Println("\n--- round-trip recall ---")
 	fmt.Printf("  %-44s %5s %6s %6s %6s %6s\n", "document", "n", "@1", "@3", "@8", "@20")
 	for _, r := range results {
@@ -159,7 +187,11 @@ func runSelfLabel(ctx context.Context, st *store.Store) {
 				"", r.skipped)
 		}
 	}
+}
 
+// reportVerdicts says what each document's recall at depth 8 means, in the
+// terms an operator can act on.
+func reportVerdicts(results []selfLabelResult) {
 	fmt.Println()
 	for _, r := range results {
 		if r.total == 0 {

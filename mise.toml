@@ -1,51 +1,92 @@
 [tools]
-python = "3.13"
-uv = "latest"
 go = "1.26"
-golangci-lint = "latest"
+golangci-lint = "2.13.2"
 sqlc = "1.31.1"
+lefthook = "2.1.14"
+mockery = "3.8.0"
+buf = "1.73.0"
+protoc-gen-go = "1.36.12"
+protoc-gen-connect-go = "1.21.0"
+node = "22"
 
-# uv owns .venv entirely (`uv sync` / `uv run`); mise only supplies the
-# python and uv binaries so the venv is built against a pinned interpreter.
 [env]
 DOCSEARCH_DB = "{{config_root}}/var/docsearch.db"
 DOCSEARCH_ROOT = "{{config_root}}/var/library"
 
 [tasks.setup]
-description = "Install Python deps and Go modules"
+description = "Install Go modules and the git hooks"
 run = [
-  "uv sync",
   "go mod download",
+  "lefthook install",
+]
+
+[tasks.check]
+description = "Everything CI runs, before a push"
+run = [
+  # A fresh lint cache: a stale one reported no issues for a whole package
+  # that CI then refused.
+  "GOLANGCI_LINT_CACHE=$(mktemp -d) mise run lint",
+  "go mod tidy -diff",
+  "sqlc diff",
+  "buf lint",
+  "buf format --diff --exit-code",
+  # Everything generated is regenerated and compared with what was there, so
+  # a source edited without regenerating fails here rather than at a test
+  # that breaks somewhere else.
+  "scripts/generated-is-current.sh",
+  "mise run test",
+  "mise run web:check",
 ]
 
 [tasks.lint]
-description = "Lint Python and Go"
-run = [
-  "uv run ruff check .",
-  "uv run ruff format --check .",
-  "uv run mypy python/docsearch",
-  "golangci-lint run ./...",
-]
+description = "Lint Go"
+run = ["golangci-lint run ./..."]
 
 [tasks.fmt]
-description = "Format Python and Go"
-run = [
-  "uv run ruff format .",
-  "uv run ruff check --fix .",
-  "gofmt -w .",
-]
+description = "Format Go"
+run = ["golangci-lint fmt ./..."]
 
 [tasks.generate]
-description = "Regenerate the Go query layer from python/docsearch/schema.sql"
-run = "sqlc generate"
+description = "Regenerate the migrations, schema snapshot, query layer, mocks and proto output"
+run = [
+  # What the migrations add up to, for a reviewer rather than for the code.
+  "go run ./scripts/schema-snapshot",
+  "sqlc generate",
+  "mockery",
+  "buf generate",
+]
 
 [tasks.test]
-description = "Run Python and Go unit tests"
+description = "Run the Go tests"
+run = ["go test ./..."]
+
+[tasks.web]
+description = "Build the library UI that docsearch-server embeds"
+dir = "web"
 run = [
-  "uv run pytest -q",
-  "go test ./...",
+  "npm ci --no-audit --no-fund",
+  "npm run build",
+]
+
+[tasks."web:check"]
+description = "Type-check and test the library UI, and check its generated client is current"
+dir = "web"
+run = [
+  "npm ci --no-audit --no-fund",
+  "npm run check",
+  "npm test",
+  # The TypeScript client is generated from the same proto as the Go one.
+  "npm run generate",
+  "git diff --exit-code -- src/gen",
 ]
 
 [tasks.build]
-description = "Build the MCP server binary"
-run = "go build -o bin/docsearch-mcp ./cmd/docsearch-mcp"
+description = "Build the server, worker, CLI and Paperless sync binaries"
+# The server embeds the UI, so it is built first.
+depends = ["web"]
+run = [
+  "go build -o bin/docsearch-server ./cmd/docsearch-server",
+  "go build -o bin/docsearch-worker ./cmd/docsearch-worker",
+  "go build -o bin/docsearch ./cmd/docsearch",
+  "go build -o bin/docsearch-sync ./cmd/docsearch-sync",
+]

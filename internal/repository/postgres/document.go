@@ -1,0 +1,279 @@
+package postgres
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/bamsammich/docsearch/internal/domain"
+	"github.com/bamsammich/docsearch/internal/pgsession"
+	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
+	"github.com/bamsammich/docsearch/internal/service/document"
+)
+
+// ErrNotFound reports a document the index does not hold.
+var ErrNotFound = errors.New("no such document")
+
+// Documents reads stored documents for verification and reporting.
+type Documents struct {
+	db *sql.DB
+	q  *pgdbgen.Queries
+	// userID is the library every statement here reads and writes. Bound
+	// once, because a repository serves one request and a request belongs
+	// to one user.
+	userID string
+}
+
+// NewDocuments reads through db.
+func NewDocuments(db *sql.DB, userID string) *Documents {
+	return &Documents{db: db, q: pgdbgen.New(db), userID: userID}
+}
+
+// Get is one document whatever its status, because verification has to be
+// able to look at a document that never became ready.
+func (d *Documents) Get(ctx context.Context, docID string) (*document.Document, error) {
+	row, err := pgsession.Read(ctx, d.db, d.q, d.userID,
+		func(q *pgdbgen.Queries) (pgdbgen.DocumentByIDRow, error) {
+			return q.DocumentByID(ctx, docID)
+		})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, docID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", docID, err)
+	}
+	doc := document.Document{
+		PageCount:  intOf(row.PageCount),
+		ChunkCount: intOf(row.ChunkCount),
+		DocID:      row.DocID,
+		Title:      row.Title,
+		Format:     row.Format,
+		SourceKind: sourceKind(row.SourceKind),
+		Status:     row.Status,
+		Source:     row.SourcePath,
+		IngestedAt: timeOf(row.IngestedAt),
+	}
+	doc.Quality, doc.Warnings = domain.Summary(row.Warnings.String)
+	return &doc, nil
+}
+
+// List is every ready document.
+func (d *Documents) List(ctx context.Context) ([]document.Document, error) {
+	rows, err := pgsession.Read(ctx, d.db, d.q, d.userID,
+		func(q *pgdbgen.Queries) ([]pgdbgen.ListReadyDocumentsRow, error) {
+			return q.ListReadyDocuments(ctx)
+		})
+	if err != nil {
+		return nil, fmt.Errorf("list documents: %w", err)
+	}
+	out := make([]document.Document, 0, len(rows))
+	for _, row := range rows {
+		doc := document.Document{
+			PageCount:  intOf(row.PageCount),
+			ChunkCount: intOf(row.ChunkCount),
+			DocID:      row.DocID,
+			Title:      row.Title,
+			Format:     row.Format,
+			SourceKind: sourceKind(row.SourceKind),
+			Status:     "ready",
+			Source:     row.SourcePath,
+			IngestedAt: timeOf(row.IngestedAt),
+		}
+		doc.Quality, doc.Warnings = domain.Summary(row.Warnings.String)
+		out = append(out, doc)
+	}
+	return out, nil
+}
+
+// Chunks are a document's chunks in ordinal order.
+func (d *Documents) Chunks(ctx context.Context, docID string) ([]domain.Chunk, error) {
+	rows, err := pgsession.Read(ctx, d.db, d.q, d.userID,
+		func(q *pgdbgen.Queries) ([]pgdbgen.DocumentChunksRow, error) {
+			return q.DocumentChunks(ctx, docID)
+		})
+	if err != nil {
+		return nil, fmt.Errorf("read the chunks of %s: %w", docID, err)
+	}
+	out := make([]domain.Chunk, 0, len(rows))
+	for _, row := range rows {
+		var kind domain.ChunkKind
+		if err := kind.UnmarshalText([]byte(row.Kind)); err != nil {
+			return nil, fmt.Errorf("chunk %d of %s: %w", row.Ordinal, docID, err)
+		}
+		out = append(out, domain.Chunk{
+			Section:          stringOf(row.Section),
+			PageStart:        intOf(row.PageStart),
+			PageEnd:          intOf(row.PageEnd),
+			PrintedPageStart: intOf(row.PrintedPageStart),
+			URL:              stringOf(row.Url),
+			Fragment:         stringOf(row.Fragment),
+			HeadingPath:      row.HeadingPath,
+			Text:             row.Text,
+			Ordinal:          int(row.Ordinal),
+			ImageCount:       int(row.ImageCount),
+			Kind:             kind,
+		})
+	}
+	return out, nil
+}
+
+// Passages are the chunks whose ordinals run from from through to.
+func (d *Documents) Passages(
+	ctx context.Context,
+	docID string,
+	from, to int,
+) ([]document.Passage, error) {
+	rows, err := pgsession.Read(ctx, d.db, d.q, d.userID,
+		func(q *pgdbgen.Queries) ([]pgdbgen.ContextChunksRow, error) {
+			return q.ContextChunks(ctx, pgdbgen.ContextChunksParams{
+				DocID:     docID,
+				Ordinal:   pgsession.Narrow(from),
+				Ordinal_2: pgsession.Narrow(to),
+			})
+		})
+	if err != nil {
+		return nil, fmt.Errorf("read chunks %d to %d of %s: %w", from, to, docID, err)
+	}
+	out := make([]document.Passage, len(rows))
+	for i, row := range rows {
+		out[i] = document.Passage{
+			Section:     stringOf(row.Section),
+			PageStart:   intOf(row.PageStart),
+			URL:         stringOf(row.Url),
+			Fragment:    stringOf(row.Fragment),
+			HeadingPath: row.HeadingPath,
+			Text:        row.Text,
+			ID:          row.ID,
+			Ordinal:     int(row.Ordinal),
+		}
+	}
+	return out, nil
+}
+
+// ChunkOrdinal is where a chunk sits in its document. A chunk the document
+// does not hold is reported as not found.
+func (d *Documents) ChunkOrdinal(ctx context.Context, docID string, chunkID int64) (int, error) {
+	ordinal, err := pgsession.Read(ctx, d.db, d.q, d.userID,
+		func(q *pgdbgen.Queries) (int32, error) {
+			return q.ChunkOrdinal(ctx, pgdbgen.ChunkOrdinalParams{ID: chunkID, DocID: docID})
+		})
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, fmt.Errorf("%w: chunk %d of %s", ErrNotFound, chunkID, docID)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("find chunk %d of %s: %w", chunkID, docID, err)
+	}
+	return int(ordinal), nil
+}
+
+// IndexTermSections are the distinct sections a back-of-book index points at.
+func (d *Documents) IndexTermSections(ctx context.Context, docID string) ([]string, error) {
+	sections, err := pgsession.Read(ctx, d.db, d.q, d.userID,
+		func(q *pgdbgen.Queries) ([]string, error) {
+			return q.IndexTermSections(ctx, docID)
+		})
+	if err != nil {
+		return nil, fmt.Errorf("read the index terms of %s: %w", docID, err)
+	}
+	return sections, nil
+}
+
+// IndexTermCount is how many entries a back-of-book index holds, which is
+// more than the number of sections they point at.
+func (d *Documents) IndexTermCount(ctx context.Context, docID string) (int, error) {
+	count, err := pgsession.Read(ctx, d.db, d.q, d.userID,
+		func(q *pgdbgen.Queries) (int64, error) {
+			return q.IndexTermCount(ctx, docID)
+		})
+	if err != nil {
+		return 0, fmt.Errorf("count the index terms of %s: %w", docID, err)
+	}
+	return int(count), nil
+}
+
+// SectionHasChunks reports whether a section, or any section beneath it,
+// holds a chunk.
+func (d *Documents) SectionHasChunks(
+	ctx context.Context,
+	docID, section string,
+) (bool, error) {
+	found, err := pgsession.Read(ctx, d.db, d.q, d.userID, func(q *pgdbgen.Queries) (bool, error) {
+		return q.SectionHasChunks(ctx, pgdbgen.SectionHasChunksParams{
+			DocID: docID,
+			// One placeholder, used twice in the clause: the subtree test
+			// compares the section and then its dotted prefix.
+			Section: nullString(section),
+		})
+	})
+	if err != nil {
+		return false, fmt.Errorf("resolve section %s of %s: %w", section, docID, err)
+	}
+	return found, nil
+}
+
+// Delete removes every trace of a document, in one transaction, and the
+// uploaded file it was read from if it was one.
+func (d *Documents) Delete(ctx context.Context, docID string) error {
+	return pgsession.Run(ctx, d.db, d.q, d.userID, func(q *pgdbgen.Queries) error {
+		if err := q.DeleteDocumentUpload(ctx, docID); err != nil {
+			return fmt.Errorf("delete the upload of %s: %w", docID, err)
+		}
+		return deleteRows(ctx, q, docID)
+	})
+}
+
+// Rename changes what a document is called.
+func (d *Documents) Rename(ctx context.Context, docID, title string) error {
+	var renamed int64
+	err := pgsession.Run(ctx, d.db, d.q, d.userID, func(q *pgdbgen.Queries) error {
+		var err error
+		renamed, err = q.RenameDocument(
+			ctx,
+			pgdbgen.RenameDocumentParams{DocID: docID, Title: title},
+		)
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("rename %s: %w", docID, err)
+	}
+	if renamed == 0 {
+		return fmt.Errorf("%w: %s", ErrNotFound, docID)
+	}
+	return nil
+}
+
+// timeOf is a nullable timestamp, zero where it is null.
+func timeOf(t sql.NullTime) time.Time {
+	if !t.Valid {
+		return time.Time{}
+	}
+	return t.Time.UTC()
+}
+
+// sourceKind reads the kind a document was stored with. An index written by
+// a build that knew a kind this one does not reports unset rather than a
+// kind nobody chose.
+func sourceKind(stored string) domain.SourceKind {
+	var kind domain.SourceKind
+	if err := kind.UnmarshalText([]byte(stored)); err != nil {
+		return 0
+	}
+	return kind
+}
+
+func stringOf(v sql.NullString) *string {
+	if !v.Valid {
+		return nil
+	}
+	return &v.String
+}
+
+func intOf(v sql.NullInt32) *int {
+	if !v.Valid {
+		return nil
+	}
+	n := int(v.Int32)
+	return &n
+}

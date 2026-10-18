@@ -28,6 +28,20 @@ import (
 // for, which is why one error covers every rejection.
 var ErrOutsideRoot = errors.New("path is not inside a configured library root")
 
+// ErrMissing is a path that lies inside a configured root but could not be
+// resolved: the file is not there, or the root itself is not mounted. It
+// reads exactly as ErrOutsideRoot and wraps it, so a caller learns nothing
+// about which files exist. It is separate only so a worker can try again: a
+// volume mounts a minute later, while a path outside every root never moves
+// inside one.
+var ErrMissing error = missing{}
+
+type missing struct{}
+
+func (missing) Error() string { return ErrOutsideRoot.Error() }
+
+func (missing) Unwrap() error { return ErrOutsideRoot }
+
 // Resolve validates candidate against roots and returns the resolved absolute
 // path.
 //
@@ -35,40 +49,69 @@ var ErrOutsideRoot = errors.New("path is not inside a configured library root")
 // accepts it wins, so the roots are searched rather than one of them being
 // privileged.
 //
-// The lexical check runs first so a path that is obviously outside every root
-// is rejected without the filesystem being touched at all. Only once a
-// candidate is lexically acceptable is it resolved through symlinks and
-// checked again -- a symlink inside a root pointing outside it passes the
-// first check and must fail the second.
+// Containment is decided once, on two fully resolved paths. Comparing a
+// resolved path against an unresolved one refuses files that are plainly
+// inside the root, in whichever direction the mismatch runs: a root reached
+// through a symlink holds none of its own files, and a caller that resolved
+// the path before asking is turned away. Both are ordinary, since /var is a
+// symlink to /private/var on macOS.
+//
+// Resolving the candidate is also what makes a traversal safe to allow this
+// far: EvalSymlinks collapses every ".." and every link, so a path dressed up
+// to look inside the root arrives as what it really points at and fails the
+// containment check on its merits.
 func Resolve(roots []string, candidate string) (string, error) {
 	if len(roots) == 0 || candidate == "" {
 		return "", ErrOutsideRoot
 	}
-	for _, root := range roots {
-		if root == "" || !filepath.IsAbs(root) {
+	refusal := ErrOutsideRoot
+	for _, configured := range roots {
+		if configured == "" || !filepath.IsAbs(configured) {
 			continue
 		}
-		abs := candidate
-		if !filepath.IsAbs(abs) {
-			abs = filepath.Join(root, abs)
+		resolved, err := resolveUnder(configured, candidate)
+		if err == nil {
+			return resolved, nil
 		}
-		abs = filepath.Clean(abs)
-
-		if !within(root, abs) {
-			continue
+		if errors.Is(err, ErrMissing) {
+			refusal = ErrMissing
 		}
-		resolved, err := filepath.EvalSymlinks(abs)
-		if err != nil {
-			// Includes "does not exist". Same error either way: the caller
-			// must not be able to tell the difference.
-			continue
-		}
-		if !within(root, resolved) {
-			continue
-		}
-		return resolved, nil
 	}
-	return "", ErrOutsideRoot
+	return "", refusal
+}
+
+// resolveUnder resolves candidate against one root. A path the root would
+// hold, but that could not be resolved, is ErrMissing; anything else that
+// fails is ErrOutsideRoot.
+func resolveUnder(configured, candidate string) (string, error) {
+	abs := candidate
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(configured, abs)
+	}
+	lexicallyInside := within(filepath.Clean(configured), filepath.Clean(abs))
+	root, err := filepath.EvalSymlinks(configured)
+	if err != nil {
+		return "", missingIf(lexicallyInside)
+	}
+	if !filepath.IsAbs(candidate) {
+		abs = filepath.Join(root, candidate)
+	}
+	resolved, err := filepath.EvalSymlinks(filepath.Clean(abs))
+	if err != nil {
+		// Includes "does not exist". The caller sees one refusal either way.
+		return "", missingIf(lexicallyInside || within(root, filepath.Clean(abs)))
+	}
+	if !within(root, resolved) {
+		return "", ErrOutsideRoot
+	}
+	return resolved, nil
+}
+
+func missingIf(inside bool) error {
+	if inside {
+		return ErrMissing
+	}
+	return ErrOutsideRoot
 }
 
 // within reports whether path is root itself or lies beneath it.

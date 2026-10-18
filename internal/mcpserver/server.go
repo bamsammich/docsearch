@@ -10,17 +10,25 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/bamsammich/docsearch/internal/libroot"
-	"github.com/bamsammich/docsearch/internal/store"
+	"github.com/bamsammich/docsearch/internal/owner"
+	"github.com/bamsammich/docsearch/internal/pgstore"
+	"github.com/bamsammich/docsearch/internal/service/job"
+	"github.com/bamsammich/docsearch/internal/upload"
 	"github.com/bamsammich/docsearch/internal/urlguard"
 )
 
 // Deps are what the tools need to do their work.
 type Deps struct {
-	Store *store.Store
+	// Stores builds the library of the user a request acts for. A factory
+	// rather than a store, because row-level security scopes a statement by
+	// the user its transaction named, and the server is built before any
+	// request names one.
+	Stores StoresFor
 	// LibraryRoots are the directories add_document accepts a path inside.
 	// They are named in that tool's description: a caller that can see
 	// neither the roots nor why a path was refused has no way to recover
@@ -32,6 +40,42 @@ type Deps struct {
 	// resolver; tests supply their own, the same way urlguard's own suite
 	// does, because the guard refuses every address a test server can bind.
 	Resolver urlguard.Resolver
+	// UploadLinks issues a signed link that uploads one file into a user's
+	// library.
+	UploadLinks LinksFor
+	// Jobs builds the ingest queue of the user a request acts for, the same
+	// service the Connect API drives.
+	Jobs JobsFor
+}
+
+// JobsFor builds one user's ingest queue.
+type JobsFor func(user string) (*job.Service, error)
+
+// StoresFor builds the store one user's library is read through.
+type StoresFor func(user string) (*pgstore.Store, error)
+
+// LinksFor issues a signed upload link for user.
+type LinksFor func(ctx context.Context, user string) (upload.Link, error)
+
+// library is the store of the user a request acts for.
+//
+// A request that named none is refused rather than served the built-in
+// library, which is the whole point of asking.
+func (d Deps) library(ctx context.Context) (*pgstore.Store, error) {
+	user, err := owner.From(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return d.Stores(user)
+}
+
+// jobs is the ingest queue of the user a request acts for.
+func (d Deps) jobs(ctx context.Context) (*job.Service, error) {
+	user, err := owner.From(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return d.Jobs(user)
 }
 
 // toolMaxK is the search tool's documented result cap.
@@ -49,10 +93,10 @@ const toolMaxK = 25
 func describeRoots(roots []string) string {
 	switch len(roots) {
 	case 0:
-		// Validate rejects this at startup; a server with no roots cannot
-		// accept any path at all.
-		return "This server has no library root configured, so add_document " +
-			"cannot accept any path."
+		// A deployment with accounts takes no paths unless its operator
+		// shares them, since every account would read the same roots.
+		return "This server takes no filesystem paths: pass an http(s) URL. A file " +
+			"on the user's machine goes in through upload_link instead; never try a path."
 	case 1:
 		return "The path must be inside " + roots[0] + ". A file elsewhere has to be " +
 			"copied there first; tell the user rather than guessing at another path."
@@ -176,9 +220,22 @@ func New(d Deps) *mcp.Server {
 	}, d.getContext)
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name: "add_document",
+		Name:        "add_document",
 		Description: describeAddDocument(d.LibraryRoots),
 	}, d.addDocument)
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "upload_link",
+		Description: "Get a single-use link that uploads one file into the library, for a " +
+			"file add_document cannot reach: one on the user's own computer, in a chat " +
+			"attachment, or anywhere outside the library roots.\n\n" +
+			"A tool call cannot carry a file, so the file goes through the link instead. " +
+			"Where you can run a shell, upload it yourself: " +
+			"`curl -T <file> '<url>?name=<file name>'`. Otherwise give the link to the " +
+			"user to open in a browser and pick the file. The link expires after a few " +
+			"minutes and works once. The upload is queued like add_document; check " +
+			"ingest_status afterwards.",
+	}, d.uploadLink)
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "ingest_status",
@@ -203,12 +260,16 @@ func New(d Deps) *mcp.Server {
 type listDocumentsInput struct{}
 
 type listDocumentsOutput struct {
-	Documents []store.Document `json:"documents"`
+	Documents []pgstore.Document `json:"documents"`
 }
 
 func (d Deps) listDocuments(ctx context.Context, _ *mcp.CallToolRequest,
 	_ listDocumentsInput) (*mcp.CallToolResult, listDocumentsOutput, error) {
-	docs, err := d.Store.ListDocuments(ctx)
+	library, err := d.library(ctx)
+	if err != nil {
+		return nil, listDocumentsOutput{}, err
+	}
+	docs, err := library.ListDocuments(ctx)
 	if err != nil {
 		return nil, listDocumentsOutput{}, err
 	}
@@ -218,13 +279,13 @@ func (d Deps) listDocuments(ctx context.Context, _ *mcp.CallToolRequest,
 // -- outline --------------------------------------------------------------
 
 type outlineInput struct {
-	DocID string `json:"doc_id" jsonschema:"the document to outline"`
+	DocID string `json:"doc_id"          jsonschema:"the document to outline"`
 	Depth int    `json:"depth,omitempty" jsonschema:"heading depth to return, default 2"`
 }
 
 type outlineOutput struct {
-	DocID   string               `json:"doc_id"`
-	Entries []store.OutlineEntry `json:"entries"`
+	DocID   string                 `json:"doc_id"`
+	Entries []pgstore.OutlineEntry `json:"entries"`
 }
 
 func (d Deps) outline(ctx context.Context, _ *mcp.CallToolRequest,
@@ -236,7 +297,11 @@ func (d Deps) outline(ctx context.Context, _ *mcp.CallToolRequest,
 	if depth <= 0 {
 		depth = 2
 	}
-	entries, err := d.Store.Outline(ctx, in.DocID, depth)
+	library, err := d.library(ctx)
+	if err != nil {
+		return nil, outlineOutput{}, err
+	}
+	entries, err := library.Outline(ctx, in.DocID, depth)
 	if err != nil {
 		return nil, outlineOutput{}, err
 	}
@@ -246,18 +311,18 @@ func (d Deps) outline(ctx context.Context, _ *mcp.CallToolRequest,
 // -- search ---------------------------------------------------------------
 
 type searchInput struct {
-	Query                   string `json:"query" jsonschema:"the search query"`
-	DocID                   string `json:"doc_id,omitempty" jsonschema:"restrict to one document"`
-	SectionFilter           string `json:"section_filter,omitempty" jsonschema:"heading_path prefix filter"`
-	K                       int    `json:"k,omitempty" jsonschema:"max results, default 8, max 25"`
+	Query                   string `json:"query"                               jsonschema:"the search query"`
+	DocID                   string `json:"doc_id,omitempty"                    jsonschema:"restrict to one document"`
+	SectionFilter           string `json:"section_filter,omitempty"            jsonschema:"heading_path prefix filter"`
+	K                       int    `json:"k,omitempty"                         jsonschema:"max results, default 8, max 25"`
 	IncludeKeywordReference bool   `json:"include_keyword_reference,omitempty" jsonschema:"include command-keyword reference entries, which are deprioritised by default"`
 }
 
 type searchOutput struct {
-	Results   []store.SearchResult            `json:"results"`
-	ByDoc     map[string][]store.SearchResult `json:"results_by_document,omitempty"`
-	Note      string                          `json:"note,omitempty"`
-	FigureHit int                             `json:"figure_dominated_results,omitempty"`
+	Results   []pgstore.SearchResult            `json:"results"`
+	ByDoc     map[string][]pgstore.SearchResult `json:"results_by_document,omitempty"`
+	Note      string                            `json:"note,omitempty"`
+	FigureHit int                               `json:"figure_dominated_results,omitempty"`
 }
 
 func (d Deps) search(ctx context.Context, _ *mcp.CallToolRequest,
@@ -269,7 +334,11 @@ func (d Deps) search(ctx context.Context, _ *mcp.CallToolRequest,
 	if in.K > toolMaxK {
 		in.K = toolMaxK
 	}
-	results, err := d.Store.Search(ctx, store.SearchParams{
+	library, err := d.library(ctx)
+	if err != nil {
+		return nil, searchOutput{}, err
+	}
+	results, err := library.Search(ctx, pgstore.SearchParams{
 		Query:                   in.Query,
 		DocID:                   in.DocID,
 		SectionFilter:           in.SectionFilter,
@@ -295,7 +364,7 @@ func (d Deps) search(ctx context.Context, _ *mcp.CallToolRequest,
 	// Grouping makes the multi-document nature visible rather than implying a
 	// single global ranking.
 	if in.DocID == "" && len(results) > 0 {
-		out.ByDoc = map[string][]store.SearchResult{}
+		out.ByDoc = map[string][]pgstore.SearchResult{}
 		for _, r := range results {
 			out.ByDoc[r.DocID] = append(out.ByDoc[r.DocID], r)
 		}
@@ -316,20 +385,20 @@ func (d Deps) search(ctx context.Context, _ *mcp.CallToolRequest,
 // -- get_context ----------------------------------------------------------
 
 type getContextInput struct {
-	DocID     string `json:"doc_id" jsonschema:"the document"`
-	ChunkID   int64  `json:"chunk_id,omitempty" jsonschema:"anchor chunk from a search result"`
-	Before    int    `json:"before,omitempty" jsonschema:"chunks before the anchor, default 1"`
-	After     int    `json:"after,omitempty" jsonschema:"chunks after the anchor, default 1"`
+	DocID     string `json:"doc_id"               jsonschema:"the document"`
+	ChunkID   int64  `json:"chunk_id,omitempty"   jsonschema:"anchor chunk from a search result"`
+	Before    int    `json:"before,omitempty"     jsonschema:"chunks before the anchor, default 1"`
+	After     int    `json:"after,omitempty"      jsonschema:"chunks after the anchor, default 1"`
 	PageStart int    `json:"page_start,omitempty" jsonschema:"first page, paginated formats only"`
-	PageEnd   int    `json:"page_end,omitempty" jsonschema:"last page, max 20 pages"`
+	PageEnd   int    `json:"page_end,omitempty"   jsonschema:"last page, max 20 pages"`
 }
 
 type getContextOutput struct {
-	DocID     string               `json:"doc_id"`
-	Chunks    []store.ContextChunk `json:"chunks,omitempty"`
-	Pages     []store.PageText     `json:"pages,omitempty"`
-	Truncated bool                 `json:"truncated,omitempty"`
-	Note      string               `json:"note,omitempty"`
+	DocID     string                 `json:"doc_id"`
+	Chunks    []pgstore.ContextChunk `json:"chunks,omitempty"`
+	Pages     []pgstore.PageText     `json:"pages,omitempty"`
+	Truncated bool                   `json:"truncated,omitempty"`
+	Note      string                 `json:"note,omitempty"`
 }
 
 func (d Deps) getContext(ctx context.Context, _ *mcp.CallToolRequest,
@@ -337,10 +406,14 @@ func (d Deps) getContext(ctx context.Context, _ *mcp.CallToolRequest,
 	if in.DocID == "" {
 		return nil, getContextOutput{}, errors.New("doc_id is required")
 	}
+	library, err := d.library(ctx)
+	if err != nil {
+		return nil, getContextOutput{}, err
+	}
 	out := getContextOutput{DocID: in.DocID}
 
 	if in.PageStart > 0 {
-		pages, truncated, err := d.Store.GetPages(ctx, in.DocID, in.PageStart, in.PageEnd)
+		pages, truncated, err := library.GetPages(ctx, in.DocID, in.PageStart, in.PageEnd)
 		if err != nil {
 			return nil, getContextOutput{}, err
 		}
@@ -357,7 +430,7 @@ func (d Deps) getContext(ctx context.Context, _ *mcp.CallToolRequest,
 	if before == 0 && after == 0 {
 		before, after = 1, 1
 	}
-	chunks, truncated, err := d.Store.GetContext(ctx, in.DocID, in.ChunkID, before, after)
+	chunks, truncated, err := library.GetContext(ctx, in.DocID, in.ChunkID, before, after)
 	if err != nil {
 		return nil, getContextOutput{}, err
 	}
@@ -371,7 +444,7 @@ func (d Deps) getContext(ctx context.Context, _ *mcp.CallToolRequest,
 // -- add_document ---------------------------------------------------------
 
 type addDocumentInput struct {
-	Target string `json:"target" jsonschema:"a file or directory inside a library root, or an http(s) URL of a documentation site"`
+	Target string `json:"target"          jsonschema:"a file or directory inside a library root, or an http(s) URL of a documentation site"`
 	Title  string `json:"title,omitempty" jsonschema:"override the derived document title"`
 }
 
@@ -403,121 +476,149 @@ type addDocumentOutput struct {
 
 func (d Deps) addDocument(ctx context.Context, _ *mcp.CallToolRequest,
 	in addDocumentInput) (*mcp.CallToolResult, addDocumentOutput, error) {
-	if in.Target == "" {
-		return nil, addDocumentOutput{}, errors.New("target is required")
-	}
-
-	if isURL(in.Target) {
-		// Validated here as well as in the worker, and again on every redirect
-		// hop inside the fetcher. Three enforcement points, none of which may
-		// assume another ran: a job row is not proof that anything checked it,
-		// and this is the only one that sees the caller.
-		if _, err := urlguard.Check(ctx, in.Target, d.Resolver); err != nil {
-			// One error for every rejection, exactly as the path branch does.
-			// Telling a caller that a host resolved but privately, rather than
-			// not at all, turns this tool into a network scanner.
-			d.Log.Warn("add_document rejected a URL the address guard refused")
-			return nil, addDocumentOutput{}, urlguard.ErrBlocked
-		}
-		// Enqueued as given. Canonicalising a URL is the fetcher's rule and it
-		// lives in one implementation; a second one here is how the two drift.
-		// The worker normalises before it keys replacement on the result.
-		id, pos, err := d.Store.Enqueue(ctx, in.Target, in.Title)
-		if err != nil {
-			return nil, addDocumentOutput{}, err
-		}
-		return nil, addDocumentOutput{
-			Jobs: []queuedJob{
-				{JobID: id, Status: "queued", PositionInQueue: pos, SourcePath: in.Target},
-			},
-			Note: "Queued one site. The whole site is crawled and indexed as a single " +
-				"document, which takes minutes and is not searchable until it finishes. " +
-				"Poll ingest_status for progress.",
-		}, nil
-	}
-
-	resolved, err := libroot.Resolve(d.LibraryRoots, in.Target)
+	target, note, err := d.checkTarget(ctx, in.Target)
 	if err != nil {
-		// One error for every rejection. Distinguishing "outside the root"
-		// from "does not exist" would make this tool a filesystem probe.
-		d.Log.Warn("add_document rejected a path outside the library root")
-		return nil, addDocumentOutput{}, libroot.ErrOutsideRoot
+		return nil, addDocumentOutput{}, err
 	}
+	jobs, err := d.jobs(ctx)
+	if err != nil {
+		return nil, addDocumentOutput{}, err
+	}
+	queued, err := jobs.Enqueue(ctx, target, in.Title)
+	if err != nil {
+		return nil, addDocumentOutput{}, err
+	}
+	out := addDocumentOutput{Note: note(len(queued))}
+	for _, q := range queued {
+		out.Jobs = append(out.Jobs, queuedJob{
+			JobID: q.JobID, Status: statusQueued, PositionInQueue: q.Position, SourcePath: q.Source,
+		})
+	}
+	return nil, out, nil
+}
 
+// checkTarget refuses a target add_document may not queue, and says what to
+// tell the caller once it is queued.
+func (d Deps) checkTarget(ctx context.Context, target string) (string, func(int) string, error) {
+	if target == "" {
+		return "", nil, errors.New("target is required")
+	}
+	if isURL(target) {
+		// Validated here as well as in the worker, and again on every
+		// redirect hop inside the fetcher. Three enforcement points, none of
+		// which may assume another ran: a job row is not proof that anything
+		// checked it, and this is the only one that sees the caller.
+		if _, err := urlguard.Check(ctx, target, d.Resolver); err != nil {
+			// One error for every rejection, exactly as the path branch
+			// does. Telling a caller that a host resolved but privately,
+			// rather than not at all, turns this tool into a network scanner.
+			d.Log.Warn("add_document rejected a URL the address guard refused")
+			return "", nil, urlguard.ErrBlocked
+		}
+		return target, func(int) string { return queuedSiteNote }, nil
+	}
+	resolved, err := d.checkPath(target)
+	if err != nil {
+		return "", nil, err
+	}
+	return resolved, queuedFilesNote, nil
+}
+
+// checkPath resolves a path under the roots. Every refusal is one error:
+// distinguishing "outside the root" from "does not exist" would make this
+// tool a filesystem probe.
+func (d Deps) checkPath(target string) (string, error) {
+	resolved, err := libroot.Resolve(d.LibraryRoots, target)
+	if err != nil {
+		d.Log.Warn("add_document rejected a path outside the library root")
+		return "", libroot.ErrOutsideRoot
+	}
 	info, err := os.Stat(resolved)
 	if err != nil {
-		return nil, addDocumentOutput{}, libroot.ErrOutsideRoot
+		return "", libroot.ErrOutsideRoot
 	}
+	if !info.IsDir() && !supportedSuffixes[strings.ToLower(filepath.Ext(resolved))] {
+		return "", errors.New("unsupported file type")
+	}
+	return resolved, nil
+}
 
-	var targets []string
-	if info.IsDir() {
-		err = filepath.WalkDir(resolved, func(p string, e os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if e.IsDir() {
-				return nil
-			}
-			if supportedSuffixes[strings.ToLower(filepath.Ext(p))] {
-				targets = append(targets, p)
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, addDocumentOutput{}, fmt.Errorf("could not enumerate directory")
-		}
-		if len(targets) == 0 {
-			return nil, addDocumentOutput{}, errors.New("no supported documents found there")
-		}
-	} else {
-		if !supportedSuffixes[strings.ToLower(filepath.Ext(resolved))] {
-			return nil, addDocumentOutput{}, fmt.Errorf("unsupported file type")
-		}
-		targets = []string{resolved}
-	}
+const queuedSiteNote = "Queued one site. The whole site is crawled and indexed as a single " +
+	"document, which takes minutes and is not searchable until it finishes. " +
+	"Poll ingest_status for progress."
 
-	out := addDocumentOutput{}
-	for _, t := range targets {
-		id, pos, err := d.Store.Enqueue(ctx, t, in.Title)
-		if err != nil {
-			return nil, addDocumentOutput{}, err
-		}
-		out.Jobs = append(out.Jobs, queuedJob{
-			JobID: id, Status: "queued", PositionInQueue: pos, SourcePath: t,
-		})
-	}
-	out.Note = fmt.Sprintf(
+func queuedFilesNote(n int) string {
+	return fmt.Sprintf(
 		"Queued %d document(s). Ingest runs asynchronously in a separate worker and a "+
 			"large PDF may take tens of minutes. Nothing is searchable yet. Poll "+
-			"ingest_status for progress.", len(out.Jobs))
-	return nil, out, nil
+			"ingest_status for progress.", n)
 }
 
 // -- ingest_status --------------------------------------------------------
 
 type ingestStatusInput struct {
-	JobID            int64 `json:"job_id,omitempty" jsonschema:"a specific job"`
+	JobID            int64 `json:"job_id,omitempty"            jsonschema:"a specific job"`
 	IncludeCompleted bool  `json:"include_completed,omitempty" jsonschema:"include finished jobs"`
 }
 
 type ingestStatusOutput struct {
-	Jobs []store.Job `json:"jobs"`
+	Jobs []jobStatus `json:"jobs"`
 }
+
+// statusLimit is how many jobs ingest_status lists.
+const statusLimit = 25
 
 func (d Deps) ingestStatus(ctx context.Context, _ *mcp.CallToolRequest,
 	in ingestStatusInput) (*mcp.CallToolResult, ingestStatusOutput, error) {
-	if in.JobID != 0 {
-		job, err := d.Store.JobByID(ctx, in.JobID)
-		if err != nil {
-			return nil, ingestStatusOutput{}, err
-		}
-		return nil, ingestStatusOutput{Jobs: []store.Job{*job}}, nil
-	}
-	jobs, err := d.Store.ActiveJobs(ctx, in.IncludeCompleted, 25)
+	jobs, err := d.jobs(ctx)
 	if err != nil {
 		return nil, ingestStatusOutput{}, err
 	}
-	return nil, ingestStatusOutput{Jobs: jobs}, nil
+	now := time.Now()
+	if in.JobID != 0 {
+		one, err := jobs.Get(ctx, in.JobID)
+		if err != nil {
+			return nil, ingestStatusOutput{}, err
+		}
+		return nil, ingestStatusOutput{Jobs: []jobStatus{statusOf(one, now)}}, nil
+	}
+	listed, err := jobs.List(ctx, in.IncludeCompleted, statusLimit)
+	if err != nil {
+		return nil, ingestStatusOutput{}, err
+	}
+	out := ingestStatusOutput{Jobs: make([]jobStatus, 0, len(listed))}
+	for _, j := range listed {
+		out.Jobs = append(out.Jobs, statusOf(j, now))
+	}
+	return nil, out, nil
+}
+
+// -- upload_link ----------------------------------------------------------
+
+type uploadLinkInput struct{}
+
+type uploadLinkOutput struct {
+	URL       string `json:"url"`
+	ExpiresAt string `json:"expires_at"`
+	Upload    string `json:"upload"`
+}
+
+func (d Deps) uploadLink(ctx context.Context, _ *mcp.CallToolRequest,
+	_ uploadLinkInput) (*mcp.CallToolResult, uploadLinkOutput, error) {
+	user, err := owner.From(ctx)
+	if err != nil {
+		return nil, uploadLinkOutput{}, err
+	}
+	link, err := d.UploadLinks(ctx, user)
+	if err != nil {
+		return nil, uploadLinkOutput{}, err
+	}
+	return nil, uploadLinkOutput{
+		URL:       link.URL,
+		ExpiresAt: link.Expires.UTC().Format(time.RFC3339),
+		Upload: "curl -T <file> '" + link.URL + "?name=<file name>', " +
+			"or open the URL in a browser and choose the file",
+	}, nil
 }
 
 // -- cancel_ingest --------------------------------------------------------
@@ -537,13 +638,17 @@ func (d Deps) cancelIngest(ctx context.Context, _ *mcp.CallToolRequest,
 	if in.JobID == 0 {
 		return nil, cancelIngestOutput{}, errors.New("job_id is required")
 	}
-	status, err := d.Store.RequestCancel(ctx, in.JobID)
+	jobs, err := d.jobs(ctx)
+	if err != nil {
+		return nil, cancelIngestOutput{}, err
+	}
+	status, err := jobs.Cancel(ctx, in.JobID)
 	if err != nil {
 		return nil, cancelIngestOutput{}, err
 	}
 	out := cancelIngestOutput{JobID: in.JobID, Status: status}
 	switch status {
-	case "queued", "running":
+	case statusQueued, statusRunning:
 		out.Note = "Cancellation requested. The job has NOT stopped yet — the worker acts " +
 			"at its next checkpoint, then rolls back any partial rows. It may still " +
 			"report as running for a short time."

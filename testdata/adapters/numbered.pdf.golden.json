@@ -1,0 +1,239 @@
+{
+ "blocks": [
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "1. Overview"
+   ],
+   "image_count": 0,
+   "locator": {
+    "page": 1,
+    "page_end": 1
+   },
+   "printed_page": 1,
+   "section": "1",
+   "subdivision": false,
+   "text": "The overview notes cover amber and delta work.\nThe overview notes cover birch and iris work.\nThe overview notes cover cedar and birch work.\nThe overview notes cover delta and grove work.\nThe overview notes cover ember and lumen work.\nThe overview notes cover fjord and ember work.\nThe overview notes cover grove and juniper work.\nThe overview notes cover harbor and cedar work.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "2. Setup"
+   ],
+   "image_count": 0,
+   "locator": {
+    "page": 2,
+    "page_end": 2
+   },
+   "printed_page": 2,
+   "section": "2",
+   "subdivision": false,
+   "text": "The setup notes cover amber and delta work.\nThe setup notes cover birch and iris work.\nThe setup notes cover cedar and birch work.\nThe setup notes cover delta and grove work.\nThe setup notes cover ember and lumen work.\nThe setup notes cover fjord and ember work.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "2. Setup"
+   ],
+   "image_count": 0,
+   "locator": {
+    "page": 2,
+    "page_end": 2
+   },
+   "printed_page": 2,
+   "section": "2",
+   "subdivision": true,
+   "text": "Wiring\nThe wiring notes cover amber and delta work.\nThe wiring notes cover birch and iris work.\nThe wiring notes cover cedar and birch work.\nThe wiring notes cover delta and grove work.\nThe wiring notes cover ember and lumen work.\nThe wiring notes cover fjord and ember work.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "2. Setup",
+    "2.1. Power"
+   ],
+   "image_count": 0,
+   "locator": {
+    "page": 3,
+    "page_end": 3
+   },
+   "printed_page": 3,
+   "section": "2.1",
+   "subdivision": false,
+   "text": "The power notes cover amber and delta work.\nThe power notes cover birch and iris work.\nThe power notes cover cedar and birch work.\nThe power notes cover delta and grove work.\nThe power notes cover ember and lumen work.\n1. Tap the switch\nThe step notes cover amber and delta work.\nThe step notes cover birch and iris work.\nThe step notes cover cedar and birch work.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "3. Maintenance"
+   ],
+   "image_count": 0,
+   "locator": {
+    "page": 4,
+    "page_end": 4
+   },
+   "printed_page": 4,
+   "section": "3",
+   "subdivision": false,
+   "text": "Maintenance\nThe maintenance notes cover amber and delta work.\nThe maintenance notes cover birch and iris work.\nThe maintenance notes cover cedar and birch work.\nThe maintenance notes cover delta and grove work.\nThe maintenance notes cover ember and lumen work.\nThe maintenance notes cover fjord and ember work.\nThe maintenance notes cover grove and juniper work.\nThe maintenance notes cover harbor and cedar work.\nThe maintenance notes cover iris and harbor work.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "4. Cleaning"
+   ],
+   "image_count": 0,
+   "locator": {
+    "page": 5,
+    "page_end": 5
+   },
+   "printed_page": 5,
+   "section": "4",
+   "subdivision": false,
+   "text": "The cleaning notes cover amber and delta work.\nThe cleaning notes cover birch and iris work.\nThe cleaning notes cover cedar and birch work.\nThe cleaning notes cover delta and grove work.\nThe cleaning notes cover ember and lumen work.\nThe cleaning notes cover fjord and ember work.\nThe cleaning notes cover grove and juniper work.\nThe cleaning notes cover harbor and cedar work.\nThe cleaning notes cover iris and harbor work.\nThe cleaning notes cover juniper and amber work.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "5. Storage"
+   ],
+   "image_count": 0,
+   "locator": {
+    "page": 6,
+    "page_end": 6
+   },
+   "printed_page": 6,
+   "section": "5",
+   "subdivision": false,
+   "text": "The storage notes cover amber and delta work.\nThe storage notes cover birch and iris work.\nThe storage notes cover cedar and birch work.\nThe storage notes cover delta and grove work.\nThe storage notes cover ember and lumen work.\nThe storage notes cover fjord and ember work.\nThe storage notes cover grove and juniper work.\nThe storage notes cover harbor and cedar work.\nThe storage notes cover iris and harbor work.\nThe storage notes cover juniper and amber work.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "6. Transport"
+   ],
+   "image_count": 0,
+   "locator": {
+    "page": 7,
+    "page_end": 7
+   },
+   "printed_page": 7,
+   "section": "6",
+   "subdivision": false,
+   "text": "The transport notes cover amber and delta work.\nThe transport notes cover birch and iris work.\nThe transport notes cover cedar and birch work.\nThe transport notes cover delta and grove work.\nThe transport notes cover ember and lumen work.\nThe transport notes cover fjord and ember work.\nThe transport notes cover grove and juniper work.\nThe transport notes cover harbor and cedar work.\nThe transport notes cover iris and harbor work.\nThe transport notes cover juniper and amber work.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "7. Repair"
+   ],
+   "image_count": 0,
+   "locator": {
+    "page": 8,
+    "page_end": 8
+   },
+   "printed_page": 8,
+   "section": "7",
+   "subdivision": false,
+   "text": "The repair notes cover amber and delta work.\nThe repair notes cover birch and iris work.\nThe repair notes cover cedar and birch work.\nThe repair notes cover delta and grove work.\nThe repair notes cover ember and lumen work.\nThe repair notes cover fjord and ember work.\nThe repair notes cover grove and juniper work.\nThe repair notes cover harbor and cedar work.\nThe repair notes cover iris and harbor work.\nThe repair notes cover juniper and amber work.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "8. Disposal"
+   ],
+   "image_count": 0,
+   "locator": {
+    "page": 9,
+    "page_end": 9
+   },
+   "printed_page": 9,
+   "section": "8",
+   "subdivision": false,
+   "text": "The disposal notes cover amber and delta work.\nThe disposal notes cover birch and iris work.\nThe disposal notes cover cedar and birch work.\nThe disposal notes cover delta and grove work.\nThe disposal notes cover ember and lumen work.\nThe disposal notes cover fjord and ember work.\nThe disposal notes cover grove and juniper work.\nThe disposal notes cover harbor and cedar work.\nThe disposal notes cover iris and harbor work.\nThe disposal notes cover juniper and amber work.",
+   "url": null
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "9. Warranty"
+   ],
+   "image_count": 0,
+   "locator": {
+    "page": 10,
+    "page_end": 10
+   },
+   "printed_page": 10,
+   "section": "9",
+   "subdivision": false,
+   "text": "The warranty notes cover amber and delta work.\nThe warranty notes cover birch and iris work.\nThe warranty notes cover cedar and birch work.\nThe warranty notes cover delta and grove work.\nThe warranty notes cover ember and lumen work.\nThe warranty notes cover fjord and ember work.\nThe warranty notes cover grove and juniper work.\nThe warranty notes cover harbor and cedar work.\nThe warranty notes cover iris and harbor work.\nThe warranty notes cover juniper and amber work.",
+   "url": null
+  }
+ ],
+ "diagnostics": {
+  "body_font_size": 10.0,
+  "body_headings_found": 10,
+  "boilerplate_lines_stripped": 0,
+  "candidates_rejected_by_ordering": [
+   "p3:1"
+  ],
+  "cross_validation": {
+   "body_sections": 10,
+   "detected_more_than_once": [],
+   "in_body_not_in_toc": [],
+   "in_toc_not_in_body": [],
+   "toc_sections": 0
+  },
+  "figures": {
+   "distinct_xrefs": 0,
+   "dropped_as_duplicate_on_page": 0,
+   "dropped_as_furniture": 0,
+   "dropped_as_too_small": 0,
+   "figures_kept": 0,
+   "furniture_xrefs": [],
+   "pages_with_no_figure": 10,
+   "placements_total": 0
+  },
+  "heading_font_sizes": [
+   16.0
+  ],
+  "printed_page_offset": 0,
+  "structure_source": "font_heuristic",
+  "toc_entries": 0
+ },
+ "format": "pdf",
+ "index_terms": [],
+ "page_count": 10,
+ "pages": {
+  "1": "1. Overview\nThe overview notes cover amber and delta work.\nThe overview notes cover birch and iris work.\nThe overview notes cover cedar and birch work.\nThe overview notes cover delta and grove work.\nThe overview notes cover ember and lumen work.\nThe overview notes cover fjord and ember work.\nThe overview notes cover grove and juniper work.\nThe overview notes cover harbor and cedar work.\n",
+  "2": "2. Setup\nThe setup notes cover amber and delta work.\nThe setup notes cover birch and iris work.\nThe setup notes cover cedar and birch work.\nThe setup notes cover delta and grove work.\nThe setup notes cover ember and lumen work.\nThe setup notes cover fjord and ember work.\nWiring\nThe wiring notes cover amber and delta work.\nThe wiring notes cover birch and iris work.\nThe wiring notes cover cedar and birch work.\nThe wiring notes cover delta and grove work.\nThe wiring notes cover ember and lumen work.\nThe wiring notes cover fjord and ember work.\n",
+  "3": "2.1. Power\nThe power notes cover amber and delta work.\nThe power notes cover birch and iris work.\nThe power notes cover cedar and birch work.\nThe power notes cover delta and grove work.\nThe power notes cover ember and lumen work.\n1. Tap the switch\nThe step notes cover amber and delta work.\nThe step notes cover birch and iris work.\nThe step notes cover cedar and birch work.\n",
+  "4": "3.\nMaintenance\nThe maintenance notes cover amber and delta work.\nThe maintenance notes cover birch and iris work.\nThe maintenance notes cover cedar and birch work.\nThe maintenance notes cover delta and grove work.\nThe maintenance notes cover ember and lumen work.\nThe maintenance notes cover fjord and ember work.\nThe maintenance notes cover grove and juniper work.\nThe maintenance notes cover harbor and cedar work.\nThe maintenance notes cover iris and harbor work.\n",
+  "5": "4. Cleaning\nThe cleaning notes cover amber and delta work.\nThe cleaning notes cover birch and iris work.\nThe cleaning notes cover cedar and birch work.\nThe cleaning notes cover delta and grove work.\nThe cleaning notes cover ember and lumen work.\nThe cleaning notes cover fjord and ember work.\nThe cleaning notes cover grove and juniper work.\nThe cleaning notes cover harbor and cedar work.\nThe cleaning notes cover iris and harbor work.\nThe cleaning notes cover juniper and amber work.\n",
+  "6": "5. Storage\nThe storage notes cover amber and delta work.\nThe storage notes cover birch and iris work.\nThe storage notes cover cedar and birch work.\nThe storage notes cover delta and grove work.\nThe storage notes cover ember and lumen work.\nThe storage notes cover fjord and ember work.\nThe storage notes cover grove and juniper work.\nThe storage notes cover harbor and cedar work.\nThe storage notes cover iris and harbor work.\nThe storage notes cover juniper and amber work.\n",
+  "7": "6. Transport\nThe transport notes cover amber and delta work.\nThe transport notes cover birch and iris work.\nThe transport notes cover cedar and birch work.\nThe transport notes cover delta and grove work.\nThe transport notes cover ember and lumen work.\nThe transport notes cover fjord and ember work.\nThe transport notes cover grove and juniper work.\nThe transport notes cover harbor and cedar work.\nThe transport notes cover iris and harbor work.\nThe transport notes cover juniper and amber work.\n",
+  "8": "7. Repair\nThe repair notes cover amber and delta work.\nThe repair notes cover birch and iris work.\nThe repair notes cover cedar and birch work.\nThe repair notes cover delta and grove work.\nThe repair notes cover ember and lumen work.\nThe repair notes cover fjord and ember work.\nThe repair notes cover grove and juniper work.\nThe repair notes cover harbor and cedar work.\nThe repair notes cover iris and harbor work.\nThe repair notes cover juniper and amber work.\n",
+  "9": "8. Disposal\nThe disposal notes cover amber and delta work.\nThe disposal notes cover birch and iris work.\nThe disposal notes cover cedar and birch work.\nThe disposal notes cover delta and grove work.\nThe disposal notes cover ember and lumen work.\nThe disposal notes cover fjord and ember work.\nThe disposal notes cover grove and juniper work.\nThe disposal notes cover harbor and cedar work.\nThe disposal notes cover iris and harbor work.\nThe disposal notes cover juniper and amber work.\n",
+  "10": "9. Warranty\nThe warranty notes cover amber and delta work.\nThe warranty notes cover birch and iris work.\nThe warranty notes cover cedar and birch work.\nThe warranty notes cover delta and grove work.\nThe warranty notes cover ember and lumen work.\nThe warranty notes cover fjord and ember work.\nThe warranty notes cover grove and juniper work.\nThe warranty notes cover harbor and cedar work.\nThe warranty notes cover iris and harbor work.\nThe warranty notes cover juniper and amber work.\n"
+ },
+ "title": "Numbered Guide"
+}

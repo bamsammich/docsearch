@@ -1,0 +1,388 @@
+// Package postgres stores an ingest in the Postgres database every library
+// lives in.
+//
+// Each method is one transaction, because that is what the ingest service
+// asks of a repository: it decides what happens, and the repository decides
+// what happens atomically. Nothing here decides anything about a document.
+package postgres
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"maps"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/bamsammich/docsearch/internal/domain"
+	"github.com/bamsammich/docsearch/internal/pgsession"
+	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
+	"github.com/bamsammich/docsearch/internal/service/ingest"
+)
+
+// timeFormat is how the Python pipeline writes a timestamp, and what every
+// reader of documents.ingested_at expects.
+const timeFormat = "2006-01-02T15:04:05Z"
+
+// Repository writes one user's documents.
+type Repository struct {
+	db *sql.DB
+	q  *pgdbgen.Queries
+	// userID is the library every statement here reads and writes. Bound
+	// once, because a repository serves one request and a request belongs
+	// to one user.
+	userID string
+}
+
+// New writes through db, which the caller opens and closes.
+func New(db *sql.DB, userID string) *Repository {
+	return &Repository{db: db, q: pgdbgen.New(db), userID: userID}
+}
+
+// Confirm stamps a document as read at, changing nothing it holds.
+func (r *Repository) Confirm(ctx context.Context, docID string, at time.Time) error {
+	return r.inTx(ctx, func(q *pgdbgen.Queries) error {
+		return q.ConfirmDocument(ctx, pgdbgen.ConfirmDocumentParams{
+			DocID: docID, IngestedAt: sql.NullTime{Time: at, Valid: true},
+		})
+	})
+}
+
+func (r *Repository) ReadyWithDigest(
+	ctx context.Context,
+	digest string,
+) (*ingest.Existing, error) {
+	row, err := pgsession.Read(ctx, r.db, r.q, r.userID,
+		func(q *pgdbgen.Queries) (pgdbgen.ReadyDocumentWithDigestRow, error) {
+			return q.ReadyDocumentWithDigest(ctx, digest)
+		})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil //nolint:nilnil // no document holds these bytes, which is not a failure
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read the document with hash %s: %w", digest, err)
+	}
+	chunks, err := pgsession.Read(
+		ctx,
+		r.db,
+		r.q,
+		r.userID,
+		func(q *pgdbgen.Queries) (int64, error) {
+			return q.CountDocumentChunks(ctx, row.DocID)
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("count the chunks of %s: %w", row.DocID, err)
+	}
+	return &ingest.Existing{
+		DocID:      row.DocID,
+		Title:      row.Title,
+		ChunkCount: int(chunks),
+	}, nil
+}
+
+func (r *Repository) DocIDForIdentity(ctx context.Context, identity string) (string, error) {
+	docID, err := pgsession.Read(
+		ctx,
+		r.db,
+		r.q,
+		r.userID,
+		func(q *pgdbgen.Queries) (string, error) {
+			return q.DocIDForSourcePath(ctx, identity)
+		},
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read the document at %s: %w", identity, err)
+	}
+	return docID, nil
+}
+
+// DocIDsWithPrefix escapes the prefix, so a title slugifying to something
+// holding a percent sign does not match every identifier in the index.
+func (r *Repository) DocIDsWithPrefix(ctx context.Context, prefix string) ([]string, error) {
+	ids, err := pgsession.Read(
+		ctx,
+		r.db,
+		r.q,
+		r.userID,
+		func(q *pgdbgen.Queries) ([]string, error) {
+			return q.DocIDsWithPrefix(ctx, likePrefix(prefix))
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("read identifiers beginning %q: %w", prefix, err)
+	}
+	return ids, nil
+}
+
+// Create writes the document as ingesting. stale names rows a replacement
+// that died left behind, cleared in the same transaction so the new attempt
+// starts from nothing.
+func (r *Repository) Create(ctx context.Context, doc ingest.Document, stale string) error {
+	return r.inTx(ctx, func(q *pgdbgen.Queries) error {
+		if stale != "" {
+			if err := deleteRows(ctx, q, stale); err != nil {
+				return err
+			}
+		}
+		return q.InsertDocument(ctx, pgdbgen.InsertDocumentParams{
+			UserID:     r.userID,
+			DocID:      doc.DocID,
+			Title:      doc.Title,
+			Format:     doc.Format,
+			SourcePath: doc.Identity,
+			SourceKind: doc.Kind.String(),
+			Sha256:     doc.Digest,
+			PageCount:  nullInt32(doc.PageCount),
+		})
+	})
+}
+
+func (r *Repository) AddChunks(
+	ctx context.Context,
+	docID string,
+	chunks []domain.Chunk,
+) error {
+	return r.inTx(ctx, func(q *pgdbgen.Queries) error {
+		for _, c := range chunks {
+			if err := q.InsertChunk(ctx, chunkParams(r.userID, docID, c)); err != nil {
+				return fmt.Errorf("write chunk %d: %w", c.Ordinal, err)
+			}
+		}
+		return nil
+	})
+}
+
+func (r *Repository) AddPagesAndTerms(
+	ctx context.Context,
+	docID string,
+	pages map[int]string,
+	terms [][2]string,
+) error {
+	if len(pages) == 0 && len(terms) == 0 {
+		return nil
+	}
+	return r.inTx(ctx, func(q *pgdbgen.Queries) error {
+		if err := writePages(ctx, q, r.userID, docID, pages); err != nil {
+			return err
+		}
+		return writeTerms(ctx, q, r.userID, docID, terms)
+	})
+}
+
+// writePages writes a paginated format's page text, in page order, so a
+// database dumped twice compares equal.
+func writePages(
+	ctx context.Context,
+	q *pgdbgen.Queries,
+	userID, docID string,
+	pages map[int]string,
+) error {
+	for _, page := range slices.Sorted(maps.Keys(pages)) {
+		err := q.UpsertPage(ctx, pgdbgen.UpsertPageParams{
+			UserID: userID,
+			DocID:  docID,
+			Page:   pgsession.Narrow(page),
+			Text:   pages[page],
+		})
+		if err != nil {
+			return fmt.Errorf("write page %d: %w", page, err)
+		}
+	}
+	return nil
+}
+
+// writeTerms writes a back-of-book index's terms, in the order the adapter
+// found them.
+func writeTerms(
+	ctx context.Context,
+	q *pgdbgen.Queries,
+	userID, docID string,
+	terms [][2]string,
+) error {
+	for _, term := range terms {
+		err := q.InsertIndexTerm(ctx, pgdbgen.InsertIndexTermParams{
+			UserID:  userID,
+			DocID:   docID,
+			Term:    term[0],
+			Section: term[1],
+		})
+		if err != nil {
+			return fmt.Errorf("write index term %q: %w", term[0], err)
+		}
+	}
+	return nil
+}
+
+// MarkReady makes the document visible to search, and completes the job that
+// wrote it in the same transaction.
+// MarkReady publishes a document. A replacement is swapped in here: the old
+// version's rows are deleted and the new version's moved under its
+// identifier, all in the one transaction, so a search sees one version or
+// the other and never a gap.
+func (r *Repository) MarkReady(ctx context.Context, ready ingest.Ready) error {
+	return r.inTx(ctx, func(q *pgdbgen.Queries) error {
+		published, err := swapIn(ctx, q, ready)
+		if err != nil {
+			return err
+		}
+		warnings := nullString(string(ready.Warnings))
+		err = q.MarkDocumentReady(ctx, pgdbgen.MarkDocumentReadyParams{
+			ChunkCount: sql.NullInt32{Int32: pgsession.Narrow(ready.ChunkCount), Valid: true},
+			IngestedAt: sql.NullTime{Time: ready.IngestedAt.UTC(), Valid: true},
+			Warnings:   warnings,
+			DocID:      published,
+		})
+		if err != nil {
+			return fmt.Errorf("publish %s: %w", published, err)
+		}
+		if ready.JobID == nil {
+			return nil
+		}
+		// A worker that lost its job publishes nothing: the rollback takes
+		// the swap with it, and the worker now holding the job finishes it.
+		return fenced(q.CompleteJob(ctx, pgdbgen.CompleteJobParams{
+			DocID:    nullString(published),
+			Warnings: warnings,
+			ID:       *ready.JobID,
+			Attempt:  pgsession.Narrow(ready.JobAttempt),
+		}))
+	})
+}
+
+// swapIn is the identifier a document is published under: its own, or that
+// of the version it replaces, once promoted into its place.
+func swapIn(ctx context.Context, q *pgdbgen.Queries, ready ingest.Ready) (string, error) {
+	if ready.Replaces == "" {
+		return ready.DocID, nil
+	}
+	if err := promote(ctx, q, ready.DocID, ready.Replaces); err != nil {
+		return "", err
+	}
+	return ready.Replaces, nil
+}
+
+// promote replaces the document at to with the one written at from.
+func promote(ctx context.Context, q *pgdbgen.Queries, from, to string) error {
+	if err := deleteRows(ctx, q, to); err != nil {
+		return fmt.Errorf("retire the old %s: %w", to, err)
+	}
+	if err := q.CopyDocumentAs(
+		ctx,
+		pgdbgen.CopyDocumentAsParams{FromID: from, ToID: to},
+	); err != nil {
+		return fmt.Errorf("promote %s: copy the document row: %w", from, err)
+	}
+	if err := q.MoveChunks(ctx, pgdbgen.MoveChunksParams{FromID: from, ToID: to}); err != nil {
+		return fmt.Errorf("promote %s: move chunks: %w", from, err)
+	}
+	if err := q.MovePages(ctx, pgdbgen.MovePagesParams{FromID: from, ToID: to}); err != nil {
+		return fmt.Errorf("promote %s: move pages: %w", from, err)
+	}
+	if err := q.MoveIndexTerms(
+		ctx,
+		pgdbgen.MoveIndexTermsParams{FromID: from, ToID: to},
+	); err != nil {
+		return fmt.Errorf("promote %s: move index terms: %w", from, err)
+	}
+	if err := q.DeleteDocumentOnly(ctx, from); err != nil {
+		return fmt.Errorf("promote %s: drop the staging row: %w", from, err)
+	}
+	return nil
+}
+
+func (r *Repository) Delete(ctx context.Context, docID string) error {
+	return r.inTx(ctx, func(q *pgdbgen.Queries) error { return deleteRows(ctx, q, docID) })
+}
+
+// deleteRows removes every trace of a document.
+//
+// Chunks go first and go through SQL. The AFTER DELETE trigger on chunks is
+// what clears chunks_fts, and deleting the document row first would take the
+// chunks with it through the foreign key, leaving the full-text index holding
+// rows for a document that no longer exists.
+func deleteRows(ctx context.Context, q *pgdbgen.Queries, docID string) error {
+	if err := q.DeleteDocumentChunks(ctx, docID); err != nil {
+		return fmt.Errorf("delete the chunks of %s: %w", docID, err)
+	}
+	if err := q.DeleteDocumentPages(ctx, docID); err != nil {
+		return fmt.Errorf("delete the pages of %s: %w", docID, err)
+	}
+	if err := q.DeleteDocumentIndexTerms(ctx, docID); err != nil {
+		return fmt.Errorf("delete the index terms of %s: %w", docID, err)
+	}
+	if err := q.DeleteDocumentRow(ctx, docID); err != nil {
+		return fmt.Errorf("delete %s: %w", docID, err)
+	}
+	return nil
+}
+
+// inTx runs write inside one transaction that names this repository's user.
+func (r *Repository) inTx(ctx context.Context, write func(*pgdbgen.Queries) error) error {
+	return pgsession.Run(ctx, r.db, r.q, r.userID, write)
+}
+
+// withoutNUL drops a code point Postgres text cannot hold.
+//
+// SQLite stored one silently, and one chunk in a real corpus carries one, so
+// an ingest that passed it through would fail on the insert rather than on
+// the document that produced it. Dropping the byte loses nothing a search
+// could have matched.
+func withoutNUL(s string) string {
+	if !strings.ContainsRune(s, 0) {
+		return s
+	}
+	return strings.ReplaceAll(s, "\x00", "")
+}
+
+// chunkParams is one chunk as its row.
+func chunkParams(userID, docID string, c domain.Chunk) pgdbgen.InsertChunkParams {
+	return pgdbgen.InsertChunkParams{
+		UserID:           userID,
+		DocID:            docID,
+		Ordinal:          pgsession.Narrow(c.Ordinal),
+		Section:          nullStringOf(c.Section),
+		PageStart:        nullInt32(c.PageStart),
+		PageEnd:          nullInt32(c.PageEnd),
+		PrintedPageStart: nullInt32(c.PrintedPageStart),
+		ImageCount:       pgsession.Narrow(c.ImageCount),
+		Kind:             c.Kind.String(),
+		Url:              nullStringOf(c.URL),
+		Fragment:         nullStringOf(c.Fragment),
+		HeadingPath:      withoutNUL(c.HeadingPath),
+		Text:             withoutNUL(c.Text),
+	}
+}
+
+// likePrefix escapes a LIKE pattern's wildcards, so a slug holding one
+// matches literally.
+func likePrefix(prefix string) string {
+	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(prefix)
+	return escaped + "%"
+}
+
+func nullInt32(v *int) sql.NullInt32 {
+	if v == nil {
+		return sql.NullInt32{}
+	}
+	return sql.NullInt32{Int32: pgsession.Narrow(*v), Valid: true}
+}
+
+func nullStringOf(v *string) sql.NullString {
+	if v == nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: *v, Valid: true}
+}
+
+func nullString(v string) sql.NullString {
+	if v == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: v, Valid: true}
+}

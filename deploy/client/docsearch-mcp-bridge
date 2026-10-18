@@ -12,6 +12,8 @@ set -e
 . "$HOME/.config/docsearch/token.env"
 AUTH_HEADER="Bearer $DOCSEARCH_TOKEN"
 export AUTH_HEADER
-exec npx -y mcp-remote http://127.0.0.1:8765/mcp \
+# Pinned: npx would otherwise run whatever was published last, with the
+# bearer token in its environment. Raise the version deliberately.
+exec npx -y mcp-remote@0.14.3 http://127.0.0.1:8765/mcp \
   --header 'Authorization:${AUTH_HEADER}' \
   --transport http-only
