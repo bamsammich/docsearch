@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -367,70 +366,6 @@ func ftsQuery(raw string) (string, error) {
 	// thing FTS5's "a" OR "b" asked for. No quoting: the words are already
 	// what the word pattern matched, so none of them carries syntax.
 	return strings.Join(words, " "), nil
-}
-
-// warning is one finding of a structure report, with the phrasing a caller
-// sees for it.
-type warning struct {
-	label string
-	items []string
-}
-
-// warningNote renders one finding, naming at most ten of its subjects.
-func warningNote(w warning) string {
-	if len(w.items) == 0 {
-		return ""
-	}
-	shown := w.items
-	if len(shown) > 10 {
-		shown = shown[:10]
-	}
-	note := fmt.Sprintf("%d %s: %s", len(w.items), w.label, strings.Join(shown, ", "))
-	if len(w.items) > len(shown) {
-		note += fmt.Sprintf(" (+%d more)", len(w.items)-len(shown))
-	}
-	return note
-}
-
-// summarizeWarnings turns a persisted StructureReport into a quality flag and
-// human-readable findings. The worker is headless, so these were captured as
-// data at ingest time; this is where a caller finally sees them.
-func summarizeWarnings(raw sql.NullString) (string, []string) {
-	if !raw.Valid || raw.String == "" {
-		return qualityUnknown, nil
-	}
-	var payload struct {
-		Quality             string   `json:"quality"`
-		InTOCNotInBody      []string `json:"in_toc_not_in_body"`
-		InBodyNotInTOC      []string `json:"in_body_not_in_toc"`
-		DetectedMoreThanOne []string `json:"detected_more_than_once"`
-		Scattered           []string `json:"scattered_sections"`
-		Notes               []string `json:"notes"`
-	}
-	if err := json.Unmarshal([]byte(raw.String), &payload); err != nil {
-		return qualityUnknown, nil
-	}
-	quality := payload.Quality
-	if quality == "" {
-		quality = qualityUnknown
-	}
-	var notes []string
-	for _, w := range []warning{
-		{items: payload.InTOCNotInBody,
-			label: "sections in the table of contents but not the body"},
-		{items: payload.InBodyNotInTOC,
-			label: "headings in the body but not the table of contents"},
-		{items: payload.DetectedMoreThanOne, label: "sections detected more than once"},
-		{items: payload.Scattered, label: "sections spanning non-adjacent chunks"},
-	} {
-		if note := warningNote(w); note != "" {
-			notes = append(notes, note)
-		}
-	}
-	// Already phrased for a caller, so they pass through whole rather than
-	// being summarised into a count of opaque identifiers.
-	notes = append(notes, payload.Notes...)
-	return quality, notes
 }
 
 // interleave merges per-document results by within-document rank.

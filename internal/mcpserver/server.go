@@ -17,6 +17,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/libroot"
 	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/pgstore"
+	"github.com/bamsammich/docsearch/internal/service/job"
 	"github.com/bamsammich/docsearch/internal/upload"
 	"github.com/bamsammich/docsearch/internal/urlguard"
 )
@@ -42,7 +43,13 @@ type Deps struct {
 	// UploadLinks issues a signed link that uploads one file into a user's
 	// library.
 	UploadLinks LinksFor
+	// Jobs builds the ingest queue of the user a request acts for, the same
+	// service the Connect API drives.
+	Jobs JobsFor
 }
+
+// JobsFor builds one user's ingest queue.
+type JobsFor func(user string) (*job.Service, error)
 
 // StoresFor builds the store one user's library is read through.
 type StoresFor func(user string) (*pgstore.Store, error)
@@ -60,6 +67,15 @@ func (d Deps) library(ctx context.Context) (*pgstore.Store, error) {
 		return nil, err
 	}
 	return d.Stores(user)
+}
+
+// jobs is the ingest queue of the user a request acts for.
+func (d Deps) jobs(ctx context.Context) (*job.Service, error) {
+	user, err := owner.From(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return d.Jobs(user)
 }
 
 // toolMaxK is the search tool's documented result cap.
@@ -460,102 +476,82 @@ type addDocumentOutput struct {
 
 func (d Deps) addDocument(ctx context.Context, _ *mcp.CallToolRequest,
 	in addDocumentInput) (*mcp.CallToolResult, addDocumentOutput, error) {
-	if in.Target == "" {
-		return nil, addDocumentOutput{}, errors.New("target is required")
-	}
-
-	if isURL(in.Target) {
-		// Validated here as well as in the worker, and again on every redirect
-		// hop inside the fetcher. Three enforcement points, none of which may
-		// assume another ran: a job row is not proof that anything checked it,
-		// and this is the only one that sees the caller.
-		if _, err := urlguard.Check(ctx, in.Target, d.Resolver); err != nil {
-			// One error for every rejection, exactly as the path branch does.
-			// Telling a caller that a host resolved but privately, rather than
-			// not at all, turns this tool into a network scanner.
-			d.Log.Warn("add_document rejected a URL the address guard refused")
-			return nil, addDocumentOutput{}, urlguard.ErrBlocked
-		}
-		// Enqueued as given. Canonicalising a URL is the fetcher's rule and it
-		// lives in one implementation; a second one here is how the two drift.
-		// The worker normalises before it keys replacement on the result.
-		library, err := d.library(ctx)
-		if err != nil {
-			return nil, addDocumentOutput{}, err
-		}
-		id, pos, err := library.Enqueue(ctx, in.Target, in.Title)
-		if err != nil {
-			return nil, addDocumentOutput{}, err
-		}
-		return nil, addDocumentOutput{
-			Jobs: []queuedJob{
-				{JobID: id, Status: "queued", PositionInQueue: pos, SourcePath: in.Target},
-			},
-			Note: "Queued one site. The whole site is crawled and indexed as a single " +
-				"document, which takes minutes and is not searchable until it finishes. " +
-				"Poll ingest_status for progress.",
-		}, nil
-	}
-
-	resolved, err := libroot.Resolve(d.LibraryRoots, in.Target)
-	if err != nil {
-		// One error for every rejection. Distinguishing "outside the root"
-		// from "does not exist" would make this tool a filesystem probe.
-		d.Log.Warn("add_document rejected a path outside the library root")
-		return nil, addDocumentOutput{}, libroot.ErrOutsideRoot
-	}
-
-	info, err := os.Stat(resolved)
-	if err != nil {
-		return nil, addDocumentOutput{}, libroot.ErrOutsideRoot
-	}
-
-	var targets []string
-	if info.IsDir() {
-		err = filepath.WalkDir(resolved, func(p string, e os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if e.IsDir() {
-				return nil
-			}
-			if supportedSuffixes[strings.ToLower(filepath.Ext(p))] {
-				targets = append(targets, p)
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, addDocumentOutput{}, fmt.Errorf("could not enumerate directory")
-		}
-		if len(targets) == 0 {
-			return nil, addDocumentOutput{}, errors.New("no supported documents found there")
-		}
-	} else {
-		if !supportedSuffixes[strings.ToLower(filepath.Ext(resolved))] {
-			return nil, addDocumentOutput{}, fmt.Errorf("unsupported file type")
-		}
-		targets = []string{resolved}
-	}
-
-	library, err := d.library(ctx)
+	target, note, err := d.checkTarget(ctx, in.Target)
 	if err != nil {
 		return nil, addDocumentOutput{}, err
 	}
-	out := addDocumentOutput{}
-	for _, t := range targets {
-		id, pos, err := library.Enqueue(ctx, t, in.Title)
-		if err != nil {
-			return nil, addDocumentOutput{}, err
-		}
+	jobs, err := d.jobs(ctx)
+	if err != nil {
+		return nil, addDocumentOutput{}, err
+	}
+	queued, err := jobs.Enqueue(ctx, target, in.Title)
+	if err != nil {
+		return nil, addDocumentOutput{}, err
+	}
+	out := addDocumentOutput{Note: note(len(queued))}
+	for _, q := range queued {
 		out.Jobs = append(out.Jobs, queuedJob{
-			JobID: id, Status: "queued", PositionInQueue: pos, SourcePath: t,
+			JobID: q.JobID, Status: statusQueued, PositionInQueue: q.Position, SourcePath: q.Source,
 		})
 	}
-	out.Note = fmt.Sprintf(
+	return nil, out, nil
+}
+
+// checkTarget refuses a target add_document may not queue, and says what to
+// tell the caller once it is queued.
+func (d Deps) checkTarget(ctx context.Context, target string) (string, func(int) string, error) {
+	if target == "" {
+		return "", nil, errors.New("target is required")
+	}
+	if isURL(target) {
+		// Validated here as well as in the worker, and again on every
+		// redirect hop inside the fetcher. Three enforcement points, none of
+		// which may assume another ran: a job row is not proof that anything
+		// checked it, and this is the only one that sees the caller.
+		if _, err := urlguard.Check(ctx, target, d.Resolver); err != nil {
+			// One error for every rejection, exactly as the path branch
+			// does. Telling a caller that a host resolved but privately,
+			// rather than not at all, turns this tool into a network scanner.
+			d.Log.Warn("add_document rejected a URL the address guard refused")
+			return "", nil, urlguard.ErrBlocked
+		}
+		return target, func(int) string { return queuedSiteNote }, nil
+	}
+	resolved, err := d.checkPath(target)
+	if err != nil {
+		return "", nil, err
+	}
+	return resolved, queuedFilesNote, nil
+}
+
+// checkPath resolves a path under the roots. Every refusal is one error:
+// distinguishing "outside the root" from "does not exist" would make this
+// tool a filesystem probe.
+func (d Deps) checkPath(target string) (string, error) {
+	resolved, err := libroot.Resolve(d.LibraryRoots, target)
+	if err != nil {
+		d.Log.Warn("add_document rejected a path outside the library root")
+		return "", libroot.ErrOutsideRoot
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return "", libroot.ErrOutsideRoot
+	}
+	if !info.IsDir() && !supportedSuffixes[strings.ToLower(filepath.Ext(resolved))] {
+		return "", errors.New("unsupported file type")
+	}
+	return resolved, nil
+}
+
+const queuedSiteNote = "Queued one site. The whole site is crawled and indexed as a single " +
+	"document, which takes minutes and is not searchable until it finishes. " +
+	"Poll ingest_status for progress."
+
+func queuedFilesNote(n int) string {
+	return fmt.Sprintf(
 		"Queued %d document(s). Ingest runs asynchronously in a separate worker and a "+
 			"large PDF may take tens of minutes. Nothing is searchable yet. Poll "+
-			"ingest_status for progress.", len(out.Jobs))
-	return nil, out, nil
+			"ingest_status for progress.", n)
 }
 
 // -- ingest_status --------------------------------------------------------
@@ -566,27 +562,35 @@ type ingestStatusInput struct {
 }
 
 type ingestStatusOutput struct {
-	Jobs []pgstore.Job `json:"jobs"`
+	Jobs []jobStatus `json:"jobs"`
 }
+
+// statusLimit is how many jobs ingest_status lists.
+const statusLimit = 25
 
 func (d Deps) ingestStatus(ctx context.Context, _ *mcp.CallToolRequest,
 	in ingestStatusInput) (*mcp.CallToolResult, ingestStatusOutput, error) {
-	library, err := d.library(ctx)
+	jobs, err := d.jobs(ctx)
 	if err != nil {
 		return nil, ingestStatusOutput{}, err
 	}
+	now := time.Now()
 	if in.JobID != 0 {
-		job, err := library.JobByID(ctx, in.JobID)
+		one, err := jobs.Get(ctx, in.JobID)
 		if err != nil {
 			return nil, ingestStatusOutput{}, err
 		}
-		return nil, ingestStatusOutput{Jobs: []pgstore.Job{*job}}, nil
+		return nil, ingestStatusOutput{Jobs: []jobStatus{statusOf(one, now)}}, nil
 	}
-	jobs, err := library.ActiveJobs(ctx, in.IncludeCompleted, 25)
+	listed, err := jobs.List(ctx, in.IncludeCompleted, statusLimit)
 	if err != nil {
 		return nil, ingestStatusOutput{}, err
 	}
-	return nil, ingestStatusOutput{Jobs: jobs}, nil
+	out := ingestStatusOutput{Jobs: make([]jobStatus, 0, len(listed))}
+	for _, j := range listed {
+		out.Jobs = append(out.Jobs, statusOf(j, now))
+	}
+	return nil, out, nil
 }
 
 // -- upload_link ----------------------------------------------------------
@@ -634,17 +638,17 @@ func (d Deps) cancelIngest(ctx context.Context, _ *mcp.CallToolRequest,
 	if in.JobID == 0 {
 		return nil, cancelIngestOutput{}, errors.New("job_id is required")
 	}
-	library, err := d.library(ctx)
+	jobs, err := d.jobs(ctx)
 	if err != nil {
 		return nil, cancelIngestOutput{}, err
 	}
-	status, err := library.RequestCancel(ctx, in.JobID)
+	status, err := jobs.Cancel(ctx, in.JobID)
 	if err != nil {
 		return nil, cancelIngestOutput{}, err
 	}
 	out := cancelIngestOutput{JobID: in.JobID, Status: status}
 	switch status {
-	case "queued", "running":
+	case statusQueued, statusRunning:
 		out.Note = "Cancellation requested. The job has NOT stopped yet — the worker acts " +
 			"at its next checkpoint, then rolls back any partial rows. It may still " +
 			"report as running for a short time."

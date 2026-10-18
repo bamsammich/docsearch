@@ -90,3 +90,15 @@ func (s *JobSuite) TestCancellingReportsWhatTheJobReadsAsNow() {
 	s.Require().NoError(err)
 	s.Equal("done", status)
 }
+
+func (s *JobSuite) TestOneJobIsReadByID() {
+	s.queue.EXPECT().Job(mock.Anything, int64(7)).Return(job.Job{JobID: 7, Status: "running"}, nil)
+	got, err := s.service().Get(s.T().Context(), 7)
+	s.Require().NoError(err)
+	s.Equal("running", got.Status)
+
+	missing := errors.New("no such job")
+	s.queue.EXPECT().Job(mock.Anything, int64(8)).Return(job.Job{}, missing)
+	_, err = s.service().Get(s.T().Context(), 8)
+	s.Require().ErrorIs(err, missing)
+}

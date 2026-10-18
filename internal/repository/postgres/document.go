@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -56,7 +55,7 @@ func (d *Documents) Get(ctx context.Context, docID string) (*document.Document, 
 		Source:     row.SourcePath,
 		IngestedAt: timeOf(row.IngestedAt),
 	}
-	doc.Quality, doc.Warnings = summarize(row.Warnings)
+	doc.Quality, doc.Warnings = domain.Summary(row.Warnings.String)
 	return &doc, nil
 }
 
@@ -82,7 +81,7 @@ func (d *Documents) List(ctx context.Context) ([]document.Document, error) {
 			Source:     row.SourcePath,
 			IngestedAt: timeOf(row.IngestedAt),
 		}
-		doc.Quality, doc.Warnings = summarize(row.Warnings)
+		doc.Quality, doc.Warnings = domain.Summary(row.Warnings.String)
 		out = append(out, doc)
 	}
 	return out, nil
@@ -182,28 +181,6 @@ func timeOf(t sql.NullTime) time.Time {
 		return time.Time{}
 	}
 	return t.Time.UTC()
-}
-
-// summarize reads the grade and the notes out of a stored structure report.
-//
-// A report that cannot be parsed is not a reason to refuse the document: the
-// rows are still there, and the grade is simply unknown.
-func summarize(warnings sql.NullString) (domain.Quality, []string) {
-	if !warnings.Valid || warnings.String == "" {
-		return 0, nil
-	}
-	var stored struct {
-		Quality string   `json:"quality"`
-		Notes   []string `json:"notes"`
-	}
-	if err := json.Unmarshal([]byte(warnings.String), &stored); err != nil {
-		return 0, nil
-	}
-	var quality domain.Quality
-	if err := quality.UnmarshalText([]byte(stored.Quality)); err != nil {
-		return 0, stored.Notes
-	}
-	return quality, stored.Notes
 }
 
 // sourceKind reads the kind a document was stored with. An index written by
