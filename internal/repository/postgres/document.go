@@ -56,6 +56,7 @@ func (d *Documents) Get(ctx context.Context, docID string) (*document.Document, 
 		IngestedAt: timeOf(row.IngestedAt),
 	}
 	doc.Quality, doc.Warnings = domain.Summary(row.Warnings.String)
+	doc.StructureSource = domain.StoredSource(row.Warnings.String)
 	return &doc, nil
 }
 
@@ -82,6 +83,7 @@ func (d *Documents) List(ctx context.Context) ([]document.Document, error) {
 			IngestedAt: timeOf(row.IngestedAt),
 		}
 		doc.Quality, doc.Warnings = domain.Summary(row.Warnings.String)
+		doc.StructureSource = domain.StoredSource(row.Warnings.String)
 		out = append(out, doc)
 	}
 	return out, nil

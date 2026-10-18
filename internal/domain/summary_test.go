@@ -46,3 +46,32 @@ func (s *SummarySuite) TestNoReportIsUngraded() {
 		s.Zero(quality, stored)
 	}
 }
+
+// Verification reads which source a document's headings came from back out
+// of the report ingest stored.
+func (s *SummarySuite) TestTheStructureSourceReadsBack() {
+	tests := []struct {
+		name   string
+		stored string
+		want   domain.StructureSource
+	}{
+		{
+			name:   "recorded",
+			stored: `{"structure_source": "atx_headings"}`,
+			want:   domain.SourceATXHeadings,
+		},
+		{name: "never recorded", stored: `{"quality": "ok"}`, want: domain.SourceUnknown},
+		{
+			name:   "outside the set",
+			stored: `{"structure_source": "guesswork"}`,
+			want:   domain.SourceUnknown,
+		},
+		{name: "no report", stored: "", want: domain.SourceUnknown},
+		{name: "unreadable", stored: "not json", want: domain.SourceUnknown},
+	}
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			s.Equal(tt.want, domain.StoredSource(tt.stored))
+		})
+	}
+}

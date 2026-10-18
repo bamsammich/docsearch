@@ -22,6 +22,19 @@ describe("findingsOf", () => {
     expect(out.warnings).toEqual([]);
   });
 
+  it("drops the ingest warning about one section holding most of the document", () => {
+    const out = findingsOf({
+      coverage: { ...none, unreliable: 30, unit: "chunks" },
+      findings: [{ code: "unaddressable", detail: "28 of 30 chunks (93%) share one heading path, 'Paper > Body'." }],
+      problems: [],
+      warnings: ["28 of 30 chunks (93%) share one heading path, 'Paper > Body': their boundaries came from the token budget"],
+      chunkCount: 30,
+      headlessChunks: 0,
+    });
+    expect(out.blocks.map((b) => b.key)).toEqual(["chapters"]);
+    expect(out.warnings).toEqual([]);
+  });
+
   it("names headless chunks when no finding does", () => {
     const out = findingsOf({
       coverage: { ...none, unreliable: 10, unit: "chunks" },

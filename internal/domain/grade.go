@@ -58,12 +58,15 @@ const (
 	// are enough chunks for a cold search to get lost in.
 	FlatMinChunks = 50
 
-	// Distinct heading paths per chunk. Where boundaries came from the token
-	// budget rather than from the document, consecutive slices inherit one
-	// heading and a section filter can no longer address them apart.
-	// Well-structured corpora measure 0.84 and 0.93; a manual whose
-	// structure was never derived, and which was therefore cut into fixed
-	// windows, measures 0.29.
+	// Distinct heading paths per chunk. Where a source missed headings,
+	// boundaries came from the token budget rather than from the document,
+	// consecutive slices inherit one heading and a section filter can no
+	// longer address them apart. Well-structured corpora measure 0.84 and
+	// 0.93; a manual whose structure was never derived, and which was
+	// therefore cut into fixed windows, measures 0.29. Only a source that
+	// can miss headings is graded on the degraded bound: see
+	// StructureReport.Unaddressable. The unusable bound sets the severity of
+	// either way a structure fails to separate its chunks.
 	AddressableDegradedRatio = 0.50
 	AddressableUnusableRatio = 0.35
 
@@ -135,14 +138,17 @@ func FactsOf(c Chunk) ChunkFacts {
 	}
 }
 
-// Grade assesses whether chunking produced a searchable document.
-func Grade(chunks []ChunkFacts) []Finding {
+// Grade assesses whether chunking produced a searchable document. The
+// source is what its headings were derived from, which decides whether few
+// heading paths per chunk can mean missed headings.
+func Grade(chunks []ChunkFacts, source StructureSource) []Finding {
 	if len(chunks) < GradeMinChunks {
 		return nil
 	}
+	addressable := func(chunks []ChunkFacts) *Finding { return unaddressable(chunks, source) }
 	var out []Finding
 	for _, check := range []func([]ChunkFacts) *Finding{
-		oversized, fragmented, flatHierarchy, figureDominated, unaddressable, boilerplate,
+		oversized, fragmented, flatHierarchy, figureDominated, addressable, boilerplate,
 	} {
 		if finding := check(chunks); finding != nil {
 			out = append(out, *finding)
@@ -274,38 +280,81 @@ func figureDominated(chunks []ChunkFacts) *Finding {
 	}
 }
 
-// unaddressable reports chunks a section filter cannot tell apart.
-func unaddressable(chunks []ChunkFacts) *Finding {
-	paths := map[string]bool{}
-	headless := 0
-	for _, c := range chunks {
-		paths[c.HeadingPath] = true
-		if pystr.Strip(c.HeadingPath) == "" {
-			headless++
-		}
-	}
-	ratio := float64(len(paths)) / float64(len(chunks))
-	if ratio >= AddressableDegradedRatio {
+// unaddressable reports chunks a section filter cannot tell apart: most of
+// the document under one heading path, or, where the source could have
+// missed headings, too few paths for the chunks.
+func unaddressable(chunks []ChunkFacts, source StructureSource) *Finding {
+	sections := sectionsOf(chunks)
+	ratio := float64(sections.distinct) / float64(len(chunks))
+	share := float64(sections.largest) / float64(len(chunks))
+	undivided := share >= UndividedShare
+	if !undivided && (source.MarkedUp() || ratio >= AddressableDegradedRatio) {
 		return nil
 	}
-	extra := ""
-	if headless > 0 {
-		extra = fmt.Sprintf(
-			" %d chunks carry no heading at all and cannot be reached by heading, "+
-				"filtered, or described in an outline.", headless)
-	}
-	return &Finding{
+	finding := &Finding{
 		Code:     "unaddressable",
 		Severity: severity(ratio < AddressableUnusableRatio),
-		Detail: fmt.Sprintf(
-			"%d chunks share only %d distinct heading paths (%.2f per chunk). "+
-				"Consecutive chunks inherit one heading, which happens when boundaries "+
-				"came from the token budget rather than from the document -- structure "+
-				"was not derived and the text was cut into fixed windows. "+
-				"`section_filter` cannot separate them and `outline` describes the "+
-				"document in %d entries.%s",
-			len(chunks), len(paths), ratio, len(paths), extra),
 	}
+	headless := ""
+	if sections.headless > 0 {
+		headless = fmt.Sprintf(
+			" %d chunks carry no heading at all and cannot be reached by heading, "+
+				"filtered, or described in an outline.", sections.headless)
+	}
+	switch {
+	case undivided && pystr.Strip(sections.largestPath) == "":
+		finding.Detail = fmt.Sprintf(
+			"%d of %d chunks (%s) carry no heading at all, so their boundaries came "+
+				"from the token budget rather than from the document. They cannot be "+
+				"reached by heading or filtered, and `outline` cannot describe them.",
+			sections.largest, len(chunks), percent(share))
+	case undivided:
+		finding.Detail = fmt.Sprintf(
+			"%d of %d chunks (%s) share one heading path, %s, so their boundaries came "+
+				"from the token budget rather than from the document. `section_filter` "+
+				"cannot narrow within that part of it and `outline` gives that part one "+
+				"entry.%s",
+			sections.largest, len(chunks), percent(share),
+			pystr.Repr(truncate(sections.largestPath, pathShown)), headless)
+	default:
+		finding.Detail = fmt.Sprintf(
+			"%d chunks share only %d distinct heading paths (%.2f per chunk), under %s, "+
+				"which can miss headings. Where it missed one, consecutive chunks inherit "+
+				"the heading before it and their boundaries came from the token budget "+
+				"rather than from the document. `section_filter` cannot separate them and "+
+				"`outline` describes the document in %d entries.%s",
+			len(chunks), sections.distinct, ratio, headingOrigin(source, "`%s`"),
+			sections.distinct, headless)
+	}
+	return finding
+}
+
+// sectionCounts is how a document's chunks fall under its heading paths.
+type sectionCounts struct {
+	// largestPath holds the most chunks, the first in document order where
+	// two hold as many.
+	largestPath string
+	distinct    int
+	largest     int
+	headless    int
+}
+
+// sectionsOf counts a document's chunks by heading path.
+func sectionsOf(chunks []ChunkFacts) sectionCounts {
+	perPath := map[string]int{}
+	var out sectionCounts
+	for _, c := range chunks {
+		perPath[c.HeadingPath]++
+		if perPath[c.HeadingPath] > out.largest {
+			out.largest = perPath[c.HeadingPath]
+			out.largestPath = c.HeadingPath
+		}
+		if pystr.Strip(c.HeadingPath) == "" {
+			out.headless++
+		}
+	}
+	out.distinct = len(perPath)
+	return out
 }
 
 // boilerplate reports page furniture the adapter did not strip.

@@ -25,10 +25,19 @@ const (
 	// fail to fetch before the ingest is refused. Provisional: it waits on a
 	// doc-site corpus to calibrate against, and is loose on purpose.
 	SiteIncompleteFatalShare = 0.20
-	// AddressableMin is the distinct heading paths per chunk below which the
-	// structure does not separate a document's chunks. Measured at 0.81 to
-	// 0.93 where retrieval works and 0.29 on a manual cut into fixed windows.
+	// AddressableMin is the distinct heading paths per chunk below which
+	// headings a source could have missed do not separate a document's
+	// chunks. Measured at 0.81 to 0.93 where retrieval works and 0.29 on a
+	// manual cut into fixed windows. A source that reads the document's own
+	// heading markup is exempt: there a low ratio means long sections, and
+	// nothing was missed.
 	AddressableMin = 0.50
+	// UndividedShare is the share of a document's chunks under one heading
+	// path at which its structure does not divide it, whatever the source.
+	// Measured across twenty documents: at most 0.34 where every heading was
+	// found, a paper's reference list the usual largest section, and 1.00 on
+	// a PDF none of whose chunks carry a heading.
+	UndividedShare = 0.50
 	// AddressabilityMinChunks is the chunk count below which a ratio is not a
 	// distribution.
 	AddressabilityMinChunks = 25
@@ -46,6 +55,9 @@ const (
 // listLimit caps how many sections a failure message names.
 const listLimit = 20
 
+// pathShown caps how much of a heading path a finding quotes.
+const pathShown = 80
+
 // unreachableLimit caps how many pages a site failure message names.
 const unreachableLimit = 10
 
@@ -58,6 +70,10 @@ const uncalibratedSamples = 200
 // structure. The JSON field names are the ones persisted in
 // documents.warnings, which the MCP server reads back.
 type StructureReport struct {
+	// LargestSectionPath is the heading path that holds the most chunks, the
+	// first in document order where two hold as many, and
+	// LargestSectionChunks counts them.
+	LargestSectionPath           string   `json:"largest_section_path"`
 	InTOCNotInBody               []string `json:"in_toc_not_in_body"`
 	InBodyNotInTOC               []string `json:"in_body_not_in_toc"`
 	DetectedMoreThanOnce         []string `json:"detected_more_than_once"`
@@ -72,6 +88,7 @@ type StructureReport struct {
 	BodySections            int      `json:"body_sections"`
 	Chunks                  int      `json:"chunks"`
 	DistinctHeadingPaths    int      `json:"distinct_heading_paths"`
+	LargestSectionChunks    int      `json:"largest_section_chunks"`
 	HeadlessChunks          int      `json:"headless_chunks"`
 	UncalibratedScriptShare float64  `json:"uncalibrated_script_share"`
 	// PagesDeclared and PagesFetched are site ingest only: pages some
@@ -128,10 +145,16 @@ func NewStructureReport(diagnostics map[string]any) *StructureReport {
 func (r *StructureReport) MeasureChunks(chunks []Chunk) {
 	r.ScatteredSections = ScatteredSections(chunks)
 	r.Chunks = len(chunks)
-	paths := map[string]bool{}
+	paths := map[string]int{}
 	r.HeadlessChunks = 0
+	r.LargestSectionChunks = 0
+	r.LargestSectionPath = ""
 	for _, c := range chunks {
-		paths[c.HeadingPath] = true
+		paths[c.HeadingPath]++
+		if paths[c.HeadingPath] > r.LargestSectionChunks {
+			r.LargestSectionChunks = paths[c.HeadingPath]
+			r.LargestSectionPath = c.HeadingPath
+		}
 		if pystr.Strip(c.HeadingPath) == "" {
 			r.HeadlessChunks++
 		}
@@ -176,11 +199,32 @@ func (r *StructureReport) Addressability() float64 {
 	return float64(r.DistinctHeadingPaths) / float64(r.Chunks)
 }
 
+// LargestSectionShare is the share of chunks under the heading path that
+// holds the most.
+func (r *StructureReport) LargestSectionShare() float64 {
+	if r.Chunks == 0 {
+		return 0
+	}
+	return float64(r.LargestSectionChunks) / float64(r.Chunks)
+}
+
+// Undivided reports a document most of which sits under one heading path, so
+// a section filter on that path returns most of it.
+func (r *StructureReport) Undivided() bool {
+	return r.Chunks >= AddressabilityMinChunks && r.LargestSectionShare() >= UndividedShare
+}
+
 // Unaddressable reports structure that does not separate the document's own
-// chunks, whatever produced it: section_filter cannot narrow within it and
-// orientation has nothing to work with.
+// chunks: section_filter cannot narrow within it and orientation has nothing
+// to work with.
+//
+// Long sections alone are not the defect. Each piece of a section the token
+// budget split carries that section's path, so chunks outnumber paths in any
+// document that writes at length. Few paths per chunk is evidence of missed
+// headings only where a source could miss them.
 func (r *StructureReport) Unaddressable() bool {
-	return r.Chunks >= AddressabilityMinChunks && r.Addressability() < AddressableMin
+	return r.Undivided() || (r.Chunks >= AddressabilityMinChunks &&
+		!r.StructureSource.MarkedUp() && r.Addressability() < AddressableMin)
 }
 
 // UnreachableShare is the share of a site's known pages that never arrived.
@@ -262,14 +306,39 @@ func (r *StructureReport) Notes() []string {
 				"path instead, which is inferred and has nothing to check it against",
 			len(r.PlacedByPath)))
 	}
-	if r.Unaddressable() {
-		notes = append(notes, fmt.Sprintf(
-			"%d chunks share only %d distinct heading paths (%.2f per chunk): boundaries "+
-				"came from the token budget rather than the document, so section_filter "+
-				"cannot narrow within it and outline describes it in %d entries",
-			r.Chunks, r.DistinctHeadingPaths, r.Addressability(), r.DistinctHeadingPaths))
+	if note := r.addressabilityNote(); note != "" {
+		notes = append(notes, note)
 	}
 	return append(notes, r.scaleNotes()...)
+}
+
+// addressabilityNote says why the structure does not separate the chunks, or
+// nothing when it does.
+func (r *StructureReport) addressabilityNote() string {
+	switch {
+	case r.Undivided() && pystr.Strip(r.LargestSectionPath) == "":
+		return fmt.Sprintf(
+			"%d of %d chunks (%s) carry no heading path: their boundaries came from the "+
+				"token budget rather than the document, so section_filter cannot narrow "+
+				"within them and outline cannot describe them",
+			r.LargestSectionChunks, r.Chunks, percent(r.LargestSectionShare()))
+	case r.Undivided():
+		return fmt.Sprintf(
+			"%d of %d chunks (%s) share one heading path, %s: their boundaries came from "+
+				"the token budget rather than the document, so section_filter cannot narrow "+
+				"within that part of it and outline gives that part one entry",
+			r.LargestSectionChunks, r.Chunks, percent(r.LargestSectionShare()),
+			pystr.Repr(truncate(r.LargestSectionPath, pathShown)))
+	case r.Unaddressable():
+		return fmt.Sprintf(
+			"%d chunks share only %d distinct heading paths (%.2f per chunk) under %s, "+
+				"which can miss headings: where it did, boundaries came from the token budget "+
+				"rather than the document, so section_filter cannot narrow within those runs "+
+				"and outline describes the document in %d entries",
+			r.Chunks, r.DistinctHeadingPaths, r.Addressability(),
+			headingOrigin(r.StructureSource, "'%s'"), r.DistinctHeadingPaths)
+	}
+	return ""
 }
 
 // scaleNotes are the notes about sizing and validation, split from Notes to
@@ -398,6 +467,15 @@ func contiguous(ordinals []int) bool {
 		}
 	}
 	return true
+}
+
+// headingOrigin names where a document's headings came from, quoting a
+// recorded source with quote.
+func headingOrigin(source StructureSource, quote string) string {
+	if source == 0 || source == SourceUnknown {
+		return "headings from a source that was not recorded"
+	}
+	return "headings from structure source " + fmt.Sprintf(quote, source)
 }
 
 // listed joins up to listLimit items, marking any cut.

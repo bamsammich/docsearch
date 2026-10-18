@@ -229,6 +229,126 @@ func (s *StructureSuite) TestAddressability() {
 	}
 }
 
+// paperSections is how a paper's chunks fall under its headings: twenty
+// sections, most of one chunk, two the token budget split five ways, and a
+// reference list of twelve. Every heading the paper marks is a path.
+var paperSections = []int{2, 1, 1, 1, 5, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 5, 2, 2, 12}
+
+// sectioned is a document with the given number of chunks under each of its
+// headings in turn, the last of them its references.
+func sectioned(counts []int) []domain.Chunk {
+	var chunks []domain.Chunk
+	for i, n := range counts {
+		path := fmt.Sprintf("Paper > Section %d", i+1)
+		if i == len(counts)-1 {
+			path = "Paper > References"
+		}
+		for range n {
+			chunks = append(chunks, domain.Chunk{
+				HeadingPath: path,
+				Text:        "The pump draws water through the inlet filter.",
+				Ordinal:     len(chunks),
+			})
+		}
+	}
+	return chunks
+}
+
+// measured is a report from the source given over the chunks given.
+func measured(source domain.StructureSource, chunks []domain.Chunk) *domain.StructureReport {
+	report := &domain.StructureReport{StructureSource: source}
+	report.MeasureChunks(chunks)
+	return report
+}
+
+// A section the token budget split carries its path into every piece, so
+// chunks outnumber paths wherever a document writes at length. Under
+// headings read from markup nothing was missed, and the split is no defect.
+func (s *StructureSuite) TestLongSectionsUnderMarkupHeadingsAreAddressable() {
+	for _, source := range []domain.StructureSource{
+		domain.SourceATXHeadings, domain.SourceHTMLNesting, domain.SourceHeadingStyles,
+	} {
+		s.Run(source.String(), func() {
+			report := measured(source, sectioned(paperSections))
+			s.Equal(44, report.Chunks)
+			s.Equal(20, report.DistinctHeadingPaths)
+			s.Less(report.Addressability(), domain.AddressableMin)
+			s.False(report.Unaddressable())
+			s.Equal(domain.QualityOK, report.Quality())
+			s.Empty(report.Notes())
+		})
+	}
+}
+
+// The same distribution under inferred headings may be headings the
+// inference missed, and the note says which source could have missed them.
+func (s *StructureSuite) TestLongSectionsUnderInferredHeadingsStayDegraded() {
+	report := measured(domain.SourceFontHeuristic, sectioned(paperSections))
+	s.True(report.Unaddressable())
+	s.False(report.Undivided())
+	s.Equal(domain.QualityDegraded, report.Quality())
+	notes := strings.Join(report.Notes(), " ")
+	s.Contains(notes, "44 chunks share only 20 distinct heading paths (0.45 per chunk)")
+	s.Contains(notes, "structure source 'font_heuristic', which can miss headings")
+}
+
+// A document most of which sits under one path is not divided by its
+// structure, whatever read the headings.
+func (s *StructureSuite) TestAnUndividedDocumentIsDegradedWhateverTheSource() {
+	tests := []struct {
+		name     string
+		wantNote string
+		chunks   []domain.Chunk
+		source   domain.StructureSource
+	}{
+		{
+			name:     "markup with only a title",
+			source:   domain.SourceATXHeadings,
+			chunks:   sectioned([]int{30}),
+			wantNote: "30 of 30 chunks (100%) share one heading path, 'Paper > References'",
+		},
+		{
+			name:     "markup with one section holding most of it",
+			source:   domain.SourceATXHeadings,
+			chunks:   sectioned([]int{1, 1, 1, 1, 26}),
+			wantNote: "26 of 30 chunks (87%) share one heading path",
+		},
+		{
+			name:     "an outline none of whose chunks carry a heading",
+			source:   domain.SourceOutline,
+			chunks:   headless(30),
+			wantNote: "30 of 30 chunks (100%) carry no heading path",
+		},
+	}
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			report := measured(tt.source, tt.chunks)
+			s.True(report.Undivided())
+			s.True(report.Unaddressable())
+			s.Equal(domain.QualityDegraded, report.Quality())
+			s.Contains(strings.Join(report.Notes(), " "), tt.wantNote)
+		})
+	}
+}
+
+// headless is a document of n chunks none of which carries a heading path.
+func headless(n int) []domain.Chunk {
+	chunks := make([]domain.Chunk, n)
+	for i := range chunks {
+		chunks[i] = domain.Chunk{Text: "The kettle switches off once the water boils.", Ordinal: i}
+	}
+	return chunks
+}
+
+// Where two sections hold as many chunks, the first is named, so a document
+// measured twice reads the same.
+func (s *StructureSuite) TestTheLargestSectionIsTheFirstOfEquals() {
+	report := measured(domain.SourceATXHeadings, sectioned([]int{1, 3, 3}))
+	s.Equal(3, report.LargestSectionChunks)
+	s.Equal("Paper > Section 2", report.LargestSectionPath)
+	s.InDelta(3.0/7.0, report.LargestSectionShare(), 1e-9)
+}
+
 // Chunk sizes for a document in an uncalibrated script are in an unknown
 // unit, though nothing looks wrong. Noted first, downgraded past a bound.
 func (s *StructureSuite) TestUncalibratedScripts() {
@@ -263,6 +383,15 @@ func (s *StructureSuite) TestNotesAndAddressabilityReachThePersistedPayload() {
 	s.Equal("degraded", payload["quality"])
 	s.InEpsilon(0.286, payload["addressability"], 0)
 	s.Contains(fmt.Sprint(payload["notes"]), "section_filter cannot narrow")
+}
+
+// The largest section is persisted with the rest, so a stored report shows
+// the evidence an undivided grade rests on.
+func (s *StructureSuite) TestTheLargestSectionReachesThePersistedPayload() {
+	payload := s.persisted(measured(domain.SourceATXHeadings, sectioned([]int{1, 1, 28})))
+	s.Equal("degraded", payload["quality"])
+	s.InEpsilon(28, payload["largest_section_chunks"], 0)
+	s.Equal("Paper > References", payload["largest_section_path"])
 }
 
 // The Python payload never carries a null list, and the MCP server reads it

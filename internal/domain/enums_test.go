@@ -76,3 +76,16 @@ func (s *EnumSuite) TestAnUnnamedValuePrintsItsNumber() {
 	// Reached only by a failure message, since marshalling refuses the value.
 	s.Equal("chunk kind(9)", domain.ChunkKind(9).String())
 }
+
+// Only a format's own heading markup reads every heading it parses. An
+// outline or table of contents declares a subset, and the rest infer.
+func (s *EnumSuite) TestOnlyHeadingMarkupIsMarkedUp() {
+	marked := map[domain.StructureSource]bool{
+		domain.SourceATXHeadings:   true,
+		domain.SourceHTMLNesting:   true,
+		domain.SourceHeadingStyles: true,
+	}
+	for value := domain.SourceOutline; value <= domain.SourceUnknown; value++ {
+		s.Equal(marked[value], value.MarkedUp(), value.String())
+	}
+}

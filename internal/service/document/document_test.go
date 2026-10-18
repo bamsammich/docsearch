@@ -2,6 +2,7 @@ package document_test
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -135,6 +136,39 @@ func (s *DocumentSuite) TestQualityAndIntegrityAreReportedApart() {
 	s.Require().NoError(err)
 	s.Empty(report.Problems, "the rows are consistent")
 	s.Equal(domain.VerdictUnusable, report.Verdict, "and the chunks are unusable")
+}
+
+// Verification grades a document's heading paths by what ingest derived them
+// from. Long sections under Markdown headings are what the author wrote; the
+// same chunks under headings of unrecorded origin may hide missed ones.
+func (s *DocumentSuite) TestVerificationGradesHeadingPathsByTheirSource() {
+	var chunks []domain.Chunk
+	for i := range 30 {
+		chunks = append(chunks, domain.Chunk{
+			HeadingPath: fmt.Sprintf("Paper > Section %d", i/3),
+			Text:        strings.Repeat("The pump draws water through the inlet filter. ", 60),
+			Ordinal:     i,
+		})
+	}
+	tests := []struct {
+		source      domain.StructureSource
+		wantVerdict domain.Verdict
+	}{
+		{source: domain.SourceATXHeadings, wantVerdict: domain.VerdictGood},
+		{source: domain.SourceUnknown, wantVerdict: domain.VerdictUnusable},
+	}
+	for _, tt := range tests {
+		s.Run(tt.source.String(), func() {
+			s.SetupTest()
+			s.holds(document.Document{
+				DocID: "paper", Status: "ready", StructureSource: tt.source,
+			}, chunks)
+
+			report, err := s.service().Verify(s.T().Context(), "paper")
+			s.Require().NoError(err)
+			s.Equal(tt.wantVerdict, report.Verdict)
+		})
+	}
 }
 
 func (s *DocumentSuite) TestADocumentWithNoChunksIsAProblemRatherThanAGrade() {
