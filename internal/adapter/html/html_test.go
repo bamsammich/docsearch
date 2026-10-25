@@ -3,9 +3,12 @@ package html_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/suite"
+	nethtml "golang.org/x/net/html"
 
 	"github.com/bamsammich/docsearch/internal/adapter/html"
 )
@@ -95,6 +98,11 @@ func (s *HTMLSuite) TestParseReadsTextNoBlockHolds() {
 			want: []string{"Body."},
 		},
 		{
+			name: "a node of only zero-width characters is not read",
+			body: "<div>\u200b<a href=\"#setup\">\u200d</a> Loose text.</div><div>\u200c\ufeff</div>",
+			want: []string{"Loose text."},
+		},
+		{
 			name: "a hidden tab panel is read",
 			body: `<div role="tabpanel">Python</div><div role="tabpanel" hidden>Go</div>`,
 			want: []string{"Python", "Go"},
@@ -145,6 +153,36 @@ func (s *HTMLSuite) TestParseReadsMintlifyParagraphSpans() {
 		{"deploy", "Was this page helpful?"},
 		{"deploy", "Responses are generated using AI and may contain mistakes."},
 	}, got)
+}
+
+func (s *HTMLSuite) TestParseLeavesMintlifyAnchorsOutOfHeadingPaths() {
+	raw, err := os.ReadFile(filepath.Join("testdata", "mintlify.html"))
+	s.Require().NoError(err)
+	_, items, err := html.Parse(string(raw))
+	s.Require().NoError(err)
+
+	paths := make(map[string][]string)
+	for _, item := range items {
+		// An item above the first heading has no anchor and no path.
+		if item.Fragment != nil {
+			paths[*item.Fragment] = item.HeadingPath
+		}
+	}
+	// Each heading's anchor link holds only a zero-width space.
+	s.Equal(map[string][]string{
+		"page-title":       {"Quickstart"},
+		"before-you-begin": {"Quickstart", "Before you begin"},
+		"deploy":           {"Quickstart", "Deploy"},
+	}, paths)
+}
+
+func (s *HTMLSuite) TestProseTextDropsNodesOfOnlyZeroWidthCharacters() {
+	doc, err := nethtml.Parse(strings.NewReader(
+		"<p>\u200b<b>Zero\u200bwidth</b> \u200c\u200d <i>\ufeff</i>kept</p>"))
+	s.Require().NoError(err)
+	p := goquery.NewDocumentFromNode(doc).Find("p").Nodes[0]
+	// A zero-width character inside a word is the word's, so it stays.
+	s.Equal("Zero\u200bwidth kept", html.ProseText(p))
 }
 
 func (s *HTMLSuite) TestExtractReportsAMissingFile() {
