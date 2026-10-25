@@ -43,7 +43,9 @@ type OutlineEntry struct {
 type Page struct {
 	// Text is the page's plain text, stored for display.
 	Text string
-	// Lines are sorted by top, rounded to a tenth of a point, then left.
+	// Lines are in reading order: by top, rounded to a tenth of a point,
+	// then left, except that a page set in columns is read a column at a
+	// time.
 	Lines  []Line
 	Images []Image
 }
@@ -51,6 +53,9 @@ type Page struct {
 // Line is one line of text, in points from the page's top left.
 type Line struct {
 	Text string
+	// Font names the font of the line's first span, "" when the engine
+	// reports none.
+	Font string
 	Y0   float64
 	X0   float64
 	Y1   float64

@@ -183,14 +183,11 @@ func (r reader) page(index int) (p Page, err error) {
 
 // readPage reads a loaded page's text runs, plain text and images.
 func (r reader) readPage(pg requests.Page) (Page, error) {
-	width, err := r.inst.FPDF_GetPageWidthF(&requests.FPDF_GetPageWidthF{Page: pg})
+	bounds, err := r.inst.FPDF_GetPageBoundingBox(&requests.FPDF_GetPageBoundingBox{Page: pg})
 	if err != nil {
-		return Page{}, fmt.Errorf("width: %w", err)
+		return Page{}, fmt.Errorf("page box: %w", err)
 	}
-	height, err := r.inst.FPDF_GetPageHeightF(&requests.FPDF_GetPageHeightF{Page: pg})
-	if err != nil {
-		return Page{}, fmt.Errorf("height: %w", err)
-	}
+	f := frameOf(bounds.Rect)
 	structured, err := r.inst.GetPageTextStructured(&requests.GetPageTextStructured{
 		Page:                   pg,
 		Mode:                   requests.GetPageTextStructuredModeRects,
@@ -203,11 +200,11 @@ func (r reader) readPage(pg requests.Page) (Page, error) {
 	if err != nil {
 		return Page{}, fmt.Errorf("text: %w", err)
 	}
-	images, err := r.images(pg, float64(height.PageHeight))
+	images, err := r.images(pg, f)
 	if err != nil {
 		return Page{}, fmt.Errorf("images: %w", err)
 	}
-	runs := toRuns(structured.Rects, float64(width.PageWidth), float64(height.PageHeight))
+	runs := toRuns(structured.Rects, f)
 	return Page{Text: pageText(plain.Text), Lines: buildLines(runs), Images: images}, nil
 }
 
@@ -222,23 +219,46 @@ func pageText(text string) string {
 	return text
 }
 
-// toRuns converts PDFium's text rects to runs in top-down coordinates, which
-// is what MuPDF reports and what every y comparison assumes; PDFium's are PDF
-// user space, origin at the bottom left.
+// frame is the visible page, its crop box, in PDF user space. Positions are
+// measured from its top left corner, which is what MuPDF reports and what
+// every y comparison assumes. PDF user space puts the origin at the bottom
+// left of the media box, and a crop box need not start there: one journal's
+// pages are cropped 66 points up from the media box's bottom edge.
+type frame struct {
+	left, top, width, height float64
+}
+
+// frameOf is the frame of PDFium's page bounding box, the crop box
+// intersected with the media box.
+func frameOf(r structs.FPDF_FS_RECTF) frame {
+	left, right := min(r.Left, r.Right), max(r.Left, r.Right)
+	bottom, top := min(r.Top, r.Bottom), max(r.Top, r.Bottom)
+	return frame{
+		left: float64(left), top: float64(top),
+		width: float64(right - left), height: float64(top - bottom),
+	}
+}
+
+// x and y convert a user-space position to one from the frame's top left.
+func (f frame) x(v float64) float64 { return v - f.left }
+func (f frame) y(v float64) float64 { return f.top - v }
+
+// toRuns converts PDFium's text rects to runs measured from the frame's top
+// left.
 //
-// A run whose centre falls outside the page is dropped. MuPDF clips to the
+// A run whose centre falls outside the frame is dropped. MuPDF clips to the
 // page and PDFium does not: one manual carries a stray "1" below the bottom
 // edge of nearly every page, which normalizes to boilerplate "#" and takes
 // every printed contents page number with it.
-func toRuns(rects []*responses.GetPageTextStructuredRect, pageWidth, pageHeight float64) []run {
+func toRuns(rects []*responses.GetPageTextStructuredRect, f frame) []run {
 	out := make([]run, 0, len(rects))
 	for _, rect := range rects {
 		p := rect.PointPosition
-		cx, cy := (p.Left+p.Right)/2, pageHeight-(p.Top+p.Bottom)/2
-		if cx < 0 || cx > pageWidth || cy < 0 || cy > pageHeight {
+		cx, cy := f.x((p.Left+p.Right)/2), f.y((p.Top+p.Bottom)/2)
+		if cx < 0 || cx > f.width || cy < 0 || cy > f.height {
 			continue
 		}
-		if r := runOf(rect, pageHeight); r.text != "" {
+		if r := runOf(rect, f); r.text != "" {
 			out = append(out, r)
 		}
 	}
@@ -247,12 +267,12 @@ func toRuns(rects []*responses.GetPageTextStructuredRect, pageWidth, pageHeight 
 
 // runOf converts one rect, taking the rendered font size where PDFium has
 // one and the nominal size otherwise.
-func runOf(rect *responses.GetPageTextStructuredRect, pageHeight float64) run {
+func runOf(rect *responses.GetPageTextStructuredRect, f frame) run {
 	raw := strings.ReplaceAll(rect.Text, "\r\n", " ")
 	p := rect.PointPosition
 	r := run{
-		text: strings.TrimSpace(raw), top: pageHeight - p.Top, left: p.Left,
-		bottom: pageHeight - p.Bottom, right: p.Right,
+		text: strings.TrimSpace(raw), top: f.y(p.Top), left: f.x(p.Left),
+		bottom: f.y(p.Bottom), right: f.x(p.Right),
 		spaceBefore: raw != strings.TrimLeft(raw, " \t\n"),
 		spaceAfter:  raw != strings.TrimRight(raw, " \t\n"),
 	}
@@ -266,7 +286,7 @@ func runOf(rect *responses.GetPageTextStructuredRect, pageHeight float64) run {
 }
 
 // images finds every image on a page, including those inside form objects.
-func (r reader) images(pg requests.Page, pageHeight float64) ([]Image, error) {
+func (r reader) images(pg requests.Page, f frame) ([]Image, error) {
 	n, err := r.inst.FPDFPage_CountObjects(&requests.FPDFPage_CountObjects{Page: pg})
 	if err != nil {
 		return nil, fmt.Errorf("count objects: %w", err)
@@ -277,7 +297,7 @@ func (r reader) images(pg requests.Page, pageHeight float64) ([]Image, error) {
 		if err != nil {
 			return nil, fmt.Errorf("object %d: %w", i, err)
 		}
-		if out, err = r.visit(obj.PageObject, identity(), pageHeight, out); err != nil {
+		if out, err = r.visit(obj.PageObject, identity(), f, out); err != nil {
 			return nil, err
 		}
 	}
@@ -289,7 +309,7 @@ func (r reader) images(pg requests.Page, pageHeight float64) ([]Image, error) {
 func (r reader) visit(
 	obj references.FPDF_PAGEOBJECT,
 	m structs.FPDF_FS_MATRIX,
-	pageHeight float64,
+	f frame,
 	out []Image,
 ) ([]Image, error) {
 	typ, err := r.inst.FPDFPageObj_GetType(&requests.FPDFPageObj_GetType{PageObject: obj})
@@ -298,13 +318,13 @@ func (r reader) visit(
 	}
 	switch typ.Type {
 	case enums.FPDF_PAGEOBJ_IMAGE:
-		im, err := r.image(obj, m, pageHeight)
+		im, err := r.image(obj, m, f)
 		if err != nil {
 			return nil, err
 		}
 		return append(out, im), nil
 	case enums.FPDF_PAGEOBJ_FORM:
-		return r.visitForm(obj, m, pageHeight, out)
+		return r.visitForm(obj, m, f, out)
 	}
 	return out, nil
 }
@@ -312,7 +332,7 @@ func (r reader) visit(
 func (r reader) visitForm(
 	obj references.FPDF_PAGEOBJECT,
 	m structs.FPDF_FS_MATRIX,
-	pageHeight float64,
+	f frame,
 	out []Image,
 ) ([]Image, error) {
 	fm, err := r.inst.FPDFPageObj_GetMatrix(&requests.FPDFPageObj_GetMatrix{PageObject: obj})
@@ -331,7 +351,7 @@ func (r reader) visitForm(
 		if err != nil {
 			return nil, fmt.Errorf("form object %d: %w", i, err)
 		}
-		if out, err = r.visit(child.PageObject, inner, pageHeight, out); err != nil {
+		if out, err = r.visit(child.PageObject, inner, f, out); err != nil {
 			return nil, err
 		}
 	}
@@ -345,7 +365,7 @@ func (r reader) visitForm(
 func (r reader) image(
 	obj references.FPDF_PAGEOBJECT,
 	m structs.FPDF_FS_MATRIX,
-	pageHeight float64,
+	f frame,
 ) (Image, error) {
 	b, err := r.inst.FPDFPageObj_GetBounds(&requests.FPDFPageObj_GetBounds{PageObject: obj})
 	if err != nil {
@@ -358,7 +378,7 @@ func (r reader) image(
 		top:    float64(b.Top),
 	})
 	return Image{
-		Y0:   pageHeight - placed.top,
+		Y0:   f.y(placed.top),
 		Area: math.Abs(placed.right-placed.left) * math.Abs(placed.top-placed.bottom),
 		ID:   r.imageID(obj),
 	}, nil

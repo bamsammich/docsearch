@@ -65,7 +65,11 @@ rounding (17.3 against 17.2), which changes no decision.
 and `Bottom` are PDF user space, origin at the bottom left. MuPDF also clips
 extraction to the page and PDFium does not: Manual C carries a stray "1" below
 the bottom edge of 1,846 pages, which normalizes to a boilerplate `#` and then
-deletes every page number from the printed contents.
+deletes every page number from the printed contents. Positions are measured
+from the crop box's top left rather than the media box's. One journal crops
+its pages 66 points up from the media box's bottom edge, and measuring from
+the media box put the top lines of every page above it, where they were
+clipped.
 
 **3. Keep vertical text out of line grouping.** Some journal PDFs print an
 "Author Manuscript" watermark down the margin of every page. Its runs are
@@ -115,8 +119,8 @@ Three causes account for the gaps:
   top, which interleaves the two columns of a journal page line by line with
   either engine. PDFium's tops differ slightly from MuPDF's line boxes, so the
   interleaving differs. The words in a section are the same; their order is
-  not. A line builder working from PDFium's per-character loose boxes, which
-  follow font metrics as MuPDF's do, should close this. Unverified.
+  not. `columns.go` now reads a page that has a gutter between two columns
+  of running text one column at a time, which neither engine did here.
 - **Images drawn through pattern fills.** Paper C's first page has five images
   that MuPDF reports with no object number. PDFium finds no image objects on
   that page at all: the images are painted by pattern fills on two paths, and

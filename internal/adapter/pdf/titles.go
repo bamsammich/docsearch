@@ -51,7 +51,7 @@ func titlePlacements(
 			title, wrapped := joinTitle(p.Lines, i)
 			section := strconv.Itoa(len(placements) + 1)
 			placements = append(placements, placement{
-				section: section, title: title, page: pno, y: p.Lines[i].Y0,
+				section: section, title: title, page: pno, line: i,
 				wrapped: wrapped, matched: true,
 			})
 			titles[section] = title
@@ -99,13 +99,16 @@ func unnumberedHeading(ln Line, headingSizes []float64, boiler boilerplate) bool
 }
 
 // joinTitle is the title starting at lines[i], with any lines that carry it
-// on at the same size just below, and how many lines it took past the first.
+// on in the same font and size just below, and how many lines it took past
+// the first. A subheading set right under its heading, at the heading's size
+// but in italic, is a title of its own.
 func joinTitle(lines []Line, i int) (string, int) {
 	parts := []string{pystr.Strip(lines[i].Text)}
 	j := i
 	for j+1 < len(lines) {
 		next, last := lines[j+1], lines[j]
-		if next.Size != last.Size || next.Y0-last.Y1 > last.Size*titleJoinGap {
+		if next.Size != last.Size || next.Font != last.Font ||
+			next.Y0-last.Y1 > last.Size*titleJoinGap {
 			break
 		}
 		parts = append(parts, pystr.Strip(next.Text))

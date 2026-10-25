@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"cmp"
 	"slices"
 	"strconv"
 	"strings"
@@ -153,12 +154,14 @@ type placement struct {
 	section string
 	title   string
 	page    int
-	y       float64
+	// line is the index of the heading's line among its page's lines, which
+	// are in reading order; -1 places it before the first.
+	line int
 	// wrapped is how many lines after the matched one carry the rest of a
 	// title set over several lines. They are the heading, not text.
 	wrapped int
 	// matched is true when the title was found among the page's lines; an
-	// unmatched entry sits at the top of its page, y -1.
+	// unmatched entry sits at the top of its page, line -1.
 	matched bool
 }
 
@@ -182,36 +185,33 @@ func locateOutlineHeadings(
 		if pno < 0 || pno >= len(pages) {
 			continue
 		}
-		y, ok := findTitle(pages[pno].Lines, normalizeTitle(e.title), boiler)
+		line, ok := findTitle(pages[pno].Lines, normalizeTitle(e.title), boiler)
 		if ok {
 			located++
 		}
 		out = append(
 			out,
-			placement{section: e.section, title: e.title, page: pno, y: y, matched: ok},
+			placement{section: e.section, title: e.title, page: pno, line: line, matched: ok},
 		)
 	}
 	slices.SortStableFunc(out, func(a, b placement) int {
-		if a.page != b.page {
-			return a.page - b.page
-		}
-		return cmpFloat(a.y, b.y)
+		return cmp.Or(cmp.Compare(a.page, b.page), cmp.Compare(a.line, b.line))
 	})
 	return out, located
 }
 
-// findTitle is the top of the first line whose normalized text is want or
+// findTitle is the index of the first line whose normalized text is want or
 // begins with it, or -1 and false.
-func findTitle(lines []Line, want string, boiler boilerplate) (float64, bool) {
+func findTitle(lines []Line, want string, boiler boilerplate) (int, bool) {
 	if want == "" {
 		return -1, false
 	}
-	for _, ln := range lines {
+	for i, ln := range lines {
 		if boiler.matches(ln.Text) {
 			continue
 		}
 		if got := normalizeTitle(ln.Text); got != "" && strings.HasPrefix(got, want) {
-			return ln.Y0, true
+			return i, true
 		}
 	}
 	return -1, false

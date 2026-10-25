@@ -52,18 +52,30 @@ func (r run) sameFont(o run) bool {
 // measured in.
 func (r run) em() float64 { return math.Max(r.size, 1) }
 
+// laidLine is a line with its right edge, which reading columns needs and
+// nothing after it does.
+type laidLine struct {
+	Line
+	right float64
+	// vertical marks text set down the page, such as a watermark in the
+	// margin. It says nothing about where the columns are.
+	vertical bool
+}
+
 // buildLines groups a page's runs into lines the way MuPDF groups spans, and
-// returns them sorted as the adapter reads them.
+// returns them in reading order.
 func buildLines(runs []run) []Line {
 	horizontal, vertical := splitVertical(runs)
-	var out []Line
+	var out []laidLine
 	for _, band := range rows(horizontal) {
 		out = append(out, bandLines(band)...)
 	}
 	for _, r := range vertical {
-		out = append(out, lineOf([]run{r}, r.top, r.bottom))
+		ln := lineOf([]run{r}, r.top, r.bottom)
+		ln.vertical = true
+		out = append(out, ln)
 	}
-	return sortedLines(out)
+	return readingOrder(sortedLines(out))
 }
 
 // splitVertical separates vertical text, such as an "Author Manuscript"
@@ -113,7 +125,7 @@ func rows(runs []run) [][]run {
 // box, and the contents parser groups rows by that top. Only same-size lines
 // share: a 12pt heading in one column and 9pt table text in the other keep
 // their own, since unnumbered headings are keyed by their top.
-func bandLines(band []run) []Line {
+func bandLines(band []run) []laidLine {
 	extents := map[float64][2]float64{}
 	for _, r := range band {
 		sz := pystr.Round(r.size, 1)
@@ -125,7 +137,7 @@ func bandLines(band []run) []Line {
 	}
 	row := slices.Clone(band)
 	slices.SortStableFunc(row, func(a, b run) int { return cmp.Compare(a.left, b.left) })
-	var out []Line
+	var out []laidLine
 	start := 0
 	for i := 1; i <= len(row); i++ {
 		if i < len(row) && !splits(row[i-1], row[i]) {
@@ -150,11 +162,12 @@ func splits(prev, cur run) bool {
 // spans with one. Same-font runs are letter-spaced text arriving a glyph at
 // a time and join without a space unless the gap is a word space, or
 // "Phone" would read "P h o n e".
-func lineOf(runs []run, top, bottom float64) Line {
+func lineOf(runs []run, top, bottom float64) laidLine {
 	if len(runs) == 0 {
-		return Line{}
+		return laidLine{}
 	}
 	first := runs[0]
+	right := first.right
 	var b strings.Builder
 	b.WriteString(first.text)
 	prev := first
@@ -165,21 +178,23 @@ func lineOf(runs []run, top, bottom float64) Line {
 		}
 		b.WriteString(r.text)
 		prev = r
+		right = max(right, r.right)
 	}
-	return Line{
+	return laidLine{Line: Line{
 		Text: pystr.Strip(b.String()),
 		Y0:   top,
 		X0:   first.left,
 		Y1:   bottom,
 		Size: pystr.Round(first.size, 1),
-	}
+		Font: first.font,
+	}, right: right}
 }
 
 // sortedLines drops empty lines and orders the rest by top, rounded to a
 // tenth of a point, then left, as the Python adapter orders MuPDF's.
-func sortedLines(lines []Line) []Line {
-	out := slices.DeleteFunc(lines, func(ln Line) bool { return ln.Text == "" })
-	slices.SortStableFunc(out, func(a, b Line) int {
+func sortedLines(lines []laidLine) []laidLine {
+	out := slices.DeleteFunc(lines, func(ln laidLine) bool { return ln.Text == "" })
+	slices.SortStableFunc(out, func(a, b laidLine) int {
 		return cmp.Or(
 			cmp.Compare(pystr.Round(a.Y0, 1), pystr.Round(b.Y0, 1)),
 			cmp.Compare(a.X0, b.X0),
