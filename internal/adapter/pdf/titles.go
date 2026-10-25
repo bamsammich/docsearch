@@ -105,14 +105,16 @@ func unnumberedHeading(ln Line, headingSizes []float64, boiler boilerplate) bool
 func joinTitle(lines []Line, i int) (string, int) {
 	parts := []string{pystr.Strip(lines[i].Text)}
 	j := i
-	for j+1 < len(lines) {
-		next, last := lines[j+1], lines[j]
-		if next.Size != last.Size || next.Font != last.Font ||
-			next.Y0-last.Y1 > last.Size*titleJoinGap {
-			break
-		}
-		parts = append(parts, pystr.Strip(next.Text))
+	for j+1 < len(lines) && carriesOn(lines[j], lines[j+1]) {
+		parts = append(parts, pystr.Strip(lines[j+1].Text))
 		j++
 	}
 	return strings.Join(parts, " "), j - i
+}
+
+// carriesOn reports whether next carries on the title line last: set in the
+// same font and size, just below it.
+func carriesOn(last, next Line) bool {
+	return next.Size == last.Size && next.Font == last.Font &&
+		next.Y0 > last.Y0 && next.Y0-last.Y1 <= last.Size*titleJoinGap
 }

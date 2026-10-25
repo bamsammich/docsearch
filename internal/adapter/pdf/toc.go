@@ -185,14 +185,14 @@ func locateOutlineHeadings(
 		if pno < 0 || pno >= len(pages) {
 			continue
 		}
-		line, ok := findTitle(pages[pno].Lines, normalizeTitle(e.title), boiler)
+		line, wrapped, ok := findTitle(pages[pno].Lines, normalizeTitle(e.title), boiler)
 		if ok {
 			located++
 		}
-		out = append(
-			out,
-			placement{section: e.section, title: e.title, page: pno, line: line, matched: ok},
-		)
+		out = append(out, placement{
+			section: e.section, title: e.title, page: pno, line: line,
+			wrapped: wrapped, matched: ok,
+		})
 	}
 	slices.SortStableFunc(out, func(a, b placement) int {
 		return cmp.Or(cmp.Compare(a.page, b.page), cmp.Compare(a.line, b.line))
@@ -201,18 +201,38 @@ func locateOutlineHeadings(
 }
 
 // findTitle is the index of the first line whose normalized text is want or
-// begins with it, or -1 and false.
-func findTitle(lines []Line, want string, boiler boilerplate) (int, bool) {
+// begins with it, and how many lines after it carry the rest of a title set
+// over several; -1 and false when no line is.
+func findTitle(lines []Line, want string, boiler boilerplate) (int, int, bool) {
 	if want == "" {
-		return -1, false
+		return -1, 0, false
 	}
 	for i, ln := range lines {
 		if boiler.matches(ln.Text) {
 			continue
 		}
-		if got := normalizeTitle(ln.Text); got != "" && strings.HasPrefix(got, want) {
-			return i, true
+		if wrapped, ok := titleAt(lines, i, want); ok {
+			return i, wrapped, true
 		}
 	}
-	return -1, false
+	return -1, 0, false
+}
+
+// titleAt reports whether the title want starts at lines[i], on that line
+// alone or carried on over the lines below it, and how many lines it took
+// past the first. A long title wraps, and its first line alone is only the
+// start of it.
+func titleAt(lines []Line, i int, want string) (int, bool) {
+	got := normalizeTitle(lines[i].Text)
+	for j := i; got != ""; j++ {
+		if strings.HasPrefix(got, want) {
+			return j - i, true
+		}
+		if !strings.HasPrefix(want, got+" ") || j+1 == len(lines) ||
+			!carriesOn(lines[j], lines[j+1]) {
+			break
+		}
+		got = normalizeTitle(got + " " + lines[j+1].Text)
+	}
+	return 0, false
 }

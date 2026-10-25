@@ -656,21 +656,27 @@ rather than inferred from it. A PDF is tried in this order:
 
 | | source | supplies | corroboration |
 |---|---|---|---|
-| 1 | embedded outline (`get_toc`) | sections, nesting, and the page each begins on | none — nothing it asserts is inferred |
+| 1 | embedded outline, when an entry points at a page | sections, nesting, and the page each begins on | none — nothing it asserts is inferred |
 | 2 | printed table of contents | sections and nesting | body headings must agree exactly, or ingest fails |
 | 3 | font-size hierarchy | sections, nesting, position | no independent source exists to check it against |
 | 4 | none of the above | — | refuse, rather than fall back to fixed windows |
 
 Tier 1 needs no corroboration because there is nothing more reliable to check
-it against — the author wrote the bookmarks. Tier 2 is equally author-declared
+it against — the author wrote the bookmarks. An outline whose every entry is a
+web link points at no page, places no heading, and is skipped. Tier 2 is equally author-declared
 but recovered by parsing a printed page, so the parse is verified against the
 body and a disagreement fails the ingest. Tier 3 is inference all the way down.
 
 **A source that wins also supplies positions.** An outline's page numbers place
 its sections directly, with the entry title matched against that page to find
-the offset within it. This matters for documents that style headings by weight
+the offset within it, over two lines when the title wraps. This matters for documents that style headings by weight
 or colour rather than size: there is no font hierarchy to detect, and requiring
 one would reject a document whose structure is fully declared.
+
+Positions follow reading order. A page set in two columns of running text is
+read a column at a time, so a heading in the right column starts its section
+where a reader reaches it. A table, whose cells leave their columns mostly
+empty, keeps its rows.
 
 Non-PDF formats sit at tier 1 by construction — a Markdown `##`, an HTML `<h2>`
 and a DOCX heading style are all declarations, not inferences.

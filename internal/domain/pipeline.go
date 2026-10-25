@@ -13,8 +13,10 @@ import "encoding/json"
 //
 // Version 1 is the first recorded. Every report written before it has no
 // version, which reads as 0, so the long-section grading of #106 reaches
-// those documents on their next ingest.
-const PipelineVersion = 1
+// those documents on their next ingest. Version 2 reads PDFs from the crop
+// box, a column at a time, and finds headings in outlines of links and
+// over wrapped lines.
+const PipelineVersion = 2
 
 // storedVersion is the one field of a persisted report that
 // StoredPipelineVersion reads.

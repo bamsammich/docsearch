@@ -174,16 +174,30 @@ func (s *headingScanner) line(pno int, lines []Line, i int) int {
 // text after the number is rest, the indices of the lines the heading takes,
 // and the index of the last line read. A title set as a line of its own
 // beside the number is the heading too. One on the next row, as splitTitle
-// also reads it, stays in the text.
+// also reads it, stays in the text. A title that follows its number on the
+// same line takes the lines it wraps onto.
 func headingTitle(lines []Line, i int, rest string) (string, []int, int) {
 	if title := pystr.Strip(rest); title != "" {
-		return title, []int{i}, i
+		return wrappedTitle(lines, i, title)
 	}
 	title, j := splitTitle(lines, i)
 	if j != i && pystr.Round(lines[j].Y0, 1) == pystr.Round(lines[i].Y0, 1) {
 		return title, []int{i, j}, j
 	}
 	return title, []int{i}, j
+}
+
+// wrappedTitle is title, begun on lines[i], with the lines below that carry
+// it on, which the heading takes too. A numbered line is the next heading,
+// not more of this one.
+func wrappedTitle(lines []Line, i int, title string) (string, []int, int) {
+	at := []int{i}
+	for j := i + 1; j < len(lines) && carriesOn(lines[j-1], lines[j]) &&
+		!sectionLine.MatchString(lines[j].Text); j++ {
+		title += " " + pystr.Strip(lines[j].Text)
+		at = append(at, j)
+	}
+	return title, at, at[len(at)-1]
 }
 
 // splitTitle reads the title of a chapter heading set as two lines, the
