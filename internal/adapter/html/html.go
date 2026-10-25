@@ -28,8 +28,14 @@ const (
 	// chromeSelector matches what is removed before reading. Chrome is not
 	// content, and a navigation repeated on every page of a site is the
 	// single largest source of duplicated term mass.
-	chromeSelector  = "script, style, nav, footer"
-	blockSelector   = "p, li, pre, blockquote, td, dd, dt"
+	chromeSelector = "script, style, nav, footer"
+	// blockSelector matches the elements read as one block each. Mintlify
+	// writes a paragraph as <span data-as="p">, so a guide page built with
+	// it carries most of its prose outside any <p>. Reading every text node
+	// that no block wraps would recover the same prose, but on other sites
+	// it also reads the chrome that sits between blocks: "On this page",
+	// "Was this page helpful?", version badges and copy buttons.
+	blockSelector   = `p, li, pre, blockquote, td, dd, dt, [data-as="p"]`
 	headingSelector = "h1, h2, h3, h4, h5, h6"
 )
 
