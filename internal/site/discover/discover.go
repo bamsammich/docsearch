@@ -20,6 +20,12 @@
 //     It often lists each page's Markdown twin rather than the page, which
 //     discovery reads as the page the twin mirrors.
 //
+// Both manifests are looked for beside the seed and in every directory above
+// it, as well as at the origin. A host that serves documentation under a
+// path keeps them there: on one probed host the origin's sitemap describes a
+// marketing site, and the documentation's 1279 pages are declared only by a
+// sitemap and an llms.txt under the documentation's path.
+//
 // Link-following is the last resort and belongs to the crawler, under a
 // budget.
 package discover
@@ -29,6 +35,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/url"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -286,7 +293,7 @@ func (c *Coverage) addLLMsEntry(pair titledURL, seed string) bool {
 	if twin {
 		u = page
 	}
-	if !InPrefixScope(u, seed) {
+	if !InPrefixScope(u, seed) || slices.Contains(c.FromLLMsTxt, u) {
 		return false
 	}
 	c.FromLLMsTxt = append(c.FromLLMsTxt, u)
@@ -439,25 +446,71 @@ type titledURL struct {
 var llmsLink = regexp.MustCompile(`(?m)^[` + pystr.SpaceChars + `]*[-*][` +
 	pystr.SpaceChars + `]*\[([^\]]*)\]\((https?://[^)` + pystr.SpaceChars + `]+)\)`)
 
-// llmsTxtCandidates reads llms.txt, in the order it lists its pages.
+// llmsTxtCandidates reads every llms.txt from the seed's directory up to the
+// origin, nearest first, each in the order it lists its pages. The nearest
+// describes the documentation itself, so its titles win.
 func llmsTxtCandidates(
 	ctx context.Context,
 	f Fetcher,
 	seed string,
 	revalidate bool,
 ) ([]titledURL, []string, error) {
-	res, err := f.Fetch(ctx, originOf(seed)+"/llms.txt", revalidate)
-	if err != nil {
-		return nil, []string{"llms.txt: " + err.Error()}, nil
+	var out []titledURL
+	var notes, read []string
+	for _, dir := range manifestDirs(seed) {
+		target := dir + "llms.txt"
+		entries, err := readLLMsTxt(ctx, f, target, revalidate)
+		if err != nil {
+			notes = append(notes, fmt.Sprintf("llms.txt %s: %v", target, err))
+			continue
+		}
+		if len(entries) > 0 {
+			out = append(out, entries...)
+			read = append(read, target)
+		}
 	}
-	if res.Status != 200 {
-		return nil, nil, nil
+	if len(read) > 1 {
+		notes = append(notes, "llms.txt read at "+strings.Join(read, ", "))
+	}
+	return out, notes, nil
+}
+
+// readLLMsTxt is the entries of one llms.txt, none where it is absent.
+func readLLMsTxt(
+	ctx context.Context,
+	f Fetcher,
+	target string,
+	revalidate bool,
+) ([]titledURL, error) {
+	res, err := f.Fetch(ctx, target, revalidate)
+	if err != nil || res.Status != 200 {
+		return nil, err
 	}
 	var out []titledURL
 	for _, m := range llmsLink.FindAllStringSubmatch(pystr.ReadText(res.Body), -1) {
 		out = append(out, titledURL{title: pystr.Strip(m[1]), url: m[2]})
 	}
-	return out, nil, nil
+	return out, nil
+}
+
+// manifestDirs is where a seed's manifests may sit: the seed's directory and
+// each directory above it, nearest first, ending at the origin. A seed path
+// without a trailing slash is read as a directory, since a documentation
+// root is usually spelled without one.
+func manifestDirs(seed string) []string {
+	u, err := url.Parse(seed)
+	if err != nil {
+		return nil
+	}
+	origin := u.Scheme + "://" + u.Host
+	var out []string
+	for dir := strings.TrimSuffix(u.EscapedPath(), "/"); dir != ""; dir = path.Dir(dir) {
+		if dir == "/" {
+			break
+		}
+		out = append(out, origin+dir+"/")
+	}
+	return append(out, origin+"/")
 }
 
 // sitemapCandidates is every URL the site's sitemaps declare, and notes
@@ -468,18 +521,13 @@ func sitemapCandidates(
 	seed string,
 	revalidate bool,
 ) ([]string, []string, error) {
-	origin := originOf(seed)
-	roots, notes, err := sitemapRoots(ctx, f, origin)
+	queue, notes, err := sitemapRoots(ctx, f, seed)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	var pages []string
 	seen := map[string]bool{}
-	queue := make([]sitemapRef, 0, len(roots))
-	for _, r := range roots {
-		queue = append(queue, sitemapRef{url: r})
-	}
 	for len(queue) > 0 {
 		ref := queue[0]
 		queue = queue[1:]
@@ -497,22 +545,36 @@ func sitemapCandidates(
 	return pages, notes, nil
 }
 
-// sitemapRoots is where to start reading sitemaps: what robots.txt names,
-// else the conventional location.
-func sitemapRoots(ctx context.Context, f Fetcher, origin string) ([]string, []string, error) {
+// sitemapRoots is where to start reading sitemaps: a sitemap.xml in each
+// directory between the seed and the origin, and then what robots.txt
+// names, else the conventional location at the origin.
+func sitemapRoots(ctx context.Context, f Fetcher, seed string) ([]sitemapRef, []string, error) {
+	origin := originOf(seed)
 	declared, err := sitemapsFromRobots(ctx, f, origin)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(declared) == 0 {
-		return []string{origin + "/sitemap.xml"}, nil, nil
+	var refs []sitemapRef
+	for _, dir := range manifestDirs(seed) {
+		if dir != origin+"/" {
+			refs = append(refs, sitemapRef{url: dir + "sitemap.xml", optional: true})
+		}
 	}
-	return declared, []string{fmt.Sprintf("robots.txt names %d sitemap(s)", len(declared))}, nil
+	if len(declared) == 0 {
+		return append(refs, sitemapRef{url: origin + "/sitemap.xml"}), nil, nil
+	}
+	for _, d := range declared {
+		refs = append(refs, sitemapRef{url: d})
+	}
+	return refs, []string{fmt.Sprintf("robots.txt names %d sitemap(s)", len(declared))}, nil
 }
 
 type sitemapRef struct {
 	url   string
 	depth int
+	// optional is a location probed on speculation, whose absence is
+	// ordinary and not worth a note.
+	optional bool
 }
 
 // readSitemap reads one sitemap document: its pages, the sitemaps it nests,
@@ -528,6 +590,9 @@ func readSitemap(
 		return nil, nil, fmt.Sprintf("sitemap %s: %v", ref.url, err)
 	}
 	if res.Status != 200 {
+		if ref.optional {
+			return nil, nil, ""
+		}
 		return nil, nil, fmt.Sprintf("sitemap %s: HTTP %d", ref.url, res.Status)
 	}
 	pages, nested := sitemapLocs(res.Body)

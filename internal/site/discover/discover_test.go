@@ -200,6 +200,25 @@ func (s *DiscoverSuite) TestAQueryStringSurvivesTheTwinsPage() {
 	s.Equal([]string{"/docs/a?v=2"}, s.paths(cov.FromLLMsTxt))
 }
 
+func (s *DiscoverSuite) TestManifestsAboveTheSeedAreReadNearestFirst() {
+	// The origin's manifests describe another site; the documentation's sit
+	// under its own path, one level above a seed for one of its manuals.
+	s.routes["/sitemap.xml"] = s.urlset("/pricing")
+	s.routes["/llms.txt"] = fmt.Sprintf("- [Far](%[1]s/docs/api/a)\n- [Pricing](%[1]s/pricing)\n",
+		s.server.URL)
+	s.routes["/docs/sitemap.xml"] = s.urlset("/docs/api/a", "/docs/api/b", "/docs/guide/c")
+	s.routes["/docs/llms.txt"] = fmt.Sprintf("- [Near](%[1]s/docs/api/a.md)\n"+
+		"- [D page](%[1]s/docs/api/d.md)\n", s.server.URL)
+	cov := s.discover("/docs/api")
+	s.Equal([]string{"/docs/api/a", "/docs/api/b"}, s.paths(cov.FromSitemap))
+	s.Equal([]string{"/docs/api/a", "/docs/api/d"}, s.paths(cov.FromLLMsTxt))
+	s.Equal("Near", cov.Titles[s.server.URL+"/docs/api/a"], "the nearest llms.txt names the page")
+	notes := strings.Join(cov.Notes, "\n")
+	s.Contains(notes, "llms.txt read at "+s.server.URL+"/docs/llms.txt, "+s.server.URL+"/llms.txt")
+	s.NotContains(notes, "/docs/api/sitemap.xml",
+		"a sitemap probed on speculation is not a finding")
+}
+
 func (s *DiscoverSuite) TestTheSeedPageSuppliesCoverageWhenNothingElseDoes() {
 	s.routes["/docs/"] = `<html><body><a href="/docs/a">A</a><a href="/elsewhere/b">B</a></body></html>`
 	cov := s.discover("/docs/")
