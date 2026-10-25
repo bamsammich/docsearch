@@ -98,6 +98,11 @@ func (s *HTMLSuite) TestParseReadsTextNoBlockHolds() {
 			want: []string{"Body."},
 		},
 		{
+			name: "a node of only zero-width characters is not read",
+			body: "<div>\u200b<a href=\"#setup\">\u200d</a> Loose text.</div><div>\u200c\ufeff</div>",
+			want: []string{"Loose text."},
+		},
+		{
 			name: "a hidden tab panel is read",
 			body: `<div role="tabpanel">Python</div><div role="tabpanel" hidden>Go</div>`,
 			want: []string{"Python", "Go"},
@@ -158,8 +163,10 @@ func (s *HTMLSuite) TestParseLeavesMintlifyAnchorsOutOfHeadingPaths() {
 
 	paths := make(map[string][]string)
 	for _, item := range items {
-		s.Require().NotNil(item.Fragment, item.Text)
-		paths[*item.Fragment] = item.HeadingPath
+		// An item above the first heading has no anchor and no path.
+		if item.Fragment != nil {
+			paths[*item.Fragment] = item.HeadingPath
+		}
 	}
 	// Each heading's anchor link holds only a zero-width space.
 	s.Equal(map[string][]string{
