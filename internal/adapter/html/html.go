@@ -23,21 +23,41 @@ import (
 	"github.com/bamsammich/docsearch/internal/pystr"
 )
 
-// CSS selectors for the elements the walk reads.
+// CSS selectors for what is removed before the walk.
 const (
-	// chromeSelector matches what is removed before reading. Chrome is not
-	// content, and a navigation repeated on every page of a site is the
-	// single largest source of duplicated term mass.
-	chromeSelector = "script, style, nav, footer"
-	// blockSelector matches the elements read as one block each. Mintlify
-	// writes a paragraph as <span data-as="p">, so a guide page built with
-	// it carries most of its prose outside any <p>. Reading every text node
-	// that no block wraps would recover the same prose, but on other sites
-	// it also reads the chrome that sits between blocks: "On this page",
-	// "Was this page helpful?", version badges and copy buttons.
-	blockSelector   = `p, li, pre, blockquote, td, dd, dt, [data-as="p"]`
-	headingSelector = "h1, h2, h3, h4, h5, h6"
+	// chromeSelector matches what is never content. A navigation repeated on
+	// every page of a site is the single largest source of duplicated term
+	// mass.
+	chromeSelector = "script, style, noscript, template, svg, nav, footer"
+	// unseenSelector matches what a reader never sees as prose: text kept for
+	// screen readers, notices addressed to crawlers, and the labels of
+	// controls. A button inside a paragraph stays, since a site that gives a
+	// term a tooltip wraps the term itself in the button.
+	//
+	// The hidden attribute is not here. Generators mark inactive tab panels
+	// hidden, and Next.js streams a page's content into a hidden <div> that a
+	// script later moves into place.
+	unseenSelector = `[aria-hidden="true"], .sr-only, .visually-hidden, button, select, option`
+	keptControl    = `p button, [data-as="p"] button`
 )
+
+// blockTags are the elements read as one block each. Mintlify writes a
+// paragraph as <span data-as="p">, which is a block too. A <pre> is read
+// apart from these, and so is a heading.
+var blockTags = map[string]bool{
+	"p": true, "li": true, "blockquote": true, "td": true, "dd": true, "dt": true,
+}
+
+// inlineTags are the elements whose text joins the text around them. Any
+// other element ends a run of text and starts a new one.
+var inlineTags = map[string]bool{
+	"a": true, "abbr": true, "b": true, "bdi": true, "bdo": true, "big": true, "br": true,
+	"cite": true, "code": true, "data": true, "del": true, "dfn": true, "em": true,
+	"font": true, "i": true, "img": true, "ins": true, "kbd": true, "label": true,
+	"mark": true, "q": true, "rp": true, "rt": true, "ruby": true, "s": true, "samp": true,
+	"small": true, "span": true, "strike": true, "strong": true, "sub": true, "sup": true,
+	"time": true, "tt": true, "u": true, "var": true, "wbr": true,
+}
 
 // Item is one block of an HTML document, with the heading ancestry above it.
 type Item struct {
@@ -50,24 +70,34 @@ type Item struct {
 
 // Parse returns the title and items of one HTML document.
 //
-// Prose is each block's text nodes, stripped and joined with a space. A
-// <pre> is read verbatim instead, since generated documentation wraps every
-// token in its own <span> and joining those would put a code sample on one
-// line.
+// Every text node outside chromeSelector and unseenSelector reaches an item.
+// A block tag is one item, and so is each run of text that no block tag
+// holds, bounded by the nearest elements that are not inline. Generators put
+// prose in callouts, cards, captions and bare <div>s, so a list of the tags
+// that hold prose would drop whatever the next generator chose.
+//
+// Prose is the text nodes, stripped and joined with a space. A <pre> is read
+// verbatim instead, since generated documentation wraps every token in its
+// own <span> and joining those would put a code sample on one line. So is a
+// multi-line <code> that no block holds, which is how some sites write a
+// sample without a <pre>.
 func Parse(src string) (string, []Item, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(src))
 	if err != nil {
 		return "", nil, fmt.Errorf("parse html: %w", err)
 	}
 	doc.Find(chromeSelector).Remove()
+	doc.Find(unseenSelector).Not(keptControl).Remove()
 
 	body := doc.Find("body").First()
 	if body.Length() == 0 {
 		body = doc.Selection
 	}
 	w := walker{codes: takeCode(body), items: []Item{}}
-	body.Find(headingSelector + ", " + blockSelector).
-		Each(func(_ int, el *goquery.Selection) { w.visit(el) })
+	for _, n := range body.Nodes {
+		w.walk(n, false)
+	}
+	w.flush()
 
 	title := ""
 	if t := doc.Find("title").First(); t.Length() > 0 {
@@ -100,32 +130,85 @@ func Extract(path string) (*domain.Extraction, error) {
 	return domain.NewExtraction(title, "html", domain.SourceHTMLNesting, blocks), nil
 }
 
-// walker visits headings and block tags in document order.
+// walker reads headings, blocks and runs of text in document order.
 type walker struct {
 	fragment *string
 	codes    []string
 	stack    domain.HeadingStack
 	items    []Item
+	// run is the text read since the last element that ends a run.
+	run []string
 }
 
-func (w *walker) visit(el *goquery.Selection) {
-	if el.Is("pre") {
+// walk reads the children of n. Under a heading or a block, read is true:
+// that element's text is already read, so only the headings, blocks and
+// <pre>s inside it remain.
+func (w *walker) walk(n *nethtml.Node, read bool) {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		switch c.Type {
+		case nethtml.TextNode:
+			if s := pystr.Strip(c.Data); s != "" && !read {
+				w.run = append(w.run, s)
+			}
+		case nethtml.ElementNode:
+			w.visit(c, read)
+		default:
+		}
+	}
+}
+
+// visit reads one element and what is inside it.
+func (w *walker) visit(n *nethtml.Node, read bool) {
+	switch {
+	case n.Data == "pre":
 		// Emitted whatever it is nested in: code is the content a reader
 		// came for, and flattening it into a parent loses its lines.
+		w.flush()
 		w.emitCode()
+	case headingLevel(n) > 0:
+		w.flush()
+		w.heading(n)
+		w.walk(n, true)
+	case isBlock(n):
+		w.flush()
+		if !read {
+			w.emit(ProseText(n))
+		}
+		// A nested block's text is already in this one's.
+		w.walk(n, true)
+	case !read && isCode(n):
+		w.flush()
+		w.emit(codeText(allText(n)))
+	case inlineTags[n.Data]:
+		w.walk(n, read)
+	default:
+		w.flush()
+		w.walk(n, read)
+		w.flush()
+	}
+}
+
+func (w *walker) heading(h *nethtml.Node) {
+	text := ProseText(h)
+	if text == "" {
 		return
 	}
-	text := ProseText(el.Nodes[0])
-	switch {
-	case text == "":
-	case el.Is(headingSelector):
-		level := int(goquery.NodeName(el)[1] - '0') // "h3" is level 3
-		w.stack.Push(level, text)
-		// An anchor is how a citation lands on the section rather than the
-		// top of the page, so it is tracked from the heading that owns it.
-		w.fragment = headingAnchor(el)
-	case el.ParentsFiltered(blockSelector).Length() == 0:
-		// A nested block tag's text is already in its parent's.
+	w.stack.Push(headingLevel(h), text)
+	// An anchor is how a citation lands on the section rather than the top
+	// of the page, so it is tracked from the heading that owns it.
+	w.fragment = headingAnchor(goquery.NewDocumentFromNode(h).Selection)
+}
+
+// flush emits the run read so far.
+func (w *walker) flush() {
+	if len(w.run) > 0 {
+		w.emit(strings.Join(w.run, " "))
+		w.run = nil
+	}
+}
+
+func (w *walker) emit(text string) {
+	if text != "" {
 		w.items = append(w.items, w.item(text))
 	}
 }
@@ -136,9 +219,7 @@ func (w *walker) emitCode() {
 	}
 	text := w.codes[0]
 	w.codes = w.codes[1:]
-	if text != "" {
-		w.items = append(w.items, w.item(text))
-	}
+	w.emit(text)
 }
 
 func (w *walker) item(text string) Item {
@@ -173,6 +254,39 @@ func codeText(text string) string {
 		lines = lines[:len(lines)-1]
 	}
 	return strings.Join(lines, "\n")
+}
+
+// headingLevel is 3 for an <h3>, and 0 for an element that is no heading.
+func headingLevel(n *nethtml.Node) int {
+	if len(n.Data) == 2 && n.Data[0] == 'h' && n.Data[1] >= '1' && n.Data[1] <= '6' {
+		return int(n.Data[1] - '0')
+	}
+	return 0
+}
+
+// isBlock reports whether n is read as one block.
+func isBlock(n *nethtml.Node) bool {
+	if blockTags[n.Data] {
+		return true
+	}
+	for _, a := range n.Attr {
+		if a.Namespace == "" && a.Key == "data-as" && a.Val == "p" {
+			return true
+		}
+	}
+	return false
+}
+
+// isCode reports whether n is a <code> whose text spans lines.
+func isCode(n *nethtml.Node) bool {
+	return n.Data == "code" && strings.Contains(pystr.Strip(allText(n)), "\n")
+}
+
+// allText is every text node under n, concatenated as written.
+func allText(n *nethtml.Node) string {
+	var b strings.Builder
+	eachText(n, func(s string) { b.WriteString(s) })
+	return b.String()
 }
 
 // headingAnchor is the heading's own id, else the id of the first element
