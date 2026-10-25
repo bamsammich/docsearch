@@ -61,6 +61,32 @@ func (s *HTMLSuite) TestParseDoesNotLetANestedPreTakeTheNextOnesPlace() {
 	s.Equal([]string{"outerinnertail", "next", "After."}, texts)
 }
 
+func (s *HTMLSuite) TestParseReadsMintlifyParagraphSpans() {
+	raw, err := os.ReadFile(filepath.Join("testdata", "mintlify.html"))
+	s.Require().NoError(err)
+	_, items, err := html.Parse(string(raw))
+	s.Require().NoError(err)
+
+	type read struct{ fragment, text string }
+	got := make([]read, len(items))
+	for i, item := range items {
+		s.Require().NotNil(item.Fragment, item.Text)
+		got[i] = read{*item.Fragment, item.Text}
+	}
+	// The page's chrome sits outside every block, so none of it is read.
+	s.Equal([]read{
+		{"page-title", "Follow this guide to publish a working site."},
+		{"before-you-begin", "Every page has a source file in your repository ."},
+		{"before-you-begin", "Install the CLI with npm i -g example first."},
+		{"before-you-begin", "A terminal"},
+		{"before-you-begin", "Node.js 20 or later"},
+		{"deploy", "Run the deploy command from the project root."},
+		{"deploy", "example deploy\nexample status"},
+		{"deploy", "Deploy without a Git provider"},
+		{"deploy", "You can connect a repository later."},
+	}, got)
+}
+
 func (s *HTMLSuite) TestExtractReportsAMissingFile() {
 	_, err := html.Extract(filepath.Join(s.T().TempDir(), "missing.html"))
 	s.Require().ErrorIs(err, os.ErrNotExist)
