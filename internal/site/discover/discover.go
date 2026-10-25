@@ -17,6 +17,8 @@
 //     page legitimately lists documents elsewhere on the host.
 //   - llms.txt is ordered and titled, and not authoritative: on one probed
 //     site it holds 169 of 210 pages, omitting an entire command reference.
+//     It often lists each page's Markdown twin rather than the page, which
+//     discovery reads as the page the twin mirrors.
 //
 // Link-following is the last resort and belongs to the crawler, under a
 // budget.
@@ -136,6 +138,7 @@ func Discover(
 	if err := cov.addLLMsTxt(ctx, f, seed, revalidate); err != nil {
 		return nil, err
 	}
+	cov.dropIndexNonPages()
 	cov.union()
 	cov.compareSources()
 	return cov, nil
@@ -168,6 +171,33 @@ func (c *Coverage) addIndexPage(
 	}
 	c.FromIndex = links
 	return nil
+}
+
+// dropIndexNonPages removes the index page's links that name no page:
+// manifests, and Markdown twins of pages another source declares. GitBook
+// prints both on every page, so a crawl from its index fetched llms.txt and
+// the seed's own twin, and refused each as not HTML.
+//
+// A twin whose page no source declares stays. A same-host link ending in .md
+// can be an HTML page under that name, and only a site that follows the twin
+// convention serves a page without the suffix.
+func (c *Coverage) dropIndexNonPages() {
+	declared := c.declared()
+	c.FromIndex = slices.DeleteFunc(c.FromIndex, func(u string) bool {
+		page, twin := pageOfTwin(u)
+		return isManifest(u) || twin && declared[page]
+	})
+}
+
+// declared is every URL a source names.
+func (c *Coverage) declared() map[string]bool {
+	out := map[string]bool{}
+	for _, list := range [][]string{c.FromIndex, c.FromSitemap, c.FromLLMsTxt} {
+		for _, u := range list {
+			out[u] = true
+		}
+	}
+	return out
 }
 
 // union orders the page set: the index page supplies the publisher's own
@@ -225,22 +255,74 @@ func (c *Coverage) addLLMsTxt(ctx context.Context, f Fetcher, seed string, reval
 		return err
 	}
 	c.Notes = append(c.Notes, notes...)
+	twins := 0
 	for _, pair := range pairs {
-		c.addLLMsEntry(pair, seed)
+		if c.addLLMsEntry(pair, seed) {
+			twins++
+		}
+	}
+	if twins > 0 {
+		c.Notes = append(c.Notes, fmt.Sprintf(
+			"llms.txt lists %d Markdown twin(s); each is crawled as the HTML page it mirrors",
+			twins,
+		))
 	}
 	return nil
 }
 
-// addLLMsEntry adds one llms.txt entry, when it sits under the seed.
-func (c *Coverage) addLLMsEntry(pair titledURL, seed string) {
+// addLLMsEntry adds one llms.txt entry, when it sits under the seed, and
+// reports whether the entry was a Markdown twin read as its page.
+//
+// The twin is replaced rather than fetched. It answers text/markdown under
+// any Accept header, which the crawler refuses, and where the sitemap lists
+// the page as well the crawl would hold the page twice: on one probed site
+// 1284 of 1290 llms.txt entries were twins of sitemap pages.
+func (c *Coverage) addLLMsEntry(pair titledURL, seed string) bool {
 	u, err := fetch.Normalize(pair.url)
-	if err != nil || !InPrefixScope(u, seed) {
-		return
+	if err != nil || isManifest(u) {
+		return false
+	}
+	page, twin := pageOfTwin(u)
+	if twin {
+		u = page
+	}
+	if !InPrefixScope(u, seed) {
+		return false
 	}
 	c.FromLLMsTxt = append(c.FromLLMsTxt, u)
 	if _, ok := c.Titles[u]; !ok && pair.title != "" {
 		c.Titles[u] = pair.title
 	}
+	return twin
+}
+
+// pageOfTwin is the page a Markdown twin mirrors, and whether raw is one.
+//
+// llmstxt.org asks a site to serve each page as Markdown at the page's URL
+// with .md appended, and at index.html.md for a URL ending in a slash. raw is
+// normalized, so it carries no fragment.
+func pageOfTwin(raw string) (string, bool) {
+	head, query, hasQuery := strings.Cut(raw, "?")
+	if !strings.HasSuffix(head, ".md") {
+		return "", false
+	}
+	head = strings.TrimSuffix(head, ".md")
+	if strings.HasSuffix(head, "/index.html") {
+		head = strings.TrimSuffix(head, "index.html")
+	}
+	if hasQuery {
+		head += "?" + query
+	}
+	return head, true
+}
+
+// isManifest reports whether raw names an llms.txt file rather than a page.
+// llms.txt links to its full-text sibling, and a section's index links to
+// its own.
+func isManifest(raw string) bool {
+	head, _, _ := strings.Cut(raw, "?")
+	name := head[strings.LastIndex(head, "/")+1:]
+	return name == "llms.txt" || name == "llms-full.txt"
 }
 
 // scopedAndSorted normalizes the sitemap's URLs, keeps those under the seed,

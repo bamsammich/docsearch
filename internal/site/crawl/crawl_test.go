@@ -197,6 +197,26 @@ func (s *CrawlSuite) TestANonHTMLPageIsSkippedWithItsReason() {
 	s.Contains(got.Unreachable[0].Reason, "not HTML: application/pdf")
 }
 
+func (s *CrawlSuite) TestMarkdownTwinsInLLMsTxtAreCrawledAsTheirPages() {
+	// The twins answer text/markdown under any Accept header, as GitBook's do.
+	s.page("/docs/", "Guide", "/docs/install", "/docs/llms.txt", "/docs/readme.md")
+	s.page("/docs/install", "Install")
+	s.page("/docs/readme", "Guide")
+	for _, p := range []string{"/docs/install.md", "/docs/readme.md", "/docs/llms.txt"} {
+		s.routes[p] = route{contentType: "text/markdown; charset=utf-8", body: "# Twin"}
+	}
+	s.routes["/sitemap.xml"] = route{contentType: "application/xml", body: s.sitemap(
+		"/docs/", "/docs/install")}
+	s.routes["/llms.txt"] = route{contentType: "text/plain", body: fmt.Sprintf(
+		"- [Installing](%[1]s/docs/install.md)\n- [Home](%[1]s/docs/readme.md)\n"+
+			"- [Index](%[1]s/docs/llms.txt)\n", s.server.URL)}
+
+	got := s.crawl("/docs/", crawl.Options{Revalidate: true})
+	s.Empty(got.Unreachable)
+	s.ElementsMatch([]string{"/docs/", "/docs/install", "/docs/readme"}, s.paths(got))
+	s.Equal("Installing", got.Pages[s.server.URL+"/docs/install"].DeclaredTitle)
+}
+
 func (s *CrawlSuite) TestASoft404PageIsTreatedAsUnreachable() {
 	s.softNotFound = true
 	s.page("/docs/", "Guide", "/docs/real", "/docs/imaginary")

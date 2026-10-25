@@ -162,6 +162,44 @@ func (s *DiscoverSuite) TestLLMsTxtContributesButDoesNotBoundCoverage() {
 	s.Contains(notes, "llms.txt omits 1 page(s) the sitemap declares")
 }
 
+func (s *DiscoverSuite) TestLLMsTxtMarkdownTwinsAreReadAsTheirPages() {
+	s.routes["/sitemap.xml"] = s.urlset("/docs/a", "/docs/guide/")
+	s.routes["/llms.txt"] = fmt.Sprintf("# Docs\n\n"+
+		"- [A page](%[1]s/docs/a.md)\n"+
+		"- [Guide](%[1]s/docs/guide/index.html.md)\n"+
+		"- [C page](%[1]s/docs/c.md)\n"+
+		"- [Everything](%[1]s/docs/llms-full.txt)\n", s.server.URL)
+	s.routes["/docs/"] = "<html><body><p>hub</p></body></html>"
+	cov := s.discover("/docs/")
+	s.Equal([]string{"/docs/a", "/docs/guide/", "/docs/c"}, s.paths(cov.FromLLMsTxt))
+	s.Equal([]string{"/docs/a", "/docs/guide/", "/docs/c"}, s.paths(cov.URLs),
+		"a twin of a sitemap page is the sitemap page, not a second one")
+	s.Equal("A page", cov.Titles[s.server.URL+"/docs/a"], "the page keeps the twin's title")
+	notes := strings.Join(cov.Notes, "\n")
+	s.Contains(notes, "llms.txt lists 3 Markdown twin(s)")
+	s.Contains(notes, "1 llms.txt URL(s) absent from the sitemap")
+}
+
+func (s *DiscoverSuite) TestTheIndexPageDropsManifestsAndTwinsOfDeclaredPages() {
+	// GitBook prints a link to llms.txt and to the page's own twin on every
+	// page.
+	s.routes["/llms.txt"] = fmt.Sprintf("- [Home](%s/docs/readme.md)\n", s.server.URL)
+	s.routes["/docs/"] = `<html><body><a href="/docs/a">A</a><a href="/docs/llms.txt">llms.txt</a>` +
+		`<a href="/docs/readme.md">Markdown</a><a href="/docs/notes.md">Notes</a></body></html>`
+	cov := s.discover("/docs/")
+	// No source declares a page for notes.md, which may be HTML under that
+	// name.
+	s.Equal([]string{"/docs/a", "/docs/notes.md"}, s.paths(cov.FromIndex))
+	s.Equal([]string{"/docs/a", "/docs/notes.md", "/docs/readme"}, s.paths(cov.URLs))
+}
+
+func (s *DiscoverSuite) TestAQueryStringSurvivesTheTwinsPage() {
+	s.routes["/llms.txt"] = fmt.Sprintf("- [V2](%s/docs/a.md?v=2)\n", s.server.URL)
+	s.routes["/docs/"] = "<html><body><p>hub</p></body></html>"
+	cov := s.discover("/docs/")
+	s.Equal([]string{"/docs/a?v=2"}, s.paths(cov.FromLLMsTxt))
+}
+
 func (s *DiscoverSuite) TestTheSeedPageSuppliesCoverageWhenNothingElseDoes() {
 	s.routes["/docs/"] = `<html><body><a href="/docs/a">A</a><a href="/elsewhere/b">B</a></body></html>`
 	cov := s.discover("/docs/")
