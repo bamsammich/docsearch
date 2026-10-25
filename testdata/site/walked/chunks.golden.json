@@ -9,7 +9,7 @@
   "page_start": null,
   "printed_page_start": null,
   "section": "1",
-  "text": "How the workshop runs, written down so nobody has to ask twice.",
+  "text": "Handbook\n\nHow the workshop runs, written down so nobody has to ask twice.",
   "url": "{{ORIGIN}}/handbook/"
  },
  {
@@ -35,7 +35,7 @@
   "page_start": null,
   "printed_page_start": null,
   "section": "2.1.1",
-  "text": "Unlock the side door, switch on the extraction and check the first aid kit is where it should be.\n\nThen read the checks .",
+  "text": "Handbook\n\nUnlock the side door, switch on the extraction and check the first aid kit is where it should be.\n\nThen read the checks .",
   "url": "{{ORIGIN}}/handbook/opening"
  },
  {
@@ -48,7 +48,7 @@
   "page_start": null,
   "printed_page_start": null,
   "section": "2.2.1",
-  "text": "Sweep, empty the extraction, and leave the log on the bench for whoever opens tomorrow.",
+  "text": "Handbook\n\nSweep, empty the extraction, and leave the log on the bench for whoever opens tomorrow.",
   "url": "{{ORIGIN}}/handbook/closing"
  },
  {
@@ -61,7 +61,7 @@
   "page_start": null,
   "printed_page_start": null,
   "section": "4.1.1",
-  "text": "Every powered machine is tested before the first person uses it, and the result goes in the log.",
+  "text": "Handbook\n\nEvery powered machine is tested before the first person uses it, and the result goes in the log.",
   "url": "{{ORIGIN}}/handbook/opening/checks"
  }
 ]
