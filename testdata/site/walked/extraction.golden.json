@@ -13,6 +13,22 @@
    "printed_page": null,
    "section": "1",
    "subdivision": false,
+   "text": "Handbook",
+   "url": "{{ORIGIN}}/handbook/"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Handbook"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 9
+   },
+   "printed_page": null,
+   "section": "1",
+   "subdivision": false,
    "text": "How the workshop runs, written down so nobody has to ask twice.",
    "url": "{{ORIGIN}}/handbook/"
   },
@@ -25,7 +41,7 @@
    ],
    "image_count": 0,
    "locator": {
-    "offset": 64
+    "offset": 73
    },
    "printed_page": null,
    "section": "1",
@@ -42,7 +58,7 @@
    ],
    "image_count": 0,
    "locator": {
-    "offset": 78
+    "offset": 87
    },
    "printed_page": null,
    "section": "1",
@@ -59,7 +75,7 @@
    ],
    "image_count": 0,
    "locator": {
-    "offset": 92
+    "offset": 101
    },
    "printed_page": null,
    "section": "1",
@@ -76,7 +92,7 @@
    ],
    "image_count": 0,
    "locator": {
-    "offset": 112
+    "offset": 121
    },
    "printed_page": null,
    "section": "1",
@@ -94,7 +110,25 @@
    ],
    "image_count": 0,
    "locator": {
-    "offset": 134
+    "offset": 143
+   },
+   "printed_page": null,
+   "section": "2.1.1",
+   "subdivision": false,
+   "text": "Handbook",
+   "url": "{{ORIGIN}}/handbook/opening"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Handbook",
+    "Opening",
+    "opening"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 152
    },
    "printed_page": null,
    "section": "2.1.1",
@@ -112,7 +146,7 @@
    ],
    "image_count": 0,
    "locator": {
-    "offset": 232
+    "offset": 250
    },
    "printed_page": null,
    "section": "2.1.1",
@@ -130,7 +164,25 @@
    ],
    "image_count": 0,
    "locator": {
-    "offset": 255
+    "offset": 273
+   },
+   "printed_page": null,
+   "section": "2.2.1",
+   "subdivision": false,
+   "text": "Handbook",
+   "url": "{{ORIGIN}}/handbook/closing"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Handbook",
+    "Closing",
+    "closing"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 282
    },
    "printed_page": null,
    "section": "2.2.1",
@@ -147,7 +199,24 @@
    ],
    "image_count": 0,
    "locator": {
-    "offset": 343
+    "offset": 370
+   },
+   "printed_page": null,
+   "section": "4.1.1",
+   "subdivision": false,
+   "text": "Handbook",
+   "url": "{{ORIGIN}}/handbook/opening/checks"
+  },
+  {
+   "figure_only": false,
+   "fragment": null,
+   "heading_path": [
+    "Opening",
+    "Checks"
+   ],
+   "image_count": 0,
+   "locator": {
+    "offset": 379
    },
    "printed_page": null,
    "section": "4.1.1",
