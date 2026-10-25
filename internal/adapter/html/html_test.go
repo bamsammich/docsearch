@@ -64,6 +64,58 @@ func (s *HTMLSuite) TestParseDoesNotLetANestedPreTakeTheNextOnesPlace() {
 	s.Equal([]string{"outerinnertail", "next", "After."}, texts)
 }
 
+func (s *HTMLSuite) TestParseReadsTextNoBlockHolds() {
+	tests := []struct {
+		name string
+		body string
+		want []string
+	}{
+		{
+			name: "a run ends at an element that is not inline",
+			body: `<div>Before <em>the</em> list<ul><li>Item</li></ul>after it.</div><div>Next.</div>`,
+			want: []string{"Before the list", "Item", "after it.", "Next."},
+		},
+		{
+			name: "a callout and a caption are runs",
+			body: `<div class="alert" role="note"><strong>Note:</strong> read this.</div>` +
+				`<figure><figcaption>Listing 1: a program</figcaption></figure>`,
+			want: []string{"Note: read this.", "Listing 1: a program"},
+		},
+		{
+			name: "a multi-line code outside a block is code",
+			body: `<div><code class="hljs">curl \` + "\n" + `  -H "Accept: */*"</code></div><p>Run <code>ls</code>.</p>`,
+			want: []string{"curl \\\n  -H \"Accept: */*\"", "Run ls ."},
+		},
+		{
+			name: "a button is read only inside a paragraph",
+			body: `<button>Copy</button><p>Store it in a <button>repository</button>.</p>`,
+			want: []string{"Store it in a repository ."},
+		},
+		{
+			name: "text for screen readers and crawlers is not read",
+			body: `<div aria-hidden="true">For AI agents: read llms.txt.</div>` +
+				`<h2>Setup<span class="sr-only">Section titled Setup</span></h2><p>Body.</p>`,
+			want: []string{"Body."},
+		},
+		{
+			name: "a hidden tab panel is read",
+			body: `<div role="tabpanel">Python</div><div role="tabpanel" hidden>Go</div>`,
+			want: []string{"Python", "Go"},
+		},
+	}
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			_, items, err := html.Parse("<body>" + tt.body + "</body>")
+			s.Require().NoError(err)
+			texts := make([]string, len(items))
+			for i, item := range items {
+				texts[i] = item.Text
+			}
+			s.Equal(tt.want, texts)
+		})
+	}
+}
+
 func (s *HTMLSuite) TestParseReadsMintlifyParagraphSpans() {
 	raw, err := os.ReadFile(filepath.Join("testdata", "mintlify.html"))
 	s.Require().NoError(err)
@@ -73,20 +125,28 @@ func (s *HTMLSuite) TestParseReadsMintlifyParagraphSpans() {
 	type read struct{ fragment, text string }
 	got := make([]read, len(items))
 	for i, item := range items {
-		s.Require().NotNil(item.Fragment, item.Text)
-		got[i] = read{*item.Fragment, item.Text}
+		got[i].text = item.Text
+		if item.Fragment != nil {
+			got[i].fragment = *item.Fragment
+		}
 	}
-	// The page's chrome sits outside every block, so none of it is read.
+	// The notice to crawlers, the skip link and the copy button are never
+	// read. The rest of the chrome is, and a site's chrome pass strips what
+	// repeats on every page.
 	s.Equal([]read{
+		{"", "Get started"},
 		{"page-title", "Follow this guide to publish a working site."},
 		{"before-you-begin", "Every page has a source file in your repository ."},
 		{"before-you-begin", "Install the CLI with npm i -g example first."},
 		{"before-you-begin", "A terminal"},
 		{"before-you-begin", "Node.js 20 or later"},
 		{"deploy", "Run the deploy command from the project root."},
+		{"deploy", "Terminal"},
 		{"deploy", "example deploy\nexample status"},
 		{"deploy", "Deploy without a Git provider"},
 		{"deploy", "You can connect a repository later."},
+		{"deploy", "Was this page helpful?"},
+		{"deploy", "Responses are generated using AI and may contain mistakes."},
 	}, got)
 }
 
