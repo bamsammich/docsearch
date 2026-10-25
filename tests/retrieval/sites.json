@@ -1,0 +1,704 @@
+{
+ "_method": {
+  "authored": "2026-10-25. The blind queries were written and hashed before any crawl ran; the expectation-informed queries were written after reading the index's heading paths.",
+  "rule": "A query that misses STAYS in this file, unedited. Rewording a query until it passes overfits to a moving test set and destroys the measurement.",
+  "blindness": "blind:true queries were written from knowledge of each project's documentation, before the index existed. blind:false queries were written after reading the index's heading paths and are reported separately, so they cannot inflate the blind hit rate.",
+  "expectation_corrections": "Some blind expect values were changed after authoring, and each change is recorded in the query's note. Two kinds were allowed: correcting an expect to the intended page's live title, read from the site itself (its llms.txt or the page's h1) rather than from the index; and narrowing an expect that matched many pages to the intended page. Narrowing can only turn a hit into a miss. No query text was changed, and no expect was widened.",
+  "dropped": "One blind query was dropped before scoring: it asked how to migrate package.json scripts to moon, and the page that answered it no longer exists on the live site. Its id is reused by an informed query.",
+  "expect_semantics": "Every document is a crawled site with no section numbering, so 'expect' is a case-insensitive substring of heading_path. A site whose hierarchy came from URL paths renders each page's path segments as the first heading levels (for example 'Guides > Docker'), and some expects name that path rather than the page title.",
+  "categories": {
+   "heading-term": "an exact technical term that appears in a page title or heading",
+   "body-term": "a term, option or flag that appears only in body text",
+   "conceptual-slang": "how an agent or developer would phrase the need, in words the page does not use",
+   "figure-dominated": "the answer sits mostly in a code block, a table or a listing rather than in prose",
+   "spans-boundary": "the answer plainly continues across headings within a page"
+  },
+  "sites": "Crawled 2026-10-25 from docs.pytest.org/en/stable, www.sphinx-doc.org/en/master, moonrepo.dev/docs, rust-lang.github.io/mdBook and mintlify.com/docs. The sites change, so a re-crawl can move a baseline without any code change; compare builds against the same crawl date."
+ },
+ "documents": {
+  "pytest": {
+   "doc_id": "docs-pytest-org",
+   "label": "pytest",
+   "match": "heading"
+  },
+  "sphinx": {
+   "doc_id": "www-sphinx-doc-org",
+   "label": "sphinx",
+   "match": "heading"
+  },
+  "moon": {
+   "doc_id": "introduction-moonrepo",
+   "label": "moon",
+   "match": "heading"
+  },
+  "mdbook": {
+   "doc_id": "introduction-mdbook-documentation",
+   "label": "mdbook",
+   "match": "heading"
+  },
+  "mintlify": {
+   "doc_id": "introduction-mintlify",
+   "label": "mintlify",
+   "match": "heading"
+  }
+ },
+ "queries": [
+  {
+   "id": "p01",
+   "doc": "pytest",
+   "expect": "How to parametrize fixtures and test functions",
+   "category": "heading-term",
+   "blind": true,
+   "query": "how do I parametrize a test function with multiple inputs",
+   "note": ""
+  },
+  {
+   "id": "p02",
+   "doc": "pytest",
+   "expect": "How to re-run failed tests",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "run only the tests that broke last time",
+   "note": ""
+  },
+  {
+   "id": "p03",
+   "doc": "pytest",
+   "expect": "How to use temporary directories and files in tests",
+   "category": "body-term",
+   "blind": true,
+   "query": "tmp_path_factory session scoped temporary directory",
+   "note": ""
+  },
+  {
+   "id": "p04",
+   "doc": "pytest",
+   "expect": "How to monkeypatch/mock modules and environments",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "fake out an environment variable inside one test",
+   "note": ""
+  },
+  {
+   "id": "p05",
+   "doc": "pytest",
+   "expect": "Teardown/Cleanup",
+   "category": "heading-term",
+   "blind": true,
+   "query": "fixture teardown with yield",
+   "note": ""
+  },
+  {
+   "id": "p06",
+   "doc": "pytest",
+   "expect": "How to use skip and xfail",
+   "category": "spans-boundary",
+   "blind": true,
+   "query": "skip a test on windows but expect it to fail on older python versions",
+   "note": ""
+  },
+  {
+   "id": "p07",
+   "doc": "pytest",
+   "expect": "How to write and report assertions in tests",
+   "category": "body-term",
+   "blind": true,
+   "query": "pytest.raises match regular expression against the exception message",
+   "note": ""
+  },
+  {
+   "id": "p08",
+   "doc": "pytest",
+   "expect": "How to handle test failures",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "stop the whole test run at the first failure",
+   "note": ""
+  },
+  {
+   "id": "p09",
+   "doc": "pytest",
+   "expect": "Control skipping of tests according to command line option",
+   "category": "figure-dominated",
+   "blind": true,
+   "query": "conftest.py example adding a --runslow command line option",
+   "note": ""
+  },
+  {
+   "id": "p10",
+   "doc": "pytest",
+   "expect": "How to mark test functions with attributes",
+   "category": "heading-term",
+   "blind": true,
+   "query": "register custom markers so pytest stops warning about unknown marks",
+   "note": ""
+  },
+  {
+   "id": "p11",
+   "doc": "pytest",
+   "expect": "Scope: sharing fixtures",
+   "category": "spans-boundary",
+   "blind": true,
+   "query": "fixture scope module versus session and when the fixture gets torn down",
+   "note": ""
+  },
+  {
+   "id": "p12",
+   "doc": "pytest",
+   "expect": "How to capture warnings",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "make pytest shut up about DeprecationWarning coming from a library",
+   "note": ""
+  },
+  {
+   "id": "s01",
+   "doc": "sphinx",
+   "expect": "intersphinx",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "link to the python standard library docs from my project",
+   "note": ""
+  },
+  {
+   "id": "s02",
+   "doc": "sphinx",
+   "expect": "autodoc",
+   "category": "body-term",
+   "blind": true,
+   "query": "autodoc_mock_imports to avoid importing heavy dependencies at build time",
+   "note": ""
+  },
+  {
+   "id": "s03",
+   "doc": "sphinx",
+   "expect": "napoleon",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "get google style docstrings to render properly",
+   "note": ""
+  },
+  {
+   "id": "s04",
+   "doc": "sphinx",
+   "expect": "Directives",
+   "category": "heading-term",
+   "blind": true,
+   "query": "toctree directive maxdepth and hidden options",
+   "note": ""
+  },
+  {
+   "id": "s05",
+   "doc": "sphinx",
+   "expect": "Options for HTML output",
+   "category": "heading-term",
+   "blind": true,
+   "query": "html_theme_options for changing the theme",
+   "note": ""
+  },
+  {
+   "id": "s06",
+   "doc": "sphinx",
+   "expect": "sphinx-build",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "fail the docs build in CI when there are warnings",
+   "note": ""
+  },
+  {
+   "id": "s07",
+   "doc": "sphinx",
+   "expect": "Cross-referencing",
+   "category": "spans-boundary",
+   "blind": true,
+   "query": "cross reference a function in another module with custom link text",
+   "note": ""
+  },
+  {
+   "id": "s08",
+   "doc": "sphinx",
+   "expect": "Builders",
+   "category": "figure-dominated",
+   "blind": true,
+   "query": "list of builders and output formats like epub latex and man pages",
+   "note": ""
+  },
+  {
+   "id": "s09",
+   "doc": "sphinx",
+   "expect": "Configuration",
+   "category": "body-term",
+   "blind": true,
+   "query": "numfig automatic numbering of figures and tables",
+   "note": ""
+  },
+  {
+   "id": "s10",
+   "doc": "sphinx",
+   "expect": "Internationalization",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "translate my docs into japanese",
+   "note": ""
+  },
+  {
+   "id": "s11",
+   "doc": "sphinx",
+   "expect": "Hello world",
+   "category": "heading-term",
+   "blind": true,
+   "query": "write a custom directive as a sphinx extension",
+   "note": ""
+  },
+  {
+   "id": "s12",
+   "doc": "sphinx",
+   "expect": "Directives",
+   "category": "body-term",
+   "blind": true,
+   "query": "literalinclude lines and emphasize-lines options",
+   "note": ""
+  },
+  {
+   "id": "m01",
+   "doc": "moon",
+   "expect": "Task inheritance",
+   "category": "heading-term",
+   "blind": true,
+   "query": "configure task inheritance from .moon/tasks.yml",
+   "note": ""
+  },
+  {
+   "id": "m02",
+   "doc": "moon",
+   "expect": "Continuous integration",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "only run tasks for projects that changed in this pull request",
+   "note": ""
+  },
+  {
+   "id": "m03",
+   "doc": "moon",
+   "expect": "Concepts > Cache",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "hash the inputs so a task is skipped when nothing changed",
+   "note": "blind expect was \"Cache\", which matched five pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "m04",
+   "doc": "moon",
+   "expect": "Remote caching",
+   "category": "heading-term",
+   "blind": true,
+   "query": "set up remote caching with a bazel remote cache server",
+   "note": ""
+  },
+  {
+   "id": "m05",
+   "doc": "moon",
+   "expect": "Concepts > Token",
+   "category": "heading-term",
+   "blind": true,
+   "query": "token variables like $projectRoot in task commands",
+   "note": "blind expect was \"Token\", which also matched \"Token functions\" in File groups; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "m06",
+   "doc": "moon",
+   "expect": "Guides > Docker",
+   "category": "body-term",
+   "blind": true,
+   "query": "moon docker scaffold and prune for smaller images",
+   "note": "blind expect was \"Docker\", which matched ten pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "m07",
+   "doc": "moon",
+   "expect": "Query language",
+   "category": "heading-term",
+   "blind": true,
+   "query": "query language to select projects by language and tag",
+   "note": ""
+  },
+  {
+   "id": "m08",
+   "doc": "moon",
+   "expect": ".moon/toolchain",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "pin the node version for the whole repo",
+   "note": "blind expect was \"toolchain\", which matched seventeen pages; narrowed after the crawl to the configuration page that pins versions, which can only remove hits"
+  },
+  {
+   "id": "m09",
+   "doc": "moon",
+   "expect": "Config > Project",
+   "category": "spans-boundary",
+   "blind": true,
+   "query": "make a task depend on a task in another project and pass it arguments",
+   "note": "blind expect was \"moon.yml\"; the live page is titled \"moon\" since moon v2 accepts several formats, so the expect names its URL path as the index renders it"
+  },
+  {
+   "id": "m10",
+   "doc": "moon",
+   "expect": "Guides > Vcs Hooks",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "git pre-commit hook managed by moon",
+   "note": "blind expect was \"VCS hooks\", which also matched the sync command; narrowed after the crawl to the intended guide's path in the index, which can only remove hits"
+  },
+  {
+   "id": "m11",
+   "doc": "moon",
+   "expect": "Guides > Codegen",
+   "category": "figure-dominated",
+   "blind": true,
+   "query": "codegen template.yml variables that prompt the user",
+   "note": "blind expect was \"Code generation\", which matched five pages; narrowed after the crawl to the intended guide's path in the index, which can only remove hits"
+  },
+  {
+   "id": "b01",
+   "doc": "mdbook",
+   "expect": "SUMMARY.md",
+   "category": "heading-term",
+   "blind": true,
+   "query": "SUMMARY.md numbered chapters and draft chapters",
+   "note": ""
+  },
+  {
+   "id": "b02",
+   "doc": "mdbook",
+   "expect": "serve",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "live reload preview in the browser while I write",
+   "note": ""
+  },
+  {
+   "id": "b03",
+   "doc": "mdbook",
+   "expect": "mdBook-specific features",
+   "category": "body-term",
+   "blind": true,
+   "query": "include a portion of a rust file using anchors",
+   "note": ""
+  },
+  {
+   "id": "b04",
+   "doc": "mdbook",
+   "expect": "MathJax",
+   "category": "heading-term",
+   "blind": true,
+   "query": "enable mathjax for latex equations",
+   "note": ""
+  },
+  {
+   "id": "b05",
+   "doc": "mdbook",
+   "expect": "Continuous Integration",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "publish the book to github pages automatically on every push",
+   "note": ""
+  },
+  {
+   "id": "b06",
+   "doc": "mdbook",
+   "expect": "Renderers",
+   "category": "body-term",
+   "blind": true,
+   "query": "site-url setting for the 404 page",
+   "note": ""
+  },
+  {
+   "id": "b07",
+   "doc": "mdbook",
+   "expect": "Preprocessors",
+   "category": "heading-term",
+   "blind": true,
+   "query": "write a preprocessor that modifies chapters before rendering",
+   "note": ""
+  },
+  {
+   "id": "b08",
+   "doc": "mdbook",
+   "expect": "mdBook-specific features",
+   "category": "spans-boundary",
+   "blind": true,
+   "query": "hide lines in rust code blocks and still run them as doctests",
+   "note": ""
+  },
+  {
+   "id": "b09",
+   "doc": "mdbook",
+   "expect": "Reading Books",
+   "category": "figure-dominated",
+   "blind": true,
+   "query": "keyboard shortcuts for navigating between chapters",
+   "note": ""
+  },
+  {
+   "id": "b10",
+   "doc": "mdbook",
+   "expect": "Syntax highlighting",
+   "category": "body-term",
+   "blind": true,
+   "query": "override the highlight.js syntax highlighting theme",
+   "note": ""
+  },
+  {
+   "id": "b11",
+   "doc": "mdbook",
+   "expect": "Environment Variables",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "set book options with environment variables instead of book.toml",
+   "note": ""
+  },
+  {
+   "id": "b12",
+   "doc": "mdbook",
+   "expect": "Alternative Backends",
+   "category": "heading-term",
+   "blind": true,
+   "query": "custom backend that outputs something other than html",
+   "note": ""
+  },
+  {
+   "id": "x01",
+   "doc": "mintlify",
+   "expect": "Custom domain",
+   "category": "heading-term",
+   "blind": true,
+   "query": "set up a custom domain for my docs",
+   "note": ""
+  },
+  {
+   "id": "x02",
+   "doc": "mintlify",
+   "expect": "Preview locally",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "preview the docs on my laptop before pushing",
+   "note": "blind expect was \"Local development\"; corrected to the page's live title, read from the site's llms.txt, not from the index"
+  },
+  {
+   "id": "x03",
+   "doc": "mintlify",
+   "expect": "Organize > Navigation",
+   "category": "body-term",
+   "blind": true,
+   "query": "docs.json navigation groups and tabs",
+   "note": "blind expect was \"Navigation\", which matched 25 pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "x04",
+   "doc": "mintlify",
+   "expect": "OpenAPI setup",
+   "category": "heading-term",
+   "blind": true,
+   "query": "generate API reference pages from an OpenAPI spec",
+   "note": "blind expect was \"OpenAPI\", which also matches dozens of API reference pages; narrowed to the intended page's live title from the site's llms.txt"
+  },
+  {
+   "id": "x05",
+   "doc": "mintlify",
+   "expect": "Redirects",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "old urls should keep working after I move pages",
+   "note": ""
+  },
+  {
+   "id": "x06",
+   "doc": "mintlify",
+   "expect": "Callouts",
+   "category": "heading-term",
+   "blind": true,
+   "query": "callout boxes like warning and note",
+   "note": ""
+  },
+  {
+   "id": "x07",
+   "doc": "mintlify",
+   "expect": "Hidden pages",
+   "category": "body-term",
+   "blind": true,
+   "query": "hide a page from the sidebar but keep it reachable by url",
+   "note": ""
+  },
+  {
+   "id": "x08",
+   "doc": "mintlify",
+   "expect": "llms.txt",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "make my docs easy for ChatGPT and other LLMs to read",
+   "note": ""
+  },
+  {
+   "id": "x09",
+   "doc": "mintlify",
+   "expect": "Format code",
+   "category": "figure-dominated",
+   "blind": true,
+   "query": "code block with line highlighting and a filename",
+   "note": "blind expect was \"Code blocks\", a title the site does not use; corrected to the intended page's live title from the site's llms.txt"
+  },
+  {
+   "id": "x10",
+   "doc": "mintlify",
+   "expect": "Reusable snippets",
+   "category": "heading-term",
+   "blind": true,
+   "query": "reuse the same content in several pages",
+   "note": "blind expect was \"Snippets\", which matched three pages; narrowed to the intended page's live title from the site's llms.txt, which can only remove hits"
+  },
+  {
+   "id": "p13",
+   "doc": "pytest",
+   "expect": "Exit codes",
+   "category": "body-term",
+   "blind": false,
+   "query": "what exit code does pytest return when no tests were collected",
+   "note": ""
+  },
+  {
+   "id": "p14",
+   "doc": "pytest",
+   "expect": "How to run doctests",
+   "category": "heading-term",
+   "blind": false,
+   "query": "run the doctests in my modules with --doctest-modules",
+   "note": ""
+  },
+  {
+   "id": "p15",
+   "doc": "pytest",
+   "expect": "Flaky tests",
+   "category": "conceptual-slang",
+   "blind": false,
+   "query": "tests that pass sometimes and fail other times for no reason",
+   "note": ""
+  },
+  {
+   "id": "s13",
+   "doc": "sphinx",
+   "expect": "Markdown",
+   "category": "heading-term",
+   "blind": false,
+   "query": "write the docs in markdown with myst instead of restructuredtext",
+   "note": ""
+  },
+  {
+   "id": "s14",
+   "doc": "sphinx",
+   "expect": "LaTeX customization",
+   "category": "body-term",
+   "blind": false,
+   "query": "latex_elements preamble to change the pdf fonts",
+   "note": ""
+  },
+  {
+   "id": "s15",
+   "doc": "sphinx",
+   "expect": "Deploying a Sphinx project online",
+   "category": "conceptual-slang",
+   "blind": false,
+   "query": "host my built docs on read the docs or github pages",
+   "note": ""
+  },
+  {
+   "id": "m12",
+   "doc": "moon",
+   "expect": "Migrate to moon v2.0",
+   "category": "conceptual-slang",
+   "blind": false,
+   "query": "what breaks when I upgrade to moon 2",
+   "note": ""
+  },
+  {
+   "id": "m13",
+   "doc": "moon",
+   "expect": "Guides > Webhooks",
+   "category": "heading-term",
+   "blind": false,
+   "query": "webhook events moon sends and their payloads",
+   "note": ""
+  },
+  {
+   "id": "m14",
+   "doc": "moon",
+   "expect": "Config > Project",
+   "category": "spans-boundary",
+   "blind": false,
+   "query": "declare dependsOn for a project and what the dependency scope means",
+   "note": ""
+  },
+  {
+   "id": "b13",
+   "doc": "mdbook",
+   "expect": "The watch command",
+   "category": "body-term",
+   "blind": false,
+   "query": "exclude files from triggering a rebuild in watch mode",
+   "note": ""
+  },
+  {
+   "id": "b14",
+   "doc": "mdbook",
+   "expect": "The test command",
+   "category": "conceptual-slang",
+   "blind": false,
+   "query": "stop a code example from being compiled and run as a test",
+   "note": ""
+  },
+  {
+   "id": "b15",
+   "doc": "mdbook",
+   "expect": "index.hbs",
+   "category": "figure-dominated",
+   "blind": false,
+   "query": "handlebars data available to the html theme template",
+   "note": ""
+  },
+  {
+   "id": "x11",
+   "doc": "mintlify",
+   "expect": "Mermaid",
+   "category": "heading-term",
+   "blind": false,
+   "query": "draw a flowchart with mermaid in a docs page",
+   "note": ""
+  },
+  {
+   "id": "x12",
+   "doc": "mintlify",
+   "expect": "Reverse Proxy",
+   "category": "conceptual-slang",
+   "blind": false,
+   "query": "serve the docs under /docs on my own website through nginx",
+   "note": ""
+  },
+  {
+   "id": "x13",
+   "doc": "mintlify",
+   "expect": "Mintignore",
+   "category": "body-term",
+   "blind": false,
+   "query": "exclude files in the repo from being published",
+   "note": ""
+  },
+  {
+   "id": "x14",
+   "doc": "mintlify",
+   "expect": "Authentication Setup",
+   "category": "spans-boundary",
+   "blind": false,
+   "query": "require login to view the docs and pass user data for personalization",
+   "note": ""
+  }
+ ]
+}
