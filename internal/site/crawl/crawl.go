@@ -23,6 +23,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -211,6 +212,9 @@ func (c *crawler) run(ctx context.Context) error {
 		c.note("this site answers 200 for pages that do not exist; responses matching its " +
 			"not-found template are treated as unreachable")
 	}
+	if err := c.keepSeed(seedPage, cov.URLs); err != nil {
+		return err
+	}
 	if err := c.walk(ctx); err != nil {
 		return err
 	}
@@ -249,6 +253,34 @@ func (c *crawler) fetchSeed(ctx context.Context) *fetch.Fetched {
 	return res
 }
 
+// keepSeed stores the seed page when no coverage source listed it.
+//
+// Without a manifest the frontier is the seed's own links, so a seed that
+// does not link to itself would drop out: a single-page API reference, or a
+// one-page site, would crawl to nothing. The seed was fetched for discovery
+// already, so keeping it costs no request and sits outside the page budget.
+// A seed that a source did list belongs to the frontier, budget included.
+func (c *crawler) keepSeed(seedPage *fetch.Fetched, declared []string) error {
+	if seedPage == nil || slices.Contains(declared, c.seed) {
+		return nil
+	}
+	final, err := fetch.Normalize(seedPage.FinalURL)
+	if err == nil && slices.Contains(declared, final) {
+		// The seed redirects to a page a source listed.
+		return nil
+	}
+	reason, err := c.refusal(seedPage)
+	if err != nil {
+		return err
+	}
+	if reason != "" {
+		c.note("seed %s not kept: %s", c.seed, reason)
+		return nil
+	}
+	c.known[c.seed] = true
+	return c.keep(frontierEntry{url: c.seed}, seedPage)
+}
+
 // start fills the frontier from the coverage set, within the page budget.
 func (c *crawler) start(urls []string) {
 	frontier := urls
@@ -272,7 +304,9 @@ func (c *crawler) start(urls []string) {
 // walk visits the frontier, adding links from each page when no manifest
 // bounded the crawl.
 func (c *crawler) walk(ctx context.Context) error {
-	done := 0
+	// A seed kept before the walk counts as done, so the count still meets
+	// the total.
+	done := len(c.result.Pages)
 	for len(c.queue) > 0 {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("crawl %s: %w", c.seed, err)
@@ -309,23 +343,33 @@ func (c *crawler) read(ctx context.Context, raw string) (*fetch.Fetched, bool, e
 		c.unreachable(raw, err.Error())
 		return nil, false, nil
 	}
-	switch {
-	case res.Status != 200:
-		c.unreachable(raw, fmt.Sprintf("HTTP %d", res.Status))
-		return nil, false, nil
-	case !isHTML(res.ContentType):
-		c.unreachable(raw, "not HTML: "+res.ContentType)
-		return nil, false, nil
-	}
-	absent, err := discover.LooksAbsent(res.Body, c.signature)
+	reason, err := c.refusal(res)
 	if err != nil {
 		return nil, false, err
 	}
-	if absent {
-		c.unreachable(raw, "soft 404: matches the site's not-found template")
+	if reason != "" {
+		c.unreachable(raw, reason)
 		return nil, false, nil
 	}
 	return res, true, nil
+}
+
+// refusal is why a response holds no content, or empty when it holds some.
+func (c *crawler) refusal(res *fetch.Fetched) (string, error) {
+	switch {
+	case res.Status != 200:
+		return fmt.Sprintf("HTTP %d", res.Status), nil
+	case !isHTML(res.ContentType):
+		return "not HTML: " + res.ContentType, nil
+	}
+	absent, err := discover.LooksAbsent(res.Body, c.signature)
+	if err != nil {
+		return "", err
+	}
+	if absent {
+		return "soft 404: matches the site's not-found template", nil
+	}
+	return "", nil
 }
 
 // keep stores a page under the URL it declares as canonical, and queues the
