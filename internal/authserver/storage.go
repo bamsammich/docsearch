@@ -140,6 +140,10 @@ func (s *storage) CreateAccessAndRefreshTokens(
 
 // saveGrant saves a new refresh token, in place of current where the grant
 // is a refresh.
+//
+// A refresh spent by another request after this one read it is an invalid
+// grant. The provider reports any error it does not recognise as a server
+// error, so the refusal is typed here as it is where the token is read.
 func (s *storage) saveGrant(ctx context.Context, current string, grant Refresh) error {
 	if current == "" {
 		return s.store.SaveRefresh(ctx, grant)
@@ -149,7 +153,7 @@ func (s *storage) saveGrant(ctx context.Context, current string, grant Refresh) 
 		return err
 	}
 	if !found {
-		return op.ErrInvalidRefreshToken
+		return oidc.ErrInvalidGrant().WithParent(op.ErrInvalidRefreshToken)
 	}
 	return nil
 }

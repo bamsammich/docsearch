@@ -402,22 +402,60 @@ func (s *PasswordSuite) TestRegistrationIsRateLimited() {
 }
 
 // Two exchanges of one refresh token at once: exactly one gets a new token.
+// A row lock holds both until each has read the token and is waiting to
+// spend it, so the loser finds the token gone at the spend, not at the read.
 func (s *PasswordSuite) TestARefreshTokenSpentTwiceAtOnceWinsOnce() {
+	ctx := s.T().Context()
 	found, clientID, issued := s.signedIn()
 	refresh := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {issued.Refresh},
 		"client_id": {clientID}}
-	statuses := make(chan int, 2)
+
+	hold, err := s.pg.Owner.BeginTx(ctx, nil)
+	s.Require().NoError(err)
+	defer func() { _ = hold.Rollback() }() //nolint:errcheck // done already once committed
+	_, err = hold.ExecContext(ctx, `SELECT FROM oauth_refresh_tokens FOR UPDATE`)
+	s.Require().NoError(err)
+
+	answers := make(chan refreshAnswer, 2)
 	for range 2 {
-		go func() {
-			response, err := http.PostForm(found.Token, refresh) //nolint:noctx // test client
-			if err != nil {
-				statuses <- 0
-				return
-			}
-			statuses <- response.StatusCode
-			_ = response.Body.Close()
-		}()
+		go func() { answers <- postRefresh(found.Token, refresh) }()
 	}
-	got := []int{<-statuses, <-statuses}
-	s.ElementsMatch([]int{http.StatusOK, http.StatusBadRequest}, got)
+	s.Require().Eventually(func() bool { return s.waitingOnLocks() == 2 },
+		10*time.Second, 10*time.Millisecond, "both refreshes reach the spend")
+	s.Require().NoError(hold.Commit())
+
+	got := []refreshAnswer{<-answers, <-answers}
+	s.ElementsMatch([]refreshAnswer{
+		{status: http.StatusOK},
+		{status: http.StatusBadRequest, error: "invalid_grant"},
+	}, got)
+}
+
+// refreshAnswer is what a token endpoint said to one refresh.
+type refreshAnswer struct {
+	error  string
+	status int
+}
+
+func postRefresh(at string, form url.Values) refreshAnswer {
+	response, err := http.PostForm(at, form) //nolint:noctx // test client
+	if err != nil {
+		return refreshAnswer{error: err.Error()}
+	}
+	defer func() { _ = response.Body.Close() }()
+	var body tokens
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		return refreshAnswer{status: response.StatusCode, error: err.Error()}
+	}
+	return refreshAnswer{status: response.StatusCode, error: body.Error}
+}
+
+// waitingOnLocks counts this database's connections blocked on a lock.
+func (s *PasswordSuite) waitingOnLocks() int {
+	var waiting int
+	s.Require().NoError(s.pg.Owner.QueryRowContext(s.T().Context(), `
+		SELECT count(DISTINCT l.pid) FROM pg_locks l
+		JOIN pg_stat_activity a ON a.pid = l.pid
+		WHERE NOT l.granted AND a.datname = current_database()`).Scan(&waiting))
+	return waiting
 }
