@@ -3,9 +3,12 @@ package html_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/suite"
+	nethtml "golang.org/x/net/html"
 
 	"github.com/bamsammich/docsearch/internal/adapter/html"
 )
@@ -85,6 +88,34 @@ func (s *HTMLSuite) TestParseReadsMintlifyParagraphSpans() {
 		{"deploy", "Deploy without a Git provider"},
 		{"deploy", "You can connect a repository later."},
 	}, got)
+}
+
+func (s *HTMLSuite) TestParseLeavesMintlifyAnchorsOutOfHeadingPaths() {
+	raw, err := os.ReadFile(filepath.Join("testdata", "mintlify.html"))
+	s.Require().NoError(err)
+	_, items, err := html.Parse(string(raw))
+	s.Require().NoError(err)
+
+	paths := make(map[string][]string)
+	for _, item := range items {
+		s.Require().NotNil(item.Fragment, item.Text)
+		paths[*item.Fragment] = item.HeadingPath
+	}
+	// Each heading's anchor link holds only a zero-width space.
+	s.Equal(map[string][]string{
+		"page-title":       {"Quickstart"},
+		"before-you-begin": {"Quickstart", "Before you begin"},
+		"deploy":           {"Quickstart", "Deploy"},
+	}, paths)
+}
+
+func (s *HTMLSuite) TestProseTextDropsNodesOfOnlyZeroWidthCharacters() {
+	doc, err := nethtml.Parse(strings.NewReader(
+		"<p>\u200b<b>Zero\u200bwidth</b> \u200c\u200d <i>\ufeff</i>kept</p>"))
+	s.Require().NoError(err)
+	p := goquery.NewDocumentFromNode(doc).Find("p").Nodes[0]
+	// A zero-width character inside a word is the word's, so it stays.
+	s.Equal("Zero\u200bwidth kept", html.ProseText(p))
 }
 
 func (s *HTMLSuite) TestExtractReportsAMissingFile() {

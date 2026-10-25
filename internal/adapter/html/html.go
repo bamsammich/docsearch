@@ -189,15 +189,22 @@ func headingAnchor(h *goquery.Selection) *string {
 	return &id
 }
 
+// zeroWidth holds the characters that take no space on the page. Python's
+// str.strip keeps them, so a text node holding only these survives the
+// strip. Mintlify puts a zero-width space inside the anchor link of every
+// heading, and read as text it would start every heading path.
+const zeroWidth = "\u200b\u200c\u200d\ufeff"
+
 // ProseText is BeautifulSoup's get_text(" ", strip=True): every text node
-// under n, each stripped, the empty ones dropped, joined with a space.
-// goquery's Text concatenates the nodes unstripped, which would keep the
-// markup's line breaks and indentation inside prose. The site packages read
-// navigation labels with it, so they read as the adapters do.
+// under n, each stripped, the empty ones dropped, joined with a space. It
+// also drops a node holding only zeroWidth characters, which BeautifulSoup
+// keeps. goquery's Text concatenates the nodes unstripped, which would keep
+// the markup's line breaks and indentation inside prose. The site packages
+// read navigation labels with it, so they read as the adapters do.
 func ProseText(n *nethtml.Node) string {
 	var parts []string
 	eachText(n, func(s string) {
-		if s = pystr.Strip(s); s != "" {
+		if s = pystr.Strip(s); strings.Trim(s, zeroWidth) != "" {
 			parts = append(parts, s)
 		}
 	})
