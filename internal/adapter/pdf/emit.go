@@ -164,15 +164,12 @@ func (s *blockSink) enterAll(headings []placement) {
 func emitOutlinePage(sink *blockSink, lines []Line, pno int, pending []placement,
 	boiler boilerplate, tops []float64,
 ) ([]placement, int) {
-	next, wrapped := 0, 0
+	next := 0
+	taken := map[int]bool{}
 	for i, ln := range lines {
 		var consumed bool
-		pending, consumed, wrapped = sink.enterAt(pending, i, wrapped)
-		if consumed || boiler.matches(ln.Text) {
-			continue
-		}
-		if wrapped > 0 {
-			wrapped--
+		pending, consumed = sink.enterAt(pending, i, taken)
+		if consumed || taken[i] || boiler.matches(ln.Text) {
 			continue
 		}
 		next = sink.buf.countImagesAbove(tops, next, ln.Y0)
@@ -182,23 +179,26 @@ func emitOutlinePage(sink *blockSink, lines []Line, pno int, pending []placement
 }
 
 // enterAt enters each pending heading placed at or before line i. It
-// returns the headings still pending, whether one of those entered was
-// matched against line i, which is then the heading rather than text, and
-// how many lines after that one carry the rest of its title.
+// returns the headings still pending and whether one of those entered was
+// matched against line i, which is then the heading rather than text. The
+// lines that carry the rest of its title go into taken.
 func (s *blockSink) enterAt(
 	pending []placement,
 	i int,
-	wrapped int,
-) ([]placement, bool, int) {
+	taken map[int]bool,
+) ([]placement, bool) {
 	consumed := false
 	for len(pending) > 0 && pending[0].line <= i {
 		s.enter(pending[0].section)
 		if pending[0].matched {
-			consumed, wrapped = true, pending[0].wrapped
+			consumed = true
+			for _, k := range pending[0].rest {
+				taken[k] = true
+			}
 		}
 		pending = pending[1:]
 	}
-	return pending, consumed, wrapped
+	return pending, consumed
 }
 
 // numberedLayout is what emitNumberedBlocks reads: the body headings placed

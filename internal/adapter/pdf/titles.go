@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,6 +14,13 @@ import (
 // two lines sits at its own leading, about half its size apart; the next
 // title is paragraphs away.
 const titleJoinGap = 0.75
+
+// besideOffset is how far to one side of a title line, as a multiple of its
+// size, a line at another size must start to be set in another column
+// rather than under the title. Anything set in a margin level with a long
+// title, such as a side note, a running label or a journal's masthead,
+// sorts between the title's lines, since lines are read top to bottom.
+const besideOffset = 10
 
 // titlePlacements reads a document whose headings carry no numbers at all.
 //
@@ -44,21 +52,38 @@ func titlePlacements(
 	var placements []placement
 	titles := map[string]string{}
 	for pno, p := range pages {
-		for i := 0; i < len(p.Lines); i++ {
-			if !isTitle(p.Lines[i]) {
-				continue
-			}
-			title, wrapped := joinTitle(p.Lines, i)
-			section := strconv.Itoa(len(placements) + 1)
-			placements = append(placements, placement{
-				section: section, title: title, page: pno, line: i,
-				wrapped: wrapped, matched: true,
-			})
-			titles[section] = title
-			i += wrapped
-		}
+		placements = pageTitles(placements, titles, p.Lines, pno, isTitle)
 	}
 	return placements, titles
+}
+
+// pageTitles appends the titles on one page to placements, numbering each
+// in document order and recording it in titles. A line that carries on a
+// title already placed is not a title of its own.
+func pageTitles(
+	placements []placement,
+	titles map[string]string,
+	lines []Line,
+	pno int,
+	isTitle func(Line) bool,
+) []placement {
+	taken := map[int]bool{}
+	for i, ln := range lines {
+		if taken[i] || !isTitle(ln) {
+			continue
+		}
+		title, rest := joinTitle(lines, i)
+		section := strconv.Itoa(len(placements) + 1)
+		placements = append(placements, placement{
+			section: section, title: title, page: pno, line: i,
+			rest: rest, matched: true,
+		})
+		titles[section] = title
+		for _, k := range rest {
+			taken[k] = true
+		}
+	}
+	return placements
 }
 
 // titleSize is the heading size whose unnumbered lines head the most pages,
@@ -99,17 +124,33 @@ func unnumberedHeading(ln Line, headingSizes []float64, boiler boilerplate) bool
 }
 
 // joinTitle is the title starting at lines[i], with any lines that carry it
-// on in the same font and size just below, and how many lines it took past
-// the first. A subheading set right under its heading, at the heading's size
-// but in italic, is a title of its own.
-func joinTitle(lines []Line, i int) (string, int) {
+// on in the same font and size just below, and the indices of those lines. A
+// subheading set right under its heading, at the heading's size but in
+// italic, is a title of its own. A line set beside the title in another
+// column is stepped over rather than ending it, and stays text.
+func joinTitle(lines []Line, i int) (string, []int) {
 	parts := []string{pystr.Strip(lines[i].Text)}
-	j := i
-	for j+1 < len(lines) && carriesOn(lines[j], lines[j+1]) {
-		parts = append(parts, pystr.Strip(lines[j+1].Text))
-		j++
+	var rest []int
+	last := lines[i]
+	for k := i + 1; k < len(lines); k++ {
+		switch {
+		case carriesOn(last, lines[k]):
+			parts = append(parts, pystr.Strip(lines[k].Text))
+			rest = append(rest, k)
+			last = lines[k]
+		case beside(last, lines[k]):
+			continue
+		default:
+			return strings.Join(parts, " "), rest
+		}
 	}
-	return strings.Join(parts, " "), j - i
+	return strings.Join(parts, " "), rest
+}
+
+// beside reports whether ln is set in another column from the title line
+// last: at another size, and starting well to one side of it.
+func beside(last, ln Line) bool {
+	return ln.Size != last.Size && math.Abs(ln.X0-last.X0) > last.Size*besideOffset
 }
 
 // carriesOn reports whether next carries on the title line last: set in the

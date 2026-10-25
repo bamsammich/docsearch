@@ -167,3 +167,53 @@ func (s *TitlesSuite) TestShortNumberedTitlesOnOnePageAreStillSections() {
 	s.Equal("1. Setup", headingPaths(got)[0])
 	s.Nil(got.Diagnostics["numbered_list_pages"])
 }
+
+// at places a line at x and y.
+func at(ln pdf.Line, x, y float64) pdf.Line {
+	ln.X0, ln.Y0, ln.Y1 = x, y, y+ln.Size*0.75
+	return ln
+}
+
+// margin is a page whose wrapped title has a note in the right margin, level
+// with it, so the note sorts between the title's two lines.
+func margin(note pdf.Line) pdf.Page {
+	lines := []pdf.Line{
+		at(title("REPLACING THE INK"), 24, 15),
+		at(note, 400, 20),
+		at(title("CARTRIDGE"), 24, 29.4),
+	}
+	for i, ln := range prose(6) {
+		lines = append(lines, at(ln, 24, 60+float64(i)*14))
+	}
+	return pdf.Page{Lines: lines}
+}
+
+// A note set in the margin beside a wrapped title neither ends the title
+// nor joins it, and stays text.
+func (s *TitlesSuite) TestANoteBesideAWrappedTitleIsSteppedOver() {
+	got := s.build(
+		margin(body("Model 4 only")),
+		chapter("PARTS OF THE UNIT"),
+		chapter("ACCESSORIES"),
+		chapter("CLEANING THE HEAD"),
+		chapter("TROUBLESHOOTING"),
+	)
+	s.Equal("REPLACING THE INK CARTRIDGE", headingPaths(got)[0])
+	s.Contains(got.Blocks[0].Text, "Model 4 only")
+	s.NotContains(got.Blocks[0].Text, "CARTRIDGE")
+}
+
+// A smaller line set directly under a title, in its column, is not beside
+// it: the title ends there, and the second title line is a title of its own.
+func (s *TitlesSuite) TestALineUnderATitleInItsColumnStillEndsIt() {
+	under := margin(body("Model 4 only"))
+	under.Lines[1].X0 = 30
+	got := s.build(
+		under,
+		chapter("PARTS OF THE UNIT"),
+		chapter("ACCESSORIES"),
+		chapter("CLEANING THE HEAD"),
+		chapter("TROUBLESHOOTING"),
+	)
+	s.Equal("REPLACING THE INK", headingPaths(got)[0])
+}

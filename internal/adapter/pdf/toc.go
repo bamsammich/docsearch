@@ -153,13 +153,15 @@ func isListing(lines []Line, titles map[string]bool, boiler boilerplate) bool {
 type placement struct {
 	section string
 	title   string
-	page    int
+	// rest are the indices of the lines after the matched one that carry the
+	// rest of a title set over several. They are the heading, not text, and
+	// need not follow it directly: a line set beside the title in another
+	// column can sort between two of its lines.
+	rest []int
+	page int
 	// line is the index of the heading's line among its page's lines, which
 	// are in reading order; -1 places it before the first.
 	line int
-	// wrapped is how many lines after the matched one carry the rest of a
-	// title set over several lines. They are the heading, not text.
-	wrapped int
 	// matched is true when the title was found among the page's lines; an
 	// unmatched entry sits at the top of its page, line -1.
 	matched bool
@@ -191,13 +193,22 @@ func locateOutlineHeadings(
 		}
 		out = append(out, placement{
 			section: e.section, title: e.title, page: pno, line: line,
-			wrapped: wrapped, matched: ok,
+			rest: following(line, wrapped), matched: ok,
 		})
 	}
 	slices.SortStableFunc(out, func(a, b placement) int {
 		return cmp.Or(cmp.Compare(a.page, b.page), cmp.Compare(a.line, b.line))
 	})
 	return out, located
+}
+
+// following is the indices of the n lines after line.
+func following(line, n int) []int {
+	out := make([]int, n)
+	for k := range out {
+		out[k] = line + 1 + k
+	}
+	return out
 }
 
 // findTitle is the index of the first line whose normalized text is want or

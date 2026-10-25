@@ -15,8 +15,11 @@ import "encoding/json"
 // version, which reads as 0, so the long-section grading of #106 reaches
 // those documents on their next ingest. Version 2 reads PDFs from the crop
 // box, a column at a time, and finds headings in outlines of links and
-// over wrapped lines.
-const PipelineVersion = 2
+// over wrapped lines. Version 3 joins a title's lines across a line set
+// beside it in another column, and carries the HTML extraction changes of
+// #113, #114 and #117, which read every text run and drop zero-width text
+// but did not bump the version themselves.
+const PipelineVersion = 3
 
 // storedVersion is the one field of a persisted report that
 // StoredPipelineVersion reads.
