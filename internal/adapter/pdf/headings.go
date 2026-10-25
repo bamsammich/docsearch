@@ -13,14 +13,18 @@ import (
 type bodyHeading struct {
 	section string
 	title   string
-	page    int
+	// lines are the indices of the heading's lines on its page: the
+	// numbered line, then the title's when it is a line of its own in the
+	// same row.
+	lines []int
+	page  int
 }
 
-// pagePoint is a position on a page: the page index and a line's top,
-// rounded to a tenth of a point.
+// pagePoint is a line on a page: the page index and the line's index among
+// the page's lines.
 type pagePoint struct {
 	page int
-	y    float64
+	line int
 }
 
 // headingScan is what findBodyHeadings returns.
@@ -149,7 +153,7 @@ func (s *headingScanner) line(pno int, lines []Line, i int) int {
 	}
 	m := sectionLine.FindStringSubmatch(ln.Text)
 	if m == nil {
-		s.subdivisions[pagePoint{page: pno, y: pystr.Round(ln.Y0, 1)}] = true
+		s.subdivisions[pagePoint{page: pno, line: i}] = true
 		return i
 	}
 	if s.onList {
@@ -160,13 +164,40 @@ func (s *headingScanner) line(pno int, lines []Line, i int) int {
 		s.rejected = append(s.rejected, "p"+strconv.Itoa(pno+1)+":"+m[1])
 		return i
 	}
-	title := pystr.Strip(m[2])
-	if title == "" {
-		title, i = splitTitle(lines, i)
-	}
+	title, at, last := headingTitle(lines, i, m[2])
 	s.last = key
-	s.headings = append(s.headings, bodyHeading{section: m[1], title: title, page: pno})
-	return i
+	s.headings = append(s.headings, bodyHeading{section: m[1], title: title, page: pno, lines: at})
+	return last
+}
+
+// headingTitle is the title of the numbered heading at lines[i], whose own
+// text after the number is rest, the indices of the lines the heading takes,
+// and the index of the last line read. A title set as a line of its own
+// beside the number is the heading too. One on the next row, as splitTitle
+// also reads it, stays in the text. A title that follows its number on the
+// same line takes the lines it wraps onto.
+func headingTitle(lines []Line, i int, rest string) (string, []int, int) {
+	if title := pystr.Strip(rest); title != "" {
+		return wrappedTitle(lines, i, title)
+	}
+	title, j := splitTitle(lines, i)
+	if j != i && pystr.Round(lines[j].Y0, 1) == pystr.Round(lines[i].Y0, 1) {
+		return title, []int{i, j}, j
+	}
+	return title, []int{i}, j
+}
+
+// wrappedTitle is title, begun on lines[i], with the lines below that carry
+// it on, which the heading takes too. A numbered line is the next heading,
+// not more of this one.
+func wrappedTitle(lines []Line, i int, title string) (string, []int, int) {
+	at := []int{i}
+	for j := i + 1; j < len(lines) && carriesOn(lines[j-1], lines[j]) &&
+		!sectionLine.MatchString(lines[j].Text); j++ {
+		title += " " + pystr.Strip(lines[j].Text)
+		at = append(at, j)
+	}
+	return title, at, at[len(at)-1]
 }
 
 // splitTitle reads the title of a chapter heading set as two lines, the
