@@ -51,7 +51,7 @@ func (n numbered) blocks(diagnostics map[string]any) ([]domain.Block, [][2]strin
 		pages:         n.pages,
 		boiler:        n.boiler,
 		subdivisions:  scan.subdivisions,
-		headings:      placeBodyHeadings(n.pages, scan.headings),
+		headings:      placeBodyHeadings(scan.headings),
 		titles:        sectionTitles,
 		figureTops:    n.figureTops,
 		tocPageMax:    n.tocPageMax,
@@ -195,26 +195,18 @@ func mostCommon(values []int) int {
 	return best
 }
 
-// placeBodyHeadings finds each heading's line on its page, keyed by the
-// line's top rounded to a tenth.
-func placeBodyHeadings(pages []Page, headings []bodyHeading) map[int]map[float64]string {
-	out := map[int]map[float64]string{}
+// placeBodyHeadings maps each page to the sections whose heading sits on
+// it, keyed by the index of every line the heading takes. A title beside its
+// number is the heading too, not text; one in the row below stays text.
+func placeBodyHeadings(headings []bodyHeading) map[int]map[int]string {
+	out := map[int]map[int]string{}
 	for _, h := range headings {
 		if out[h.page] == nil {
-			out[h.page] = map[float64]string{}
+			out[h.page] = map[int]string{}
 		}
-		out[h.page][pystr.Round(headingTop(pages[h.page].Lines, h.section), 1)] = h.section
+		for _, i := range h.lines {
+			out[h.page][i] = h.section
+		}
 	}
 	return out
-}
-
-// headingTop is the top of the first line numbered section, 0 when none is,
-// which places the heading at the top of its page.
-func headingTop(lines []Line, section string) float64 {
-	for _, ln := range lines {
-		if m := sectionLine.FindStringSubmatch(ln.Text); m != nil && m[1] == section {
-			return ln.Y0
-		}
-	}
-	return 0
 }

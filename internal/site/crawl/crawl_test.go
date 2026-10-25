@@ -37,6 +37,11 @@ type CrawlSuite struct {
 type route struct {
 	contentType string
 	body        string
+	// markdown is served as text/markdown to a client that does not ask for
+	// HTML, as some documentation hosts answer agents.
+	markdown string
+	// location redirects the path there.
+	location string
 }
 
 func TestCrawl(t *testing.T) { suite.Run(t, new(CrawlSuite)) }
@@ -48,8 +53,7 @@ func (s *CrawlSuite) SetupTest() {
 	s.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.requests.Add(1)
 		if got, ok := s.routes[r.URL.Path]; ok {
-			w.Header().Set("Content-Type", or(got.contentType, "text/html"))
-			s.write(w, got.body)
+			s.serve(w, r, got)
 			return
 		}
 		if s.softNotFound {
@@ -63,6 +67,19 @@ func (s *CrawlSuite) SetupTest() {
 		http.Error(w, "not found", http.StatusNotFound)
 	}))
 	s.T().Cleanup(s.server.Close)
+}
+
+func (s *CrawlSuite) serve(w http.ResponseWriter, r *http.Request, got route) {
+	switch {
+	case got.location != "":
+		http.Redirect(w, r, got.location, http.StatusFound)
+	case got.markdown != "" && !strings.Contains(r.Header.Get("Accept"), "text/html"):
+		w.Header().Set("Content-Type", "text/markdown")
+		s.write(w, got.markdown)
+	default:
+		w.Header().Set("Content-Type", or(got.contentType, "text/html"))
+		s.write(w, got.body)
+	}
 }
 
 func or(v, fallback string) string {
@@ -155,8 +172,6 @@ func (s *CrawlSuite) TestThePageBudgetCapsTheCrawlAndReportsTheRemainder() {
 }
 
 func (s *CrawlSuite) TestAMissingPageIsReportedNotFatal() {
-	// The seed is crawled only where a source declares it, so the sitemap
-	// names it beside the page that is gone.
 	s.page("/docs/", "Guide", "/docs/gone")
 	s.routes["/sitemap.xml"] = route{
 		contentType: "application/xml",
@@ -187,7 +202,7 @@ func (s *CrawlSuite) TestASoft404PageIsTreatedAsUnreachable() {
 	s.page("/docs/", "Guide", "/docs/real", "/docs/imaginary")
 	s.page("/docs/real", "Real")
 	got := s.crawl("/docs/", crawl.Options{Revalidate: true})
-	s.Equal([]string{"/docs/real"}, s.paths(got))
+	s.Equal([]string{"/docs/", "/docs/real"}, s.paths(got))
 	s.Require().Len(got.Unreachable, 1)
 	s.Contains(got.Unreachable[0].Reason, "soft 404")
 	s.Contains(strings.Join(got.Notes, "\n"), "answers 200 for pages that do not exist")
@@ -203,7 +218,7 @@ func (s *CrawlSuite) TestACanonicalLinkCollapsesAVersionedDuplicate() {
 
 	got := s.crawl("/docs/", crawl.Options{Revalidate: true})
 	// The seed declares both spellings; the crawl keeps the canonical one.
-	s.Equal([]string{"/docs/v2/page"}, s.paths(got))
+	s.Equal([]string{"/docs/", "/docs/v2/page"}, s.paths(got))
 	s.Require().Len(got.CanonicalMerges, 1)
 	s.Equal(canonical, got.CanonicalMerges[0].Reason)
 }
@@ -213,7 +228,7 @@ func (s *CrawlSuite) TestLinksAreFollowedWhenNoManifestAnswers() {
 	s.page("/docs/one", "One", "/docs/two")
 	s.page("/docs/two", "Two")
 	got := s.crawl("/docs/", crawl.Options{Revalidate: true})
-	s.ElementsMatch([]string{"/docs/one", "/docs/two"}, s.paths(got))
+	s.ElementsMatch([]string{"/docs/", "/docs/one", "/docs/two"}, s.paths(got))
 	s.Contains(strings.Join(got.Notes, "\n"), "no sitemap or llms.txt")
 }
 
@@ -223,7 +238,7 @@ func (s *CrawlSuite) TestLinkFollowingRespectsTheDepthBound() {
 	s.page("/docs/two", "Two", "/docs/three")
 	s.page("/docs/three", "Three")
 	got := s.crawl("/docs/", crawl.Options{Revalidate: true, LinkDepth: 1})
-	s.ElementsMatch([]string{"/docs/one", "/docs/two"}, s.paths(got),
+	s.ElementsMatch([]string{"/docs/", "/docs/one", "/docs/two"}, s.paths(got),
 		"the seed's own links are depth 0, and one hop past them is depth 1")
 }
 
@@ -235,8 +250,53 @@ func (s *CrawlSuite) TestDiscoveredLinksAreScopedButDeclaredOnesAreNot() {
 	s.page("/blog/post", "Post")
 	s.page("/blog/other", "Other")
 	got := s.crawl("/hub", crawl.Options{Revalidate: true})
-	s.ElementsMatch([]string{"/docs/one", "/blog/post"}, s.paths(got),
+	s.ElementsMatch([]string{"/hub", "/docs/one", "/blog/post"}, s.paths(got),
 		"/blog/other was found on a page, not declared by the seed, so the prefix applies")
+}
+
+func (s *CrawlSuite) TestASeedThatLinksNowhereIsStillKept() {
+	// A one-page site, or a single-page API reference, declares no other
+	// page and does not link to itself.
+	s.page("/", "Example Domain")
+	got := s.crawl("/", crawl.Options{Revalidate: true})
+	s.Equal([]string{"/"}, s.paths(got))
+	s.Empty(got.Unreachable)
+}
+
+func (s *CrawlSuite) TestASeedThatRedirectsToADeclaredPageIsKeptOnce() {
+	s.routes["/docs"] = route{location: "/docs/"}
+	s.page("/docs/", "Guide", "/docs/one")
+	s.page("/docs/one", "One")
+	s.routes["/sitemap.xml"] = route{
+		contentType: "application/xml",
+		body:        s.sitemap("/docs/", "/docs/one"),
+	}
+	got := s.crawl("/docs", crawl.Options{Revalidate: true})
+	s.ElementsMatch([]string{"/docs/", "/docs/one"}, s.paths(got))
+}
+
+func (s *CrawlSuite) TestASeedThatHoldsNoContentIsNotKept() {
+	s.routes["/docs/"] = route{contentType: "application/pdf", body: "%PDF-1.7"}
+	got := s.crawl("/docs/", crawl.Options{Revalidate: true})
+	s.Empty(got.Pages)
+	s.Empty(got.Unreachable, "the seed was never declared, so it is not a page the crawl missed")
+	s.Contains(strings.Join(got.Notes, "\n"), "not kept: not HTML: application/pdf")
+}
+
+func (s *CrawlSuite) TestAHostThatServesMarkdownToAgentsIsAskedForHTML() {
+	s.page("/docs/", "Guide", "/docs/one")
+	s.page("/docs/one", "One")
+	for _, p := range []string{"/docs/", "/docs/one"} {
+		r := s.routes[p]
+		r.markdown = "# " + p
+		s.routes[p] = r
+	}
+	got := s.crawl("/docs/", crawl.Options{Revalidate: true})
+	s.ElementsMatch([]string{"/docs/", "/docs/one"}, s.paths(got))
+	s.Empty(got.Unreachable)
+	for _, page := range got.Pages {
+		s.Contains(string(page.Body), "<html>")
+	}
 }
 
 func (s *CrawlSuite) TestASitemapSuppressesLinkFollowing() {
@@ -262,12 +322,12 @@ func (s *CrawlSuite) TestASecondCrawlCanRunEntirelyFromTheCache() {
 		crawl.Options{Revalidate: true},
 	)
 	s.Require().NoError(err)
-	s.Len(first.Pages, 1)
+	s.Len(first.Pages, 2)
 
 	before := s.requests.Load()
 	second, err := crawl.Crawl(s.T().Context(), f, s.server.URL+"/docs/", crawl.Options{})
 	s.Require().NoError(err)
-	s.Len(second.Pages, 1)
+	s.Len(second.Pages, 2)
 	s.Equal(before, s.requests.Load(), "a re-crawl from the cache asks the server nothing")
 }
 

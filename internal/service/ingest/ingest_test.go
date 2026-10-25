@@ -3,6 +3,7 @@ package ingest_test
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -187,7 +188,7 @@ func (s *IngestSuite) TestHeldBytesAnOlderPipelineReadAreReadAgain() {
 	s.Require().NoError(err)
 	s.Equal(ingest.Replaced, result.Outcome)
 	s.Equal("operator-guide", published.Replaces)
-	s.Contains(result.Note, "by pipeline version 0")
+	s.Contains(result.Note, "by pipeline version "+strconv.Itoa(domain.PipelineVersion-1))
 }
 
 // Held bytes arriving from another path replace the document that holds

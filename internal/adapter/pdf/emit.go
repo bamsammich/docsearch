@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"cmp"
 	"slices"
 	"strings"
 
@@ -130,7 +131,10 @@ func emitOutlineBlocks(pages []Page, placements []placement, titles map[string]s
 	sink := &blockSink{path: outlinePath(titles)}
 	for pno, p := range pages {
 		pending := slices.Clone(byPage[pno])
-		slices.SortStableFunc(pending, func(a, b placement) int { return cmpFloat(a.y, b.y) })
+		slices.SortStableFunc(
+			pending,
+			func(a, b placement) int { return cmp.Compare(a.line, b.line) },
+		)
 		if skip[pno] {
 			sink.enterAll(pending)
 			continue
@@ -151,19 +155,19 @@ func (s *blockSink) enterAll(headings []placement) {
 	}
 }
 
-// emitOutlinePage adds one page's lines, entering each placed heading at or
-// above a line before reading it. A heading placed at the top of the page
-// (y -1) applies before the first line, as the outline claimed. A line a
+// emitOutlinePage adds one page's lines, entering each heading placed at or
+// before a line before reading it. A heading placed at the top of the page
+// (line -1) applies before the first line, as the outline claimed. A line a
 // heading was matched against is the heading itself and is not text. It
-// returns the headings still pending below the last line and how many of the
+// returns the headings still pending after the last line and how many of the
 // page's figures were counted.
 func emitOutlinePage(sink *blockSink, lines []Line, pno int, pending []placement,
 	boiler boilerplate, tops []float64,
 ) ([]placement, int) {
 	next, wrapped := 0, 0
-	for _, ln := range lines {
+	for i, ln := range lines {
 		var consumed bool
-		pending, consumed, wrapped = sink.enterAbove(pending, ln.Y0, wrapped)
+		pending, consumed, wrapped = sink.enterAt(pending, i, wrapped)
 		if consumed || boiler.matches(ln.Text) {
 			continue
 		}
@@ -177,17 +181,17 @@ func emitOutlinePage(sink *blockSink, lines []Line, pno int, pending []placement
 	return pending, next
 }
 
-// enterAbove enters each pending heading placed at or above y. It returns the
-// headings still pending, whether one of those entered was matched against
-// the line at y, which is then the heading rather than text, and how many
-// lines after that one carry the rest of its title.
-func (s *blockSink) enterAbove(
+// enterAt enters each pending heading placed at or before line i. It
+// returns the headings still pending, whether one of those entered was
+// matched against line i, which is then the heading rather than text, and
+// how many lines after that one carry the rest of its title.
+func (s *blockSink) enterAt(
 	pending []placement,
-	y float64,
+	i int,
 	wrapped int,
 ) ([]placement, bool, int) {
 	consumed := false
-	for len(pending) > 0 && pending[0].y <= y {
+	for len(pending) > 0 && pending[0].line <= i {
 		s.enter(pending[0].section)
 		if pending[0].matched {
 			consumed, wrapped = true, pending[0].wrapped
@@ -203,8 +207,8 @@ type numberedLayout struct {
 	boiler       boilerplate
 	subdivisions map[pagePoint]bool
 	// headings maps a page to the sections whose heading sits on it, keyed
-	// by the heading line's top rounded to a tenth.
-	headings     map[int]map[float64]string
+	// by the heading line's index among the page's lines.
+	headings     map[int]map[int]string
 	titles       map[string]string
 	indexSection string
 	pages        []Page
@@ -239,15 +243,14 @@ func emitNumberedBlocks(l numberedLayout) []domain.Block {
 // the page's figures were counted.
 func (l numberedLayout) emitPage(sink *blockSink, lines []Line, pno int) int {
 	tops, next := l.figureTops[pno], 0
-	for _, ln := range lines {
+	for i, ln := range lines {
 		if l.boiler.matches(ln.Text) {
 			continue
 		}
 		next = sink.buf.countImagesAbove(tops, next, ln.Y0)
-		y := pystr.Round(ln.Y0, 1)
-		section, isHeading := l.headings[pno][y]
+		section, isHeading := l.headings[pno][i]
 		if !isHeading {
-			l.addLine(sink, ln.Text, pagePoint{page: pno, y: y})
+			l.addLine(sink, ln.Text, pagePoint{page: pno, line: i})
 			continue
 		}
 		sink.enter(section)

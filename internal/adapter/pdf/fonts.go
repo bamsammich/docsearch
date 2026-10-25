@@ -2,6 +2,8 @@ package pdf
 
 import (
 	"slices"
+	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -16,6 +18,9 @@ const (
 	// boilerplateMinPages is the page count below which repetition is not
 	// evidence of furniture and the false-positive risk dominates.
 	boilerplateMinPages = 8
+	// furnitureSpread is how far apart, in points, the tops of one line on
+	// different pages may sit and still be one piece of furniture.
+	furnitureSpread = 6.0
 )
 
 // sizeCount counts per font size, remembering the order sizes were first
@@ -106,37 +111,75 @@ func headingSizesOf(linesAt *sizeCount, body float64, floor int) []float64 {
 // and "3." are one key, and on a short document that collision alone clears
 // the threshold and would strip every chapter heading. Running furniture is
 // set small; a heading-sized line never is.
+//
+// The same collision catches body text with no letters in it. A reference
+// list sets each "109:163-203" on a line of its own, all of them "#:#-#",
+// and a paper of 37 pages reaches the threshold with them. Such a line is
+// furniture only where it repeats at one height, as a page number does.
 func detectBoilerplate(pages []Page, headingSizes []float64) boilerplate {
 	found := boilerplate{}
 	if len(pages) < boilerplateMinPages {
 		return found
 	}
 	threshold := max(3, int(float64(len(pages))*boilerplatePageFraction))
-	for key, onPages := range pagesPerLine(pages, headingSizes) {
-		if len(onPages) >= threshold {
+	for key, at := range positionsPerLine(pages, headingSizes) {
+		onPages := distinctPages(at)
+		if !strings.ContainsFunc(key, unicode.IsLetter) {
+			onPages = pagesAtOneHeight(at)
+		}
+		if onPages >= threshold {
 			found[key] = true
 		}
 	}
 	return found
 }
 
-// pagesPerLine maps each normalized line below heading size to the pages it
-// appears on.
-func pagesPerLine(pages []Page, headingSizes []float64) map[string]map[int]bool {
-	seen := map[string]map[int]bool{}
+// pageTop is where a line sits: its page and its top.
+type pageTop struct {
+	page int
+	y    float64
+}
+
+// positionsPerLine maps each normalized line below heading size to where it
+// appears, in page order.
+func positionsPerLine(pages []Page, headingSizes []float64) map[string][]pageTop {
+	seen := map[string][]pageTop{}
 	for i, p := range pages {
 		for _, ln := range p.Lines {
 			if !slices.Contains(headingSizes, ln.Size) {
-				addPage(seen, normalize(ln.Text), i)
+				key := normalize(ln.Text)
+				seen[key] = append(seen[key], pageTop{page: i, y: ln.Y0})
 			}
 		}
 	}
 	return seen
 }
 
-func addPage(seen map[string]map[int]bool, key string, page int) {
-	if seen[key] == nil {
-		seen[key] = map[int]bool{}
+// pagesAtOneHeight counts the pages of the largest share of at whose tops
+// lie within furnitureSpread of each other.
+func pagesAtOneHeight(at []pageTop) int {
+	sorted := slices.Clone(at)
+	slices.SortStableFunc(sorted, func(a, b pageTop) int { return cmpFloat(a.y, b.y) })
+	inWindow := map[int]int{}
+	best, start := 0, 0
+	for _, p := range sorted {
+		inWindow[p.page]++
+		for p.y-sorted[start].y > furnitureSpread {
+			if inWindow[sorted[start].page]--; inWindow[sorted[start].page] == 0 {
+				delete(inWindow, sorted[start].page)
+			}
+			start++
+		}
+		best = max(best, len(inWindow))
 	}
-	seen[key][page] = true
+	return best
+}
+
+// distinctPages counts the pages among at.
+func distinctPages(at []pageTop) int {
+	pages := map[int]bool{}
+	for _, p := range at {
+		pages[p.page] = true
+	}
+	return len(pages)
 }

@@ -42,6 +42,9 @@ func Build(doc *Document, name string) (*domain.Extraction, error) {
 		"figures":                    figures.diagnostic(),
 	}
 
+	if len(doc.Outline) > 0 && !pointsAtAPage(doc.Outline) {
+		diagnostics["outline_ignored"] = len(doc.Outline)
+	}
 	entries, source, tocPageMax := structureSource(doc, boiler)
 	if source == "" && len(headingSizes) > 0 {
 		source = sourceFonts
@@ -86,11 +89,12 @@ func Build(doc *Document, name string) (*domain.Extraction, error) {
 	}, nil
 }
 
-// structureSource picks the outline when there is one, else a printed
-// contents listing among the first pages. It returns "" as the source when
-// neither exists, and the last printed contents page, -1 when there is none.
+// structureSource picks the outline when one of its entries points at a
+// page, else a printed contents listing among the first pages. It returns ""
+// as the source when neither exists, and the last printed contents page, -1
+// when there is none.
 func structureSource(doc *Document, boiler boilerplate) ([]tocEntry, string, int) {
-	if len(doc.Outline) > 0 {
+	if pointsAtAPage(doc.Outline) {
 		return outlineEntries(doc.Outline), sourceOutline, -1
 	}
 	scan := max(40, len(doc.Pages)/20)
@@ -99,6 +103,14 @@ func structureSource(doc *Document, boiler boilerplate) ([]tocEntry, string, int
 		return entries, sourceFrontTOC, slices.Max(slices.Collect(maps.Keys(tocPages)))
 	}
 	return []tocEntry{}, "", -1
+}
+
+// pointsAtAPage reports whether any outline entry names a page. Some
+// publishers ship an outline of web links, every entry pointing nowhere in
+// the document. Placing those puts no heading on any page, so every chunk
+// would come out headless while the font sizes still hold the headings.
+func pointsAtAPage(outline []OutlineEntry) bool {
+	return slices.ContainsFunc(outline, func(e OutlineEntry) bool { return e.Page > 0 })
 }
 
 // title is the metadata title, else the file name less its suffix.

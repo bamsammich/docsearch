@@ -21,6 +21,14 @@ import (
 // UserAgent identifies the crawler and where to complain about it.
 const UserAgent = "docsearch/0.1 (+https://github.com/bamsammich/docsearch)"
 
+// Accept asks for HTML first. Some documentation hosts answer a client that
+// names no preference, as a non-browser User-Agent usually does, with
+// text/markdown for agents. The crawl reads links, canonical tags and the
+// sidebar from the HTML, so that markdown would arrive as a page with no
+// structure. The wildcard keeps sitemaps, llms.txt and robots.txt
+// acceptable.
+const Accept = "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8"
+
 const (
 	// DefaultInterval is the wait between requests to one host. A
 	// documentation site is someone else's server, and a crawl of a few
@@ -266,6 +274,7 @@ func (f *Fetcher) request(
 		return nil, fmt.Errorf("%w: %s: %w", ErrFetch, raw, err)
 	}
 	req.Header.Set("User-Agent", f.userAgent)
+	req.Header.Set("Accept", Accept)
 	for name, value := range headers {
 		req.Header.Set(name, value)
 	}
