@@ -126,6 +126,24 @@ func (s *DiscoverSuite) TestASitemapIsScopedToTheSeed() {
 	s.Contains(strings.Join(cov.Notes, "\n"), "sitemap declares 2 URL(s), 1 under the seed")
 }
 
+func (s *DiscoverSuite) TestSeedLinksAreScopedOnceAManifestCoversTheSeed() {
+	s.routes["/sitemap.xml"] = s.urlset("/docs/a")
+	s.routes["/docs/"] = `<html><body><a href="/docs/a">A</a><a href="/blog/post">Post</a></body></html>`
+	cov := s.discover("/docs/")
+	s.Equal([]string{"/docs/a"}, s.paths(cov.FromIndex))
+	s.Equal([]string{"/docs/a"}, s.paths(cov.URLs))
+}
+
+func (s *DiscoverSuite) TestAHubWithNoManifestUnderItKeepsItsLinks() {
+	// The origin's sitemap describes other pages, none under the seed, so
+	// the seed's links are its only declaration of what it indexes.
+	s.routes["/sitemap.xml"] = s.urlset("/blog/post")
+	s.routes["/support/hub"] = `<html><body><a href="/support/en/one">One</a>` +
+		`<a href="/support/en/two">Two</a></body></html>`
+	cov := s.discover("/support/hub")
+	s.Equal([]string{"/support/en/one", "/support/en/two"}, s.paths(cov.FromIndex))
+}
+
 func (s *DiscoverSuite) TestASitemapIndexIsFollowed() {
 	s.routes["/sitemap.xml"] = fmt.Sprintf(
 		`<?xml version="1.0"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`+

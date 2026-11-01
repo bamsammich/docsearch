@@ -37,9 +37,10 @@ const (
 	// DefaultMaxRedirects is where a redirect chain becomes a loop or a
 	// trap rather than navigation.
 	DefaultMaxRedirects = 5
-	// DefaultMaxFetches is a backstop against a seed that addresses far
-	// more than a manual. The crawler applies the real budget; this is the
-	// floor under a bug.
+	// DefaultMaxFetches is the floor under a bug: requests a crawl may make
+	// beyond the pages it has reserved. The crawler reserves its declared
+	// frontier, so a crawl stops here only by fetching far more than it
+	// declared.
 	DefaultMaxFetches = 5000
 	// DefaultTimeout bounds one request.
 	DefaultTimeout = 20 * time.Second
@@ -106,6 +107,7 @@ type Fetcher struct {
 	interval     time.Duration
 	maxRedirects int
 	maxFetches   int
+	slack        int
 	fetches      int
 	maxBody      int64
 	ignoreRobots bool
@@ -122,6 +124,7 @@ func New(cache Cache, opts Options) *Fetcher {
 		interval:     orDuration(opts.Interval, DefaultInterval),
 		maxRedirects: orInt(opts.MaxRedirects, DefaultMaxRedirects),
 		maxFetches:   orInt(opts.MaxFetches, DefaultMaxFetches),
+		slack:        orInt(opts.MaxFetches, DefaultMaxFetches),
 		maxBody:      DefaultMaxBodyBytes,
 		ignoreRobots: opts.IgnoreRobots,
 	}
@@ -197,6 +200,12 @@ func (f *Fetcher) follow(
 		}
 	}
 	return nil, fmt.Errorf("%w: %s: more than %d redirects", ErrFetch, target, f.maxRedirects)
+}
+
+// Reserve makes room in the budget for requests more, keeping the slack the
+// budget was built with above them.
+func (f *Fetcher) Reserve(requests int) {
+	f.maxFetches = max(f.maxFetches, f.fetches+requests+f.slack)
 }
 
 // hop requests one URL of a redirect chain, within the budget.
