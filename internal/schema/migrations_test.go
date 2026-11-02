@@ -600,3 +600,27 @@ func (s *MigrationSuite) TestJobForceGoesDownAndUpAgain() {
 	s.Equal(1, total, "the job survives losing the column")
 	s.Equal(0, forced)
 }
+
+// -- 00017_default_partition_grant ----------------------------------------
+
+// readBuiltInPartition is the read search makes when it names the built-in
+// library's own BM25 index, which needs SELECT on the partition itself.
+const readBuiltInPartition = `SELECT 1 FROM chunks_default LIMIT 0`
+
+func (s *MigrationSuite) TestDefaultPartitionGrantUpLetsTheAppReadThePartition() {
+	s.upTo(16)
+	s.True(s.appCannot(readBuiltInPartition), "migration 6 granted the parent alone")
+
+	s.upTo(17)
+
+	s.False(s.appCannot(readBuiltInPartition))
+}
+
+func (s *MigrationSuite) TestDefaultPartitionGrantGoesDownAndUpAgain() {
+	s.upTo(17)
+	s.down()
+	s.True(s.appCannot(readBuiltInPartition), "down takes the grant back")
+	s.upTo(17)
+
+	s.False(s.appCannot(readBuiltInPartition))
+}
