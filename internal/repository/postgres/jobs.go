@@ -304,7 +304,7 @@ func (j *Jobs) Add(
 	err = j.inTx(ctx, func(q *pgdbgen.Queries) error {
 		var queueErr error
 		id, queueErr = q.EnqueueJob(ctx, pgdbgen.EnqueueJobParams{
-			UserID:     j.userID,
+			LibraryID:  j.userID,
 			SourcePath: source,
 			Title:      nullString(title),
 			Force:      force,

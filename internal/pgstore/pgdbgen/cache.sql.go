@@ -38,8 +38,8 @@ type CachedResponseRow struct {
 // re-chunking a site makes none.
 //
 // Every statement runs in a transaction that opened with
-// SET LOCAL app.user_id, so a read names no user and the policy decides what
-// it sees. A write names user_id because a row has to carry its owner.
+// SET LOCAL app.library_id, so a read names no library and the policy decides what
+// it sees. A write names library_id because a row has to carry its owner.
 func (q *Queries) CachedResponse(ctx context.Context, url string) (CachedResponseRow, error) {
 	row := q.db.QueryRowContext(ctx, cachedResponse, url)
 	var i CachedResponseRow
@@ -75,10 +75,10 @@ func (q *Queries) CachedRobots(ctx context.Context, host string) (CachedRobotsRo
 
 const storeResponse = `-- name: StoreResponse :exec
 INSERT INTO responses (
-  user_id, url, final_url, status, content_type, etag, last_modified, body,
+  library_id, url, final_url, status, content_type, etag, last_modified, body,
   sha256, fetched_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-ON CONFLICT (user_id, url) DO UPDATE SET
+ON CONFLICT (library_id, url) DO UPDATE SET
   final_url = EXCLUDED.final_url,
   status = EXCLUDED.status,
   content_type = EXCLUDED.content_type,
@@ -90,7 +90,7 @@ ON CONFLICT (user_id, url) DO UPDATE SET
 `
 
 type StoreResponseParams struct {
-	UserID       string
+	LibraryID    string
 	Url          string
 	FinalUrl     string
 	Status       int32
@@ -106,7 +106,7 @@ type StoreResponseParams struct {
 // refresh idempotent.
 func (q *Queries) StoreResponse(ctx context.Context, arg StoreResponseParams) error {
 	_, err := q.db.ExecContext(ctx, storeResponse,
-		arg.UserID,
+		arg.LibraryID,
 		arg.Url,
 		arg.FinalUrl,
 		arg.Status,
@@ -121,13 +121,13 @@ func (q *Queries) StoreResponse(ctx context.Context, arg StoreResponseParams) er
 }
 
 const storeRobots = `-- name: StoreRobots :exec
-INSERT INTO robots (user_id, host, body, fetched_at) VALUES ($1, $2, $3, $4)
-ON CONFLICT (user_id, host) DO UPDATE SET
+INSERT INTO robots (library_id, host, body, fetched_at) VALUES ($1, $2, $3, $4)
+ON CONFLICT (library_id, host) DO UPDATE SET
   body = EXCLUDED.body, fetched_at = EXCLUDED.fetched_at
 `
 
 type StoreRobotsParams struct {
-	UserID    string
+	LibraryID string
 	Host      string
 	Body      string
 	FetchedAt time.Time
@@ -139,7 +139,7 @@ type StoreRobotsParams struct {
 // skew between a worker and its database.
 func (q *Queries) StoreRobots(ctx context.Context, arg StoreRobotsParams) error {
 	_, err := q.db.ExecContext(ctx, storeRobots,
-		arg.UserID,
+		arg.LibraryID,
 		arg.Host,
 		arg.Body,
 		arg.FetchedAt,

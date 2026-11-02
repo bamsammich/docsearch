@@ -40,13 +40,13 @@ func (s *SearchSuite) SetupTest() {
 // seed writes one ready document holding chunks chunks.
 func (s *SearchSuite) seed(id, title string, chunks int) {
 	s.write(`INSERT INTO documents
-		   (user_id,doc_id,title,format,source_path,sha256,status,chunk_count)
+		   (library_id,doc_id,title,format,source_path,sha256,status,chunk_count)
 		 VALUES ($1,$2,$3,'pdf','/x',$4,'ready',$5)`,
 		builtinUser, id, title, id, chunks)
 	for i := range chunks {
 		kind, text := chunkBody(id, i)
 		s.write(`INSERT INTO chunks
-			   (user_id,doc_id,ordinal,section,heading_path,text,kind,image_count)
+			   (library_id,doc_id,ordinal,section,heading_path,text,kind,image_count)
 			 VALUES ($1,$2,$3,$4,$5,$6,$7,0)`,
 			builtinUser, id, i, "1."+strconv.Itoa(i),
 			title+" > Section "+strconv.Itoa(i), text, kind)
@@ -144,13 +144,13 @@ func bestKeywordRank(res []SearchResult) int {
 // "10_ Rules" would be a wildcard and sweep in "100 Rules".
 func (s *SearchSuite) TestASectionFilterHasNoWildcards() {
 	s.write(`INSERT INTO documents
-		   (user_id,doc_id,title,format,source_path,sha256,status,chunk_count)
+		   (library_id,doc_id,title,format,source_path,sha256,status,chunk_count)
 		 VALUES ($1,'wild','Wild','pdf','/x','wild','ready',3)`, builtinUser)
 	for i, heading := range []string{
 		"Wild > 10_ Rules", "Wild > 10_ Rules > Detail", "Wild > 100 Rules > Detail",
 	} {
 		s.write(`INSERT INTO chunks
-			   (user_id,doc_id,ordinal,section,heading_path,text,kind,image_count)
+			   (library_id,doc_id,ordinal,section,heading_path,text,kind,image_count)
 			 VALUES ($1,'wild',$2,$3,$4,'calibrate the fixture before use','prose',0)`,
 			builtinUser, i, strconv.Itoa(i+1), heading)
 	}
@@ -168,7 +168,7 @@ func (s *SearchSuite) TestASectionFilterHasNoWildcards() {
 // in a search of its document and in a search of the whole library, which
 // reads every document's entries in one query.
 func (s *SearchSuite) TestAnIndexEntryLiftsTheSectionItNames() {
-	s.write(`INSERT INTO index_terms (user_id, doc_id, term, section)
+	s.write(`INSERT INTO index_terms (library_id, doc_id, term, section)
 		VALUES ($1, 'big', 'Universe, patching a', '1.9')`, builtinUser)
 
 	scoped := s.search(SearchParams{Query: "universe", DocID: "big", K: 5})

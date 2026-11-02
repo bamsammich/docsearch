@@ -133,7 +133,7 @@ func (r *Repository) Create(ctx context.Context, doc ingest.Document, stale stri
 			}
 		}
 		return q.InsertDocument(ctx, pgdbgen.InsertDocumentParams{
-			UserID:     r.userID,
+			LibraryID:  r.userID,
 			DocID:      doc.DocID,
 			Title:      doc.Title,
 			Format:     doc.Format,
@@ -187,10 +187,10 @@ func writePages(
 ) error {
 	for _, page := range slices.Sorted(maps.Keys(pages)) {
 		err := q.UpsertPage(ctx, pgdbgen.UpsertPageParams{
-			UserID: userID,
-			DocID:  docID,
-			Page:   pgsession.Narrow(page),
-			Text:   pages[page],
+			LibraryID: userID,
+			DocID:     docID,
+			Page:      pgsession.Narrow(page),
+			Text:      pages[page],
 		})
 		if err != nil {
 			return fmt.Errorf("write page %d: %w", page, err)
@@ -209,10 +209,10 @@ func writeTerms(
 ) error {
 	for _, term := range terms {
 		err := q.InsertIndexTerm(ctx, pgdbgen.InsertIndexTermParams{
-			UserID:  userID,
-			DocID:   docID,
-			Term:    term[0],
-			Section: term[1],
+			LibraryID: userID,
+			DocID:     docID,
+			Term:      term[0],
+			Section:   term[1],
 		})
 		if err != nil {
 			return fmt.Errorf("write index term %q: %w", term[0], err)
@@ -345,7 +345,7 @@ func withoutNUL(s string) string {
 // chunkParams is one chunk as its row.
 func chunkParams(userID, docID string, c domain.Chunk) pgdbgen.InsertChunkParams {
 	return pgdbgen.InsertChunkParams{
-		UserID:           userID,
+		LibraryID:        userID,
 		DocID:            docID,
 		Ordinal:          pgsession.Narrow(c.Ordinal),
 		Section:          nullStringOf(c.Section),

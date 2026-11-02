@@ -297,8 +297,8 @@ type TopLevelHeadingsRow struct {
 
 // Chunk and page reads, through internal/repository/postgres.
 //
-// Every statement runs in a transaction that named its user, so none of
-// these filters on user_id: row-level security is where the library is
+// Every statement runs in a transaction that named its library, so none of
+// these filters on library_id: row-level security is where the library is
 // chosen.
 func (q *Queries) TopLevelHeadings(ctx context.Context, docID string) ([]TopLevelHeadingsRow, error) {
 	rows, err := q.db.QueryContext(ctx, topLevelHeadings, docID)

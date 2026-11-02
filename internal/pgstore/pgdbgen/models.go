@@ -11,7 +11,7 @@ import (
 )
 
 type Chunk struct {
-	UserID           string
+	LibraryID        string
 	ID               int64
 	DocID            string
 	Ordinal          int32
@@ -28,7 +28,7 @@ type Chunk struct {
 }
 
 type ChunksDefault struct {
-	UserID           string
+	LibraryID        string
 	ID               int64
 	DocID            string
 	Ordinal          int32
@@ -56,14 +56,14 @@ type Document struct {
 	Status     string
 	IngestedAt sql.NullTime
 	Warnings   sql.NullString
-	UserID     string
+	LibraryID  string
 }
 
 type IndexTerm struct {
-	DocID   string
-	Term    string
-	Section string
-	UserID  string
+	DocID     string
+	Term      string
+	Section   string
+	LibraryID string
 }
 
 type IngestJob struct {
@@ -83,8 +83,25 @@ type IngestJob struct {
 	LeaseUntil  sql.NullTime
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
-	UserID      string
+	LibraryID   string
 	Force       bool
+}
+
+type Library struct {
+	LibraryID string
+	Kind      string
+	Slug      sql.NullString
+	Name      sql.NullString
+	CreatedBy sql.NullString
+	CreatedAt time.Time
+}
+
+type LibraryGrant struct {
+	LibraryID string
+	UserID    string
+	Role      string
+	GrantedBy sql.NullString
+	GrantedAt time.Time
 }
 
 type OauthAuthRequest struct {
@@ -122,10 +139,10 @@ type OauthRefreshToken struct {
 }
 
 type Page struct {
-	DocID  string
-	Page   int32
-	Text   string
-	UserID string
+	DocID     string
+	Page      int32
+	Text      string
+	LibraryID string
 }
 
 type PasswordAccount struct {
@@ -138,7 +155,7 @@ type PasswordAccount struct {
 }
 
 type Response struct {
-	UserID       string
+	LibraryID    string
 	Url          string
 	FinalUrl     string
 	Status       int32
@@ -151,7 +168,7 @@ type Response struct {
 }
 
 type Robot struct {
-	UserID    string
+	LibraryID string
 	Host      string
 	Body      string
 	FetchedAt time.Time
@@ -163,7 +180,7 @@ type SchemaVersion struct {
 }
 
 type Upload struct {
-	UserID     string
+	LibraryID  string
 	Key        string
 	Filename   string
 	Sha256     string
@@ -173,7 +190,7 @@ type Upload struct {
 
 type UploadLink struct {
 	TokenHash string
-	UserID    string
+	LibraryID string
 	ExpiresAt time.Time
 	UsedAt    sql.NullTime
 }

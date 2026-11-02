@@ -3,8 +3,9 @@
 //
 // Nothing outside this package should touch the database except through it.
 //
-// The policies read app.user_id, and SET LOCAL lasts for one transaction, so
-// a statement run on a bare connection matches no rows at all. Wrapping even
+// The policies read app.user_id and app.library_id, and a setting made with
+// SET LOCAL lasts for one transaction, so a statement run on a bare
+// connection matches no rows at all. Wrapping even
 // a single read costs one round trip and buys a rule with no exceptions: a
 // method that forgot the user would return nothing rather than return
 // somebody else's rows, and there is no way to forget it without also
@@ -50,31 +51,25 @@ func Run(
 	return nil
 }
 
-// setUser is what the policies read. SET LOCAL takes no placeholder, so the
-// identifier is quoted rather than bound; it comes from the authenticated
-// request rather than from a document.
+// setUser is what the policies read: app.user_id is who is asking, and
+// app.library_id is the library the transaction works in. The policies
+// check that the user holds a grant on that library.
+//
+// A user's personal library carries the user's own id, and until shared
+// libraries reach this layer it is the only library a transaction names.
+//
+// set_config with is_local true is SET LOCAL as a function, which lets both
+// settings go in one statement with the identifier bound rather than quoted.
 func setUser(ctx context.Context, tx *sql.Tx, userID string) error {
 	if userID == "" {
 		return errors.New("no user: a statement without an owner would match no rows")
 	}
 	if _, err := tx.ExecContext(ctx,
-		fmt.Sprintf("SET LOCAL app.user_id = %s", quoteLiteral(userID))); err != nil {
+		"SELECT set_config('app.user_id', $1, true), set_config('app.library_id', $1, true)",
+		userID); err != nil {
 		return fmt.Errorf("set the user: %w", err)
 	}
 	return nil
-}
-
-// quoteLiteral wraps a value as Postgres does, doubling any quote inside it.
-func quoteLiteral(s string) string {
-	out := make([]rune, 0, len(s)+2)
-	out = append(out, '\'')
-	for _, r := range s {
-		if r == '\'' {
-			out = append(out, '\'')
-		}
-		out = append(out, r)
-	}
-	return string(append(out, '\''))
 }
 
 // Rollback reports a rollback that itself failed, and says nothing about one
