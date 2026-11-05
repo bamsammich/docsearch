@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -162,4 +165,28 @@ func (s *SettingsSuite) TestStoredSettingsFillOnlyWhatNothingStrongerSet() {
 	s.Equal(config.FromEnv, cfg.Origins["public-url"].Kind)
 	s.True(cfg.OIDC.SignUp)
 	s.Equal(config.FromDatabase, cfg.Origins["oidc-sign-up"].Kind)
+}
+
+// The DSN carries the request role's password and the file is shown on the
+// Sign-in page, so the file cannot hold it.
+func (s *SettingsSuite) TestTheFileCannotHoldTheDSN() {
+	s.write("dsn: postgres://docsearch_app:secret@db/docsearch\n")
+
+	_, err := s.parse("--config", s.file)
+	s.Require().ErrorIs(err, errUnknownKeys)
+	s.Require().ErrorContains(err, "dsn")
+}
+
+// A config path that is a URL is refused without a request being made.
+func (s *SettingsSuite) TestAConfigURLIsRefusedUnfetched() {
+	var asked atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		asked.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	s.T().Cleanup(server.Close)
+
+	_, err := s.parse("--config", server.URL+"/docsearch.yaml")
+	s.Require().ErrorContains(err, "names a file, not a URL")
+	s.Zero(asked.Load())
 }

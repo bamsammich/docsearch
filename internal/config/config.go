@@ -356,11 +356,18 @@ func (c *Config) resolvePublicURL() error {
 		}
 		c.PublicURL = derived
 	}
-	parsed, err := url.Parse(c.PublicURL)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return fmt.Errorf("%s must be an absolute URL, not %q", EnvPublicURL, c.PublicURL)
+	if !HTTPURL(c.PublicURL) {
+		return fmt.Errorf("the public URL must be an absolute http or https URL, not %q: "+
+			"set it with --public-url, %s or public_url", c.PublicURL, EnvPublicURL)
 	}
 	return nil
+}
+
+// HTTPURL reports whether s is an absolute http or https URL with a host,
+// which is what a browser can be sent to and a provider can be fetched from.
+func HTTPURL(s string) bool {
+	parsed, err := url.Parse(s)
+	return err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Host != ""
 }
 
 // defaultPublicURL is, in oidc mode, the origin clients already address
@@ -386,6 +393,9 @@ func (c *Config) defaultPublicURL() (string, error) {
 func (o OIDC) validate() error {
 	if o.Issuer == "" {
 		return errors.New("auth mode oidc needs an issuer: set " + EnvOIDCIssuer)
+	}
+	if !HTTPURL(o.Issuer) {
+		return fmt.Errorf("the oidc issuer must be an absolute http or https URL, not %q", o.Issuer)
 	}
 	if o.Resource == "" {
 		return errors.New("auth mode oidc needs docsearch's own /mcp URI: set " + EnvOIDCResource)

@@ -33,10 +33,11 @@ const (
 )
 
 // fileKeys are where each setting lives in docsearch.yaml. A flag missing
-// here has no file key: a secret, which comes from the environment alone.
+// here has no file key: a secret, which comes from the environment or the
+// command line alone. The database DSN is one, because it carries the
+// request role's password and the file is shown on the Sign-in page.
 var fileKeys = map[string]string{
 	flagAddr:                flagAddr,
-	flagDSN:                 flagDSN,
 	"auth":                  "auth.mode",
 	"root":                  "roots",
 	"allowed-origins":       "allowed_origins",
@@ -62,8 +63,8 @@ var fileKeys = map[string]string{
 // how people sign in, short of the sign-in mode itself, whose wrong value
 // would lock everyone out.
 var editable = map[string]settings.Editable{
-	flagPublicURL:  {Key: fileKeys[flagPublicURL]},
-	flagOIDCIssuer: {Key: fileKeys[flagOIDCIssuer]},
+	flagPublicURL:  {Key: fileKeys[flagPublicURL], URL: true},
+	flagOIDCIssuer: {Key: fileKeys[flagOIDCIssuer], URL: true},
 	flagClaimName:  {Key: fileKeys[flagClaimName]},
 	flagClaimValue: {Key: fileKeys[flagClaimValue]},
 	flagSignUp:     {Key: fileKeys[flagSignUp], Boolean: true},
@@ -98,9 +99,25 @@ func applyStored(cfg *config.Config, stored map[string]string) {
 // environment first, then docsearch.yaml. The environment wins, so an
 // operator overrides the deployment's file without editing it.
 func from(flag, env string) cli.ValueSourceChain {
-	file := altyaml.YAML(fileKeys[flag], altsrc.NewStringPtrSourcer(&configPath))
+	file := altyaml.YAML(fileKeys[flag], localConfig{})
 	return cli.NewValueSourceChain(cli.EnvVar(env), file)
 }
+
+// localConfig names the config file to altsrc, and names nothing for a path
+// that is a URL: altsrc fetches one over HTTP, and the server reads its
+// settings from a file it was handed, never from the network. checkConfig
+// then refuses the path.
+type localConfig struct{}
+
+func (localConfig) SourceURI() string {
+	if remote(configPath) {
+		return ""
+	}
+	return configPath
+}
+
+// remote reports whether a config path is a URL rather than a file.
+func remote(path string) bool { return strings.Contains(path, "://") }
 
 // rootsFrom is from for --root, whose list the file holds as a YAML list.
 // altsrc joins a list with commas, and --root splits on the platform's
@@ -140,7 +157,7 @@ func (s rootsSource) GoString() string { return s.String() }
 
 // readConfig parses docsearch.yaml, or answers nothing when no file is named.
 func readConfig(path string) (map[any]any, error) {
-	if path == "" {
+	if path == "" || remote(path) {
 		return nil, nil
 	}
 	raw, err := os.ReadFile(path) //nolint:gosec // the operator names the file
@@ -164,6 +181,9 @@ var errUnknownKeys = errors.New("keys no setting reads")
 func checkConfig(path string) error {
 	if path == "" {
 		return nil
+	}
+	if remote(path) {
+		return fmt.Errorf("--config names a file, not a URL: %s", path)
 	}
 	if info, err := os.Stat(path); err != nil || info.IsDir() {
 		return fmt.Errorf("the config file %s is not a file docsearch can read", path)

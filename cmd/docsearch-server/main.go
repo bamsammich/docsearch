@@ -68,7 +68,7 @@ func command() *cli.Command {
 			&cli.StringFlag{
 				Name:    flagDSN,
 				Usage:   "Postgres `DSN` of the database holding every library",
-				Sources: from(flagDSN, config.EnvDSN),
+				Sources: cli.EnvVars(config.EnvDSN),
 			},
 			&cli.StringFlag{
 				Name:    "auth",

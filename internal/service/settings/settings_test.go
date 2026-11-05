@@ -16,7 +16,7 @@ import (
 var editable = map[string]settings.Editable{
 	"oidc-required-claim-value": {Key: "auth.oidc.required_claim.value"},
 	"oidc-sign-up":              {Key: "auth.oidc.sign_up", Boolean: true},
-	"public-url":                {Key: "public_url"},
+	"public-url":                {Key: "public_url", URL: true},
 }
 
 const deployed = `# Deployed by the platform team.
@@ -130,4 +130,14 @@ func (s *SettingsSuite) TestStoredIsByFlagAndEmptyWithAFile() {
 	stored, err = s.withFile(nil).Stored(s.T().Context())
 	s.Require().NoError(err)
 	s.Empty(stored)
+}
+
+// A value that would stop the server from starting is refused before it is
+// kept or written.
+func (s *SettingsSuite) TestAURLSettingTakesOnlyAnHTTPURL() {
+	for _, bad := range []string{"not a url", "javascript://x/%0aalert(1)", "docs.example.com"} {
+		_, err := s.withDatabase(nil).
+			Update(s.T().Context(), []settings.Change{{Flag: "public-url", Value: bad}})
+		s.Require().ErrorIs(err, settings.ErrInvalid, bad)
+	}
 }
