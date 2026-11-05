@@ -53,6 +53,6 @@ func (s *SelfLabelSuite) TestAChunkWithNoDistinctiveTextYieldsAnUnusableQuery() 
 }
 
 func (s *SelfLabelSuite) TestHeadingOnlyChunkStillProducesAQuery() {
-	q := generateQuery(pgstore.SampledChunk{HeadingPath: "Patching Fixtures", Text: ""})
-	s.Contains(q, "Patching")
+	q := generateQuery(pgstore.SampledChunk{HeadingPath: "Calibrating Sensors", Text: ""})
+	s.Contains(q, "Calibrating")
 }

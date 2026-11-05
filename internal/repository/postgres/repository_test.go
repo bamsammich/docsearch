@@ -214,11 +214,11 @@ func (s *RepositorySuite) TestPagesAndIndexTermsAreWritten() {
 	s.Require().NoError(s.repo.AddPagesAndTerms(
 		s.T().Context(), "manual",
 		map[int]string{2: "second page", 1: "first page"},
-		[][2]string{{"dimmer", "4.1"}, {"patch", "4.2"}},
+		[][2]string{{"planet", "4.1"}, {"orbit", "4.2"}},
 	))
 
 	s.Equal("first page", s.queryOne(`SELECT text FROM pages WHERE doc_id='manual' AND page=1`))
-	s.Equal("4.1", s.queryOne(`SELECT section FROM index_terms WHERE term='dimmer'`))
+	s.Equal("4.1", s.queryOne(`SELECT section FROM index_terms WHERE term='planet'`))
 }
 
 func (s *RepositorySuite) TestAPageWrittenTwiceKeepsTheLastText() {
