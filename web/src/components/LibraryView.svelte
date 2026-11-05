@@ -5,6 +5,7 @@
   import { findingsOf } from "../lib/findings";
   import { coverageFor, library, verdictOf } from "../lib/library.svelte";
   import { queue } from "../lib/queue.svelte";
+  import { minPanel, minTable, panel } from "../lib/panel.svelte";
   import { router } from "../lib/router.svelte";
   import Badge from "./Badge.svelte";
   import CoverageStrip from "./CoverageStrip.svelte";
@@ -54,8 +55,9 @@
     ].filter((p) => p.show),
   );
   const visible = $derived([...(filter !== "good" ? problems : []), ...(filter !== "attention" ? healthy : [])]);
-  // On a wide screen the first document is always open beside the table.
-  const openId = $derived(router.docId || (narrow ? "" : (visible[0]?.docId ?? "")));
+  // On a wide screen the first document opens beside the table until the
+  // panel is closed; selecting a row opens it again.
+  const openId = $derived(router.docId || (narrow || panel.closed ? "" : (visible[0]?.docId ?? "")));
   const open = $derived(openId ? library.byId(openId) : undefined);
   const sheet = $derived(narrow && !!router.docId && !!open);
 
@@ -79,7 +81,51 @@
   const scale = (id: string) => (longest ? `${Math.max(4, ((sizes[id] ?? 0) / longest) * 100)}%` : "0");
 
   function select(id: string) {
+    panel.closed = false;
     router.go("library", id);
+  }
+
+  // The panel beside the table: dragged or arrowed to a width, expanded to
+  // the widest the table allows, or closed so the table takes the page.
+  let box: HTMLDivElement | undefined = $state();
+  let drag = $state<{ x: number; width: number } | null>(null);
+  const room = () => box?.clientWidth ?? innerWidth;
+
+  function closePanel() {
+    const id = openId;
+    panel.closed = true;
+    router.go("library");
+    queueMicrotask(() => document.querySelector<HTMLElement>(`[data-doc="${CSS.escape(id)}"]`)?.focus());
+  }
+
+  function startDrag(event: PointerEvent) {
+    drag = { x: event.clientX, width: panel.width };
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+
+  function moveDrag(event: PointerEvent) {
+    if (drag) panel.resize(drag.width + (drag.x - event.clientX), room());
+  }
+
+  function endDrag() {
+    if (!drag) return;
+    drag = null;
+    panel.save();
+  }
+
+  const steps: Record<string, (w: number) => number> = {
+    ArrowLeft: (w) => w + 24,
+    ArrowRight: (w) => w - 24,
+    Home: () => minPanel,
+    End: () => room(),
+  };
+
+  function nudge(event: KeyboardEvent) {
+    const step = steps[event.key];
+    if (!step) return;
+    event.preventDefault();
+    panel.resize(step(panel.width), room());
+    panel.save();
   }
 
   function closeSheet() {
@@ -95,7 +141,9 @@
   });
 
   function back(event: KeyboardEvent) {
-    if (sheet && event.key === "Escape") closeSheet();
+    if (event.key !== "Escape") return;
+    if (sheet) closeSheet();
+    else if (!narrow) closePanel();
   }
 
   /** The first problem a document has, for its row in the table. */
@@ -127,7 +175,8 @@
 {:else if !library.docs.length}
   <EmptyLibrary />
 {:else}
-  <div class="library" class:sheet-open={sheet}>
+  <div class="library" class:sheet-open={sheet} class:no-panel={!open && !narrow} class:dragging={!!drag}
+    bind:this={box} style:--panel-w={`${panel.width}px`}>
     <section class="lib-list" aria-labelledby="lib-title">
       <div class="lib-head">
         <h1 id="lib-title">Library</h1>
@@ -197,11 +246,35 @@
     </section>
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="reading" class:sheet onkeydown={back}>
-      {#if open}
-        {#key open.docId}<DocumentPanel doc={open} {sheet} onclose={closeSheet} />{/key}
-      {:else if router.docId}
-        <p class="ok-line pad">No document “{router.docId}” here. It may have been removed.</p>
+      {#if open && !narrow}
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+        <div
+          class="resizer"
+          class:dragging={!!drag}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize the document panel"
+          aria-valuenow={panel.width}
+          aria-valuemin={minPanel}
+          aria-valuemax={Math.max(minPanel, room() - minTable)}
+          tabindex="0"
+          onpointerdown={startDrag}
+          onpointermove={moveDrag}
+          onpointerup={endDrag}
+          onpointercancel={endDrag}
+          onkeydown={nudge}
+        ></div>
       {/if}
+      <div class="reading-scroll">
+        {#if open}
+          {#key open.docId}
+            <DocumentPanel doc={open} {sheet} onclose={sheet ? closeSheet : closePanel}
+              expanded={panel.expanded} onexpand={() => panel.toggle(room())} />
+          {/key}
+        {:else if router.docId}
+          <p class="ok-line pad">No document “{router.docId}” here. It may have been removed.</p>
+        {/if}
+      </div>
     </div>
   </div>
 {/if}

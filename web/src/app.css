@@ -155,8 +155,12 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .label { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--ink); }
 
 /* library: the table, and the selected document beside it */
-.library { display: grid; grid-template-columns: minmax(0, 1fr) minmax(400px, 520px); margin: -20px -24px -64px; min-height: calc(100dvh - var(--topbar-h)); }
-.lib-list { min-width: 0; padding: 20px 24px 64px; }
+/* The panel's width is the reader's: dragged, arrowed or expanded, and never
+   so wide that the table loses its own 360px. */
+.library { display: grid; grid-template-columns: minmax(0, 1fr) min(var(--panel-w, 480px), calc(100% - 360px)); margin: -20px -24px -64px; min-height: calc(100dvh - var(--topbar-h)); }
+.library.no-panel { grid-template-columns: minmax(0, 1fr); }
+.library.dragging { cursor: col-resize; user-select: none; }
+.lib-list { min-width: 0; padding: 20px 24px 64px; container-type: inline-size; }
 .lib-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; }
 .lib-head h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
 .summary { margin: 0; font-size: 13px; color: var(--muted); }
@@ -198,6 +202,13 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 /* A problem row's bar stays long enough to show its split, however small the document. */
 .lrow.degraded .l-bar, .lrow.unusable .l-bar { min-width: 48px; }
 .scale-note { margin: 10px 10px 0; }
+/* A narrow table column (a wide panel, or a phone) puts each row on two
+   lines: name and verdict, then reach. */
+@container (max-width: 560px) {
+  .lhead { display: none; }
+  .lrow { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; }
+  .l-reach { grid-column: 1 / -1; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; }
+}
 details.legend { margin-top: 18px; font-size: 13px; }
 details.legend summary { cursor: pointer; color: var(--muted); font-weight: 500; }
 details.legend dl { margin: 10px 0 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; align-items: start; }
@@ -205,8 +216,17 @@ details.legend dd { margin: 0; color: var(--muted); }
 .ok-line { font-size: 13px; color: var(--muted); margin: 0; }
 
 /* the selected document */
-.reading { position: sticky; top: var(--topbar-h); align-self: start; max-height: calc(100dvh - var(--topbar-h)); overflow-y: auto; border-left: 1px solid var(--line); background: var(--surface); }
+.reading { position: sticky; top: var(--topbar-h); align-self: start; border-left: 1px solid var(--line); background: var(--surface); }
+.reading-scroll { max-height: calc(100dvh - var(--topbar-h)); overflow-y: auto; }
+/* A 7px grip on the panel's left edge that shows the accent while in use. */
+.resizer { position: absolute; top: 0; bottom: 0; left: -4px; width: 7px; z-index: 2; cursor: col-resize; touch-action: none; }
+.resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 3px; background: transparent; transform: scaleX(.34); transition: background .15s, transform .15s; }
+.resizer:hover::after, .resizer:focus-visible::after, .resizer.dragging::after { background: var(--accent); transform: none; }
+.resizer:focus-visible { outline: none; }
 .record { display: flex; flex-direction: column; gap: 22px; padding: 20px 24px 28px; }
+.rec-tools { display: flex; justify-content: flex-end; gap: 2px; margin: -12px -14px -20px 0; }
+.btn.icon { padding: 0; width: 30px; justify-content: center; color: var(--muted); }
+.btn.icon:hover { color: var(--ink); }
 .rec-head { display: grid; gap: 4px; }
 .rec-src { margin: 0; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 .rec-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
@@ -475,7 +495,8 @@ details.help p { margin: 8px 0 0; color: var(--muted); }
   .library { grid-template-columns: minmax(0, 1fr); }
   .reading { display: none; }
   .library.sheet-open .lib-list { display: none; }
-  .reading.sheet { display: block; position: static; max-height: none; overflow: visible; border: 0; background: none; }
+  .reading.sheet { display: block; position: static; border: 0; background: none; }
+  .reading.sheet .reading-scroll { max-height: none; overflow: visible; }
   .reading.sheet > * { max-width: 760px; margin-left: auto; margin-right: auto; }
   .sheet-back { display: inline-flex; justify-self: start; align-self: flex-start; margin: 0 0 -10px -10px; }
   .gsearch .scope { max-width: 130px; }
@@ -527,9 +548,7 @@ details.help p { margin: 8px 0 0; color: var(--muted); }
   .view { grid-column: 1; padding: 14px 12px calc(84px + env(safe-area-inset-bottom, 0px)); }
   .library { margin: -14px -12px 0; }
   .lib-list { padding: 14px 12px 24px; }
-  .lhead { display: none; }
-  .lrow { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; padding: 10px 8px; }
-  .l-reach { grid-column: 1 / -1; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; }
+  .lrow { padding: 10px 8px; }
   .find { flex: 1 1 100%; }
   .record { padding: 14px 14px 24px; }
   .reach-n { font-size: 40px; }

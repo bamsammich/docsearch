@@ -24,7 +24,13 @@
     page_start?: number;
   }
 
-  let { doc, sheet = false, onclose }: { doc: Document; sheet?: boolean; onclose?: () => void } = $props();
+  let {
+    doc,
+    sheet = false,
+    expanded = false,
+    onclose,
+    onexpand,
+  }: { doc: Document; sheet?: boolean; expanded?: boolean; onclose?: () => void; onexpand?: () => void } = $props();
 
   const report = $derived(library.reports[doc.docId]);
   const reportError = $derived(library.reportErrors[doc.docId]);
@@ -188,6 +194,18 @@
 <article class="record" aria-labelledby="rec-title">
   {#if sheet}
     <button class="btn quiet small sheet-back" onclick={onclose}><Icon name="back" /> Library</button>
+  {:else if onexpand || onclose}
+    <div class="rec-tools">
+      {#if onexpand}
+        <button class="btn quiet small icon" onclick={onexpand} aria-pressed={expanded}
+          aria-label={expanded ? "Collapse the panel" : "Expand the panel"} title={expanded ? "Collapse" : "Expand"}>
+          <Icon name={expanded ? "collapse" : "expand"} />
+        </button>
+      {/if}
+      {#if onclose}
+        <button class="btn quiet small icon" onclick={onclose} aria-label="Close the panel" title="Close (Esc)"><Icon name="x" /></button>
+      {/if}
+    </div>
   {/if}
   <header class="rec-head">
     {#if renaming}
