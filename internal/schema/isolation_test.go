@@ -38,7 +38,7 @@ func (s *IsolationSuite) SetupTest() {
 	// not, and version 10 allows exactly one account without one.
 	s.exec(`SELECT create_account('second', 'https://issuer.example', 'subject-2')`)
 
-	s.library("default", "shared-manual", "the dimmer curve is set per channel")
+	s.library("default", "shared-manual", "the planet orbit is set per sensor")
 	s.library("second", "shared-manual", "a different document under the same id")
 }
 
@@ -58,7 +58,7 @@ func (s *IsolationSuite) library(userID, docID, text string) {
 			userID, docID)
 		s.write(tx,
 			`INSERT INTO chunks (user_id, doc_id, ordinal, heading_path, text)
-			 VALUES ($1, $2, 0, '4. Dimmer curves', $3)`, userID, docID, text)
+			 VALUES ($1, $2, 0, '4. Planet orbits', $3)`, userID, docID, text)
 		s.write(tx,
 			`INSERT INTO responses
 			   (user_id, url, final_url, status, body, sha256, fetched_at)
@@ -95,7 +95,7 @@ func (s *IsolationSuite) TestAQueryWithoutAFilterSeesOneLibrary() {
 		var text string
 		s.Require().NoError(tx.QueryRowContext(s.T().Context(),
 			`SELECT text FROM chunks`).Scan(&text))
-		s.Contains(text, "dimmer curve")
+		s.Contains(text, "planet orbit")
 	})
 }
 

@@ -194,7 +194,7 @@ func (s *DocumentsSuite) TestARenameKeepsTheIdentifier() {
 func (s *DocumentsSuite) TestIndexTermSectionsComeBackDistinctAndSorted() {
 	s.ingested("manual", []domain.Chunk{chunkAt(0, "1", 1)}, "")
 	s.Require().NoError(s.write.AddPagesAndTerms(s.T().Context(), "manual", nil, [][2]string{
-		{"dimmer", "4.1"}, {"patch", "4.1"}, {"universe", "2"},
+		{"planet", "4.1"}, {"orbit", "4.1"}, {"sensor", "2"},
 	}))
 
 	sections, err := s.docs.IndexTermSections(s.T().Context(), "manual")
