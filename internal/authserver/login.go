@@ -132,7 +132,10 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page signInPage,
 		"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
 	)
 	header.Set("X-Frame-Options", "DENY")
-	header.Set("Referrer-Policy", "no-referrer")
+	// same-origin keeps the request ID in this page's URL from reaching the
+	// app's redirect. It must not be no-referrer: under that policy a browser
+	// posts the form with Origin: null, which sameOrigin refuses.
+	header.Set("Referrer-Policy", "same-origin")
 	header.Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	if err := signInTemplate.Execute(w, page); err != nil {
