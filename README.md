@@ -177,15 +177,15 @@ MB unless set.
 
 `docsearch-server` serves a web page at its public URL (`--public-url`, printed
 at startup as `library_ui`). It shows which documents your agents can search
-and how well, the ingest queue, and a search preview that calls the same MCP
+and how well, the ingest queue, and a search field that calls the same MCP
 `search` tool an agent does.
 
-| tab | what it answers |
+| page | what it answers |
 |---|---|
-| Library | Which documents need attention, and what an agent loses on each. A coverage strip splits every document into pages reachable by chapter, pages reachable without usable chapters, and pages that never reached the index. Rename a document here; its `doc_id` stays the same. Re-ingest reads the file again even when it is unchanged, so a document picks up the current extraction and grading. |
+| Library | A table of documents with problems first, and beside it the selected document's checks: what an agent loses on each, and on which pages. A coverage bar splits every document into what agents reach by chapter, what they reach without usable chapters, and what never reached the index. Rename a document here; its `doc_id` stays the same. Re-ingest reads the file again even when it is unchanged, so a document picks up the current extraction and grading. |
 | Reader | A document's chunks in order, as agents receive them, beside its outline. Chunks without a heading and pages that never reached the index are marked. A search result opens the reader at its chunk. Original opens the file the document was read from. |
 | Ingest | Add a site or upload a file, with an optional title, and follow each job through discover, fetch, extract, chunk and index. Failures are listed first. |
-| Search preview | Run a query, optionally inside one document and section, and see the ranked results and the raw response an agent receives. |
+| Search | The field at the top of every page, focused with `/`. Search the whole library or one document, narrow by section, and see the ranked results and the raw response an agent receives. |
 
 The page signs in with the credential an MCP client uses, and the server
 keeps no session for it:

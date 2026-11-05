@@ -71,14 +71,14 @@ export function headline(c: Coverage): string {
   return `Agents reach ${of} ${c.unit} by chapter.`;
 }
 
-/** What each grade finding costs an agent, in one line. */
+/** What each grade finding costs an agent, in one line read after "Agents lose:". */
 const costs: Record<string, string> = {
-  unaddressable: "Agents can't narrow a search with section_filter, and the outline won't guide them.",
-  flat_hierarchy: "Agents can't narrow a search with section_filter, and the outline won't guide them.",
-  oversized: "Agents get whole chapters back instead of passages.",
-  fragmented: "Chunks are too small to answer a question on their own.",
-  figure_dominated: "Agents get the captions but not what the figures show.",
-  boilerplate: "Repeated headers and footers match every query and crowd out real results.",
+  unaddressable: "narrowing a search to one chapter with section_filter, and an outline to guide them.",
+  flat_hierarchy: "narrowing a search to one chapter with section_filter, and an outline to guide them.",
+  oversized: "passages: a search returns whole chapters instead.",
+  fragmented: "answers: each chunk is too small to answer a question on its own.",
+  figure_dominated: "what the figures show. Only their captions reached the index.",
+  boilerplate: "real results, crowded out by repeated headers and footers that match every query.",
 };
 
 export function costOf(code: string): string {

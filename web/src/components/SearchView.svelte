@@ -1,15 +1,15 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { coverageFor, library, verdictOf } from "../lib/library.svelte";
   import CoverageStrip from "./CoverageStrip.svelte";
   import { callTool, type ContextChunk, type ContextOutput, type SearchHit, type SearchOutput } from "../lib/mcp";
   import { readerHref, router } from "../lib/router.svelte";
+  import { search } from "../lib/search.svelte";
   import Badge from "./Badge.svelte";
   import Icon from "./Icon.svelte";
 
   type Mode = "ranked" | "grouped" | "raw";
 
-  let query = $state("");
-  let docId = $state(router.docId);
   let section = $state("");
   let k = $state(8);
   let mode = $state<Mode>("ranked");
@@ -19,16 +19,19 @@
   let asked = $state({ query: "", k: 8, section: "" });
   let sections = $state<string[]>([]);
   let contexts = $state<Record<number, ContextChunk[] | "loading" | string>>({});
-  let queryInput: HTMLInputElement | undefined = $state();
 
+  const docId = $derived(search.docId);
+  const scopeTitle = $derived(docId ? (library.byId(docId)?.title ?? docId) : "");
+
+  // Arriving with nothing asked, a pointer user lands in the search field; on
+  // a touch screen that would open the keyboard before anyone asked to type.
   $effect(() => {
-    docId = router.docId;
+    if (!untrack(() => search.query) && matchMedia("(pointer: fine)").matches) search.focus();
   });
 
-  // A pointer user lands in the query box; on a touch screen that would open
-  // the keyboard over the page before anyone asked to type.
+  // Every submit from the top bar runs here, the first one included.
   $effect(() => {
-    if (matchMedia("(pointer: fine)").matches) queryInput?.focus();
+    if (search.runs) untrack(() => void run());
   });
 
   // The section filter offers the chosen document's own top-level headings.
@@ -44,11 +47,12 @@
       .catch(() => undefined);
   });
 
-  async function search(event?: SubmitEvent) {
+  async function run(event?: SubmitEvent) {
     event?.preventDefault();
+    const query = search.query;
     if (!query.trim()) {
-      error = "Type a query first.";
-      queryInput?.focus();
+      error = "Type a query in the search field first.";
+      search.focus();
       return;
     }
     running = true;
@@ -72,8 +76,8 @@
   }
 
   function example(q: string) {
-    query = q;
-    void search();
+    search.query = q;
+    search.submit();
   }
 
   async function toggleContext(hit: SearchHit) {
@@ -156,38 +160,31 @@
   </li>
 {/snippet}
 
-<div class="page-head"><h1>Search preview</h1></div>
-<form class="qbar" onsubmit={search} novalidate>
-  <div class="field qf">
-    <label for="r-q">Query</label>
-    <input class="input q" id="r-q" type="search" placeholder="What would the agent search for?" bind:value={query} bind:this={queryInput} />
-  </div>
-  <div class="field df">
-    <label for="r-doc">Document</label>
-    <select class="input" id="r-doc" bind:value={docId}>
-      <option value="">All documents</option>
-      {#each library.docs as d (d.docId)}<option value={d.docId}>{d.title}</option>{/each}
-    </select>
-  </div>
+<div class="page-head">
+  <h1>{#if asked.query}Results for “{asked.query}”{:else}Search{/if}</h1>
+  <p>{#if scopeTitle}In {scopeTitle}. <button class="link-btn" onclick={() => (search.docId = "")}>Search all documents</button>{:else}Across all documents. The same results an agent gets from the search tool.{/if}</p>
+</div>
+<form class="qbar" onsubmit={run} novalidate>
   <div class="field">
     <label for="r-sec">Section filter</label>
     <input class="input" id="r-sec" type="text" list="r-sec-list" bind:value={section} disabled={!docId}
-      placeholder={docId ? (sections[0] ?? "a heading prefix") : "Pick a document"} />
+      placeholder={docId ? (sections[0] ?? "a heading prefix") : "Search one document to filter"} />
     <datalist id="r-sec-list">{#each sections as s (s)}<option value={s}></option>{/each}</datalist>
   </div>
   <div class="field">
     <label for="r-k">Limit (k)</label>
     <input class="input tnum" id="r-k" type="number" min="1" max="25" bind:value={k} />
   </div>
-  <button class="btn primary go" type="submit" disabled={running}><Icon name="search" /> {running ? "Searching…" : "Search"}</button>
+  <button class="btn go" type="submit" disabled={running}><Icon name="refresh" /> {running ? "Searching…" : "Search again"}</button>
 </form>
-<div class="qmeta">
-  <div class="chips" aria-label="Example queries">
-    <span class="muted">Try</span>
-    {#each examples as q (q)}<button type="button" class="chip" onclick={() => example(q)}>{q}</button>{/each}
+{#if !output}
+  <div class="qmeta">
+    <div class="chips" aria-label="Example queries">
+      <span class="muted">Try</span>
+      {#each examples as q (q)}<button type="button" class="chip" onclick={() => example(q)}>{q}</button>{/each}
+    </div>
   </div>
-  <span class="hint">The same results an agent gets from the search tool.</span>
-</div>
+{/if}
 
 <div class="results" aria-live="polite">
   {#if error}
