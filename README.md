@@ -204,6 +204,16 @@ names each library, and a document outside your own is `library/doc_id`.
 `add_document`, `upload_link` and `PUT /upload?library=` add to a library you
 edit.
 
+The CLI reads your own library unless `--library` names another, and takes a
+`library/doc_id` wherever it takes a `doc_id`:
+
+```bash
+docsearch list --library platform
+docsearch enqueue https://example.com/docs --library platform
+docsearch jobs --library platform
+docsearch verify platform/install-guide
+```
+
 ## The library UI
 
 `docsearch-server` serves a web page at its public URL (`--public-url`, printed

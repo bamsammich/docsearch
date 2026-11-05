@@ -22,6 +22,7 @@ func enqueueCommand() *cli.Command {
 			"version stays searchable until the new one replaces it.",
 		Flags: append(serverFlags(),
 			titleFlag(),
+			libraryFlag("queue into the `LIBRARY` named, rather than your own"),
 			&cli.BoolFlag{
 				Name:  flagForce,
 				Usage: "re-read sources even where the index already holds their bytes",
@@ -52,6 +53,7 @@ func jobsCommand() *cli.Command {
 		Name:  "jobs",
 		Usage: "show the ingest queue",
 		Flags: append(serverFlags(),
+			libraryFlag("show the queue of the `LIBRARY` named, rather than your own"),
 			&cli.BoolFlag{
 				Name:  "all",
 				Usage: "include jobs that have finished",
@@ -98,7 +100,7 @@ func cancelCommand() *cli.Command {
 		Description: "Reports what the job reads as now. A job that already finished " +
 			"is not cancelled, and saying so beats claiming a cancellation that " +
 			"did nothing.",
-		Flags:  serverFlags(),
+		Flags:  append(serverFlags(), libraryFlag("the `LIBRARY` the job fills, if not your own")),
 		Action: cancelJob,
 	}
 }

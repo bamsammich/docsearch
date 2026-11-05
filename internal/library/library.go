@@ -138,7 +138,7 @@ func (l *Libraries) Destination(ctx context.Context, user, label string) (pgsess
 	if label == "" {
 		return pgsession.Personal(user), nil
 	}
-	libs, err := pgstore.New(l.db, pgsession.Personal(user)).Libraries(ctx)
+	libs, err := l.Readable(ctx, user)
 	if err != nil {
 		return pgsession.Scope{}, err
 	}
@@ -147,6 +147,33 @@ func (l *Libraries) Destination(ctx context.Context, user, label string) (pgsess
 		return pgsession.Scope{}, ErrNotWritable
 	}
 	return pgsession.Scope{User: user, Library: lib.ID}, nil
+}
+
+// Readable is every library user reads, their own first.
+func (l *Libraries) Readable(ctx context.Context, user string) ([]pgstore.Library, error) {
+	return pgstore.New(l.db, pgsession.Personal(user)).Libraries(ctx)
+}
+
+// Locate is the scope that reads a doc_id a caller sent, and the identifier
+// within that library: library/doc_id in a library user reads, or a bare
+// identifier in their own.
+//
+// An identifier naming a library user does not read is looked up in their
+// own as it was sent. No real identifier holds a slash, so it answers exactly
+// as a document that does not exist.
+func (l *Libraries) Locate(
+	ctx context.Context,
+	user, docID string,
+) (pgsession.Scope, string, error) {
+	libs, err := l.Readable(ctx, user)
+	if err != nil {
+		return pgsession.Scope{}, "", err
+	}
+	lib, local, ok := pgstore.Resolve(libs, docID)
+	if !ok {
+		return pgsession.Personal(user), docID, nil
+	}
+	return pgsession.Scope{User: user, Library: lib.ID}, local, nil
 }
 
 // check refuses a view nobody owns.

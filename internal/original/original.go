@@ -23,6 +23,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/libroot"
 	"github.com/bamsammich/docsearch/internal/owner"
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/service/document"
 	"github.com/bamsammich/docsearch/internal/upload"
 )
@@ -30,22 +31,25 @@ import (
 // Pattern is where the handler is mounted.
 const Pattern = "GET /original/{doc_id}"
 
-// Documents finds a document in one user's library.
+// Documents finds a document in one library.
 type Documents interface {
 	Get(ctx context.Context, docID string) (*document.Document, error)
 }
 
-// Uploads reads one user's uploaded files.
+// Uploads reads one library's uploaded files.
 type Uploads interface {
 	Get(ctx context.Context, key string) (upload.File, error)
 }
 
 // Handler serves a document's original file.
 type Handler struct {
-	// Documents builds the document lookup of the user a request acts for.
-	Documents func(user string) (Documents, error)
-	// Uploads builds that user's upload store.
-	Uploads func(user string) (Uploads, error)
+	// Locate is the library a doc_id is in, as the scope that reads it, and
+	// the identifier within that library.
+	Locate func(ctx context.Context, user, docID string) (pgsession.Scope, string, error)
+	// Documents builds the document lookup of one library.
+	Documents func(scope pgsession.Scope) (Documents, error)
+	// Uploads builds that library's upload store.
+	Uploads func(scope pgsession.Scope) (Uploads, error)
 	// NotFound is the sentinel Documents returns for a document it lacks.
 	NotFound error
 	Log      *slog.Logger
@@ -63,12 +67,17 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no owner", http.StatusForbidden)
 		return
 	}
-	docs, err := h.Documents(user)
+	scope, local, err := h.Locate(r.Context(), user, r.PathValue("doc_id"))
 	if err != nil {
 		h.fail(w, err)
 		return
 	}
-	doc, err := docs.Get(r.Context(), r.PathValue("doc_id"))
+	docs, err := h.Documents(scope)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	doc, err := docs.Get(r.Context(), local)
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -78,7 +87,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "a site has no stored original; open its URL", http.StatusNotFound)
 		return
 	}
-	file, err := h.open(r.Context(), user, doc.Source)
+	file, err := h.open(r.Context(), scope, doc.Source)
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -105,15 +114,19 @@ type opened struct {
 
 // open finds the original: in the database for an upload, under a library
 // root for a file.
-func (h Handler) open(ctx context.Context, user, source string) (opened, error) {
+func (h Handler) open(ctx context.Context, scope pgsession.Scope, source string) (opened, error) {
 	if key, ok := upload.KeyOf(source); ok {
-		return h.openUpload(ctx, user, key)
+		return h.openUpload(ctx, scope, key)
 	}
 	return h.openFile(source)
 }
 
-func (h Handler) openUpload(ctx context.Context, user, key string) (opened, error) {
-	store, err := h.Uploads(user)
+func (h Handler) openUpload(
+	ctx context.Context,
+	scope pgsession.Scope,
+	key string,
+) (opened, error) {
+	store, err := h.Uploads(scope)
 	if err != nil {
 		return opened{}, err
 	}

@@ -21,9 +21,10 @@ func newOriginalRoute(
 	log *slog.Logger,
 ) route {
 	return route{path: original.Pattern, handler: original.Handler{
-		Documents: func(user string) (original.Documents, error) { return libs.Documents(pgsession.Personal(user)) },
-		Uploads: func(user string) (original.Uploads, error) {
-			return pgupload.New(db, pgsession.Personal(user)), nil
+		Locate:    libs.Locate,
+		Documents: func(scope pgsession.Scope) (original.Documents, error) { return libs.Documents(scope) },
+		Uploads: func(scope pgsession.Scope) (original.Uploads, error) {
+			return pgupload.New(db, scope), nil
 		},
 		NotFound: postgres.ErrNotFound,
 		Log:      log,

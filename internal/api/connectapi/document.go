@@ -17,7 +17,8 @@ import (
 	typev1 "github.com/bamsammich/docsearch/internal/api/docsearch/type/v1"
 	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/libroot"
-	"github.com/bamsammich/docsearch/internal/owner"
+	"github.com/bamsammich/docsearch/internal/pgsession"
+	"github.com/bamsammich/docsearch/internal/pgstore"
 	"github.com/bamsammich/docsearch/internal/service/document"
 )
 
@@ -39,16 +40,19 @@ type Documents interface {
 	) (*document.Reading, error)
 }
 
-// DocumentsFor builds the document service for the user a request acts for.
+// DocumentsFor builds the document service for one library, as one user.
 //
 // A factory rather than a service, because row-level security scopes a
-// statement by the user its transaction named, so there is one service per
-// user and the server is built before any request names one.
-type DocumentsFor func(user string) (Documents, error)
+// statement by the user and the library its transaction named, so there is
+// one service per scope and the server is built before any request names one.
+type DocumentsFor func(scope pgsession.Scope) (Documents, error)
 
 // DocumentServer implements the generated document handler.
 type DocumentServer struct {
 	documents DocumentsFor
+	// readable is every library the asking user reads, which is how a
+	// library label or a qualified doc_id becomes a scope.
+	readable ReadableFor
 	// notFound recognises a document the index does not hold, so a caller
 	// asking about one gets NotFound rather than Internal. The repository
 	// owns the error; this only has to be told which it is.
@@ -60,20 +64,25 @@ type DocumentServer struct {
 // that is not there.
 func NewDocumentServer(
 	documents DocumentsFor,
+	readable ReadableFor,
 	notFound error,
 	opts ...connect.HandlerOption,
 ) (string, http.Handler) {
 	return documentv1connect.NewDocumentServiceHandler(
-		&DocumentServer{documents: documents, notFound: notFound},
+		&DocumentServer{documents: documents, readable: readable, notFound: notFound},
 		opts...,
 	)
 }
 
 func (s *DocumentServer) List(
 	ctx context.Context,
-	_ *connect.Request[documentv1.ListRequest],
+	req *connect.Request[documentv1.ListRequest],
 ) (*connect.Response[documentv1.ListResponse], error) {
-	documents, err := s.forOwner(ctx)
+	sh, err := labelled(ctx, s.readable, req.Msg.GetLibrary())
+	if err != nil {
+		return nil, err
+	}
+	documents, err := s.in(sh)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +92,7 @@ func (s *DocumentServer) List(
 	}
 	out := make([]*documentv1.Document, len(docs))
 	for i, doc := range docs {
-		out[i] = documentMessage(doc)
+		out[i] = documentMessage(doc, sh.library)
 	}
 	return connect.NewResponse(&documentv1.ListResponse{Documents: out}), nil
 }
@@ -96,16 +105,16 @@ func (s *DocumentServer) Verify(
 		return nil, connect.NewError(
 			connect.CodeInvalidArgument, errors.New("doc_id names the document to verify"))
 	}
-	documents, err := s.forOwner(ctx)
+	doc, err := s.at(ctx, req.Msg.GetDocId())
 	if err != nil {
 		return nil, err
 	}
-	report, err := documents.Verify(ctx, req.Msg.GetDocId())
+	report, err := doc.documents.Verify(ctx, doc.local)
 	if err != nil {
 		return nil, s.asConnectError(err)
 	}
 	return connect.NewResponse(&documentv1.VerifyResponse{
-		Report: verifyMessage(report),
+		Report: verifyMessage(report, doc.shelf.library),
 	}), nil
 }
 
@@ -118,7 +127,11 @@ func (s *DocumentServer) Inspect(
 			connect.CodeInvalidArgument,
 			errors.New("target names the file or site to inspect"))
 	}
-	documents, err := s.forOwner(ctx)
+	sh, err := labelled(ctx, s.readable, "")
+	if err != nil {
+		return nil, err
+	}
+	documents, err := s.in(sh)
 	if err != nil {
 		return nil, err
 	}
@@ -139,11 +152,14 @@ func (s *DocumentServer) Remove(
 		return nil, connect.NewError(
 			connect.CodeInvalidArgument, errors.New("doc_id names the document to remove"))
 	}
-	documents, err := s.forOwner(ctx)
+	doc, err := s.at(ctx, req.Msg.GetDocId())
 	if err != nil {
 		return nil, err
 	}
-	if err := documents.Remove(ctx, req.Msg.GetDocId()); err != nil {
+	if err := doc.shelf.editable(); err != nil {
+		return nil, err
+	}
+	if err := doc.documents.Remove(ctx, doc.local); err != nil {
 		return nil, s.asConnectError(err)
 	}
 	return connect.NewResponse(&documentv1.RemoveResponse{}), nil
@@ -168,11 +184,14 @@ func (s *DocumentServer) Rename(
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("title runs past %d characters", TitleLimit))
 	}
-	documents, err := s.forOwner(ctx)
+	doc, err := s.at(ctx, req.Msg.GetDocId())
 	if err != nil {
 		return nil, err
 	}
-	if err := documents.Rename(ctx, req.Msg.GetDocId(), title); err != nil {
+	if err := doc.shelf.editable(); err != nil {
+		return nil, err
+	}
+	if err := doc.documents.Rename(ctx, doc.local, title); err != nil {
 		return nil, s.asConnectError(err)
 	}
 	return connect.NewResponse(&documentv1.RenameResponse{}), nil
@@ -186,11 +205,11 @@ func (s *DocumentServer) Read(
 		return nil, connect.NewError(
 			connect.CodeInvalidArgument, errors.New("doc_id names the document to read"))
 	}
-	documents, err := s.forOwner(ctx)
+	doc, err := s.at(ctx, req.Msg.GetDocId())
 	if err != nil {
 		return nil, err
 	}
-	reading, err := documents.Read(ctx, req.Msg.GetDocId(),
+	reading, err := doc.documents.Read(ctx, doc.local,
 		int(req.Msg.GetFromOrdinal()), req.Msg.AtChunkId, int(req.Msg.GetLimit()))
 	if err != nil {
 		return nil, s.asConnectError(err)
@@ -229,10 +248,11 @@ func (s *DocumentServer) asConnectError(err error) error {
 	}
 }
 
-// documentMessage is one document as a caller sees it.
-func documentMessage(doc document.Document) *documentv1.Document {
+// documentMessage is one document as a caller sees it, its identifier
+// qualified by the library it is in.
+func documentMessage(doc document.Document, lib pgstore.Library) *documentv1.Document {
 	return &documentv1.Document{
-		DocId:      doc.DocID,
+		DocId:      lib.Qualify(doc.DocID),
 		Title:      doc.Title,
 		Format:     doc.Format,
 		SourceKind: typev1.SourceKind(doc.SourceKind),
@@ -255,7 +275,7 @@ func timestampOf(t time.Time) *timestamppb.Timestamp {
 }
 
 // verifyMessage is a verification report as a caller sees it.
-func verifyMessage(report *document.VerifyReport) *documentv1.VerifyReport {
+func verifyMessage(report *document.VerifyReport, lib pgstore.Library) *documentv1.VerifyReport {
 	findings := make([]*documentv1.Finding, len(report.Findings))
 	for i, f := range report.Findings {
 		findings[i] = &documentv1.Finding{
@@ -265,7 +285,7 @@ func verifyMessage(report *document.VerifyReport) *documentv1.VerifyReport {
 		}
 	}
 	return &documentv1.VerifyReport{
-		Document:           documentMessage(report.Document),
+		Document:           documentMessage(report.Document, lib),
 		Measurements:       measurementsMessage(report.Measurements),
 		Problems:           report.Problems,
 		Findings:           findings,
@@ -368,20 +388,31 @@ const (
 	_ = uint8(typev1.Level(domain.LevelBlocked) - typev1.Level_LEVEL_BLOCKED)
 )
 
-// forOwner is the document service of the user a request acts for.
-//
-// A request that named none is refused rather than served the built-in
-// library, which is the whole point of asking.
+// in is the document service of one library.
 //
 //nolint:ireturn // a factory for a port returns that port; a concrete type here would defeat it.
-func (s *DocumentServer) forOwner(ctx context.Context) (Documents, error) {
-	user, err := owner.From(ctx)
-	if err != nil {
-		return nil, asConnectError(err)
-	}
-	documents, err := s.documents(user)
+func (s *DocumentServer) in(sh shelf) (Documents, error) {
+	documents, err := s.documents(sh.scope)
 	if err != nil {
 		return nil, asConnectError(err)
 	}
 	return documents, nil
+}
+
+// reached is a doc_id resolved: the service that reads its library, the
+// identifier within that library, and the library itself.
+type reached struct {
+	documents Documents
+	local     string
+	shelf     shelf
+}
+
+// at resolves a doc_id a request sent.
+func (s *DocumentServer) at(ctx context.Context, docID string) (reached, error) {
+	sh, local, err := holding(ctx, s.readable, docID)
+	if err != nil {
+		return reached{}, err
+	}
+	documents, err := s.in(sh)
+	return reached{documents: documents, local: local, shelf: sh}, err
 }

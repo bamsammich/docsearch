@@ -18,6 +18,7 @@ import (
 	typev1 "github.com/bamsammich/docsearch/internal/api/docsearch/type/v1"
 	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/owner"
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/service/document"
 )
 
@@ -31,16 +32,22 @@ type DocumentAPISuite struct {
 	suite.Suite
 	documents *mocks.MockDocuments
 	client    documentv1connect.DocumentServiceClient
+	// scopes are the libraries the handler asked for a service in.
+	scopes []pgsession.Scope
 }
 
 func TestDocumentAPI(t *testing.T) { suite.Run(t, new(DocumentAPISuite)) }
 
 func (s *DocumentAPISuite) SetupTest() {
 	s.documents = mocks.NewMockDocuments(s.T())
+	s.scopes = nil
 
 	path, handler := connectapi.NewDocumentServer(
-		func(string) (connectapi.Documents, error) { return s.documents, nil },
-		errNotFound)
+		func(scope pgsession.Scope) (connectapi.Documents, error) {
+			s.scopes = append(s.scopes, scope)
+			return s.documents, nil
+		},
+		shelves, errNotFound)
 	mux := http.NewServeMux()
 	mux.Handle(path, owner.Middleware(owner.Builtin, handler))
 	server := httptest.NewServer(mux)
@@ -213,10 +220,10 @@ func (s *DocumentAPISuite) TestAFailureNobodyAnticipatedStaysInternal() {
 // built-in library.
 func (s *DocumentAPISuite) TestAListWithNoOwnerIsRefused() {
 	path, handler := connectapi.NewDocumentServer(
-		func(string) (connectapi.Documents, error) {
+		func(pgsession.Scope) (connectapi.Documents, error) {
 			s.FailNow("the handler asked for a library without a user")
 			return nil, nil
-		}, errNotFound)
+		}, shelves, errNotFound)
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
 	server := httptest.NewServer(mux)
@@ -301,4 +308,84 @@ func (s *DocumentAPISuite) TestRenamingADocumentTheIndexDoesNotHoldIsNotFound() 
 		DocId: "gone", Title: "New",
 	}))
 	s.Equal(connect.CodeNotFound, connect.CodeOf(err))
+}
+
+func (s *DocumentAPISuite) TestListReadsTheLibraryItNamesAndQualifiesItsIdentifiers() {
+	s.documents.EXPECT().
+		List(mock.Anything).
+		Return([]document.Document{{DocID: "guide", Status: "ready"}}, nil)
+
+	res, err := s.client.List(s.T().Context(),
+		connect.NewRequest(&documentv1.ListRequest{Library: "platform"}))
+	s.Require().NoError(err)
+	s.Require().Len(res.Msg.GetDocuments(), 1)
+
+	s.Equal("platform/guide", res.Msg.GetDocuments()[0].GetDocId())
+	s.Equal([]pgsession.Scope{{User: owner.Builtin, Library: platformID}}, s.scopes)
+}
+
+func (s *DocumentAPISuite) TestListWithNoLibraryReadsYourOwnWithBareIdentifiers() {
+	s.documents.EXPECT().List(mock.Anything).Return([]document.Document{{DocID: "guide"}}, nil)
+
+	res, err := s.client.List(s.T().Context(), connect.NewRequest(&documentv1.ListRequest{}))
+	s.Require().NoError(err)
+
+	s.Equal("guide", res.Msg.GetDocuments()[0].GetDocId())
+	s.Equal([]pgsession.Scope{pgsession.Personal(owner.Builtin)}, s.scopes)
+}
+
+// A library someone else holds and one that was never there answer alike.
+func (s *DocumentAPISuite) TestListingALibraryYouDoNotReadIsNotFound() {
+	_, err := s.client.List(s.T().Context(),
+		connect.NewRequest(&documentv1.ListRequest{Library: "finance"}))
+	s.Require().Error(err)
+	s.Equal(connect.CodeNotFound, connect.CodeOf(err))
+	s.Empty(s.scopes)
+}
+
+func (s *DocumentAPISuite) TestAQualifiedIdentifierIsVerifiedInItsLibrary() {
+	s.documents.EXPECT().Verify(mock.Anything, "guide").Return(&document.VerifyReport{
+		Document: document.Document{DocID: "guide"},
+	}, nil)
+
+	res, err := s.client.Verify(s.T().Context(),
+		connect.NewRequest(&documentv1.VerifyRequest{DocId: "runbooks/guide"}))
+	s.Require().NoError(err)
+
+	s.Equal("runbooks/guide", res.Msg.GetReport().GetDocument().GetDocId())
+	s.Equal([]pgsession.Scope{{User: owner.Builtin, Library: runbooksID}}, s.scopes)
+}
+
+// No real identifier holds a slash, so one naming a library you do not read
+// is looked up in your own as sent, and is not there.
+func (s *DocumentAPISuite) TestAnIdentifierInALibraryYouDoNotReadIsNotFound() {
+	s.documents.EXPECT().Read(mock.Anything, "finance/ledger", 0, (*int64)(nil), 0).
+		Return(nil, errNotFound)
+
+	_, err := s.client.Read(s.T().Context(),
+		connect.NewRequest(&documentv1.ReadRequest{DocId: "finance/ledger"}))
+	s.Require().Error(err)
+	s.Equal(connect.CodeNotFound, connect.CodeOf(err))
+	s.Equal([]pgsession.Scope{pgsession.Personal(owner.Builtin)}, s.scopes)
+}
+
+func (s *DocumentAPISuite) TestAnEditorRemovesFromASharedLibrary() {
+	s.documents.EXPECT().Remove(mock.Anything, "guide").Return(nil)
+
+	_, err := s.client.Remove(s.T().Context(),
+		connect.NewRequest(&documentv1.RemoveRequest{DocId: "platform/guide"}))
+	s.Require().NoError(err)
+	s.Equal([]pgsession.Scope{{User: owner.Builtin, Library: platformID}}, s.scopes)
+}
+
+func (s *DocumentAPISuite) TestAReaderCannotRemoveOrRename() {
+	_, err := s.client.Remove(s.T().Context(),
+		connect.NewRequest(&documentv1.RemoveRequest{DocId: "runbooks/guide"}))
+	s.Require().Error(err)
+	s.Equal(connect.CodePermissionDenied, connect.CodeOf(err))
+
+	_, err = s.client.Rename(s.T().Context(),
+		connect.NewRequest(&documentv1.RenameRequest{DocId: "runbooks/guide", Title: "Guide"}))
+	s.Require().Error(err)
+	s.Equal(connect.CodePermissionDenied, connect.CodeOf(err))
 }

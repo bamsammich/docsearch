@@ -1,6 +1,7 @@
 package original_test
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/original"
 	"github.com/bamsammich/docsearch/internal/original/mocks"
 	"github.com/bamsammich/docsearch/internal/owner"
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/service/document"
 	"github.com/bamsammich/docsearch/internal/upload"
 )
@@ -43,8 +45,11 @@ func (s *OriginalSuite) SetupTest() {
 func (s *OriginalSuite) serve(docID string) *httptest.ResponseRecorder {
 	mux := http.NewServeMux()
 	mux.Handle(original.Pattern, original.Handler{
-		Documents: func(string) (original.Documents, error) { return s.docs, nil },
-		Uploads:   func(string) (original.Uploads, error) { return s.uploads, nil },
+		Locate: func(_ context.Context, user, docID string) (pgsession.Scope, string, error) {
+			return pgsession.Personal(user), docID, nil
+		},
+		Documents: func(pgsession.Scope) (original.Documents, error) { return s.docs, nil },
+		Uploads:   func(pgsession.Scope) (original.Uploads, error) { return s.uploads, nil },
 		NotFound:  errNotFound,
 		Log:       slog.New(slog.DiscardHandler),
 		Roots:     []string{s.root},

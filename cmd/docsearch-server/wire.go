@@ -266,14 +266,16 @@ func newIngestRoute(libs *library.Libraries) route {
 
 func newDocumentRoute(libs *library.Libraries) route {
 	return mount(connectapi.NewDocumentServer(
-		func(user string) (connectapi.Documents, error) { return libs.Documents(pgsession.Personal(user)) },
+		func(scope pgsession.Scope) (connectapi.Documents, error) { return libs.Documents(scope) },
+		libs.Readable,
 		postgres.ErrNotFound,
 	))
 }
 
 func newJobRoute(libs *library.Libraries) route {
 	return mount(connectapi.NewJobServer(
-		func(user string) (connectapi.Jobs, error) { return libs.Jobs(pgsession.Personal(user)) },
+		func(scope pgsession.Scope) (connectapi.Jobs, error) { return libs.Jobs(scope) },
+		libs.Readable,
 		postgres.ErrNotFound))
 }
 
