@@ -9,6 +9,7 @@ import (
 
 	accountv1 "github.com/bamsammich/docsearch/internal/api/docsearch/account/v1"
 	"github.com/bamsammich/docsearch/internal/api/docsearch/account/v1/accountv1connect"
+	"github.com/bamsammich/docsearch/internal/config"
 	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/password"
 	"github.com/bamsammich/docsearch/internal/service/admin"
@@ -31,21 +32,25 @@ type Admin interface {
 // for.
 type AdminFor func(user string) (Admin, error)
 
-// Setting is one sign-in setting the server's configuration holds, and the
-// flag and environment variable that set it.
+// Setting is one sign-in setting the server's configuration holds, where its
+// value came from, and the flag and environment variable that set it. A
+// rule the server keeps has no origin and no flag.
 type Setting struct {
-	Label string
-	Value string
-	Flag  string
-	Env   string
+	Origin config.Origin
+	Label  string
+	Value  string
+	Flag   string
+	Env    string
 }
 
 // AccountServer implements the generated account handler.
 type AccountServer struct {
 	admins AdminFor
-	// auth is the sign-in mode, and settings are how its sign-in is
-	// configured. Both are fixed when the server starts.
+	// auth is the sign-in mode, file is the docsearch.yaml the server read
+	// if any, and settings are how its sign-in is configured. All three are
+	// fixed when the server starts.
 	auth     string
+	file     string
 	settings []Setting
 }
 
@@ -54,10 +59,11 @@ func NewAccountServer(
 	admins AdminFor,
 	auth string,
 	settings []Setting,
+	file string,
 	opts ...connect.HandlerOption,
 ) (string, http.Handler) {
 	return accountv1connect.NewAccountServiceHandler(
-		&AccountServer{admins: admins, auth: auth, settings: settings}, opts...)
+		&AccountServer{admins: admins, auth: auth, settings: settings, file: file}, opts...)
 }
 
 func (s *AccountServer) Me(
@@ -192,10 +198,19 @@ func (s *AccountServer) SignIn(
 	if !me.Admin {
 		return nil, adminError(admin.ErrNotAdmin)
 	}
-	out := &accountv1.SignInResponse{Settings: make([]*accountv1.Setting, 0, len(s.settings))}
+	out := &accountv1.SignInResponse{
+		Settings: make([]*accountv1.Setting, 0, len(s.settings)),
+		File:     s.file,
+	}
 	for _, setting := range s.settings {
 		out.Settings = append(out.Settings, &accountv1.Setting{
-			Label: setting.Label, Value: setting.Value, Flag: setting.Flag, Env: setting.Env,
+			Label:  setting.Label,
+			Value:  setting.Value,
+			Source: setting.Origin.Kind,
+			Where:  setting.Origin.Where,
+			Key:    setting.Origin.Key,
+			Flag:   setting.Flag,
+			Env:    setting.Env,
 		})
 	}
 	return connect.NewResponse(out), nil

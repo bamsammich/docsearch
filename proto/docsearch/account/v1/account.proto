@@ -28,11 +28,19 @@ message Account {
 message Setting {
   string label = 1;
   string value = 2;
-  // Flag and env are where the setting is made: a command-line flag and
-  // the environment variable that sets it. Both are empty for a rule the
-  // server keeps rather than one it is configured with.
-  string flag = 3;
-  string env = 4;
+  // Source is where the value came from: flag, environment, file or
+  // default. It is empty for a rule the server keeps rather than one it is
+  // configured with.
+  string source = 3;
+  // Where names the flag, the environment variable or the file the value
+  // came from.
+  string where = 4;
+  // Key is the setting's key in docsearch.yaml.
+  string key = 5;
+  // Flag and env are the ways to set it: its command-line flag and its
+  // environment variable.
+  string flag = 6;
+  string env = 7;
 }
 
 message MeRequest {}
@@ -91,6 +99,9 @@ message SignInRequest {}
 
 message SignInResponse {
   repeated Setting settings = 1;
+  // File is the docsearch.yaml the server read, and empty when it read
+  // none.
+  string file = 2;
 }
 
 // AccountService is the administrator's work. Every call but Me refuses

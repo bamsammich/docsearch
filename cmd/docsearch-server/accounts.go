@@ -40,6 +40,7 @@ func newAccountRoute(cfg config.Config, db *sql.DB) (route, error) {
 		},
 		cfg.Auth.String(),
 		signInSettings(cfg),
+		cfg.File,
 	)), nil
 }
 
@@ -77,21 +78,17 @@ func (p passwordAccounts) List(ctx context.Context) ([]password.Account, error) 
 }
 
 // signInSettings are how people sign in, as the configuration sets it, for
-// an administrator to read. A setting the server keeps as a rule rather
-// than one it is configured with names no flag.
+// an administrator to read: each value, where it came from, and the flag
+// that sets it. A rule the server keeps rather than one it is configured
+// with names no flag.
 func signInSettings(cfg config.Config) []connectapi.Setting {
-	method := connectapi.Setting{Label: "Sign-in", Flag: "--auth", Env: config.EnvAuth}
+	method := configured(cfg, "Sign-in", "", "auth", config.EnvAuth)
 	switch cfg.Auth {
 	case owner.Password:
 		method.Value = "Accounts docsearch holds, with passwords"
 		return []connectapi.Setting{
 			method,
-			{
-				Label: "Sign-in page",
-				Value: cfg.PublicURL,
-				Flag:  "--public-url",
-				Env:   config.EnvPublicURL,
-			},
+			configured(cfg, "Sign-in page", cfg.PublicURL, "public-url", config.EnvPublicURL),
 			{
 				Label: "Failed sign-ins",
 				Value: fmt.Sprintf("%d in a row lock an account for %d minutes",
@@ -112,22 +109,10 @@ func signInSettings(cfg config.Config) []connectapi.Setting {
 		}
 		return []connectapi.Setting{
 			method,
-			{
-				Label: "Provider",
-				Value: cfg.OIDC.Issuer,
-				Flag:  "--oidc-issuer",
-				Env:   config.EnvOIDCIssuer,
-			},
-			{
-				Label: "Who may sign in", Value: who,
-				Flag: "--oidc-required-claim-name", Env: config.EnvOIDCRequiredClaimName,
-			},
-			{
-				Label: "New people",
-				Value: joining,
-				Flag:  "--oidc-sign-up",
-				Env:   config.EnvOIDCSignUp,
-			},
+			configured(cfg, "Provider", cfg.OIDC.Issuer, "oidc-issuer", config.EnvOIDCIssuer),
+			configured(cfg, "Who may sign in", who,
+				"oidc-required-claim-name", config.EnvOIDCRequiredClaimName),
+			configured(cfg, "New people", joining, "oidc-sign-up", config.EnvOIDCSignUp),
 		}
 	case owner.None:
 		method.Value = "No sign-in: local access only"
@@ -135,4 +120,15 @@ func signInSettings(cfg config.Config) []connectapi.Setting {
 		method.Value = "The server token"
 	}
 	return []connectapi.Setting{method}
+}
+
+// configured is a setting flag makes, with where its value came from.
+func configured(cfg config.Config, label, value, flag, env string) connectapi.Setting {
+	return connectapi.Setting{
+		Label:  label,
+		Value:  value,
+		Flag:   "--" + flag,
+		Env:    env,
+		Origin: cfg.Origins[flag],
+	}
 }

@@ -19,7 +19,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file docsearch/account/v1/account.proto.
  */
 export const file_docsearch_account_v1_account: GenFile = /*@__PURE__*/
-  fileDesc("CiJkb2NzZWFyY2gvYWNjb3VudC92MS9hY2NvdW50LnByb3RvEhRkb2NzZWFyY2guYWNjb3VudC52MSKeAQoHQWNjb3VudBIQCgh1c2VybmFtZRgBIAEoCRINCgVhZG1pbhgCIAEoCBIuCgpjcmVhdGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIQCghwYXNzd29yZBgEIAEoCBIwCgxsb2NrZWRfdW50aWwYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIkIKB1NldHRpbmcSDQoFbGFiZWwYASABKAkSDQoFdmFsdWUYAiABKAkSDAoEZmxhZxgDIAEoCRILCgNlbnYYBCABKAkiCwoJTWVSZXF1ZXN0IjsKCk1lUmVzcG9uc2USEAoIdXNlcm5hbWUYASABKAkSDQoFYWRtaW4YAiABKAgSDAoEYXV0aBgDIAEoCSINCgtMaXN0UmVxdWVzdCI/CgxMaXN0UmVzcG9uc2USLwoIYWNjb3VudHMYASADKAsyHS5kb2NzZWFyY2guYWNjb3VudC52MS5BY2NvdW50Ih4KCkFkZFJlcXVlc3QSEAoIdXNlcm5hbWUYASABKAkiHwoLQWRkUmVzcG9uc2USEAoIcGFzc3dvcmQYASABKAkiIAoMUmVzZXRSZXF1ZXN0EhAKCHVzZXJuYW1lGAEgASgJIiEKDVJlc2V0UmVzcG9uc2USEAoIcGFzc3dvcmQYASABKAkiIQoNVW5sb2NrUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCSIQCg5VbmxvY2tSZXNwb25zZSIhCg1SZW1vdmVSZXF1ZXN0EhAKCHVzZXJuYW1lGAEgASgJIhAKDlJlbW92ZVJlc3BvbnNlIjIKD1NldEFkbWluUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCRINCgVhZG1pbhgCIAEoCCISChBTZXRBZG1pblJlc3BvbnNlIg8KDVNpZ25JblJlcXVlc3QiQQoOU2lnbkluUmVzcG9uc2USLwoIc2V0dGluZ3MYASADKAsyHS5kb2NzZWFyY2guYWNjb3VudC52MS5TZXR0aW5nMrAFCg5BY2NvdW50U2VydmljZRJJCgJNZRIfLmRvY3NlYXJjaC5hY2NvdW50LnYxLk1lUmVxdWVzdBogLmRvY3NlYXJjaC5hY2NvdW50LnYxLk1lUmVzcG9uc2UiABJPCgRMaXN0EiEuZG9jc2VhcmNoLmFjY291bnQudjEuTGlzdFJlcXVlc3QaIi5kb2NzZWFyY2guYWNjb3VudC52MS5MaXN0UmVzcG9uc2UiABJMCgNBZGQSIC5kb2NzZWFyY2guYWNjb3VudC52MS5BZGRSZXF1ZXN0GiEuZG9jc2VhcmNoLmFjY291bnQudjEuQWRkUmVzcG9uc2UiABJSCgVSZXNldBIiLmRvY3NlYXJjaC5hY2NvdW50LnYxLlJlc2V0UmVxdWVzdBojLmRvY3NlYXJjaC5hY2NvdW50LnYxLlJlc2V0UmVzcG9uc2UiABJVCgZVbmxvY2sSIy5kb2NzZWFyY2guYWNjb3VudC52MS5VbmxvY2tSZXF1ZXN0GiQuZG9jc2VhcmNoLmFjY291bnQudjEuVW5sb2NrUmVzcG9uc2UiABJVCgZSZW1vdmUSIy5kb2NzZWFyY2guYWNjb3VudC52MS5SZW1vdmVSZXF1ZXN0GiQuZG9jc2VhcmNoLmFjY291bnQudjEuUmVtb3ZlUmVzcG9uc2UiABJbCghTZXRBZG1pbhIlLmRvY3NlYXJjaC5hY2NvdW50LnYxLlNldEFkbWluUmVxdWVzdBomLmRvY3NlYXJjaC5hY2NvdW50LnYxLlNldEFkbWluUmVzcG9uc2UiABJVCgZTaWduSW4SIy5kb2NzZWFyY2guYWNjb3VudC52MS5TaWduSW5SZXF1ZXN0GiQuZG9jc2VhcmNoLmFjY291bnQudjEuU2lnbkluUmVzcG9uc2UiAGIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("CiJkb2NzZWFyY2gvYWNjb3VudC92MS9hY2NvdW50LnByb3RvEhRkb2NzZWFyY2guYWNjb3VudC52MSKeAQoHQWNjb3VudBIQCgh1c2VybmFtZRgBIAEoCRINCgVhZG1pbhgCIAEoCBIuCgpjcmVhdGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIQCghwYXNzd29yZBgEIAEoCBIwCgxsb2NrZWRfdW50aWwYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIm4KB1NldHRpbmcSDQoFbGFiZWwYASABKAkSDQoFdmFsdWUYAiABKAkSDgoGc291cmNlGAMgASgJEg0KBXdoZXJlGAQgASgJEgsKA2tleRgFIAEoCRIMCgRmbGFnGAYgASgJEgsKA2VudhgHIAEoCSILCglNZVJlcXVlc3QiOwoKTWVSZXNwb25zZRIQCgh1c2VybmFtZRgBIAEoCRINCgVhZG1pbhgCIAEoCBIMCgRhdXRoGAMgASgJIg0KC0xpc3RSZXF1ZXN0Ij8KDExpc3RSZXNwb25zZRIvCghhY2NvdW50cxgBIAMoCzIdLmRvY3NlYXJjaC5hY2NvdW50LnYxLkFjY291bnQiHgoKQWRkUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCSIfCgtBZGRSZXNwb25zZRIQCghwYXNzd29yZBgBIAEoCSIgCgxSZXNldFJlcXVlc3QSEAoIdXNlcm5hbWUYASABKAkiIQoNUmVzZXRSZXNwb25zZRIQCghwYXNzd29yZBgBIAEoCSIhCg1VbmxvY2tSZXF1ZXN0EhAKCHVzZXJuYW1lGAEgASgJIhAKDlVubG9ja1Jlc3BvbnNlIiEKDVJlbW92ZVJlcXVlc3QSEAoIdXNlcm5hbWUYASABKAkiEAoOUmVtb3ZlUmVzcG9uc2UiMgoPU2V0QWRtaW5SZXF1ZXN0EhAKCHVzZXJuYW1lGAEgASgJEg0KBWFkbWluGAIgASgIIhIKEFNldEFkbWluUmVzcG9uc2UiDwoNU2lnbkluUmVxdWVzdCJPCg5TaWduSW5SZXNwb25zZRIvCghzZXR0aW5ncxgBIAMoCzIdLmRvY3NlYXJjaC5hY2NvdW50LnYxLlNldHRpbmcSDAoEZmlsZRgCIAEoCTKwBQoOQWNjb3VudFNlcnZpY2USSQoCTWUSHy5kb2NzZWFyY2guYWNjb3VudC52MS5NZVJlcXVlc3QaIC5kb2NzZWFyY2guYWNjb3VudC52MS5NZVJlc3BvbnNlIgASTwoETGlzdBIhLmRvY3NlYXJjaC5hY2NvdW50LnYxLkxpc3RSZXF1ZXN0GiIuZG9jc2VhcmNoLmFjY291bnQudjEuTGlzdFJlc3BvbnNlIgASTAoDQWRkEiAuZG9jc2VhcmNoLmFjY291bnQudjEuQWRkUmVxdWVzdBohLmRvY3NlYXJjaC5hY2NvdW50LnYxLkFkZFJlc3BvbnNlIgASUgoFUmVzZXQSIi5kb2NzZWFyY2guYWNjb3VudC52MS5SZXNldFJlcXVlc3QaIy5kb2NzZWFyY2guYWNjb3VudC52MS5SZXNldFJlc3BvbnNlIgASVQoGVW5sb2NrEiMuZG9jc2VhcmNoLmFjY291bnQudjEuVW5sb2NrUmVxdWVzdBokLmRvY3NlYXJjaC5hY2NvdW50LnYxLlVubG9ja1Jlc3BvbnNlIgASVQoGUmVtb3ZlEiMuZG9jc2VhcmNoLmFjY291bnQudjEuUmVtb3ZlUmVxdWVzdBokLmRvY3NlYXJjaC5hY2NvdW50LnYxLlJlbW92ZVJlc3BvbnNlIgASWwoIU2V0QWRtaW4SJS5kb2NzZWFyY2guYWNjb3VudC52MS5TZXRBZG1pblJlcXVlc3QaJi5kb2NzZWFyY2guYWNjb3VudC52MS5TZXRBZG1pblJlc3BvbnNlIgASVQoGU2lnbkluEiMuZG9jc2VhcmNoLmFjY291bnQudjEuU2lnbkluUmVxdWVzdBokLmRvY3NlYXJjaC5hY2NvdW50LnYxLlNpZ25JblJlc3BvbnNlIgBiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * Account is one account as an administrator sees it.
@@ -85,16 +85,39 @@ export type Setting = Message<"docsearch.account.v1.Setting"> & {
   value: string;
 
   /**
-   * Flag and env are where the setting is made: a command-line flag and
-   * the environment variable that sets it. Both are empty for a rule the
-   * server keeps rather than one it is configured with.
+   * Source is where the value came from: flag, environment, file or
+   * default. It is empty for a rule the server keeps rather than one it is
+   * configured with.
    *
-   * @generated from field: string flag = 3;
+   * @generated from field: string source = 3;
+   */
+  source: string;
+
+  /**
+   * Where names the flag, the environment variable or the file the value
+   * came from.
+   *
+   * @generated from field: string where = 4;
+   */
+  where: string;
+
+  /**
+   * Key is the setting's key in docsearch.yaml.
+   *
+   * @generated from field: string key = 5;
+   */
+  key: string;
+
+  /**
+   * Flag and env are the ways to set it: its command-line flag and its
+   * environment variable.
+   *
+   * @generated from field: string flag = 6;
    */
   flag: string;
 
   /**
-   * @generated from field: string env = 4;
+   * @generated from field: string env = 7;
    */
   env: string;
 };
@@ -366,6 +389,14 @@ export type SignInResponse = Message<"docsearch.account.v1.SignInResponse"> & {
    * @generated from field: repeated docsearch.account.v1.Setting settings = 1;
    */
   settings: Setting[];
+
+  /**
+   * File is the docsearch.yaml the server read, and empty when it read
+   * none.
+   *
+   * @generated from field: string file = 2;
+   */
+  file: string;
 };
 
 /**

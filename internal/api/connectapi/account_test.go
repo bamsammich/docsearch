@@ -13,6 +13,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/api/connectapi/mocks"
 	accountv1 "github.com/bamsammich/docsearch/internal/api/docsearch/account/v1"
 	"github.com/bamsammich/docsearch/internal/api/docsearch/account/v1/accountv1connect"
+	"github.com/bamsammich/docsearch/internal/config"
 	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/password"
 	"github.com/bamsammich/docsearch/internal/service/admin"
@@ -32,7 +33,19 @@ func (s *AccountAPISuite) SetupTest() {
 	path, handler := connectapi.NewAccountServer(
 		func(string) (connectapi.Admin, error) { return s.admin, nil },
 		"password",
-		[]connectapi.Setting{{Label: "Sign-in", Value: "Accounts docsearch holds", Flag: "--auth"}},
+		[]connectapi.Setting{
+			{
+				Label: "Sign-in",
+				Value: "Accounts docsearch holds",
+				Flag:  "--auth",
+				Origin: config.Origin{
+					Kind:  config.FromFile,
+					Where: "/etc/docsearch.yaml",
+					Key:   "auth.mode",
+				},
+			},
+		},
+		"/etc/docsearch.yaml",
 	)
 	mux := http.NewServeMux()
 	mux.Handle(path, owner.Middleware(owner.Builtin, handler))
@@ -60,7 +73,11 @@ func (s *AccountAPISuite) TestTheSignInSettingsAreForAdministratorsOnly() {
 	res, err := s.client.SignIn(s.T().Context(), connect.NewRequest(&accountv1.SignInRequest{}))
 	s.Require().NoError(err)
 	s.Require().Len(res.Msg.GetSettings(), 1)
-	s.Equal("--auth", res.Msg.GetSettings()[0].GetFlag())
+	got := res.Msg.GetSettings()[0]
+	s.Equal("--auth", got.GetFlag())
+	s.Equal("file", got.GetSource())
+	s.Equal("auth.mode", got.GetKey())
+	s.Equal("/etc/docsearch.yaml", res.Msg.GetFile())
 }
 
 func (s *AccountAPISuite) TestEachRefusalAnswersWithItsCode() {

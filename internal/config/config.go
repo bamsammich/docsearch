@@ -49,6 +49,32 @@ type Config struct {
 	// test or staging instance can't be taken for the one agents search.
 	// Empty shows nothing.
 	InstanceLabel string
+	// File is the docsearch.yaml the server read, and empty when it read
+	// none.
+	File string
+	// Origins say where each setting came from, keyed by its flag's name,
+	// so an administrator can see what sets it and where to change it.
+	Origins map[string]Origin
+}
+
+// The places a setting comes from, strongest first: the command line, the
+// environment, docsearch.yaml, and the default.
+const (
+	FromFlag    = "flag"
+	FromEnv     = "environment"
+	FromFile    = "file"
+	FromDefault = "default"
+)
+
+// Origin is where one setting's value came from.
+type Origin struct {
+	// Kind is FromFlag, FromEnv, FromFile or FromDefault.
+	Kind string
+	// Where names the flag, the environment variable or the file.
+	Where string
+	// Key is the setting's key in docsearch.yaml, and empty for a setting
+	// the file cannot hold.
+	Key string
 }
 
 // OIDC is how a deployment in auth mode oidc reaches its provider, and who
@@ -127,6 +153,9 @@ const (
 	EnvUIClientID = "DOCSEARCH_UI_CLIENT_ID"
 	// EnvInstanceLabel names this server in the library UI.
 	EnvInstanceLabel = "DOCSEARCH_INSTANCE_LABEL"
+	// EnvConfig names the docsearch.yaml the server reads beneath the
+	// environment.
+	EnvConfig = "DOCSEARCH_CONFIG"
 )
 
 // DefaultUploadMaxMB is large enough for the biggest manual docsearch has
