@@ -184,6 +184,25 @@ func typed(e Editable, value string) any {
 // the mappings it needs and removing a key whose value is nil. Comments and
 // every key it was not asked to change are kept.
 func Rewrite(src []byte, values map[string]any) ([]byte, error) {
+	doc, err := document(src)
+	if err != nil {
+		return nil, err
+	}
+	root := doc.Content[0]
+	for key, value := range values {
+		path := strings.Split(key, ".")
+		if value == nil {
+			remove(root, path)
+			continue
+		}
+		set(root, path, scalarOf(value))
+	}
+	return encode(doc)
+}
+
+// document is a config file parsed into nodes, or an empty mapping for an
+// empty file.
+func document(src []byte) (*yaml.Node, error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(src, &doc); err != nil {
 		return nil, fmt.Errorf("parse the config file: %w", err)
@@ -191,26 +210,27 @@ func Rewrite(src []byte, values map[string]any) ([]byte, error) {
 	if doc.Kind == 0 {
 		doc = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode}}}
 	}
-	root := doc.Content[0]
-	if root.Kind != yaml.MappingNode {
+	if doc.Content[0].Kind != yaml.MappingNode {
 		return nil, errors.New("the config file is not a mapping of settings")
 	}
-	for key, value := range values {
-		path := strings.Split(key, ".")
-		if value == nil {
-			remove(root, path)
-			continue
-		}
-		scalar := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: fmt.Sprint(value)}
-		if _, ok := value.(bool); ok {
-			scalar.Tag = "!!bool"
-		}
-		set(root, path, scalar)
+	return &doc, nil
+}
+
+// scalarOf is value as a YAML scalar, tagged as a boolean or as text.
+func scalarOf(value any) *yaml.Node {
+	scalar := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: fmt.Sprint(value)}
+	if _, ok := value.(bool); ok {
+		scalar.Tag = "!!bool"
 	}
+	return scalar
+}
+
+// encode writes doc back as YAML, indented two spaces.
+func encode(doc *yaml.Node) ([]byte, error) {
 	var out bytes.Buffer
 	encoder := yaml.NewEncoder(&out)
 	encoder.SetIndent(2)
-	if err := encoder.Encode(&doc); err != nil {
+	if err := encoder.Encode(doc); err != nil {
 		return nil, fmt.Errorf("write the config file: %w", err)
 	}
 	if err := encoder.Close(); err != nil {
@@ -273,22 +293,28 @@ func changedLines(before, after []byte) []int {
 	return out
 }
 
-// common marks the lines of b that belong to the longest run a and b share
-// in order.
-func common(a, b []string) []bool {
+// shared is the length of the longest common run of a[i:] and b[j:], for
+// every i and j.
+func shared(a, b []string) [][]int {
 	lengths := make([][]int, len(a)+1)
 	for i := range lengths {
 		lengths[i] = make([]int, len(b)+1)
 	}
 	for i := len(a) - 1; i >= 0; i-- {
 		for j := len(b) - 1; j >= 0; j-- {
+			lengths[i][j] = max(lengths[i+1][j], lengths[i][j+1])
 			if a[i] == b[j] {
 				lengths[i][j] = lengths[i+1][j+1] + 1
-			} else {
-				lengths[i][j] = max(lengths[i+1][j], lengths[i][j+1])
 			}
 		}
 	}
+	return lengths
+}
+
+// common marks the lines of b that belong to the longest run a and b share
+// in order.
+func common(a, b []string) []bool {
+	lengths := shared(a, b)
 	kept := make([]bool, len(b))
 	for i, j := 0, 0; i < len(a) && j < len(b); {
 		switch {
