@@ -90,3 +90,21 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) er
 	_, err := q.db.ExecContext(ctx, createAccount, arg.UserID, arg.Issuer, arg.Subject)
 	return err
 }
+
+const setUsername = `-- name: SetUsername :one
+SELECT set_username($1::text, $2::text)::boolean AS named
+`
+
+type SetUsernameParams struct {
+	UserID   string
+	Username string
+}
+
+// set_username answers whether the name is now the account's: a name another
+// account holds stays with that account.
+func (q *Queries) SetUsername(ctx context.Context, arg SetUsernameParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, setUsername, arg.UserID, arg.Username)
+	var named bool
+	err := row.Scan(&named)
+	return named, err
+}

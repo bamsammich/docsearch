@@ -202,4 +202,5 @@ type User struct {
 	CreatedAt time.Time
 	Issuer    sql.NullString
 	Subject   sql.NullString
+	Username  sql.NullString
 }

@@ -107,6 +107,21 @@ $$;
 
 
 --
+-- Name: password_account_username(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.password_account_username() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+BEGIN
+  UPDATE users SET username = NEW.username WHERE user_id = NEW.user_id;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: readable_libraries(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -144,6 +159,25 @@ CREATE FUNCTION public.role_rank(role text) RETURNS integer
     LANGUAGE sql IMMUTABLE STRICT
     AS $$
   SELECT CASE role WHEN 'admin' THEN 3 WHEN 'editor' THEN 2 WHEN 'reader' THEN 1 END;
+$$;
+
+
+--
+-- Name: set_username(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_username(target_user text, new_username text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+BEGIN
+  UPDATE users SET username = new_username
+   WHERE user_id = target_user
+     AND username IS DISTINCT FROM new_username
+     AND NOT EXISTS (SELECT 1 FROM users other
+                      WHERE other.username = new_username AND other.user_id <> target_user);
+  RETURN EXISTS (SELECT 1 FROM users WHERE user_id = target_user AND username = new_username);
+END;
 $$;
 
 
@@ -544,8 +578,10 @@ CREATE TABLE public.users (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     issuer text,
     subject text,
+    username text,
     CONSTRAINT users_id_is_identifier_safe CHECK ((user_id ~ '^[a-z0-9_-]{1,40}$'::text)),
-    CONSTRAINT users_identity_whole CHECK (((issuer IS NULL) = (subject IS NULL)))
+    CONSTRAINT users_identity_whole CHECK (((issuer IS NULL) = (subject IS NULL))),
+    CONSTRAINT users_username_check CHECK ((username ~ '^[a-z0-9._@+-]{1,128}$'::text))
 );
 
 
@@ -725,6 +761,14 @@ ALTER TABLE ONLY public.users
 
 
 --
+-- Name: users users_username_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_username_key UNIQUE (username);
+
+
+--
 -- Name: chunks_bm25; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -841,6 +885,13 @@ ALTER INDEX public.idx_chunks_doc_ord ATTACH PARTITION public.chunks_default_use
 --
 
 ALTER INDEX public.idx_chunks_doc_section ATTACH PARTITION public.chunks_default_user_id_doc_id_section_idx;
+
+
+--
+-- Name: password_accounts password_account_username; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER password_account_username AFTER INSERT ON public.password_accounts FOR EACH ROW EXECUTE FUNCTION public.password_account_username();
 
 
 --

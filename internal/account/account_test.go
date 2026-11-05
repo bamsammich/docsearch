@@ -191,3 +191,52 @@ func (s *AccountSuite) TestTheRequiredClaimIsCheckedEveryTime() {
 		})
 	}
 }
+
+// -- usernames ------------------------------------------------------------
+
+func (s *AccountSuite) TestAUsernameComesFromPreferredUsernameThenEmail() {
+	for want, stated := range map[string]map[string]any{
+		"alice":             {"preferred_username": "Alice", "email": "a@example.com"},
+		"alice@example.com": {"email": "Alice@Example.com"},
+	} {
+		s.SetupTest()
+		s.store.EXPECT().Find(mock.Anything, alice).Return("u-alice", true, nil)
+		s.store.EXPECT().Name(mock.Anything, "u-alice", want).Return(true, nil).Once()
+		s.Equal(http.StatusOK, s.send(s.accounts(account.Policy{}), claimsOf(alice, stated)).code)
+	}
+}
+
+func (s *AccountSuite) TestAClaimThatIsNoUsernameRecordsNothing() {
+	for _, stated := range []map[string]any{
+		{"preferred_username": "has space"},
+		{"email": 42},
+		nil,
+	} {
+		s.SetupTest()
+		s.store.EXPECT().Find(mock.Anything, alice).Return("u-alice", true, nil)
+		s.Equal(http.StatusOK, s.send(s.accounts(account.Policy{}), claimsOf(alice, stated)).code)
+		s.store.AssertNotCalled(s.T(), "Name", mock.Anything, mock.Anything, mock.Anything)
+	}
+}
+
+func (s *AccountSuite) TestASignInRecordsTheUsernameOnce() {
+	s.store.EXPECT().Find(mock.Anything, alice).Return("u-alice", true, nil)
+	s.store.EXPECT().Name(mock.Anything, "u-alice", "alice").Return(true, nil).Once()
+	accounts := s.accounts(account.Policy{})
+	claims := claimsOf(alice, map[string]any{"preferred_username": "alice"})
+
+	s.Equal(http.StatusOK, s.send(accounts, claims).code)
+	s.Equal(http.StatusOK, s.send(accounts, claims).code, "the second request writes nothing")
+}
+
+func (s *AccountSuite) TestANameAnotherAccountHoldsStillLetsTheRequestThrough() {
+	s.store.EXPECT().Find(mock.Anything, alice).Return("u-alice", true, nil)
+	s.store.EXPECT().Name(mock.Anything, "u-alice", "alice").Return(false, nil).Once()
+
+	got := s.send(
+		s.accounts(account.Policy{}),
+		claimsOf(alice, map[string]any{"preferred_username": "alice"}),
+	)
+	s.Equal(http.StatusOK, got.code)
+	s.Equal("u-alice", got.user)
+}

@@ -459,6 +459,12 @@ required claim, such as `groups` holding `docsearch-users`, is checked on
 every request, so removing someone from the group at the provider removes
 their access here.
 
+**Usernames** are how someone is invited to a shared library. A password
+account's is the name it signs in with. An `oidc` account's is the token's
+`preferred_username`, or its `email` when the provider sends no username,
+recorded when the account signs in. An account that has never signed in has
+none yet. A name another account already holds stays with that account.
+
 **Switching an existing install** keeps its library. Name your own subject
 with `--oidc-default-owner`, and your first sign-in takes the library the
 deployment already holds. Nobody else can claim it.

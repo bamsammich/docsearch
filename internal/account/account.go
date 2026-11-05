@@ -16,8 +16,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/auth"
 
@@ -34,6 +36,10 @@ type Store interface {
 	ClaimBuiltin(ctx context.Context, identity resource.Identity) (string, bool, error)
 	// Create makes an account and the partition its library lives in.
 	Create(ctx context.Context, userID string, identity resource.Identity) error
+	// Name records the username an account signed in under, and reports
+	// whether the name is now the account's: one another account already
+	// holds stays with that account.
+	Name(ctx context.Context, userID, username string) (bool, error)
 }
 
 // RequiredClaim is a claim every token must carry. A claim that is a list
@@ -64,6 +70,10 @@ var (
 
 // Accounts resolves identities to libraries under one policy.
 type Accounts struct {
+	// named is each account whose username this process has recorded, and
+	// the name it recorded, so a request writes the name only when it is new
+	// or has changed.
+	named  sync.Map
 	store  Store
 	log    *slog.Logger
 	policy Policy
@@ -111,6 +121,53 @@ func (a *Accounts) create(ctx context.Context, identity resource.Identity) (stri
 		return "", fmt.Errorf("create account: %w", createErr)
 	}
 	return existing, nil
+}
+
+// usernameShape is what a username may hold, the same rule the users table
+// checks. A claim that does not fit is not recorded.
+var usernameShape = regexp.MustCompile(`^[a-z0-9._@+-]{1,128}$`)
+
+// UsernameOf is the name a token's account is invited by: its
+// preferred_username, or its email where the provider sends no username,
+// lower-cased. A token with neither, or one whose value does not fit, names
+// none.
+func UsernameOf(info *auth.TokenInfo) (string, bool) {
+	for _, claim := range []string{"preferred_username", "email"} {
+		stated, ok := resource.Stated(info, claim)
+		if !ok {
+			continue
+		}
+		name, ok := stated.(string)
+		name = strings.ToLower(strings.TrimSpace(name))
+		if ok && usernameShape.MatchString(name) {
+			return name, true
+		}
+	}
+	return "", false
+}
+
+// remember records the username a request's token names, once per account
+// and name in this process. A failure is logged rather than refused: the
+// request still acts for the right account, and only an invitation by name
+// waits for the next sign-in.
+func (a *Accounts) remember(ctx context.Context, user string, info *auth.TokenInfo) {
+	name, ok := UsernameOf(info)
+	if !ok {
+		return
+	}
+	if seen, found := a.named.Load(user); found && seen == name {
+		return
+	}
+	held, err := a.store.Name(ctx, user, name)
+	switch {
+	case err != nil:
+		a.log.WarnContext(ctx, "username not recorded", "user", user, "err", err)
+		return
+	case !held:
+		a.log.WarnContext(ctx, "username belongs to another account; this one keeps none",
+			"user", user, "username", name)
+	}
+	a.named.Store(user, name)
 }
 
 // newUserID is a fresh identifier. It becomes part of a table name, so it is
@@ -165,6 +222,7 @@ func (a *Accounts) Middleware(next http.Handler) http.Handler {
 			http.Error(w, "account not resolved", http.StatusInternalServerError)
 			return
 		}
+		a.remember(r.Context(), user, info)
 		next.ServeHTTP(w, r.WithContext(owner.With(r.Context(), user)))
 	})
 }

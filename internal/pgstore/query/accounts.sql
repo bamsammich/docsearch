@@ -17,3 +17,8 @@ SELECT COALESCE(claim_builtin(sqlc.arg(issuer)::text, sqlc.arg(subject)::text), 
 
 -- name: AllAccounts :many
 SELECT user_id FROM users ORDER BY user_id;
+
+-- set_username answers whether the name is now the account's: a name another
+-- account holds stays with that account.
+-- name: SetUsername :one
+SELECT set_username(sqlc.arg(user_id)::text, sqlc.arg(username)::text)::boolean AS named;

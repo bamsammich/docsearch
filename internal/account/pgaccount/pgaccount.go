@@ -71,3 +71,15 @@ func (s *Store) Users(ctx context.Context) ([]string, error) {
 	}
 	return users, nil
 }
+
+// Name records the username an account signed in under, and reports whether
+// the name is now the account's.
+func (s *Store) Name(ctx context.Context, userID, username string) (bool, error) {
+	named, err := s.queries.SetUsername(ctx, pgdbgen.SetUsernameParams{
+		UserID: userID, Username: username,
+	})
+	if err != nil {
+		return false, fmt.Errorf("record username: %w", err)
+	}
+	return named, nil
+}
