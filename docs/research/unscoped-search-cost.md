@@ -92,13 +92,18 @@ tests and a single-account deployment never see it. The phase 0 spike's
 libraries were each in their own partition, so the timings it compared
 across spreads were of searches scoring zero.
 
+`pgstore`'s second-account test narrows the cause. Through the parent index,
+a second account's rows score with the `default` partition's term
+statistics. A term `default` does not hold scores zero, and every other term
+scores with the wrong library's statistics.
+
 **The parent index name also costs the walk.** With a second partition, a
 walk over one partition's index rechecks each row against the named parent
 at about 30 µs a row. Naming the partition's own index, with the partition
 fixed at plan time, took the 200-document walk from 98 ms to 5 ms. Naming it
 also fixes the zero scores, but needs the leaf index's name at search time
-and `SELECT` on `chunks_default` for the app role, which no migration grants
-today. It is a separate change.
+and `SELECT` on `chunks_default` for the app role. Search now names it, and
+migration 17 grants the `SELECT`.
 
 **The scan cap applies to both shapes alike.** Upstream issue 516 reports
 that 1.4.0 ends an ordered scan silently after 100,000 index entries. The

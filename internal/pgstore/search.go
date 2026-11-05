@@ -122,7 +122,12 @@ func (s *Store) Search(ctx context.Context, p SearchParams) ([]SearchResult, err
 	// document it holds.
 	var out []SearchResult
 	err = pgsession.ReadOnly(ctx, s.db, s.userID, func(tx *sql.Tx) error {
-		run := searcher{tx: tx, q: s.q.WithTx(tx)}
+		run := searcher{tx: tx, q: s.q.WithTx(tx), user: s.userID}
+		index, err := run.ownIndex(ctx)
+		if err != nil || index == "" {
+			return err
+		}
+		run.index = index
 		var searchErr error
 		if p.DocID == "" {
 			out, searchErr = run.acrossDocuments(ctx, p, match)
@@ -139,6 +144,51 @@ func (s *Store) Search(ctx context.Context, p SearchParams) ([]SearchResult, err
 type searcher struct {
 	tx *sql.Tx
 	q  *pgdbgen.Queries
+	// user is the account the transaction named, and index is the BM25
+	// index of that account's own partition, which every score is read
+	// through.
+	user  string
+	index string
+}
+
+// ownIndex is the name of the BM25 index on the account's own partition, or
+// nothing for an account with no partition, which holds no chunks.
+//
+// pg_textsearch 1.4.0 scores a query naming the parent index, chunks_bm25,
+// with the first partition's statistics (upstream issue 552), which are the
+// built-in library's. Searched that way, another account's chunks scored
+// zero for a term the built-in library lacks and were dropped, and scored
+// with the wrong library's statistics for the rest.
+//
+// The partition is named by create_account. Postgres names the index, so it
+// is read from the catalog rather than assumed. to_bm25query takes the name
+// as it is stored, unquoted, even where an account's hyphen would need quotes
+// in SQL.
+func (r searcher) ownIndex(ctx context.Context) (string, error) {
+	var index string
+	err := r.tx.QueryRowContext(ctx, `SELECT pg_class.relname
+		  FROM pg_inherits
+		  JOIN pg_index ON pg_index.indexrelid = pg_inherits.inhrelid
+		  JOIN pg_class ON pg_class.oid = pg_inherits.inhrelid
+		 WHERE pg_inherits.inhparent = 'chunks_bm25'::regclass
+		   AND pg_index.indrelid = to_regclass(format('%I', 'chunks_' || $1))`,
+		r.user).Scan(&index)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("find the library's search index: %w", err)
+	}
+	return index, nil
+}
+
+// bound is a scored statement's arguments: the three that scored and
+// ownPartition read, then rest from $4 on.
+//
+// Every scored statement runs unnamed, as walk needs for its speed, so
+// Postgres plans each one with the account and the index name in hand.
+func (r searcher) bound(match string, rest ...any) []any {
+	return append([]any{pgx.QueryExecModeCacheDescribe, match, r.index, r.user}, rest...)
 }
 
 // acrossDocuments merges per-document results by within-document rank.
@@ -215,10 +265,10 @@ func (r searcher) acrossDocuments(
 //   - It runs as an unnamed statement. Executed from the driver's cached
 //     prepared statement, the same plan took 190 ms.
 //
-// One cost remains once a second account has its own partition: a scan of
-// one partition's index for a query naming the parent index rechecks each row
-// it returns, at about 30 microseconds a row. That is still one pass over the
-// matches rather than one per document.
+// It also names the account's own index, which ownIndex explains. Once a
+// second account exists, a scan through the parent's name rechecks each row
+// at about 30 microseconds, and a 200-document library's walk took 98 ms
+// that way against 5 ms.
 func (r searcher) walk(
 	ctx context.Context,
 	p SearchParams,
@@ -229,10 +279,9 @@ func (r searcher) walk(
 	for id := range ready {
 		pools.wanted[id] = poolSize(p.K)
 	}
-	statement, args := walkQuery(p, match)
-	args = append([]any{pgx.QueryExecModeCacheDescribe}, args...)
+	statement, rest := walkQuery(p)
 	err := r.withoutSorts(ctx, func() error {
-		return pgsession.Rows(ctx, r.tx, statement, args, pools.read)
+		return pgsession.Rows(ctx, r.tx, statement, r.bound(match, rest...), pools.read)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("search failed: %w", err)
@@ -241,15 +290,15 @@ func (r searcher) walk(
 }
 
 // walkQuery is every chunk's identifier in BM25 order, within the section
-// filter if there is one.
-func walkQuery(p SearchParams, match string) (string, []any) {
-	args := []any{match}
-	statement := `SELECT chunks.doc_id, chunks.id FROM chunks`
+// filter if there is one, and the arguments it takes after bound's.
+func walkQuery(p SearchParams) (string, []any) {
+	var rest []any
+	statement := `SELECT chunks.doc_id, chunks.id FROM chunks WHERE ` + ownPartition
 	if p.SectionFilter != "" {
-		statement += " WHERE chunks.heading_path = $2 OR starts_with(chunks.heading_path, $2 || ' > ')"
-		args = append(args, p.SectionFilter)
+		statement += " AND " + sectionWithin(len(rest))
+		rest = append(rest, p.SectionFilter)
 	}
-	return statement + " ORDER BY " + scored, args
+	return statement + " ORDER BY " + scored, rest
 }
 
 // walkPools collects the identifiers a walk keeps.
@@ -298,8 +347,8 @@ func (r searcher) score(ctx context.Context, match string, ids []int64) (scoredR
 	       chunks.image_count, chunks.kind, chunks.url, chunks.fragment,
 	       ` + scored + ` AS score, chunks.text
 	  FROM chunks
-	 WHERE chunks.id = ANY($2)`
-	if err := pgsession.Rows(ctx, r.tx, statement, []any{match, ids}, out.read); err != nil {
+	 WHERE ` + ownPartition + ` AND chunks.id = ANY($4)`
+	if err := pgsession.Rows(ctx, r.tx, statement, r.bound(match, ids), out.read); err != nil {
 		return nil, fmt.Errorf("search failed: %w", err)
 	}
 	return out, nil
@@ -385,7 +434,8 @@ func (r searcher) candidates(
 	match string,
 	label resultLabel,
 ) ([]SearchResult, error) {
-	statement, args := candidateQuery(p, match)
+	statement, rest := candidateQuery(p)
+	args := r.bound(match, rest...)
 	var out []SearchResult
 	err := pgsession.Rows(ctx, r.tx, statement, args, func(rows *sql.Rows) error {
 		var scanErr error
@@ -403,8 +453,27 @@ func (r searcher) candidates(
 // planner score every row standalone at about 150 microseconds each rather
 // than walking the index: the spike measured 159 ms that way against 13.4 ms
 // this way.
+//
+// $1 is the query and $2 the account's own index, which ownIndex finds.
 const scored = `(chunks.heading_path || ' ' || chunks.heading_path || ' ' ||
-	chunks.text) <@> to_bm25query($1, 'chunks_bm25')`
+	chunks.text) <@> to_bm25query($1, $2)`
+
+// ownPartition fixes the partition when the statement is planned. Row-level
+// security already limits the rows to the account's, but through a setting
+// the planner does not read, so without the test it plans for every
+// partition and pg_textsearch refuses the index that scored names.
+const ownPartition = `chunks.user_id = $3`
+
+// sectionWithin tests a chunk against the section filter, which a statement
+// passes after n arguments of its own.
+func sectionWithin(n int) string {
+	at := boundArgs + n + 1
+	return fmt.Sprintf(
+		"(chunks.heading_path = $%d OR starts_with(chunks.heading_path, $%d || ' > '))", at, at)
+}
+
+// boundArgs is how many arguments bound puts before a statement's own.
+const boundArgs = 3
 
 // poolSize is how many candidates a document's pool holds for a search of k.
 //
@@ -412,9 +481,10 @@ const scored = `(chunks.heading_path || ' ' || chunks.heading_path || ' ' ||
 // rather than only permuting an already-truncated top k.
 func poolSize(k int) int { return k * 4 }
 
-// candidateQuery builds the pool the ranking draws from, poolSize rows deep.
-func candidateQuery(p SearchParams, match string) (string, []any) {
-	args := []any{match, p.DocID}
+// candidateQuery builds the pool the ranking draws from, poolSize rows deep,
+// and the arguments it takes after bound's.
+func candidateQuery(p SearchParams) (string, []any) {
+	rest := []any{p.DocID}
 	sb := strings.Builder{}
 	sb.WriteString(`SELECT * FROM (
 		SELECT chunks.doc_id, chunks.heading_path, chunks.section,
@@ -422,21 +492,19 @@ func candidateQuery(p SearchParams, match string) (string, []any) {
 		       chunks.image_count, chunks.kind, chunks.url, chunks.fragment,
 		       ` + scored + ` AS score, chunks.text
 		  FROM chunks
-		 WHERE chunks.doc_id = $2`)
+		 WHERE ` + ownPartition + ` AND chunks.doc_id = $4`)
 	if p.SectionFilter != "" {
-		fmt.Fprintf(&sb,
-			" AND (chunks.heading_path = $%d OR starts_with(chunks.heading_path, $%d || ' > '))",
-			len(args)+1, len(args)+1)
-		args = append(args, p.SectionFilter)
+		sb.WriteString(" AND " + sectionWithin(len(rest)))
+		rest = append(rest, p.SectionFilter)
 	}
-	fmt.Fprintf(&sb, " ORDER BY "+scored+" LIMIT $%d) candidates", len(args)+1)
-	args = append(args, poolSize(p.K))
+	fmt.Fprintf(&sb, " ORDER BY "+scored+" LIMIT $%d) candidates", boundArgs+len(rest)+1)
+	rest = append(rest, poolSize(p.K))
 	// A score of zero is a row that matched nothing. Where the index drives
 	// the query none come back, but Postgres scans a table small enough to
 	// scan and then scores every row, which a fresh library is. Dropping
 	// them here costs nothing: the limit above already bounded the rows.
 	sb.WriteString(" WHERE score < 0 ORDER BY score")
-	return sb.String(), args
+	return sb.String(), rest
 }
 
 // rankCandidates orders the candidates and numbers the top k.
