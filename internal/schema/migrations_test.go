@@ -700,3 +700,38 @@ func (s *MigrationSuite) TestLibrariesGoDownAndUpAgain() {
 	s.upTo(18)
 	s.Equal(1, s.count(`SELECT COUNT(*) FROM libraries`))
 }
+
+// -- 00019_job_requester --------------------------------------------------
+
+func (s *MigrationSuite) TestJobRequesterNamesEachJobsOwner() {
+	// Every job before version 19 was queued in a personal library by the
+	// library's owner, so that owner is who the worker writes as.
+	s.upTo(18)
+	pgtest.WriteAs(s.T(), s.db, "default", func(tx *sql.Tx) {
+		_, err := tx.ExecContext(s.T().Context(),
+			`INSERT INTO ingest_jobs (library_id, source_path, status, created_at, updated_at)
+			 VALUES ('default', '/library/guide.md', 'queued', now(), now())`)
+		s.Require().NoError(err)
+	})
+
+	s.upTo(19)
+
+	var requester string
+	s.Require().NoError(s.pg.App.QueryRowContext(s.T().Context(),
+		`SELECT requested_by FROM waiting_queues()`).Scan(&requester))
+	s.Equal("default", requester)
+}
+
+func (s *MigrationSuite) TestJobRequesterGoesDownAndUpAgain() {
+	s.upTo(19)
+	s.down()
+	s.False(s.columnExists("ingest_jobs", "requested_by"))
+	s.upTo(19)
+	s.True(s.columnExists("ingest_jobs", "requested_by"))
+}
+
+// columnExists reports whether a table has a column by name.
+func (s *MigrationSuite) columnExists(table, column string) bool {
+	return s.count(`SELECT COUNT(*) FROM information_schema.columns
+		  WHERE table_name = $1 AND column_name = $2`, table, column) == 1
+}

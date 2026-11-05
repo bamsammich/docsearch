@@ -85,6 +85,7 @@ type IngestJob struct {
 	UpdatedAt   time.Time
 	LibraryID   string
 	Force       bool
+	RequestedBy sql.NullString
 }
 
 type Library struct {

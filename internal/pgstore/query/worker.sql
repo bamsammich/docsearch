@@ -20,6 +20,9 @@
 -- contending for one. SQLite allowed a single writer, so the same statement
 -- there relied on the write lock instead.
 --
+-- A worker writes as the person who queued the job, so it claims only that
+-- person's jobs: the policies then check each write against their grant.
+--
 -- Jobs at or past the attempt ceiling are excluded here rather than after
 -- claiming: a permanently failing job that is claimed and then put back
 -- would be reclaimed forever and starve the queue.
@@ -36,6 +39,7 @@ UPDATE ingest_jobs
  WHERE id = (
        SELECT next.id FROM ingest_jobs next
         WHERE next.cancel_req = false
+          AND next.requested_by = current_setting('app.user_id', true)
           AND next.attempts < sqlc.arg(max_attempts)
           AND (next.status = 'queued'
                OR (next.status = 'running' AND next.lease_until < now()))
@@ -111,3 +115,15 @@ UPDATE ingest_jobs
    SET status = 'done', phase = NULL, doc_id = $1, error = NULL,
        lease_until = NULL, updated_at = now()
  WHERE id = sqlc.arg(id) AND attempts = sqlc.arg(attempt) AND status = 'running';
+
+-- Every library and requester with a job to claim or a lease to recover,
+-- where the requester can still add to the library. Read before the worker
+-- knows whom to write as, so it goes through a definer function.
+-- name: WaitingQueues :many
+SELECT library_id::text AS library_id, requested_by::text AS requested_by
+  FROM waiting_queues();
+
+-- Queued jobs whose requester can no longer add to the library are failed
+-- rather than left to wait for a claim that cannot come.
+-- name: FailUnclaimableJobs :one
+SELECT fail_unclaimable_jobs()::integer AS failed;
