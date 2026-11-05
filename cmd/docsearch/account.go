@@ -77,7 +77,7 @@ func accountCommand() *cli.Command {
 				Action:    withAccounts(removeAccount),
 			},
 			{
-				Name: "list", Usage: "show every account", Flags: []cli.Flag{dsn},
+				Name: commandList, Usage: "show every account", Flags: []cli.Flag{dsn},
 				Action: withAccounts(listAccounts),
 			},
 		},

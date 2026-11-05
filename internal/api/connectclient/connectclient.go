@@ -17,16 +17,18 @@ import (
 	"github.com/bamsammich/docsearch/internal/api/docsearch/document/v1/documentv1connect"
 	ingestv1 "github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1"
 	"github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1/ingestv1connect"
+	"github.com/bamsammich/docsearch/internal/api/docsearch/library/v1/libraryv1connect"
 	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/service/document"
 	"github.com/bamsammich/docsearch/internal/service/job"
 )
 
-// Client speaks all three services at one server.
+// Client speaks every service at one server.
 type Client struct {
 	documents documentv1connect.DocumentServiceClient
 	ingest    ingestv1connect.IngestServiceClient
 	jobs      ingestv1connect.JobServiceClient
+	libraries libraryv1connect.LibraryServiceClient
 }
 
 // New builds a client for the server at baseURL, authenticating with token.
@@ -40,6 +42,7 @@ func New(
 		documents: documentv1connect.NewDocumentServiceClient(httpClient, baseURL, opts...),
 		ingest:    ingestv1connect.NewIngestServiceClient(httpClient, baseURL, opts...),
 		jobs:      ingestv1connect.NewJobServiceClient(httpClient, baseURL, opts...),
+		libraries: libraryv1connect.NewLibraryServiceClient(httpClient, baseURL, opts...),
 	}
 }
 

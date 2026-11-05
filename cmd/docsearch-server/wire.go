@@ -64,6 +64,7 @@ func serve(cfg config.Config, log *slog.Logger) error {
 			grouped(newIngestRoute),
 			grouped(newDocumentRoute),
 			grouped(newJobRoute),
+			grouped(newLibraryRoute),
 			grouped(newUploadRoute),
 			grouped(newOriginalRoute),
 			fx.Annotate(newMux, fx.ParamTags(routeGroup)),
@@ -274,6 +275,14 @@ func newJobRoute(libs *library.Libraries) route {
 	return mount(connectapi.NewJobServer(
 		func(user string) (connectapi.Jobs, error) { return libs.Jobs(pgsession.Personal(user)) },
 		postgres.ErrNotFound))
+}
+
+// newLibraryRoute creates and shares libraries, as the asking user. The
+// database checks every rule, so the route needs nothing but the pool.
+func newLibraryRoute(db *sql.DB) route {
+	return mount(connectapi.NewLibraryServer(
+		func(user string) (connectapi.Libraries, error) { return postgres.NewLibraries(db, user), nil },
+	))
 }
 
 // mount names what a handler constructor returns as a pair, so that a list of
