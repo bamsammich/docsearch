@@ -11,7 +11,7 @@ import (
 )
 
 const activeJobs = `-- name: ActiveJobs :many
-SELECT id, source_path, title, doc_id, status, phase, progress_cur, progress_tot, attempts, permanent, cancel_req, error, warnings, lease_until, created_at, updated_at, user_id, force FROM ingest_jobs
+SELECT id, source_path, title, doc_id, status, phase, progress_cur, progress_tot, attempts, permanent, cancel_req, error, warnings, lease_until, created_at, updated_at, library_id, force FROM ingest_jobs
  WHERE status IN ('queued','running')
  ORDER BY created_at, id
 `
@@ -42,7 +42,7 @@ func (q *Queries) ActiveJobs(ctx context.Context) ([]IngestJob, error) {
 			&i.LeaseUntil,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.UserID,
+			&i.LibraryID,
 			&i.Force,
 		); err != nil {
 			return nil, err
@@ -60,13 +60,13 @@ func (q *Queries) ActiveJobs(ctx context.Context) ([]IngestJob, error) {
 
 const enqueueJob = `-- name: EnqueueJob :one
 
-INSERT INTO ingest_jobs (user_id, source_path, title, force, status, created_at, updated_at)
+INSERT INTO ingest_jobs (library_id, source_path, title, force, status, created_at, updated_at)
 VALUES ($1, $2, $3, $4, 'queued', now(), now())
 RETURNING id
 `
 
 type EnqueueJobParams struct {
-	UserID     string
+	LibraryID  string
 	SourcePath string
 	Title      sql.NullString
 	Force      bool
@@ -77,7 +77,7 @@ type EnqueueJobParams struct {
 // last-insert-id, and RETURNING is how a caller learns what it queued.
 func (q *Queries) EnqueueJob(ctx context.Context, arg EnqueueJobParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, enqueueJob,
-		arg.UserID,
+		arg.LibraryID,
 		arg.SourcePath,
 		arg.Title,
 		arg.Force,
@@ -88,7 +88,7 @@ func (q *Queries) EnqueueJob(ctx context.Context, arg EnqueueJobParams) (int64, 
 }
 
 const jobByID = `-- name: JobByID :one
-SELECT id, source_path, title, doc_id, status, phase, progress_cur, progress_tot, attempts, permanent, cancel_req, error, warnings, lease_until, created_at, updated_at, user_id, force FROM ingest_jobs WHERE id = $1
+SELECT id, source_path, title, doc_id, status, phase, progress_cur, progress_tot, attempts, permanent, cancel_req, error, warnings, lease_until, created_at, updated_at, library_id, force FROM ingest_jobs WHERE id = $1
 `
 
 // The three job reads select * so they share one generated row type and one
@@ -114,7 +114,7 @@ func (q *Queries) JobByID(ctx context.Context, id int64) (IngestJob, error) {
 		&i.LeaseUntil,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.UserID,
+		&i.LibraryID,
 		&i.Force,
 	)
 	return i, err
@@ -146,7 +146,7 @@ func (q *Queries) QueuePosition(ctx context.Context, id int64) (int64, error) {
 }
 
 const recentJobs = `-- name: RecentJobs :many
-SELECT id, source_path, title, doc_id, status, phase, progress_cur, progress_tot, attempts, permanent, cancel_req, error, warnings, lease_until, created_at, updated_at, user_id, force FROM ingest_jobs
+SELECT id, source_path, title, doc_id, status, phase, progress_cur, progress_tot, attempts, permanent, cancel_req, error, warnings, lease_until, created_at, updated_at, library_id, force FROM ingest_jobs
  ORDER BY (status IN ('queued','running')) DESC, updated_at DESC
  LIMIT $1
 `
@@ -177,7 +177,7 @@ func (q *Queries) RecentJobs(ctx context.Context, limit int32) ([]IngestJob, err
 			&i.LeaseUntil,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.UserID,
+			&i.LibraryID,
 			&i.Force,
 		); err != nil {
 			return nil, err

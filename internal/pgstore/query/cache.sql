@@ -6,8 +6,8 @@
 -- re-chunking a site makes none.
 --
 -- Every statement runs in a transaction that opened with
--- SET LOCAL app.user_id, so a read names no user and the policy decides what
--- it sees. A write names user_id because a row has to carry its owner.
+-- SET LOCAL app.library_id, so a read names no library and the policy decides what
+-- it sees. A write names library_id because a row has to carry its owner.
 
 -- name: CachedResponse :one
 SELECT url, final_url, status, content_type, etag, last_modified, body, sha256,
@@ -18,10 +18,10 @@ SELECT url, final_url, status, content_type, etag, last_modified, body, sha256,
 -- refresh idempotent.
 -- name: StoreResponse :exec
 INSERT INTO responses (
-  user_id, url, final_url, status, content_type, etag, last_modified, body,
+  library_id, url, final_url, status, content_type, etag, last_modified, body,
   sha256, fetched_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-ON CONFLICT (user_id, url) DO UPDATE SET
+ON CONFLICT (library_id, url) DO UPDATE SET
   final_url = EXCLUDED.final_url,
   status = EXCLUDED.status,
   content_type = EXCLUDED.content_type,
@@ -45,6 +45,6 @@ SELECT body, fetched_at FROM robots WHERE host = $1;
 -- from one clock and written by another, the comparison would answer to the
 -- skew between a worker and its database.
 -- name: StoreRobots :exec
-INSERT INTO robots (user_id, host, body, fetched_at) VALUES ($1, $2, $3, $4)
-ON CONFLICT (user_id, host) DO UPDATE SET
+INSERT INTO robots (library_id, host, body, fetched_at) VALUES ($1, $2, $3, $4)
+ON CONFLICT (library_id, host) DO UPDATE SET
   body = EXCLUDED.body, fetched_at = EXCLUDED.fetched_at;

@@ -242,25 +242,13 @@ func begin(t TestingT, db *sql.DB, userID string) *sql.Tx {
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
-	// SET LOCAL takes no placeholder, and the identifier comes from the test
-	// rather than from a request.
+	// The user's personal library carries the user's id, as pgsession names it.
 	if _, err := tx.ExecContext(t.Context(),
-		fmt.Sprintf("SET LOCAL app.user_id = %s", quote(userID))); err != nil {
+		"SELECT set_config('app.user_id', $1, true), set_config('app.library_id', $1, true)",
+		userID); err != nil {
 		t.Fatalf("set the user: %v", err)
 	}
 	return tx
-}
-
-// quote wraps a literal the way Postgres does, doubling any quote inside it.
-func quote(s string) string {
-	out := "'"
-	for _, r := range s {
-		if r == '\'' {
-			out += "'"
-		}
-		out += string(r)
-	}
-	return out + "'"
 }
 
 // Run executes a command inside the container and returns what it printed.

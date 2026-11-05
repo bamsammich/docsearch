@@ -202,10 +202,10 @@ func window(ctx context.Context, tx *sql.Tx, query string) ([]candidate, error) 
 func windowThenJoin(ctx context.Context, tx *sql.Tx, query string) ([]candidate, error) {
 	return collect(ctx, tx, `SELECT ranked.doc_id, ranked.id, ranked.score, chunks.text FROM (
 		  SELECT walk.*, row_number() OVER (PARTITION BY doc_id ORDER BY score, id) AS rn
-		    FROM (SELECT chunks.user_id, chunks.doc_id, chunks.id, `+scored+` AS score
+		    FROM (SELECT chunks.library_id, chunks.doc_id, chunks.id, `+scored+` AS score
 		            FROM chunks ORDER BY `+scored+` LIMIT $2) walk
 		   WHERE score < 0) ranked
-		  JOIN chunks ON chunks.user_id = ranked.user_id AND chunks.id = ranked.id
+		  JOIN chunks ON chunks.library_id = ranked.library_id AND chunks.id = ranked.id
 		 WHERE rn <= $3 ORDER BY ranked.doc_id, ranked.score`, query, walkLimit(ctx, tx), pool)
 }
 
@@ -406,10 +406,10 @@ func explain(t *testing.T, ctx context.Context, app *sql.DB, user, query string,
 			 WHERE score < 0 ORDER BY score LIMIT 32`, []any{query, doc}},
 		{"one walk + window", `SELECT ranked.doc_id, ranked.id, ranked.score, chunks.text FROM (
 		  SELECT walk.*, row_number() OVER (PARTITION BY doc_id ORDER BY score, id) AS rn
-		    FROM (SELECT chunks.user_id, chunks.doc_id, chunks.id, ` + scored + ` AS score
+		    FROM (SELECT chunks.library_id, chunks.doc_id, chunks.id, ` + scored + ` AS score
 		            FROM chunks ORDER BY ` + scored + ` LIMIT 1000000) walk
 		   WHERE score < 0) ranked
-		  JOIN chunks ON chunks.user_id = ranked.user_id AND chunks.id = ranked.id
+		  JOIN chunks ON chunks.library_id = ranked.library_id AND chunks.id = ranked.id
 		 WHERE rn <= 32`, []any{query}},
 	}
 	for _, p := range plans {
@@ -442,11 +442,11 @@ func explain(t *testing.T, ctx context.Context, app *sql.DB, user, query string,
 func load(t *testing.T, owner *sql.DB, user string, from, docs int) {
 	t.Helper()
 	exec(t, owner, `
-		INSERT INTO documents (user_id, doc_id, title, format, source_path, sha256, status, chunk_count)
+		INSERT INTO documents (library_id, doc_id, title, format, source_path, sha256, status, chunk_count)
 		SELECT $1, 'doc-' || d, 'Document ' || d, 'pdf', '/spike/' || $1 || '/' || d, md5($1 || d), 'ready', 0
 		  FROM generate_series($3::int + 1, $3::int + $2::int) AS d`, user, docs, from)
 	exec(t, owner, `
-		INSERT INTO chunks (user_id, doc_id, ordinal, section, heading_path, text)
+		INSERT INTO chunks (library_id, doc_id, ordinal, section, heading_path, text)
 		SELECT $1, 'doc-' || d, c, 's' || (c / 10),
 		       'w' || (1 + floor(power(random(), 3) * $3::int)) || ' > w' || (1 + floor(power(random(), 3) * $3::int)),
 		       (SELECT string_agg('w' || (1 + floor(power(random(), 3) * $3::int)::int), ' ')
@@ -455,8 +455,8 @@ func load(t *testing.T, owner *sql.DB, user string, from, docs int) {
 		       LATERAL generate_series(1, 20 + floor(random() * 100)::int) AS c`,
 		user, docs, vocabulary, wordsPerChunk, from)
 	exec(t, owner, `UPDATE documents SET chunk_count = n FROM (
-		SELECT doc_id, count(*) AS n FROM chunks WHERE user_id = $1 GROUP BY doc_id) c
-		WHERE documents.user_id = $1 AND documents.doc_id = c.doc_id`, user)
+		SELECT doc_id, count(*) AS n FROM chunks WHERE library_id = $1 GROUP BY doc_id) c
+		WHERE documents.library_id = $1 AND documents.doc_id = c.doc_id`, user)
 }
 
 func pickQueries() []string {
@@ -493,7 +493,8 @@ func inTx(ctx context.Context, db *sql.DB, user string, work func(*sql.Tx) error
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`SET LOCAL app.user_id = '%s'`, user)); err != nil {
+	if _, err := tx.ExecContext(ctx,
+		"SELECT set_config('app.user_id', $1, true), set_config('app.library_id', $1, true)", user); err != nil {
 		return err
 	}
 	return work(tx)

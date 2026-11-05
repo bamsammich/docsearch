@@ -11,8 +11,8 @@ import (
 )
 
 const createUploadLink = `-- name: CreateUploadLink :exec
-INSERT INTO upload_links (token_hash, user_id, expires_at)
-VALUES ($1, current_setting('app.user_id', true), $2)
+INSERT INTO upload_links (token_hash, library_id, expires_at)
+VALUES ($1, current_setting('app.library_id', true), $2)
 `
 
 type CreateUploadLinkParams struct {
@@ -49,9 +49,9 @@ func (q *Queries) GetUpload(ctx context.Context, key string) (GetUploadRow, erro
 }
 
 const putUpload = `-- name: PutUpload :exec
-INSERT INTO uploads (user_id, key, filename, sha256, content)
-VALUES (current_setting('app.user_id', true), $1, $2, $3, $4)
-ON CONFLICT (user_id, key) DO UPDATE
+INSERT INTO uploads (library_id, key, filename, sha256, content)
+VALUES (current_setting('app.library_id', true), $1, $2, $3, $4)
+ON CONFLICT (library_id, key) DO UPDATE
   SET filename = EXCLUDED.filename, sha256 = EXCLUDED.sha256,
       content = EXCLUDED.content, uploaded_at = now()
 `
@@ -74,15 +74,15 @@ func (q *Queries) PutUpload(ctx context.Context, arg PutUploadParams) error {
 }
 
 const redeemUploadLink = `-- name: RedeemUploadLink :one
-SELECT COALESCE(redeem_upload_link($1::text), '')::text AS user_id
+SELECT COALESCE(redeem_upload_link($1::text), '')::text AS library_id
 `
 
 // Redeeming runs before any user is known, on a bare connection.
 func (q *Queries) RedeemUploadLink(ctx context.Context, tokenHash string) (string, error) {
 	row := q.db.QueryRowContext(ctx, redeemUploadLink, tokenHash)
-	var user_id string
-	err := row.Scan(&user_id)
-	return user_id, err
+	var library_id string
+	err := row.Scan(&library_id)
+	return library_id, err
 }
 
 const uploadLinkOpen = `-- name: UploadLinkOpen :one

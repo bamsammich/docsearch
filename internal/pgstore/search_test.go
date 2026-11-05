@@ -45,13 +45,13 @@ func (s *SearchSuite) seed(id, title string, chunks int) {
 // seedFor writes one ready document holding chunks chunks into user's library.
 func (s *SearchSuite) seedFor(user, id, title string, chunks int) {
 	s.writeAs(user, `INSERT INTO documents
-		   (user_id,doc_id,title,format,source_path,sha256,status,chunk_count)
+		   (library_id,doc_id,title,format,source_path,sha256,status,chunk_count)
 		 VALUES ($1,$2,$3,'pdf','/x',$4,'ready',$5)`,
 		user, id, title, id, chunks)
 	for i := range chunks {
 		kind, text := chunkBody(id, i)
 		s.writeAs(user, `INSERT INTO chunks
-			   (user_id,doc_id,ordinal,section,heading_path,text,kind,image_count)
+			   (library_id,doc_id,ordinal,section,heading_path,text,kind,image_count)
 			 VALUES ($1,$2,$3,$4,$5,$6,$7,0)`,
 			user, id, i, "1."+strconv.Itoa(i),
 			title+" > Section "+strconv.Itoa(i), text, kind)
@@ -109,7 +109,7 @@ func (s *SearchSuite) TestUnscopedSearchDoesNotLetOneDocumentSweepTheTop() {
 // The scores are compared, not the chunks: these chunks tie, and pg_textsearch
 // orders a tie by how far its top-k search was asked to look.
 func (s *SearchSuite) TestUnscopedSearchRanksEachDocumentAsItsOwnSearchDoes() {
-	s.write(`INSERT INTO index_terms (user_id, doc_id, term, section)
+	s.write(`INSERT INTO index_terms (library_id, doc_id, term, section)
 		VALUES ($1, 'big', 'Planet, charting a', '1.9')`, builtinUser)
 
 	for _, include := range []bool{false, true} {
@@ -142,10 +142,10 @@ func scoresOf(results []SearchResult, docID string) []float64 {
 // A document still being ingested has chunks but is not searchable yet.
 func (s *SearchSuite) TestUnscopedSearchLeavesOutADocumentNotReady() {
 	s.write(`INSERT INTO documents
-		   (user_id,doc_id,title,format,source_path,sha256,status,chunk_count)
+		   (library_id,doc_id,title,format,source_path,sha256,status,chunk_count)
 		 VALUES ($1,'half','Half Built','pdf','/x','half','indexing',1)`, builtinUser)
 	s.write(`INSERT INTO chunks
-		   (user_id,doc_id,ordinal,section,heading_path,text,kind,image_count)
+		   (library_id,doc_id,ordinal,section,heading_path,text,kind,image_count)
 		 VALUES ($1,'half',0,'1','Half Built > Planet','planet orbit planet orbit','prose',0)`, builtinUser)
 
 	for _, r := range s.search(SearchParams{Query: "planet orbit", K: 25}) {
@@ -206,13 +206,13 @@ func bestKeywordRank(res []SearchResult) int {
 // "10_ Rules" would be a wildcard and sweep in "100 Rules".
 func (s *SearchSuite) TestASectionFilterHasNoWildcards() {
 	s.write(`INSERT INTO documents
-		   (user_id,doc_id,title,format,source_path,sha256,status,chunk_count)
+		   (library_id,doc_id,title,format,source_path,sha256,status,chunk_count)
 		 VALUES ($1,'wild','Wild','pdf','/x','wild','ready',3)`, builtinUser)
 	for i, heading := range []string{
 		"Wild > 10_ Rules", "Wild > 10_ Rules > Detail", "Wild > 100 Rules > Detail",
 	} {
 		s.write(`INSERT INTO chunks
-			   (user_id,doc_id,ordinal,section,heading_path,text,kind,image_count)
+			   (library_id,doc_id,ordinal,section,heading_path,text,kind,image_count)
 			 VALUES ($1,'wild',$2,$3,$4,'calibrate the sensor before use','prose',0)`,
 			builtinUser, i, strconv.Itoa(i+1), heading)
 	}
@@ -230,7 +230,7 @@ func (s *SearchSuite) TestASectionFilterHasNoWildcards() {
 // in a search of its document and in a search of the whole library, which
 // reads every document's entries in one query.
 func (s *SearchSuite) TestAnIndexEntryLiftsTheSectionItNames() {
-	s.write(`INSERT INTO index_terms (user_id, doc_id, term, section)
+	s.write(`INSERT INTO index_terms (library_id, doc_id, term, section)
 		VALUES ($1, 'big', 'Planet, charting a', '1.9')`, builtinUser)
 
 	scoped := s.search(SearchParams{Query: "planet", DocID: "big", K: 5})
@@ -289,7 +289,7 @@ func (s *SearchSuite) TestASecondAccountSearchesItsOwnLibrary() {
 	}
 
 	s.writeAs(other, `INSERT INTO chunks
-		   (user_id,doc_id,ordinal,section,heading_path,text,kind,image_count)
+		   (library_id,doc_id,ordinal,section,heading_path,text,kind,image_count)
 		 VALUES ($1,'small',6,'1.6','Small Guide > Zebras','count the zebra stripes','prose',0)`,
 		other)
 	got, err := theirs.Search(s.T().Context(), SearchParams{Query: "zebra", K: 8})

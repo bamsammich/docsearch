@@ -57,10 +57,10 @@ func (q *Queries) ConfirmDocument(ctx context.Context, arg ConfirmDocumentParams
 
 const copyDocumentAs = `-- name: CopyDocumentAs :exec
 INSERT INTO documents (
-  user_id, doc_id, title, format, source_path, source_kind, sha256,
+  library_id, doc_id, title, format, source_path, source_kind, sha256,
   page_count, chunk_count, status, ingested_at, warnings
 )
-SELECT user_id, $1::text, title, format, source_path, source_kind, sha256,
+SELECT library_id, $1::text, title, format, source_path, source_kind, sha256,
        page_count, chunk_count, status, ingested_at, warnings
   FROM documents WHERE doc_id = $2::text
 `
@@ -328,13 +328,13 @@ func (q *Queries) IndexTermSections(ctx context.Context, docID string) ([]string
 
 const insertChunk = `-- name: InsertChunk :exec
 INSERT INTO chunks (
-  user_id, doc_id, ordinal, section, page_start, page_end, printed_page_start,
+  library_id, doc_id, ordinal, section, page_start, page_end, printed_page_start,
   image_count, kind, url, fragment, heading_path, text
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 `
 
 type InsertChunkParams struct {
-	UserID           string
+	LibraryID        string
 	DocID            string
 	Ordinal          int32
 	Section          sql.NullString
@@ -351,7 +351,7 @@ type InsertChunkParams struct {
 
 func (q *Queries) InsertChunk(ctx context.Context, arg InsertChunkParams) error {
 	_, err := q.db.ExecContext(ctx, insertChunk,
-		arg.UserID,
+		arg.LibraryID,
 		arg.DocID,
 		arg.Ordinal,
 		arg.Section,
@@ -370,13 +370,13 @@ func (q *Queries) InsertChunk(ctx context.Context, arg InsertChunkParams) error 
 
 const insertDocument = `-- name: InsertDocument :exec
 INSERT INTO documents (
-  user_id, doc_id, title, format, source_path, source_kind, sha256,
+  library_id, doc_id, title, format, source_path, source_kind, sha256,
   page_count, chunk_count, status, ingested_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, 'ingesting', NULL)
 `
 
 type InsertDocumentParams struct {
-	UserID     string
+	LibraryID  string
 	DocID      string
 	Title      string
 	Format     string
@@ -391,7 +391,7 @@ type InsertDocumentParams struct {
 // MarkDocumentReady runs.
 func (q *Queries) InsertDocument(ctx context.Context, arg InsertDocumentParams) error {
 	_, err := q.db.ExecContext(ctx, insertDocument,
-		arg.UserID,
+		arg.LibraryID,
 		arg.DocID,
 		arg.Title,
 		arg.Format,
@@ -404,19 +404,19 @@ func (q *Queries) InsertDocument(ctx context.Context, arg InsertDocumentParams) 
 }
 
 const insertIndexTerm = `-- name: InsertIndexTerm :exec
-INSERT INTO index_terms (user_id, doc_id, term, section) VALUES ($1, $2, $3, $4)
+INSERT INTO index_terms (library_id, doc_id, term, section) VALUES ($1, $2, $3, $4)
 `
 
 type InsertIndexTermParams struct {
-	UserID  string
-	DocID   string
-	Term    string
-	Section string
+	LibraryID string
+	DocID     string
+	Term      string
+	Section   string
 }
 
 func (q *Queries) InsertIndexTerm(ctx context.Context, arg InsertIndexTermParams) error {
 	_, err := q.db.ExecContext(ctx, insertIndexTerm,
-		arg.UserID,
+		arg.LibraryID,
 		arg.DocID,
 		arg.Term,
 		arg.Section,
@@ -511,10 +511,10 @@ type ReadyDocumentWithDigestRow struct {
 // last statement here flips its status.
 //
 // Every statement runs in a transaction that opened with
-// SET LOCAL app.user_id, so row-level security scopes it to one library. A
-// read therefore names no user: the policy is where that is decided, and a
+// SET LOCAL app.library_id, so row-level security scopes it to one library. A
+// read therefore names no library: the policy is where that is decided, and a
 // second copy of the filter in 45 queries is 45 places for it to be wrong.
-// A write names user_id because a row has to carry its owner, and the policy
+// A write names library_id because a row has to carry its owner, and the policy
 // then refuses a value that disagrees with the session.
 // warnings is read whole because the pipeline version that wrote the
 // report is one of its keys.
@@ -551,22 +551,22 @@ func (q *Queries) SectionHasChunks(ctx context.Context, arg SectionHasChunksPara
 }
 
 const upsertPage = `-- name: UpsertPage :exec
-INSERT INTO pages (user_id, doc_id, page, text) VALUES ($1, $2, $3, $4)
-ON CONFLICT (user_id, doc_id, page) DO UPDATE SET text = EXCLUDED.text
+INSERT INTO pages (library_id, doc_id, page, text) VALUES ($1, $2, $3, $4)
+ON CONFLICT (library_id, doc_id, page) DO UPDATE SET text = EXCLUDED.text
 `
 
 type UpsertPageParams struct {
-	UserID string
-	DocID  string
-	Page   int32
-	Text   string
+	LibraryID string
+	DocID     string
+	Page      int32
+	Text      string
 }
 
 // A page arrives again when a site is re-crawled, so the write is an upsert
 // rather than an insert that has to be preceded by a delete.
 func (q *Queries) UpsertPage(ctx context.Context, arg UpsertPageParams) error {
 	_, err := q.db.ExecContext(ctx, upsertPage,
-		arg.UserID,
+		arg.LibraryID,
 		arg.DocID,
 		arg.Page,
 		arg.Text,

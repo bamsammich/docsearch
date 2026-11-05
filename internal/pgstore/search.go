@@ -260,7 +260,7 @@ func (r searcher) acrossDocuments(
 //   - It carries keys only. pg_textsearch 1.4.0 scores a projected <@>
 //     standalone, at about 60 microseconds a row.
 //   - Sorts are off. Without a LIMIT, row-level security leads the planner to
-//     read the partition by its user_id index, score every row standalone and
+//     read the partition by its library_id index, score every row standalone and
 //     sort, which took 260 ms.
 //   - It runs as an unnamed statement. Executed from the driver's cached
 //     prepared statement, the same plan took 190 ms.
@@ -462,7 +462,7 @@ const scored = `(chunks.heading_path || ' ' || chunks.heading_path || ' ' ||
 // security already limits the rows to the account's, but through a setting
 // the planner does not read, so without the test it plans for every
 // partition and pg_textsearch refuses the index that scored names.
-const ownPartition = `chunks.user_id = $3`
+const ownPartition = `chunks.library_id = $3`
 
 // sectionWithin tests a chunk against the section filter, which a statement
 // passes after n arguments of its own.
