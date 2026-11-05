@@ -1,11 +1,13 @@
 // Package settings changes how docsearch is configured, from the library UI.
 //
-// A deployment keeps its settings in one place. Started with docsearch.yaml,
-// the file holds them, and a change is never stored: it comes back as the
-// updated file, for the operator to commit and deploy. Started without one,
-// a change is kept in the database and read when the server next starts.
-// Either way a setting the environment or the command line sets is refused,
-// since what is kept would never take effect over it.
+// A setting is taken from the strongest place that holds it: the command
+// line, the environment, docsearch.yaml, the database, then the default. A
+// change made in the UI is kept in the database, and takes effect when the
+// server next starts. A setting docsearch.yaml holds is changed in the
+// file, so for one of those the change comes back as the updated file, for
+// the operator to commit and deploy, and nothing is stored. A setting the
+// environment or the command line sets is refused, since neither a kept
+// value nor the file would take effect over it.
 package settings
 
 import (
@@ -49,13 +51,13 @@ type Change struct {
 
 // Result is what a change came to.
 type Result struct {
-	// File is docsearch.yaml with the change made, for a deployment that
-	// reads one. Nothing was stored.
+	// File is docsearch.yaml with the changes to settings it holds made,
+	// and empty when the changes touched none. Those were not stored.
 	File string
 	// Changed are the 1-based lines of File the change touched.
 	Changed []int
-	// Saved is true when the change was kept in the database, to take
-	// effect when the server next starts.
+	// Saved is true when changes to settings the file does not hold were
+	// kept in the database, to take effect when the server next starts.
 	Saved bool
 }
 
@@ -88,12 +90,8 @@ func New(
 	return &Service{editable: editable, origins: origins, file: file, store: store, read: read}
 }
 
-// Stored is what the database keeps, by flag, for a deployment with no file.
-// It is empty for one that reads docsearch.yaml.
+// Stored is what the database keeps, by flag.
 func (s *Service) Stored(ctx context.Context) (map[string]string, error) {
-	if s.file != "" {
-		return map[string]string{}, nil
-	}
 	byKey, err := s.store.Stored(ctx)
 	if err != nil {
 		return nil, err
@@ -107,34 +105,61 @@ func (s *Service) Stored(ctx context.Context) (map[string]string, error) {
 	return out, nil
 }
 
-// Update makes changes: into the file it returns, or into the database.
+// Update makes changes: a setting docsearch.yaml holds into the file it
+// returns, and any other into the database.
 func (s *Service) Update(ctx context.Context, changes []Change) (Result, error) {
-	values := make(map[string]any, len(changes))
-	for _, change := range changes {
-		e, err := s.check(change)
+	inFile, kept, err := s.sort(changes)
+	if err != nil {
+		return Result{}, err
+	}
+	var result Result
+	if len(inFile) > 0 {
+		rewritten, err := s.rewrite(inFile)
 		if err != nil {
 			return Result{}, err
 		}
-		values[e.Key] = typed(e, change.Value)
+		result = rewritten
 	}
-	if s.file != "" {
-		return s.rewrite(values)
+	if len(kept) > 0 {
+		if err := s.keep(ctx, kept); err != nil {
+			return Result{}, err
+		}
+		result.Saved = true
 	}
-	return s.keep(ctx, changes)
+	return result, nil
 }
 
-// keep stores changes in the database, for a deployment with no file.
-func (s *Service) keep(ctx context.Context, changes []Change) (Result, error) {
+// sort checks changes and parts them: the values docsearch.yaml holds, by
+// key, and the changes to keep in the database.
+func (s *Service) sort(changes []Change) (map[string]any, []Change, error) {
+	inFile := map[string]any{}
+	var kept []Change
+	for _, change := range changes {
+		e, err := s.check(change)
+		if err != nil {
+			return nil, nil, err
+		}
+		if s.origins[change.Flag].Kind == config.FromFile {
+			inFile[e.Key] = typed(e, change.Value)
+			continue
+		}
+		kept = append(kept, change)
+	}
+	return inFile, kept, nil
+}
+
+// keep stores changes in the database.
+func (s *Service) keep(ctx context.Context, changes []Change) error {
 	for _, change := range changes {
 		var value *string
 		if change.Value != "" {
 			value = &change.Value
 		}
 		if err := s.store.Set(ctx, s.editable[change.Flag].Key, value); err != nil {
-			return Result{}, err
+			return err
 		}
 	}
-	return Result{Saved: true}, nil
+	return nil
 }
 
 func (s *Service) check(change Change) (Editable, error) {

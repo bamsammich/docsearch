@@ -70,8 +70,9 @@ var editable = map[string]settings.Editable{
 	flagSignUp:     {Key: fileKeys[flagSignUp], Boolean: true},
 }
 
-// applyStored takes what the database keeps for a deployment with no
-// docsearch.yaml, for every editable setting nothing stronger set.
+// applyStored takes what the database keeps for every editable setting
+// nothing stronger set. The order is the default, then the database, then
+// docsearch.yaml, the environment and the command line.
 func applyStored(cfg *config.Config, stored map[string]string) {
 	for flag, e := range editable {
 		value, kept := stored[e.Key]

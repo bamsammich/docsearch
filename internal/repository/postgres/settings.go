@@ -8,8 +8,8 @@ import (
 	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
 )
 
-// Settings are the settings an administrator changed, kept for a docsearch
-// started without docsearch.yaml.
+// Settings are the settings an administrator changed in the library UI, kept
+// for whatever docsearch.yaml leaves out.
 type Settings struct {
 	admins *Admins
 }

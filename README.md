@@ -423,8 +423,16 @@ an in-flight job can checkpoint or roll back instead of being killed mid-write.
 | permit public bind | `--allow-public-bind` | `DOCSEARCH_ALLOW_PUBLIC_BIND=true` | `allow_public_bind` |
 
 `docsearch-server --config docsearch.yaml` (or `DOCSEARCH_CONFIG`) reads the
-server's settings from a file, so a deployment repository can hold them. The
-environment overrides the file, and the command line overrides both. Nested
+server's settings from a file, so a deployment repository can hold them.
+A setting is taken from the strongest place that holds it:
+
+| strongest | | | | weakest |
+|---|---|---|---|---|
+| command line | environment | `docsearch.yaml` | database | default |
+
+The database holds what an administrator changed on the Sign-in page, for
+a setting nothing stronger sets. A setting the file holds is changed in the
+file: the Sign-in page shows the updated file to commit and deploy. Nested
 keys nest in the file:
 
 ```yaml

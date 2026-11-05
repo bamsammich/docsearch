@@ -16,12 +16,22 @@
   let updated = $state<{ text: string; changed: Set<number> } | null>(null);
 
   const fileName = $derived(file.split("/").pop() || "docsearch.yaml");
-  // What a field starts from: the value kept for the next start when there
-  // is one, and the running value otherwise.
-  const baseline = (s: Setting) => (s.hasStored ? s.stored : s.value);
-  const changes = $derived(
-    settings.filter((s) => s.editable && draft[s.name] !== undefined && draft[s.name] !== baseline(s))
-      .map((s) => ({ name: s.name, value: draft[s.name] ?? "" })),
+  // A setting docsearch.yaml holds changes in the file, and any other is
+  // kept here, beneath the file.
+  const inFile = (s: Setting) => s.source === "file";
+  // What a field starts from: the value kept for the next start when that is
+  // where it changes, and the running value otherwise.
+  const baseline = (s: Setting) => (s.hasStored && !inFile(s) ? s.stored : s.value);
+  const changed = $derived(
+    settings.filter((s) => s.editable && draft[s.name] !== undefined && draft[s.name] !== baseline(s)),
+  );
+  const changes = $derived(changed.map((s) => ({ name: s.name, value: draft[s.name] ?? "" })));
+  const touchesFile = $derived(changed.some(inFile));
+  const touchesStore = $derived(changed.some((s) => !inFile(s)));
+  const action = $derived(
+    touchesFile && touchesStore ? `Save, and show ${fileName}`
+      : touchesFile ? `Show ${fileName} with this change`
+      : "Save",
   );
 
   async function load(): Promise<void> {
@@ -47,12 +57,10 @@
     busy = true;
     try {
       const out = await accounts.updateSignIn({ changes });
+      updated = out.file ? { text: out.file, changed: new Set(out.changedLines) } : null;
       if (out.saved) {
         toast.show("Saved. The change takes effect when docsearch restarts.");
-        updated = null;
         await load();
-      } else {
-        updated = { text: out.file, changed: new Set(out.changedLines) };
       }
     } catch (err) {
       updateError = err instanceof ConnectError && err.code === Code.FailedPrecondition
@@ -93,7 +101,7 @@
 <div class="page-head">
   <h1>Sign-in</h1>
   {#if file}
-    <p><span class="mono">{fileName}</span> holds these settings, so a change here is not saved. Copy the updated file into your deployment and redeploy.</p>
+    <p>A setting <span class="mono">{fileName}</span> holds changes in that file: copy the updated file into your deployment and redeploy. Any other change is saved here and takes effect when docsearch restarts.</p>
   {:else}
     <p>A change saved here takes effect when docsearch restarts. The environment and the command line override it.</p>
   {/if}
@@ -120,7 +128,7 @@
               {:else}
                 <span class="setting-value">{s.value || "Not set"}</span>
               {/if}
-              {#if s.hasStored && s.stored !== s.value}
+              {#if s.hasStored && s.stored !== s.value && (s.source === "default" || s.source === "database")}
                 <span class="setting-source">Saved · takes effect when docsearch restarts</span>
               {/if}
               {#if s.source === "file"}
@@ -140,9 +148,7 @@
       </dl>
       {#if settings.some((s) => s.editable)}
         <div class="row-btns signin-actions">
-          <button class="btn primary" onclick={apply} disabled={busy || !changes.length}>
-            {file ? `Show ${fileName} with this change` : "Save"}
-          </button>
+          <button class="btn primary" onclick={apply} disabled={busy || !changes.length}>{action}</button>
           <button class="btn quiet" onclick={undo} disabled={busy || (!changes.length && !updated)}>Undo changes</button>
         </div>
         {#if updateError}<p class="err" role="alert">{updateError}</p>{/if}

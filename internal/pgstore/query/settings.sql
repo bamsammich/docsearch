@@ -1,4 +1,4 @@
--- Settings an administrator changed, kept for a docsearch started without
+-- Settings an administrator changed in the library UI, beneath
 -- docsearch.yaml. The request role reads them; set_setting writes them.
 
 -- name: StoredSettings :many

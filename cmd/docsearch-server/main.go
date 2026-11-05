@@ -236,9 +236,10 @@ func configFrom(cmd *cli.Command, args []string) (config.Config, error) {
 func start(cfg config.Config) error {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-	// Without docsearch.yaml, the database is the one store of settings an
-	// administrator changed in the library UI.
-	if cfg.File == "" && cfg.DSN != "" {
+	// What an administrator changed in the library UI is kept in the
+	// database, beneath docsearch.yaml: it fills only a setting nothing
+	// stronger set.
+	if cfg.DSN != "" {
 		if err := readStored(&cfg); err != nil {
 			return err
 		}
