@@ -169,13 +169,67 @@ func (s *PasswordSuite) authorize(at, clientID, challenge string) string {
 	return s.site.URL + location
 }
 
+// signIn submits the sign-in form the way a browser does: it loads the page
+// and posts with the Origin that the page's Referrer-Policy lets through.
 func (s *PasswordSuite) signIn(page, username, secret string) *http.Response {
+	shown := s.do(http.MethodGet, page, nil, nil)
+	s.Require().Equal(http.StatusOK, shown.StatusCode)
+	origin := formOrigin(shown.Header.Get("Referrer-Policy"), s.site.URL, s.site.URL+"/login")
+	return s.postSignIn(page, origin, username, secret)
+}
+
+// postSignIn posts the sign-in form with the given Origin; an empty one is
+// sent as no header at all.
+func (s *PasswordSuite) postSignIn(page, origin, username, secret string) *http.Response {
 	id := strings.TrimPrefix(page, s.site.URL+"/login?authRequestID=")
 	id, err := url.QueryUnescape(id)
 	s.Require().NoError(err)
 	form := url.Values{"authRequestID": {id}, "username": {username}, "password": {secret}}
-	return s.do(http.MethodPost, s.site.URL+"/login", strings.NewReader(form.Encode()),
-		map[string]string{"Content-Type": "application/x-www-form-urlencoded"})
+	header := map[string]string{"Content-Type": "application/x-www-form-urlencoded"}
+	if origin != "" {
+		header["Origin"] = origin
+	}
+	return s.do(http.MethodPost, s.site.URL+"/login", strings.NewReader(form.Encode()), header)
+}
+
+// formOrigin is the Origin a browser sends when a form on a page at
+// pageOrigin (scheme://host), served with the given Referrer-Policy, posts
+// to target. It follows the Fetch standard's "serialize a request origin" for
+// a POST that is not CORS: the policy can hide the origin, and a hidden one
+// is "null".
+func formOrigin(policy, pageOrigin, target string) string {
+	to, err := url.Parse(target)
+	if err != nil {
+		return "null"
+	}
+	switch referrerPolicy(policy) {
+	case "no-referrer":
+		return "null"
+	case "no-referrer-when-downgrade", "strict-origin", "strict-origin-when-cross-origin":
+		if strings.HasPrefix(pageOrigin, "https:") && to.Scheme != "https" {
+			return "null"
+		}
+	case "same-origin":
+		if pageOrigin != to.Scheme+"://"+to.Host {
+			return "null"
+		}
+	}
+	return pageOrigin
+}
+
+// referrerPolicy is the policy a browser takes from a Referrer-Policy
+// header: the last token it knows, or its default when there is none.
+func referrerPolicy(header string) string {
+	chosen := "strict-origin-when-cross-origin"
+	for token := range strings.SplitSeq(header, ",") {
+		switch token = strings.ToLower(strings.TrimSpace(token)); token {
+		case "no-referrer", "no-referrer-when-downgrade", "same-origin", "origin",
+			"strict-origin", "origin-when-cross-origin", "strict-origin-when-cross-origin",
+			"unsafe-url":
+			chosen = token
+		}
+	}
+	return chosen
 }
 
 // code follows a successful sign-in back through the provider to the
@@ -258,6 +312,30 @@ func (s *PasswordSuite) TestAWrongPasswordStaysOnThePage() {
 	refused := s.signIn(page, "alice", "not the password at all")
 	s.Equal(http.StatusUnauthorized, refused.StatusCode)
 	s.Contains(s.readAll(refused), "wrong username or password")
+}
+
+// A browser on docsearch's own page names that page's origin, so the form
+// gets through. no-referrer on the page once made every browser send
+// Origin: null instead, and the check refused them all.
+func (s *PasswordSuite) TestTheSignInPageSendsItsOwnOrigin() {
+	found := s.discover()
+	_, challenge := pkce()
+	page := s.authorize(found.Authorization, s.register(found.Registration), challenge)
+	shown := s.do(http.MethodGet, page, nil, nil)
+	s.Equal(s.site.URL,
+		formOrigin(shown.Header.Get("Referrer-Policy"), s.site.URL, s.site.URL+"/login"))
+}
+
+// A form on another site, or on a sandboxed or data: page that a browser
+// names only as "null", cannot sign a person in.
+func (s *PasswordSuite) TestASignInPostedFromElsewhereIsRefused() {
+	for _, origin := range []string{"https://elsewhere.example", "null"} {
+		found := s.discover()
+		_, challenge := pkce()
+		page := s.authorize(found.Authorization, s.register(found.Registration), challenge)
+		refused := s.postSignIn(page, origin, "alice", alicePassword)
+		s.Equal(http.StatusForbidden, refused.StatusCode, origin)
+	}
 }
 
 // The code is useless without the verifier only the client holds.
