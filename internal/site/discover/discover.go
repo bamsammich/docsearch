@@ -14,7 +14,10 @@
 //     a documentation crawl.
 //   - The seed page's own links are what the publisher put on the page as its
 //     index. They are in scope by declaration rather than by prefix: a hub
-//     page legitimately lists documents elsewhere on the host.
+//     page legitimately lists documents elsewhere on the host. Once a
+//     manifest declares pages under the seed, though, the seed is a section
+//     of a larger site, and its links outside that section are the site's
+//     navigation: one probed seed covers 187 pages and its sidebar links 882.
 //   - llms.txt is ordered and titled, and not authoritative: on one probed
 //     site it holds 169 of 210 pages, omitting an entire command reference.
 //     It often lists each page's Markdown twin rather than the page, which
@@ -145,6 +148,7 @@ func Discover(
 	if err := cov.addLLMsTxt(ctx, f, seed, revalidate); err != nil {
 		return nil, err
 	}
+	cov.scopeIndex(seed)
 	cov.dropIndexNonPages()
 	cov.union()
 	cov.compareSources()
@@ -153,7 +157,7 @@ func Discover(
 
 // addIndexPage adds the links the seed page declares. They are in scope by
 // declaration rather than by prefix: a hub page legitimately lists documents
-// elsewhere on the host.
+// elsewhere on the host. scopeIndex narrows them once a manifest answers.
 func (c *Coverage) addIndexPage(
 	ctx context.Context,
 	f Fetcher,
@@ -178,6 +182,26 @@ func (c *Coverage) addIndexPage(
 	}
 	c.FromIndex = links
 	return nil
+}
+
+// scopeIndex holds the index page's links to the seed's prefix once a
+// manifest declares pages under it. A hub page whose documents sit elsewhere
+// has no manifest under its own path, so its links stay in scope by
+// declaration. A section of a larger site does have one, and its page links
+// the whole site's navigation, which is not what the seed asked for.
+func (c *Coverage) scopeIndex(seed string) {
+	if len(c.FromSitemap) == 0 && len(c.FromLLMsTxt) == 0 {
+		return
+	}
+	before := len(c.FromIndex)
+	c.FromIndex = slices.DeleteFunc(c.FromIndex, func(u string) bool {
+		return !InPrefixScope(u, seed)
+	})
+	if dropped := before - len(c.FromIndex); dropped > 0 {
+		c.Notes = append(c.Notes, fmt.Sprintf(
+			"%d seed page link(s) outside the seed's path left out: a manifest declares "+
+				"the pages under it", dropped))
+	}
 }
 
 // dropIndexNonPages removes the index page's links that name no page:
@@ -352,8 +376,9 @@ func scopedAndSorted(urls []string, seed string) []string {
 // InPrefixScope reports whether url sits under the seed's path, on the
 // seed's host.
 //
-// Applied to sources that describe a whole site, never to links the seed
-// itself declares: those are in scope because the publisher put them there,
+// Applied to sources that describe a whole site. Links the seed itself
+// declares are held to it only when a manifest declares pages under the
+// seed: otherwise they are in scope because the publisher put them there,
 // and requiring the seed's prefix discards the ordinary case of an index
 // page beside what it indexes.
 func InPrefixScope(raw, seed string) bool {

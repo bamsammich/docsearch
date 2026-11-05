@@ -1,6 +1,6 @@
 {
  "_method": {
-  "authored": "2026-10-25. The blind queries were written and hashed before any crawl ran; the expectation-informed queries were written after reading the index's heading paths.",
+  "authored": "2026-10-25. The blind queries were written and hashed before any crawl ran; the expectation-informed queries were written after reading the index's heading paths. A second round of 69 blind queries over five more sites was written and hashed on the same date, before those sites were first crawled; 54 of them are in this file.",
   "rule": "A query that misses STAYS in this file, unedited. Rewording a query until it passes overfits to a moving test set and destroys the measurement.",
   "blindness": "blind:true queries were written from knowledge of each project's documentation, before the index existed. blind:false queries were written after reading the index's heading paths and are reported separately, so they cannot inflate the blind hit rate.",
   "expectation_corrections": "Some blind expect values were changed after authoring, and each change is recorded in the query's note. Two kinds were allowed: correcting an expect to the intended page's live title, read from the site itself (its llms.txt or the page's h1) rather than from the index; and narrowing an expect that matched many pages to the intended page. Narrowing can only turn a hit into a miss. No query text was changed, and no expect was widened.",
@@ -13,7 +13,7 @@
    "figure-dominated": "the answer sits mostly in a code block, a table or a listing rather than in prose",
    "spans-boundary": "the answer plainly continues across headings within a page"
   },
-  "sites": "Crawled 2026-10-25 from docs.pytest.org/en/stable, www.sphinx-doc.org/en/master, moonrepo.dev/docs, rust-lang.github.io/mdBook and mintlify.com/docs. The sites change, so a re-crawl can move a baseline without any code change; compare builds against the same crawl date."
+  "sites": "Crawled 2026-10-25 from docs.pytest.org/en/stable, www.sphinx-doc.org/en/master, moonrepo.dev/docs, rust-lang.github.io/mdBook and mintlify.com/docs. The sites change, so a re-crawl can move a baseline without any code change; compare builds against the same crawl date. The second round crawled nextjs.org/docs/app, gitbook.com/docs/developers, developers.fireblocks.com/docs and sst.dev/docs on 2026-10-25. Its 15 kubernetes.io/docs/concepts queries are held out because no build indexed that site; docs/research/site-retrieval-baseline.md lists them."
  },
  "documents": {
   "pytest": {
@@ -39,6 +39,26 @@
   "mintlify": {
    "doc_id": "introduction-mintlify",
    "label": "mintlify",
+   "match": "heading"
+  },
+  "nextjs": {
+   "doc_id": "app-router",
+   "label": "nextjs",
+   "match": "heading"
+  },
+  "gitbook-dev": {
+   "doc_id": "developer-documentation-developers-gitbook-documentation",
+   "label": "gitbook-dev",
+   "match": "heading"
+  },
+  "fireblocks": {
+   "doc_id": "developers-fireblocks-com",
+   "label": "fireblocks",
+   "match": "heading"
+  },
+  "sst": {
+   "doc_id": "sst-dev",
+   "label": "sst",
    "match": "heading"
   }
  },
@@ -699,6 +719,492 @@
    "blind": false,
    "query": "require login to view the docs and pass user data for personalization",
    "note": ""
+  },
+  {
+   "id": "n01",
+   "doc": "nextjs",
+   "expect": "Generate Static Params",
+   "category": "heading-term",
+   "blind": true,
+   "query": "generateStaticParams for dynamic routes at build time",
+   "note": "blind expect was \"generateStaticParams\", which matched 6 pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "n02",
+   "doc": "nextjs",
+   "expect": "File Conventions > Proxy",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "run code before a request completes to redirect users who are not logged in",
+   "note": "blind expect was \"proxy\", which matched 14 pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "n03",
+   "doc": "nextjs",
+   "expect": "Image Component",
+   "category": "body-term",
+   "blind": true,
+   "query": "next/image sizes prop for responsive images",
+   "note": ""
+  },
+  {
+   "id": "n04",
+   "doc": "nextjs",
+   "expect": "revalidatePath",
+   "category": "heading-term",
+   "blind": true,
+   "query": "revalidatePath after a mutation to refresh cached data",
+   "note": ""
+  },
+  {
+   "id": "n05",
+   "doc": "nextjs",
+   "expect": "Metadata And Og Images",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "set the page title and description for SEO",
+   "note": "blind expect was \"Metadata\", which matched 17 pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "n06",
+   "doc": "nextjs",
+   "expect": "Getting Started > Route Handlers",
+   "category": "heading-term",
+   "blind": true,
+   "query": "route handlers to build an api endpoint in the app router",
+   "note": "blind expect was \"Route Handlers\", which matched 11 pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "n07",
+   "doc": "nextjs",
+   "expect": "loading.js",
+   "category": "body-term",
+   "blind": true,
+   "query": "loading.js file shows a fallback while a route segment streams",
+   "note": ""
+  },
+  {
+   "id": "n08",
+   "doc": "nextjs",
+   "expect": "redirects",
+   "category": "figure-dominated",
+   "blind": true,
+   "query": "redirects in next.config.js returning source destination permanent",
+   "note": ""
+  },
+  {
+   "id": "n09",
+   "doc": "nextjs",
+   "expect": "Environment Variables",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "keep api keys on the server and expose only some values to the browser",
+   "note": ""
+  },
+  {
+   "id": "n10",
+   "doc": "nextjs",
+   "expect": "Parallel Routes",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "render two pages side by side in the same layout with slots",
+   "note": ""
+  },
+  {
+   "id": "n11",
+   "doc": "nextjs",
+   "expect": "Intercepting Routes",
+   "category": "heading-term",
+   "blind": true,
+   "query": "intercepting routes to open a photo in a modal",
+   "note": ""
+  },
+  {
+   "id": "n12",
+   "doc": "nextjs",
+   "expect": "Functions > Cookies",
+   "category": "body-term",
+   "blind": true,
+   "query": "read a cookie in a server component",
+   "note": "blind expect was \"cookies\", which matched 10 pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "n13",
+   "doc": "nextjs",
+   "expect": "Static Exports",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "host the site as plain html files on s3 without a node server",
+   "note": ""
+  },
+  {
+   "id": "n14",
+   "doc": "nextjs",
+   "expect": "Fetching Data",
+   "category": "spans-boundary",
+   "blind": true,
+   "query": "fetch data in a server component and stream the slow part with suspense",
+   "note": ""
+  },
+  {
+   "id": "n15",
+   "doc": "nextjs",
+   "expect": "Self-Hosting",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "run my next app in docker on my own server",
+   "note": "the live title is \"Self-Hosting\", but the hierarchy taken from the URL path renders it \"Self Hosting\", so the expect cannot match"
+  },
+  {
+   "id": "d01",
+   "doc": "gitbook-dev",
+   "expect": "ContentKit",
+   "category": "heading-term",
+   "blind": true,
+   "query": "contentkit components for an integration block",
+   "note": "blind expect \"ContentKit\" matches 21 pages, the overview and its component reference; no heading-path substring isolates the overview page, so it was left unnarrowed"
+  },
+  {
+   "id": "d02",
+   "doc": "gitbook-dev",
+   "expect": "Rate limiting",
+   "category": "heading-term",
+   "blind": true,
+   "query": "rate limits on the gitbook api",
+   "note": ""
+  },
+  {
+   "id": "d03",
+   "doc": "gitbook-dev",
+   "expect": "manifest",
+   "category": "body-term",
+   "blind": true,
+   "query": "gitbook-manifest.yaml fields for a new integration",
+   "note": ""
+  },
+  {
+   "id": "d04",
+   "doc": "gitbook-dev",
+   "expect": "Authentication",
+   "category": "heading-term",
+   "blind": true,
+   "query": "create a personal access token to call the api",
+   "note": ""
+  },
+  {
+   "id": "d05",
+   "doc": "gitbook-dev",
+   "expect": "Develop your integration locally",
+   "category": "body-term",
+   "blind": true,
+   "query": "gitbook dev command to test an integration locally",
+   "note": "blind expect was \"Develop\", which matched 26 pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "d06",
+   "doc": "gitbook-dev",
+   "expect": "Integrations > Publishing",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "release my integration so other organizations can install it",
+   "note": "blind expect was \"Publish\", which matched 20 pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "d07",
+   "doc": "gitbook-dev",
+   "expect": "Integration runtime > Events",
+   "category": "heading-term",
+   "blind": true,
+   "query": "listen for events when a page is updated",
+   "note": "blind expect was \"Events\", which matched 6 pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "d08",
+   "doc": "gitbook-dev",
+   "expect": "Pagination",
+   "category": "figure-dominated",
+   "blind": true,
+   "query": "paginated list response next page cursor",
+   "note": ""
+  },
+  {
+   "id": "d09",
+   "doc": "gitbook-dev",
+   "expect": "Errors",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "the api returned an error response, what fields does it have",
+   "note": ""
+  },
+  {
+   "id": "d10",
+   "doc": "gitbook-dev",
+   "expect": "Embed",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "put the gitbook assistant chat widget on my own website",
+   "note": "no page in the developers space covers embedding the assistant"
+  },
+  {
+   "id": "d11",
+   "doc": "gitbook-dev",
+   "expect": "OAuth",
+   "category": "heading-term",
+   "blind": true,
+   "query": "oauth flow when installing an integration",
+   "note": ""
+  },
+  {
+   "id": "d12",
+   "doc": "gitbook-dev",
+   "expect": "Quickstart",
+   "category": "spans-boundary",
+   "blind": true,
+   "query": "scaffold a new integration with the cli and run it",
+   "note": ""
+  },
+  {
+   "id": "d13",
+   "doc": "gitbook-dev",
+   "expect": "CLI",
+   "category": "body-term",
+   "blind": true,
+   "query": "install the gitbook cli with npm",
+   "note": ""
+  },
+  {
+   "id": "f01",
+   "doc": "fireblocks",
+   "expect": "Webhooks Overview",
+   "category": "heading-term",
+   "blind": true,
+   "query": "validate the webhook signature",
+   "note": "blind expect was \"Webhook\", which matched 9 pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "f02",
+   "doc": "fireblocks",
+   "expect": "Gas Station",
+   "category": "heading-term",
+   "blind": true,
+   "query": "gas station to fund transaction fees automatically",
+   "note": ""
+  },
+  {
+   "id": "f03",
+   "doc": "fireblocks",
+   "expect": "Idempotency",
+   "category": "body-term",
+   "blind": true,
+   "query": "Idempotency-Key header to avoid creating the same transaction twice",
+   "note": ""
+  },
+  {
+   "id": "f04",
+   "doc": "fireblocks",
+   "expect": "Co-Signer",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "automatically approve transactions from a server without a phone",
+   "note": "the co-signer pages sit under /cosigners and /api-reference, outside the /docs seed"
+  },
+  {
+   "id": "f05",
+   "doc": "fireblocks",
+   "expect": "Rate Limit",
+   "category": "heading-term",
+   "blind": true,
+   "query": "api rate limits per second",
+   "note": ""
+  },
+  {
+   "id": "f06",
+   "doc": "fireblocks",
+   "expect": "Sandbox",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "first api call with a free test workspace",
+   "note": ""
+  },
+  {
+   "id": "f07",
+   "doc": "fireblocks",
+   "expect": "API key",
+   "category": "body-term",
+   "blind": true,
+   "query": "generate a csr file and private key for an api user",
+   "note": ""
+  },
+  {
+   "id": "f08",
+   "doc": "fireblocks",
+   "expect": "Create a Vault Account",
+   "category": "heading-term",
+   "blind": true,
+   "query": "create a vault account and a deposit address",
+   "note": "blind expect was \"Vault\", which matched 12 pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "f09",
+   "doc": "fireblocks",
+   "expect": "Whitelist",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "only allow withdrawals to approved external addresses",
+   "note": ""
+  },
+  {
+   "id": "f10",
+   "doc": "fireblocks",
+   "expect": "SDK",
+   "category": "figure-dominated",
+   "blind": true,
+   "query": "python sdk example creating a transaction",
+   "note": "blind expect \"SDK\" matches 9 pages and none is a Python SDK page, so there was no intended page to narrow to"
+  },
+  {
+   "id": "f11",
+   "doc": "fireblocks",
+   "expect": "Monitoring Transaction Status",
+   "category": "spans-boundary",
+   "blind": true,
+   "query": "transaction statuses from submitted to completed",
+   "note": "blind expect was \"Status\", which matched 6 pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "f12",
+   "doc": "fireblocks",
+   "expect": "Travel Rule Overview",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "send originator and beneficiary information with a transfer",
+   "note": "blind expect was \"Travel Rule\", which matched 9 pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "t01",
+   "doc": "sst",
+   "expect": "Linking",
+   "category": "heading-term",
+   "blind": true,
+   "query": "linking resources to functions with the link prop",
+   "note": ""
+  },
+  {
+   "id": "t02",
+   "doc": "sst",
+   "expect": "Secret >",
+   "category": "body-term",
+   "blind": true,
+   "query": "sst secret set to store an api key",
+   "note": "blind expect was \"Secret\", which matched 7 pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "t03",
+   "doc": "sst",
+   "expect": "Live",
+   "category": "heading-term",
+   "blind": true,
+   "query": "live lambda development with sst dev",
+   "note": ""
+  },
+  {
+   "id": "t04",
+   "doc": "sst",
+   "expect": "Custom Domains",
+   "category": "heading-term",
+   "blind": true,
+   "query": "custom domains for an api with a certificate",
+   "note": ""
+  },
+  {
+   "id": "t05",
+   "doc": "sst",
+   "expect": "Providers >",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "deploy to cloudflare instead of aws",
+   "note": "blind expect was \"Providers\", which matched 5 pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "t06",
+   "doc": "sst",
+   "expect": "Console >",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "web dashboard to see logs and autodeploy from git",
+   "note": "blind expect was \"Console\", which matched 16 pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "t07",
+   "doc": "sst",
+   "expect": "IAM Credentials",
+   "category": "body-term",
+   "blind": true,
+   "query": "aws sso login profile for deploying",
+   "note": ""
+  },
+  {
+   "id": "t08",
+   "doc": "sst",
+   "expect": "Vpc",
+   "category": "heading-term",
+   "blind": true,
+   "query": "vpc component with nat gateway",
+   "note": "blind expect \"Vpc\" matches 19 pages, mostly component arguments named vpc; no heading-path substring isolates the Vpc component page, so it was left unnarrowed"
+  },
+  {
+   "id": "t09",
+   "doc": "sst",
+   "expect": "Monorepo",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "structure a project with several packages sharing code",
+   "note": ""
+  },
+  {
+   "id": "t10",
+   "doc": "sst",
+   "expect": "Config > App",
+   "category": "figure-dominated",
+   "blind": true,
+   "query": "sst.config.ts app function with removal and home settings",
+   "note": "blind expect was \"Config\", which matched 13 pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "t11",
+   "doc": "sst",
+   "expect": "State > How it works",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "where does sst store what it has deployed",
+   "note": "blind expect was \"State\", which matched 6 pages; narrowed after the crawl to the intended page's path in the index, which can only remove hits"
+  },
+  {
+   "id": "t12",
+   "doc": "sst",
+   "expect": "Migrate From v2",
+   "category": "spans-boundary",
+   "blind": true,
+   "query": "migrate from sst v2 to v3 constructs",
+   "note": ""
+  },
+  {
+   "id": "t13",
+   "doc": "sst",
+   "expect": "Cron",
+   "category": "conceptual-slang",
+   "blind": true,
+   "query": "run a function on a schedule every hour",
+   "note": ""
+  },
+  {
+   "id": "t14",
+   "doc": "sst",
+   "expect": "Nextjs",
+   "category": "heading-term",
+   "blind": true,
+   "query": "deploy a next.js app to aws with the nextjs component",
+   "note": "the Nextjs component page answers as a soft 404 to the crawler, so it is not in the index"
   }
  ]
 }

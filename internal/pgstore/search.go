@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
 )
@@ -152,9 +154,10 @@ type searcher struct {
 // is not a substitute -- the caller who most needs scoping is exactly the one
 // who does not yet know which document holds the answer.
 //
-// Cost is one candidate query per ready document, plus one for the titles and
-// one for the index entries of all of them. That is fine at this scale and
-// would need revisiting for a library of hundreds.
+// Every document's pool comes from one walk of the library's BM25 ordering,
+// which walk describes, and the rows it keeps are scored in one statement.
+// Each pool is then ranked exactly as a search of that document alone ranks
+// it.
 func (r searcher) acrossDocuments(
 	ctx context.Context,
 	p SearchParams,
@@ -168,22 +171,19 @@ func (r searcher) acrossDocuments(
 	if err != nil {
 		return nil, err
 	}
+	kept, err := r.walk(ctx, p, match, ready)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := r.score(ctx, match, kept)
+	if err != nil {
+		return nil, err
+	}
 
-	perDoc := make([][]SearchResult, 0, len(ready))
-	for _, id := range slices.Sorted(maps.Keys(ready)) {
-		scoped := p
-		scoped.DocID = id
-		res, err := r.candidates(ctx, scoped, match, resultLabel{
-			title:         ready[id],
-			boostSections: boosts[id],
-			keepKeywords:  p.IncludeKeywordReference,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if len(res) > 0 {
-			perDoc = append(perDoc, res)
-		}
+	pools := rows.pools(kept, ready, boosts, p.IncludeKeywordReference)
+	perDoc := make([][]SearchResult, 0, len(pools))
+	for _, id := range slices.Sorted(maps.Keys(pools)) {
+		perDoc = append(perDoc, rankCandidates(pools[id], p.K))
 	}
 
 	out := interleave(perDoc, p.K)
@@ -191,6 +191,166 @@ func (r searcher) acrossDocuments(
 		out[i].Rank = i + 1
 	}
 	return out, nil
+}
+
+// walk reads the library's BM25 ordering once and keeps each ready
+// document's first pool of rows, which are the rows candidateQuery returns for
+// that document. The identifiers come back in walk order, which is score
+// order.
+//
+// A query per document cost the number of documents times the size of the
+// library. pg_textsearch cannot narrow its ordered scan to one document: it
+// orders the whole partition and filters on doc_id afterwards, so each
+// document's query walked past every other document's matches. 500 documents
+// in one library took 1.3 s that way.
+//
+// The walk is cheap only in one shape, and each condition below was measured
+// over the same 5,800 chunks, where the walk takes 3 ms:
+//
+//   - It carries keys only. pg_textsearch 1.4.0 scores a projected <@>
+//     standalone, at about 60 microseconds a row.
+//   - Sorts are off. Without a LIMIT, row-level security leads the planner to
+//     read the partition by its user_id index, score every row standalone and
+//     sort, which took 260 ms.
+//   - It runs as an unnamed statement. Executed from the driver's cached
+//     prepared statement, the same plan took 190 ms.
+//
+// One cost remains once a second account has its own partition: a scan of
+// one partition's index for a query naming the parent index rechecks each row
+// it returns, at about 30 microseconds a row. That is still one pass over the
+// matches rather than one per document.
+func (r searcher) walk(
+	ctx context.Context,
+	p SearchParams,
+	match string,
+	ready map[string]string,
+) ([]int64, error) {
+	pools := walkPools{wanted: make(map[string]int, len(ready))}
+	for id := range ready {
+		pools.wanted[id] = poolSize(p.K)
+	}
+	statement, args := walkQuery(p, match)
+	args = append([]any{pgx.QueryExecModeCacheDescribe}, args...)
+	err := r.withoutSorts(ctx, func() error {
+		return pgsession.Rows(ctx, r.tx, statement, args, pools.read)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("search failed: %w", err)
+	}
+	return pools.kept, nil
+}
+
+// walkQuery is every chunk's identifier in BM25 order, within the section
+// filter if there is one.
+func walkQuery(p SearchParams, match string) (string, []any) {
+	args := []any{match}
+	statement := `SELECT chunks.doc_id, chunks.id FROM chunks`
+	if p.SectionFilter != "" {
+		statement += " WHERE chunks.heading_path = $2 OR starts_with(chunks.heading_path, $2 || ' > ')"
+		args = append(args, p.SectionFilter)
+	}
+	return statement + " ORDER BY " + scored, args
+}
+
+// walkPools collects the identifiers a walk keeps.
+type walkPools struct {
+	// wanted is how many more rows each document's pool takes. A document
+	// still being ingested is never in it.
+	wanted map[string]int
+	kept   []int64
+}
+
+func (w *walkPools) read(rows *sql.Rows) error {
+	for rows.Next() {
+		var doc string
+		var id int64
+		if err := rows.Scan(&doc, &id); err != nil {
+			return err
+		}
+		if w.wanted[doc] > 0 {
+			w.kept = append(w.kept, id)
+			w.wanted[doc]--
+		}
+	}
+	return nil
+}
+
+// withoutSorts runs one statement with sorts disabled, and only that one.
+func (r searcher) withoutSorts(ctx context.Context, run func() error) error {
+	if _, err := r.tx.ExecContext(ctx, "SET LOCAL enable_sort = off"); err != nil {
+		return err
+	}
+	if err := run(); err != nil {
+		return err
+	}
+	_, err := r.tx.ExecContext(ctx, "SET LOCAL enable_sort TO DEFAULT")
+	return err
+}
+
+// score reads and scores the rows walk kept.
+func (r searcher) score(ctx context.Context, match string, ids []int64) (scoredRows, error) {
+	out := make(scoredRows, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	statement := `SELECT chunks.doc_id, chunks.heading_path, chunks.section,
+	       chunks.id, chunks.page_start, chunks.page_end, chunks.printed_page_start,
+	       chunks.image_count, chunks.kind, chunks.url, chunks.fragment,
+	       ` + scored + ` AS score, chunks.text
+	  FROM chunks
+	 WHERE chunks.id = ANY($2)`
+	if err := pgsession.Rows(ctx, r.tx, statement, []any{match, ids}, out.read); err != nil {
+		return nil, fmt.Errorf("search failed: %w", err)
+	}
+	return out, nil
+}
+
+// scoredRows are the rows score read, by identifier.
+type scoredRows map[int64]SearchResult
+
+// read keeps the rows that matched.
+//
+// A row scoring zero matched nothing. The index walk returns none, but a
+// scan and a sort, which disabling sorts discourages and does not forbid,
+// returns every row. Those sort after the matches, so they only ever fill a
+// pool's tail, and dropping them leaves the matches. They are dropped here
+// rather than in SQL, where the planner moves the test into the scan and
+// scores every row twice.
+func (s scoredRows) read(rows *sql.Rows) error {
+	for rows.Next() {
+		res, err := scanResult(rows)
+		if err != nil {
+			return err
+		}
+		if res.bm25 < 0 {
+			s[res.ChunkID] = res
+		}
+	}
+	return nil
+}
+
+// pools groups the rows by document with the adjustments applied. Each pool
+// keeps walk order, which is score order, so it reaches rankCandidates in the
+// order a document's own query returns it.
+func (s scoredRows) pools(
+	kept []int64,
+	ready map[string]string,
+	boosts map[string][]string,
+	keepKeywords bool,
+) map[string][]SearchResult {
+	out := map[string][]SearchResult{}
+	for _, id := range kept {
+		res, ok := s[id]
+		if !ok {
+			continue
+		}
+		res.Title = ready[res.DocID]
+		out[res.DocID] = append(out[res.DocID], adjusted(res, resultLabel{
+			boostSections: boosts[res.DocID],
+			keepKeywords:  keepKeywords,
+		}))
+	}
+	return out
 }
 
 // oneDocument searches the document p names.
@@ -238,18 +398,22 @@ func (r searcher) candidates(
 	return rankCandidates(out, p.K), nil
 }
 
-// candidateQuery builds the pool the ranking draws from.
+// scored is the expression the BM25 index orders by, written once. Ordering
+// by anything else, or filtering on the score inside the query, makes the
+// planner score every row standalone at about 150 microseconds each rather
+// than walking the index: the spike measured 159 ms that way against 13.4 ms
+// this way.
+const scored = `(chunks.heading_path || ' ' || chunks.heading_path || ' ' ||
+	chunks.text) <@> to_bm25query($1, 'chunks_bm25')`
+
+// poolSize is how many candidates a document's pool holds for a search of k.
 //
 // It over-fetches, so the index boost can reorder within a meaningful pool
 // rather than only permuting an already-truncated top k.
-func candidateQuery(p SearchParams, match string) (string, []any) {
-	// The scored expression, written once. Ordering by anything else, or
-	// filtering on the score inside the query, makes the planner score every
-	// row standalone at about 150 microseconds each rather than walking the
-	// index: the spike measured 159 ms that way against 13.4 ms this way.
-	const scored = `(chunks.heading_path || ' ' || chunks.heading_path || ' ' ||
-		chunks.text) <@> to_bm25query($1, 'chunks_bm25')`
+func poolSize(k int) int { return k * 4 }
 
+// candidateQuery builds the pool the ranking draws from, poolSize rows deep.
+func candidateQuery(p SearchParams, match string) (string, []any) {
 	args := []any{match, p.DocID}
 	sb := strings.Builder{}
 	sb.WriteString(`SELECT * FROM (
@@ -266,7 +430,7 @@ func candidateQuery(p SearchParams, match string) (string, []any) {
 		args = append(args, p.SectionFilter)
 	}
 	fmt.Fprintf(&sb, " ORDER BY "+scored+" LIMIT $%d) candidates", len(args)+1)
-	args = append(args, p.K*4)
+	args = append(args, poolSize(p.K))
 	// A score of zero is a row that matched nothing. Where the index drives
 	// the query none come back, but Postgres scans a table small enough to
 	// scan and then scores every row, which a fresh library is. Dropping

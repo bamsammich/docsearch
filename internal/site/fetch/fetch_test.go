@@ -334,6 +334,18 @@ func (s *FetchSuite) TestTheFetchBudgetIsAFloorUnderABug() {
 	s.Contains(err.Error(), "budget")
 }
 
+func (s *FetchSuite) TestReserveKeepsTheSlackAboveTheReservedRequests() {
+	f := s.fetcher(fetch.Options{IgnoreRobots: true, MaxFetches: 2})
+	f.Reserve(3)
+	for range 5 {
+		_, err := f.Fetch(s.T().Context(), s.server.URL+"/page.html", true)
+		s.Require().NoError(err)
+	}
+	_, err := f.Fetch(s.T().Context(), s.server.URL+"/page.html", true)
+	s.Require().ErrorIs(err, fetch.ErrFetch, "three reserved requests plus a slack of two is five")
+	s.Contains(err.Error(), "budget")
+}
+
 func (s *FetchSuite) TestRequestsToOneHostAreSpaced() {
 	f := s.fetcher(fetch.Options{IgnoreRobots: true, Interval: 80 * time.Millisecond})
 	start := time.Now()

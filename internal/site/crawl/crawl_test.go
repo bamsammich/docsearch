@@ -156,7 +156,7 @@ func (s *CrawlSuite) TestEveryDeclaredPageIsFetched() {
 	s.Equal([]string{"sitemap", "index_page"}, sortedSources(got.Coverage.Sources()))
 }
 
-func (s *CrawlSuite) TestThePageBudgetCapsTheCrawlAndReportsTheRemainder() {
+func (s *CrawlSuite) TestThePageBudgetDoesNotCapDeclaredPages() {
 	s.page("/docs/", "Guide", "/docs/a", "/docs/b", "/docs/c")
 	for _, p := range []string{"/docs/a", "/docs/b", "/docs/c"} {
 		s.page(p, p)
@@ -165,10 +165,76 @@ func (s *CrawlSuite) TestThePageBudgetCapsTheCrawlAndReportsTheRemainder() {
 		"/docs/", "/docs/a", "/docs/b", "/docs/c")}
 
 	got := s.crawl("/docs/", crawl.Options{Revalidate: true, MaxPages: 2})
-	s.Len(got.Pages, 2)
-	s.Len(got.Unreachable, 2)
-	s.Contains(got.Unreachable[0].Reason, "page budget of 2 exhausted")
-	s.Contains(strings.Join(got.Notes, "\n"), "page budget of 2 reached")
+	s.Len(got.Pages, 4, "a sitemap is a finite list, so every page it declares is fetched")
+	s.Empty(got.Unreachable)
+}
+
+func (s *CrawlSuite) TestThePageBudgetBoundsLinkFollowing() {
+	s.page("/docs/", "Guide", "/docs/a")
+	s.page("/docs/a", "A", "/docs/b", "/docs/c")
+	s.page("/docs/b", "B")
+	s.page("/docs/c", "C")
+
+	got := s.crawl("/docs/", crawl.Options{Revalidate: true, MaxPages: 3})
+	s.ElementsMatch(
+		[]string{"/docs/", "/docs/a", "/docs/b"},
+		s.paths(got),
+		"with no manifest, links are followed only until the crawl knows three pages, seed included",
+	)
+	s.Empty(got.Unreachable, "a link the budget left unfollowed was never declared")
+}
+
+func (s *CrawlSuite) TestTheFetchBudgetMakesRoomForTheDeclaredFrontier() {
+	paths := []string{"/docs/"}
+	for i := range 30 {
+		paths = append(paths, fmt.Sprintf("/docs/p%d", i))
+	}
+	s.page("/docs/", "Guide")
+	for _, p := range paths[1:] {
+		s.page(p, p)
+	}
+	s.routes["/sitemap.xml"] = route{contentType: "application/xml", body: s.sitemap(paths...)}
+	f := fetch.New(fetchtest.New(), fetch.Options{
+		Guard: allowLoopback, Interval: time.Millisecond, MaxFetches: 10,
+	})
+
+	got, err := crawl.Crawl(
+		s.T().Context(),
+		f,
+		s.server.URL+"/docs/",
+		crawl.Options{Revalidate: true},
+	)
+	s.Require().NoError(err)
+	s.Len(
+		got.Pages,
+		len(paths),
+		"a fixed fetch budget of 10 would have refused most of the frontier",
+	)
+	s.Empty(got.Unreachable)
+}
+
+func (s *CrawlSuite) TestASectionWithAManifestLeavesOutTheSiteNavigation() {
+	// The seed is one section of a larger site. Its page links the whole
+	// site's navigation, and the sitemap declares the section's pages.
+	s.page(
+		"/docs/concepts/",
+		"Concepts",
+		"/docs/concepts/pods",
+		"/docs/tasks/run",
+		"/docs/reference/api",
+	)
+	s.page("/docs/concepts/pods", "Pods")
+	s.page("/docs/tasks/run", "Run")
+	s.page("/docs/reference/api", "API")
+	s.routes["/sitemap.xml"] = route{contentType: "application/xml", body: s.sitemap(
+		"/docs/concepts/", "/docs/concepts/pods", "/docs/tasks/run", "/docs/reference/api")}
+
+	got := s.crawl("/docs/concepts/", crawl.Options{Revalidate: true})
+	s.ElementsMatch([]string{"/docs/concepts/", "/docs/concepts/pods"}, s.paths(got))
+	s.Contains(
+		strings.Join(got.Notes, "\n"),
+		"2 seed page link(s) outside the seed's path left out",
+	)
 }
 
 func (s *CrawlSuite) TestAMissingPageIsReportedNotFatal() {

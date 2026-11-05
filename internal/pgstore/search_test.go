@@ -91,6 +91,57 @@ func (s *SearchSuite) TestUnscopedSearchDoesNotLetOneDocumentSweepTheTop() {
 		"both documents are represented when results merge by within-document rank")
 }
 
+// An unscoped search takes each document's results from one walk of the
+// library rather than a query per document, and must rank each as a search of
+// that document alone does, adjustments included.
+//
+// The scores are compared, not the chunks: these chunks tie, and pg_textsearch
+// orders a tie by how far its top-k search was asked to look.
+func (s *SearchSuite) TestUnscopedSearchRanksEachDocumentAsItsOwnSearchDoes() {
+	s.write(`INSERT INTO index_terms (user_id, doc_id, term, section)
+		VALUES ($1, 'big', 'Universe, patching a', '1.9')`, builtinUser)
+
+	for _, include := range []bool{false, true} {
+		across := s.search(
+			SearchParams{Query: "universe dmx", K: 25, IncludeKeywordReference: include},
+		)
+		for _, doc := range []string{"big", "small"} {
+			got := scoresOf(across, doc)
+			own := scoresOf(s.search(SearchParams{
+				Query: "universe dmx", DocID: doc, K: 25, IncludeKeywordReference: include,
+			}), doc)
+			s.Require().NotEmpty(got, "%s is represented", doc)
+			s.Require().GreaterOrEqual(len(own), len(got))
+			s.Equal(own[:len(got)], got, "%s, keyword reference included: %v", doc, include)
+		}
+	}
+}
+
+// scoresOf is one document's adjusted scores, in result order.
+func scoresOf(results []SearchResult, docID string) []float64 {
+	var out []float64
+	for _, r := range results {
+		if r.DocID == docID {
+			out = append(out, r.bm25)
+		}
+	}
+	return out
+}
+
+// A document still being ingested has chunks but is not searchable yet.
+func (s *SearchSuite) TestUnscopedSearchLeavesOutADocumentNotReady() {
+	s.write(`INSERT INTO documents
+		   (user_id,doc_id,title,format,source_path,sha256,status,chunk_count)
+		 VALUES ($1,'half','Half Built','pdf','/x','half','indexing',1)`, builtinUser)
+	s.write(`INSERT INTO chunks
+		   (user_id,doc_id,ordinal,section,heading_path,text,kind,image_count)
+		 VALUES ($1,'half',0,'1','Half Built > Universe','universe dmx universe dmx','prose',0)`, builtinUser)
+
+	for _, r := range s.search(SearchParams{Query: "universe dmx", K: 25}) {
+		s.NotEqual("half", r.DocID)
+	}
+}
+
 // Scoped behaviour must be untouched by the cross-document merge.
 func (s *SearchSuite) TestScopedSearchReturnsOnlyThatDocumentAndIsRanked() {
 	res := s.search(SearchParams{Query: "universe dmx", DocID: "big", K: 5})
