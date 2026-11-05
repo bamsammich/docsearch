@@ -1,7 +1,8 @@
 <script lang="ts">
   import { loadConfig } from "./lib/config";
   import { library } from "./lib/library.svelte";
-  import { libraries, nameOf } from "./lib/libraries.svelte";
+  import { roleChanged } from "./lib/api";
+  import { labelOf, libraries, nameOf } from "./lib/libraries.svelte";
   import { queue } from "./lib/queue.svelte";
   import { adminViews, router } from "./lib/router.svelte";
   import { admin } from "./lib/admin.svelte";
@@ -38,15 +39,39 @@
     return queue.watch();
   });
 
+  // A refusal of what the account's role no longer allows reads its
+  // libraries and its administrator role again.
+  $effect(() => {
+    const reread = () => {
+      void libraries.load();
+      void admin.load();
+    };
+    window.addEventListener(roleChanged, reread);
+    return () => window.removeEventListener(roleChanged, reread);
+  });
+
   // The pages show one library: choosing another loads its documents, and a
   // search scoped to a document of the last one no longer applies.
   let shownLabel = "";
   $effect(() => {
     const label = libraries.label;
     if (session.status !== "signed-in") return;
-    if (shownLabel && shownLabel !== label) search.docId = "";
+    if (shownLabel && shownLabel !== label && labelOf(search.docId) !== label) search.docId = "";
     shownLabel = label;
     void library.load();
+  });
+
+  // A link to a document shows the library that holds it, so the reader and
+  // the scope find it among that library's documents.
+  $effect(() => {
+    if ((router.view !== "search" && router.view !== "read") || !router.docId) return;
+    const label = labelOf(router.docId);
+    if (label !== libraries.label && libraries.all.some((l) => l.library === label)) libraries.choose(label);
+  });
+
+  // Administration is for administrators: anyone else lands on the library.
+  $effect(() => {
+    if (adminViews.includes(router.view) && admin.loaded && !admin.available) router.go("library");
   });
 
   $effect(() => search.attach(field));
@@ -194,6 +219,7 @@
           <button class="btn primary" onclick={() => session.signOut()}>Sign in again</button>
         </div>
       {/if}
+      {#if libraries.error}<div class="banner" role="alert"><span>{libraries.error}</span></div>{/if}
       {#if router.view === "people"}<PeopleView />{:else if router.view === "signin"}<SignInView />{:else if router.view === "ingest"}<IngestView />{:else if router.view === "members"}<MembersView />{:else if router.view === "search"}<SearchView />{:else if router.view === "read"}<ReaderView />{:else}<LibraryView />{/if}
     </main>
   </div>

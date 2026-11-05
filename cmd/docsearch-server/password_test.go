@@ -375,7 +375,7 @@ func (s *PasswordSuite) TestARemovedAccountsTokensStopWorking() {
 	s.Require().NoError(s.admin.Remove(s.T().Context(), "alice"))
 
 	status, _ := s.callMCP(issued.Access)
-	s.Equal(http.StatusForbidden, status)
+	s.Equal(http.StatusUnauthorized, status, "refused as invalid, so the client signs in again")
 	status, _ = s.exchange(found.Token, url.Values{"grant_type": {"refresh_token"},
 		"refresh_token": {issued.Refresh}, "client_id": {clientID}})
 	s.Equal(http.StatusBadRequest, status)

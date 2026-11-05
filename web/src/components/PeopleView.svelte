@@ -87,7 +87,8 @@
     try {
       await run();
       toast.show(done);
-      await load();
+      // An administrator who gave up the role leaves Administration.
+      if (admin.available) await load();
     } catch (err) {
       rowError = { ...rowError, [p.username]: refusal(err, p.username) };
     } finally {
@@ -102,7 +103,10 @@
     }, `Reset the password for ${p.username}.`);
   const unlock = (p: Account) => act(p, () => accounts.unlock({ username: p.username }), `Unlocked ${p.username}.`);
   const promote = (p: Account) =>
-    act(p, () => accounts.setAdmin({ username: p.username, admin: !p.admin }),
+    act(p, async () => {
+      await accounts.setAdmin({ username: p.username, admin: !p.admin });
+      if (p.username === admin.username) await admin.load();
+    },
       p.admin ? `${p.username} is no longer an administrator.` : `${p.username} is now an administrator.`);
   const remove = (p: Account) =>
     act(p, async () => {

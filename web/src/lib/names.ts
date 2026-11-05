@@ -11,8 +11,15 @@ export function slugOf(name: string): string {
     .toLowerCase()
     .normalize("NFKD")
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 63);
+    .replace(/^-+/, "")
+    .slice(0, 63)
+    .replace(/-+$/, "");
+}
+
+/** The label of the library a document id names: the part before a slash, or the account's own. */
+export function labelOf(docId: string): string {
+  const at = docId.indexOf("/");
+  return at > 0 ? docId.slice(0, at) : own;
 }
 
 /** What a person reads a library as. */

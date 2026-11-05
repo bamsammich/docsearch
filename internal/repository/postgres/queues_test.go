@@ -98,6 +98,36 @@ func (s *QueuesSuite) TestAJobWhoseRequesterCanNoLongerAddFails() {
 	s.Contains(got.Error, "can no longer add to this library")
 }
 
+func (s *QueuesSuite) TestAJobLeftRunningFailsOnceItsLeaseRunsOut() {
+	id := s.queued(editor, "https://example.com/docs")
+	claimed, err := postgres.NewJobs(s.db.App, editor).Claim(s.T().Context(), lease, 3)
+	s.Require().NoError(err)
+	s.Require().NotNil(claimed)
+	_, err = s.db.Owner.ExecContext(
+		s.T().Context(),
+		`DELETE FROM library_grants WHERE library_id = 'lib_team' AND user_id = 'second'`,
+	)
+	s.Require().NoError(err)
+
+	s.Empty(s.waiting())
+	running, err := postgres.NewJobs(s.db.App, admin).Job(s.T().Context(), id)
+	s.Require().NoError(err)
+	s.Equal("running", running.Status, "a worker may still be finishing it")
+
+	_, err = s.db.Owner.ExecContext(
+		s.T().Context(),
+		`UPDATE ingest_jobs SET lease_until = now() - interval '1 minute' WHERE id = $1`,
+		id,
+	)
+	s.Require().NoError(err)
+	s.Empty(s.waiting())
+
+	got, err := postgres.NewJobs(s.db.App, admin).Job(s.T().Context(), id)
+	s.Require().NoError(err)
+	s.Equal("failed", got.Status)
+	s.Contains(got.Error, "can no longer add to this library")
+}
+
 func (s *QueuesSuite) TestAReaderCannotQueue() {
 	_, err := s.db.Owner.ExecContext(
 		s.T().Context(),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nameOf, own, slugOf } from "./names";
+import { labelOf, nameOf, own, slugOf } from "./names";
 
 describe("slugOf", () => {
   it("joins lower-case words with hyphens", () => {
@@ -13,6 +13,22 @@ describe("slugOf", () => {
 
   it("is empty for a name with no letter or digit", () => {
     expect(slugOf("—!—")).toBe("");
+  });
+
+  it("ends on a letter or digit when a long name is cut", () => {
+    const slug = slugOf(`${"a".repeat(62)} b`);
+    expect(slug).toBe("a".repeat(62));
+  });
+});
+
+describe("labelOf", () => {
+  it("is the library a qualified document id names", () => {
+    expect(labelOf("runbooks/abc123")).toBe("runbooks");
+  });
+
+  it("is the account's own library for a bare id", () => {
+    expect(labelOf("abc123")).toBe(own);
+    expect(labelOf("")).toBe(own);
   });
 });
 

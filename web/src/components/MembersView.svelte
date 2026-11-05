@@ -42,6 +42,7 @@
       members = listed.members;
       events = logged.events;
     } catch (err) {
+      if (lostLibrary(err)) return void (await lost());
       loadError = problem(err);
     } finally {
       loaded = true;
@@ -108,6 +109,21 @@
     return { lines: lines.reverse(), since };
   });
 
+  // The server answers a library this account no longer changes, or no
+  // longer reads, as one it has no library by.
+  const lostLibrary = (err: unknown) =>
+    err instanceof ConnectError && err.code === Code.NotFound && /^no library/.test(err.rawMessage);
+
+  /** Reads the libraries again after a refusal that says the role changed, and says what changed. */
+  async function lost(): Promise<void> {
+    const name = libraries.name;
+    const of = label;
+    await libraries.load();
+    toast.show(libraries.all.some((l) => l.library === of)
+      ? `You're no longer an admin of ${name}.`
+      : `You're no longer a member of ${name}.`);
+  }
+
   function refusal(err: unknown, who: string): string {
     if (err instanceof ConnectError && err.code === Code.NotFound)
       return `No account named ${who} yet. They need to sign in once before you can invite them.`;
@@ -136,6 +152,7 @@
       invitee = "";
       await load(label);
     } catch (err) {
+      if (lostLibrary(err)) return void (await lost());
       inviteError = refusal(err, who);
       inviteField?.focus();
     } finally {
@@ -155,6 +172,7 @@
       await load(label);
     } catch (err) {
       m.role = before;
+      if (lostLibrary(err)) return void (await lost());
       rowError = { ...rowError, [m.username]: refusal(err, m.username) };
     } finally {
       busy = false;
@@ -169,6 +187,7 @@
       removing = "";
       await load(label);
     } catch (err) {
+      if (lostLibrary(err)) return void (await lost());
       rowError = { ...rowError, [m.username]: refusal(err, m.username) };
     } finally {
       busy = false;
@@ -183,8 +202,11 @@
       toast.show(`You left ${left}.`);
       router.go("library");
     } catch (err) {
-      loadError = refusal(err, me);
       leaving = false;
+      if (lostLibrary(err)) return void (await lost());
+      loadError = err instanceof ConnectError && err.code === Code.FailedPrecondition
+        ? "You're its only admin. Make someone else an admin before you leave."
+        : problem(err);
     } finally {
       busy = false;
     }

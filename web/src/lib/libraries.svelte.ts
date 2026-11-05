@@ -4,7 +4,7 @@ import type { Library } from "../gen/docsearch/library/v1/library_pb";
 import { problem, shelves } from "./api";
 import { nameOf, own } from "./names";
 
-export { nameOf, own, slugOf } from "./names";
+export { labelOf, nameOf, own, slugOf } from "./names";
 
 const remember = "docsearch.library";
 
@@ -35,12 +35,12 @@ class Libraries {
 
   /** Editors and admins add, re-read and remove documents. */
   get canEdit(): boolean {
-    const role = this.current?.role ?? "admin";
+    const role = this.current?.role;
     return role === "editor" || role === "admin";
   }
 
   get isAdmin(): boolean {
-    return (this.current?.role ?? "admin") === "admin";
+    return this.current?.role === "admin";
   }
 
   get isOwn(): boolean {
