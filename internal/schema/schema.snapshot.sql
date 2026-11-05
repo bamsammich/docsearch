@@ -107,6 +107,22 @@ $$;
 
 
 --
+-- Name: readable_libraries(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.readable_libraries() RETURNS TABLE(library_id text, kind text, slug text, name text, role text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT l.library_id, l.kind, l.slug, l.name, g.role
+    FROM library_grants g
+    JOIN libraries l ON l.library_id = g.library_id
+   WHERE g.user_id = current_setting('app.user_id', true)
+   ORDER BY (l.library_id = g.user_id) DESC, l.slug NULLS LAST, l.library_id;
+$$;
+
+
+--
 -- Name: redeem_upload_link(text); Type: FUNCTION; Schema: public; Owner: -
 --
 

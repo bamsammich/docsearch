@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 
 	"github.com/bamsammich/docsearch/internal/libroot"
 	"github.com/bamsammich/docsearch/internal/owner"
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgstore"
 	"github.com/bamsammich/docsearch/internal/service/job"
 	"github.com/bamsammich/docsearch/internal/upload"
@@ -24,10 +26,10 @@ import (
 
 // Deps are what the tools need to do their work.
 type Deps struct {
-	// Stores builds the library of the user a request acts for. A factory
-	// rather than a store, because row-level security scopes a statement by
-	// the user its transaction named, and the server is built before any
-	// request names one.
+	// Stores builds the store one library is read through, as one user. A
+	// factory rather than a store, because row-level security scopes a
+	// statement by the user and the library its transaction named, and the
+	// server is built before any request names either.
 	Stores StoresFor
 	// LibraryRoots are the directories add_document accepts a path inside.
 	// They are named in that tool's description: a caller that can see
@@ -51,22 +53,90 @@ type Deps struct {
 // JobsFor builds one user's ingest queue.
 type JobsFor func(user string) (*job.Service, error)
 
-// StoresFor builds the store one user's library is read through.
-type StoresFor func(user string) (*pgstore.Store, error)
+// StoresFor builds the store one library is read through, as one user.
+type StoresFor func(scope pgsession.Scope) (*pgstore.Store, error)
 
 // LinksFor issues a signed upload link for user.
 type LinksFor func(ctx context.Context, user string) (upload.Link, error)
 
-// library is the store of the user a request acts for.
+// own is the store of the requesting user's own library.
 //
-// A request that named none is refused rather than served the built-in
+// A request that named no user is refused rather than served the built-in
 // library, which is the whole point of asking.
-func (d Deps) library(ctx context.Context) (*pgstore.Store, error) {
+func (d Deps) own(ctx context.Context) (*pgstore.Store, string, error) {
 	user, err := owner.From(ctx)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return d.Stores(user)
+	store, err := d.Stores(pgsession.Personal(user))
+	return store, user, err
+}
+
+// readable is every library the requesting user reads, their own first.
+func (d Deps) readable(ctx context.Context) (*pgstore.Store, []pgstore.Library, error) {
+	store, _, err := d.own(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	libs, err := store.Libraries(ctx)
+	return store, libs, err
+}
+
+// resolved is a doc_id an agent sent, resolved: the store of the library the
+// document is in, that library, and the identifier within it.
+type resolved struct {
+	store   *pgstore.Store
+	local   string
+	library pgstore.Library
+}
+
+// document resolves a doc_id an agent sent.
+//
+// A doc_id naming a library the user does not read is looked up in their own
+// library as it was sent. No real identifier holds a slash, so it answers
+// exactly as a document that does not exist, and a probe cannot tell a
+// library someone else holds from one that was never there.
+func (d Deps) document(ctx context.Context, docID string) (resolved, error) {
+	user, err := owner.From(ctx)
+	if err != nil {
+		return resolved{}, err
+	}
+	own, libs, err := d.readable(ctx)
+	if err != nil {
+		return resolved{}, err
+	}
+	lib, local, ok := pgstore.Resolve(libs, docID)
+	if !ok {
+		return resolved{
+			store:   own,
+			library: pgstore.Library{Label: pgstore.OwnLabel},
+			local:   docID,
+		}, nil
+	}
+	store, err := d.Stores(pgsession.Scope{User: user, Library: lib.ID})
+	return resolved{store: store, library: lib, local: local}, err
+}
+
+// chosen narrows libs to the names an agent passed, or keeps them all.
+//
+// A name the user reads no library under is refused with the same words
+// whether or not such a library exists.
+func chosen(libs []pgstore.Library, names []string) ([]pgstore.Library, error) {
+	if len(names) == 0 {
+		return libs, nil
+	}
+	out := make([]pgstore.Library, 0, len(names))
+	for _, name := range names {
+		i := slices.IndexFunc(libs, func(l pgstore.Library) bool { return l.Label == name })
+		if i < 0 {
+			return nil, fmt.Errorf(
+				"you read no library named %q: list_documents names the ones you do",
+				name,
+			)
+		}
+		out = append(out, libs[i])
+	}
+	return out, nil
 }
 
 // jobs is the ingest queue of the user a request acts for.
@@ -144,6 +214,11 @@ const serverInstructions = "docsearch holds the full text of documentation the u
 	"answer is already local. When a document covers the question, read its outline, then " +
 	"search with section_filter set to the chapter that covers it. Go to the web only once " +
 	"the corpus has been checked and does not hold the answer.\n\n" +
+	"LIBRARIES. The corpus may span several libraries: the user's own, called 'personal', " +
+	"and shared ones a team reads together. A search covers every library the user can " +
+	"read unless you pass libraries. When the user names a team or a library, pass it. A " +
+	"document outside the user's own library has a doc_id of the form library/doc_id; " +
+	"pass it on exactly as a tool returned it.\n\n" +
 	"INGEST WHAT YOU READ. When research settles on a documentation site or a manual worth " +
 	"having again, queue it with add_document so the next session finds it locally. Ingest " +
 	"the source itself -- the documentation root URL, or the file -- and never your own " +
@@ -170,6 +245,9 @@ func New(d Deps) *mcp.Server {
 		Name: "list_documents",
 		Description: "List every document available to search, with its top-level headings " +
 			"so you can pick the right one without a separate outline call. " +
+			"Documents come from every library you can read, each naming its library; " +
+			"'libraries' lists those libraries with your role in each. Pass libraries to " +
+			"list only some. " +
 			"Each document reports a quality flag from ingest: 'ok' means the derived " +
 			"heading structure was validated against the document's own table of contents; " +
 			"'degraded' means structural anomalies were recorded and section attribution " +
@@ -200,6 +278,9 @@ func New(d Deps) *mcp.Server {
 			"small document. An unscoped search merges each document's results by their " +
 			"within-document rank rather than by score, so no cross-document score " +
 			"comparison is made on your behalf.\n\n" +
+			"An unscoped search covers every library you can read, merged the same way, and " +
+			"each result names its library. Pass libraries to search only some, or a doc_id " +
+			"to search one document.\n\n" +
 			"Entries from a document's command-keyword reference are deprioritised by " +
 			"default: they are term-dense and match on incidental word overlap. Pass " +
 			"include_keyword_reference when you are looking up a specific command or " +
@@ -257,23 +338,55 @@ func New(d Deps) *mcp.Server {
 
 // -- list_documents -------------------------------------------------------
 
-type listDocumentsInput struct{}
+type listDocumentsInput struct {
+	Libraries []string `json:"libraries,omitempty" jsonschema:"limit to these libraries, by the names this tool reports; default every library you can read"`
+}
 
 type listDocumentsOutput struct {
 	Documents []pgstore.Document `json:"documents"`
+	Libraries []libraryEntry     `json:"libraries"`
+}
+
+// libraryEntry is one library in list_documents, with how many of its
+// documents are listed.
+type libraryEntry struct {
+	pgstore.Library
+
+	Documents int `json:"documents"`
 }
 
 func (d Deps) listDocuments(ctx context.Context, _ *mcp.CallToolRequest,
-	_ listDocumentsInput) (*mcp.CallToolResult, listDocumentsOutput, error) {
-	library, err := d.library(ctx)
+	in listDocumentsInput) (*mcp.CallToolResult, listDocumentsOutput, error) {
+	user, err := owner.From(ctx)
 	if err != nil {
 		return nil, listDocumentsOutput{}, err
 	}
-	docs, err := library.ListDocuments(ctx)
+	_, libs, err := d.readable(ctx)
 	if err != nil {
 		return nil, listDocumentsOutput{}, err
 	}
-	return nil, listDocumentsOutput{Documents: docs}, nil
+	libs, err = chosen(libs, in.Libraries)
+	if err != nil {
+		return nil, listDocumentsOutput{}, err
+	}
+	out := listDocumentsOutput{Documents: []pgstore.Document{}, Libraries: []libraryEntry{}}
+	for _, lib := range libs {
+		store, err := d.Stores(pgsession.Scope{User: user, Library: lib.ID})
+		if err != nil {
+			return nil, listDocumentsOutput{}, err
+		}
+		docs, err := store.ListDocuments(ctx)
+		if err != nil {
+			return nil, listDocumentsOutput{}, err
+		}
+		for _, doc := range docs {
+			doc.Library = lib.Label
+			doc.DocID = lib.Qualify(doc.DocID)
+			out.Documents = append(out.Documents, doc)
+		}
+		out.Libraries = append(out.Libraries, libraryEntry{Library: lib, Documents: len(docs)})
+	}
+	return nil, out, nil
 }
 
 // -- outline --------------------------------------------------------------
@@ -297,11 +410,11 @@ func (d Deps) outline(ctx context.Context, _ *mcp.CallToolRequest,
 	if depth <= 0 {
 		depth = 2
 	}
-	library, err := d.library(ctx)
+	doc, err := d.document(ctx, in.DocID)
 	if err != nil {
 		return nil, outlineOutput{}, err
 	}
-	entries, err := library.Outline(ctx, in.DocID, depth)
+	entries, err := doc.store.Outline(ctx, doc.local, depth)
 	if err != nil {
 		return nil, outlineOutput{}, err
 	}
@@ -311,11 +424,12 @@ func (d Deps) outline(ctx context.Context, _ *mcp.CallToolRequest,
 // -- search ---------------------------------------------------------------
 
 type searchInput struct {
-	Query                   string `json:"query"                               jsonschema:"the search query"`
-	DocID                   string `json:"doc_id,omitempty"                    jsonschema:"restrict to one document"`
-	SectionFilter           string `json:"section_filter,omitempty"            jsonschema:"heading_path prefix filter"`
-	K                       int    `json:"k,omitempty"                         jsonschema:"max results, default 8, max 25"`
-	IncludeKeywordReference bool   `json:"include_keyword_reference,omitempty" jsonschema:"include command-keyword reference entries, which are deprioritised by default"`
+	Query                   string   `json:"query"                               jsonschema:"the search query"`
+	DocID                   string   `json:"doc_id,omitempty"                    jsonschema:"restrict to one document, as list_documents names it"`
+	Libraries               []string `json:"libraries,omitempty"                 jsonschema:"search only these libraries, by the names list_documents reports; default every library you can read"`
+	SectionFilter           string   `json:"section_filter,omitempty"            jsonschema:"heading_path prefix filter"`
+	K                       int      `json:"k,omitempty"                         jsonschema:"max results, default 8, max 25"`
+	IncludeKeywordReference bool     `json:"include_keyword_reference,omitempty" jsonschema:"include command-keyword reference entries, which are deprioritised by default"`
 }
 
 type searchOutput struct {
@@ -334,17 +448,7 @@ func (d Deps) search(ctx context.Context, _ *mcp.CallToolRequest,
 	if in.K > toolMaxK {
 		in.K = toolMaxK
 	}
-	library, err := d.library(ctx)
-	if err != nil {
-		return nil, searchOutput{}, err
-	}
-	results, err := library.Search(ctx, pgstore.SearchParams{
-		Query:                   in.Query,
-		DocID:                   in.DocID,
-		SectionFilter:           in.SectionFilter,
-		K:                       in.K,
-		IncludeKeywordReference: in.IncludeKeywordReference,
-	})
+	results, err := d.searchIn(ctx, in)
 	if err != nil {
 		return nil, searchOutput{}, err
 	}
@@ -382,6 +486,39 @@ func (d Deps) search(ctx context.Context, _ *mcp.CallToolRequest,
 	return nil, out, nil
 }
 
+// searchIn runs a search where the input points it: one document's library
+// when a doc_id is given, and otherwise every library the caller reads, or
+// the ones they named.
+func (d Deps) searchIn(ctx context.Context, in searchInput) ([]pgstore.SearchResult, error) {
+	params := pgstore.SearchParams{
+		Query:                   in.Query,
+		SectionFilter:           in.SectionFilter,
+		K:                       in.K,
+		IncludeKeywordReference: in.IncludeKeywordReference,
+	}
+	if in.DocID != "" {
+		doc, err := d.document(ctx, in.DocID)
+		if err != nil {
+			return nil, err
+		}
+		params.DocID = doc.local
+		results, err := doc.store.Search(ctx, params)
+		if err != nil {
+			return nil, err
+		}
+		return pgstore.Labelled(doc.library, results), nil
+	}
+	own, libs, err := d.readable(ctx)
+	if err != nil {
+		return nil, err
+	}
+	libs, err = chosen(libs, in.Libraries)
+	if err != nil {
+		return nil, err
+	}
+	return own.SearchLibraries(ctx, libs, params)
+}
+
 // -- get_context ----------------------------------------------------------
 
 type getContextInput struct {
@@ -406,14 +543,14 @@ func (d Deps) getContext(ctx context.Context, _ *mcp.CallToolRequest,
 	if in.DocID == "" {
 		return nil, getContextOutput{}, errors.New("doc_id is required")
 	}
-	library, err := d.library(ctx)
+	doc, err := d.document(ctx, in.DocID)
 	if err != nil {
 		return nil, getContextOutput{}, err
 	}
 	out := getContextOutput{DocID: in.DocID}
 
 	if in.PageStart > 0 {
-		pages, truncated, err := library.GetPages(ctx, in.DocID, in.PageStart, in.PageEnd)
+		pages, truncated, err := doc.store.GetPages(ctx, doc.local, in.PageStart, in.PageEnd)
 		if err != nil {
 			return nil, getContextOutput{}, err
 		}
@@ -430,7 +567,7 @@ func (d Deps) getContext(ctx context.Context, _ *mcp.CallToolRequest,
 	if before == 0 && after == 0 {
 		before, after = 1, 1
 	}
-	chunks, truncated, err := library.GetContext(ctx, in.DocID, in.ChunkID, before, after)
+	chunks, truncated, err := doc.store.GetContext(ctx, doc.local, in.ChunkID, before, after)
 	if err != nil {
 		return nil, getContextOutput{}, err
 	}
