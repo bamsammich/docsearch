@@ -31,6 +31,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/adapter"
 	"github.com/bamsammich/docsearch/internal/adapter/pdf"
 	"github.com/bamsammich/docsearch/internal/owner"
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgstore"
 	"github.com/bamsammich/docsearch/internal/pgtest"
 	"github.com/bamsammich/docsearch/internal/repository/postgres"
@@ -119,7 +120,10 @@ var _ = Describe("An index built by Go", Ordered, func() {
 		// with each other and with the document they came from. The chunk-
 		// quality verdict is the structure policy's business and is graded
 		// at ingest.
-		documents := document.New(postgres.NewDocuments(built.db, owner.Builtin), nil)
+		documents := document.New(
+			postgres.NewDocuments(built.db, pgsession.Personal(owner.Builtin)),
+			nil,
+		)
 		for _, fixture := range fixtures {
 			docID := built.docIDFor(fixture)
 			report, err := documents.Verify(context.Background(), docID)
@@ -205,7 +209,7 @@ func newIndex() *index {
 	// uses, never as the owner the migrations ran under.
 	return &index{
 		db:    pg.App,
-		store: pgstore.New(pg.App, owner.Builtin),
+		store: pgstore.New(pg.App, pgsession.Personal(owner.Builtin)),
 		root:  library,
 	}
 }
@@ -233,7 +237,7 @@ func (i *index) writeBytes(name string, body []byte) string {
 
 // enqueue puts one job on the queue, as the CLI's add does.
 func (i *index) enqueue(path string) int64 {
-	id, _, err := postgres.NewJobs(i.db, owner.Builtin).
+	id, _, err := postgres.NewJobs(i.db, pgsession.Personal(owner.Builtin)).
 		Add(context.Background(), path, "", false)
 	Expect(err).NotTo(HaveOccurred())
 	return id
@@ -246,10 +250,18 @@ func (i *index) work(jobs int) {
 	defer func() { Expect(extractor.Close()).To(Succeed()) }()
 
 	service := worker.New(
-		postgres.NewJobs(i.db, owner.Builtin),
-		ingest.New(postgres.New(i.db, owner.Builtin), time.Now),
-		source.New(adapter.New(extractor), []string{i.root},
-			pgcache.New(i.db, owner.Builtin), pgupload.New(i.db, owner.Builtin), site.Options{}),
+		postgres.NewJobs(i.db, pgsession.Personal(owner.Builtin)),
+		ingest.New(postgres.New(i.db, pgsession.Personal(owner.Builtin)), time.Now),
+		source.New(
+			adapter.New(extractor),
+			[]string{i.root},
+			pgcache.New(
+				i.db,
+				pgsession.Personal(owner.Builtin),
+			),
+			pgupload.New(i.db, pgsession.Personal(owner.Builtin)),
+			site.Options{},
+		),
 		// The worker logs each job; the suite's own output is the report.
 		worker.Options{
 			Log:  slog.New(slog.NewTextHandler(io.Discard, nil)),

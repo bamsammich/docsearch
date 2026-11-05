@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgstore"
 )
 
@@ -35,7 +36,7 @@ func TestDumpUnscoped(t *testing.T) {
 	if err := json.Unmarshal(raw, &set); err != nil {
 		t.Fatal(err)
 	}
-	st, err := pgstore.Open(dsn, "default")
+	st, err := pgstore.Open(dsn, pgsession.Personal("default"))
 	if err != nil {
 		t.Fatal(err)
 	}

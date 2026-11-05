@@ -157,11 +157,12 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	// job, the document it produces and the responses it crawled all belong
 	// to one library.
 	library := func(user string) *worker.Service {
+		scope := pgsession.Personal(user)
 		return worker.New(
-			postgres.NewJobs(db, user),
-			ingest.New(postgres.New(db, user), time.Now),
-			source.New(adapter.New(extractor), roots, pgcache.New(db, user),
-				pgupload.New(db, user), site.Options{}),
+			postgres.NewJobs(db, scope),
+			ingest.New(postgres.New(db, scope), time.Now),
+			source.New(adapter.New(extractor), roots, pgcache.New(db, scope),
+				pgupload.New(db, scope), site.Options{}),
 			options,
 		)
 	}

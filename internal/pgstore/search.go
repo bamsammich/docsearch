@@ -121,8 +121,8 @@ func (s *Store) Search(ctx context.Context, p SearchParams) ([]SearchResult, err
 	// across the library opens and closes one rather than three for each
 	// document it holds.
 	var out []SearchResult
-	err = pgsession.ReadOnly(ctx, s.db, s.userID, func(tx *sql.Tx) error {
-		run := searcher{tx: tx, q: s.q.WithTx(tx), user: s.userID}
+	err = pgsession.ReadOnly(ctx, s.db, s.scope, func(tx *sql.Tx) error {
+		run := searcher{tx: tx, q: s.q.WithTx(tx), library: s.scope.Library}
 		index, err := run.ownIndex(ctx)
 		if err != nil || index == "" {
 			return err
@@ -140,15 +140,15 @@ func (s *Store) Search(ctx context.Context, p SearchParams) ([]SearchResult, err
 }
 
 // searcher is one search's statements, all in the transaction that named the
-// user.
+// user and the library.
 type searcher struct {
 	tx *sql.Tx
 	q  *pgdbgen.Queries
-	// user is the account the transaction named, and index is the BM25
-	// index of that account's own partition, which every score is read
+	// library is the one the transaction named, and index is the BM25
+	// index of that library's own partition, which every score is read
 	// through.
-	user  string
-	index string
+	library string
+	index   string
 }
 
 // ownIndex is the name of the BM25 index on the account's own partition, or
@@ -172,7 +172,7 @@ func (r searcher) ownIndex(ctx context.Context) (string, error) {
 		  JOIN pg_class ON pg_class.oid = pg_inherits.inhrelid
 		 WHERE pg_inherits.inhparent = 'chunks_bm25'::regclass
 		   AND pg_index.indrelid = to_regclass(format('%I', 'chunks_' || $1))`,
-		r.user).Scan(&index)
+		r.library).Scan(&index)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
@@ -188,7 +188,7 @@ func (r searcher) ownIndex(ctx context.Context) (string, error) {
 // Every scored statement runs unnamed, as walk needs for its speed, so
 // Postgres plans each one with the account and the index name in hand.
 func (r searcher) bound(match string, rest ...any) []any {
-	return append([]any{pgx.QueryExecModeCacheDescribe, match, r.index, r.user}, rest...)
+	return append([]any{pgx.QueryExecModeCacheDescribe, match, r.index, r.library}, rest...)
 }
 
 // acrossDocuments merges per-document results by within-document rank.

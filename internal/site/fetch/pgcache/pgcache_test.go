@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgtest"
 	"github.com/bamsammich/docsearch/internal/schema"
 	"github.com/bamsammich/docsearch/internal/site/fetch"
@@ -37,7 +38,7 @@ func (s *CacheSuite) SetupTest() {
 // cache reads as the restricted role a request uses, not as the owner the
 // migrations ran under.
 func (s *CacheSuite) cache(userID string) *pgcache.Cache {
-	return pgcache.New(s.pg.App, userID)
+	return pgcache.New(s.pg.App, pgsession.Personal(userID))
 }
 
 func response(url, body string) *fetch.Response {
@@ -154,7 +155,8 @@ func (s *CacheSuite) TestACrawlResumesInANewProcess() {
 	s.Require().NoError(err)
 	defer func() { s.Require().NoError(restarted.Close()) }()
 
-	got, ok, err := pgcache.New(restarted, builtinUser).Get(ctx, "https://example.com/a")
+	got, ok, err := pgcache.New(restarted, pgsession.Personal(builtinUser)).
+		Get(ctx, "https://example.com/a")
 	s.Require().NoError(err)
 	s.Require().True(ok)
 	s.Equal("<p>hi</p>", string(got.Body))
@@ -162,8 +164,8 @@ func (s *CacheSuite) TestACrawlResumesInANewProcess() {
 
 // A statement without an owner matches no rows, so the cache refuses rather
 // than reporting an empty cache that a crawl would fetch all over again.
-func (s *CacheSuite) TestACacheWithNoUserRefuses() {
+func (s *CacheSuite) TestACacheWithNoScopeRefuses() {
 	_, _, err := s.cache("").Get(s.T().Context(), "https://example.com/a")
 	s.Require().Error(err)
-	s.Contains(err.Error(), "no user")
+	s.Contains(err.Error(), "no scope")
 }

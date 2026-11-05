@@ -57,7 +57,7 @@ func (s *Store) ChunksMatchingExpectation(ctx context.Context, docID, expect str
 }
 
 func (s *Store) chunksInSection(ctx context.Context, docID, section string) ([]TargetChunk, error) {
-	rows, err := pgsession.Read(ctx, s.db, s.q, s.userID,
+	rows, err := pgsession.Read(ctx, s.db, s.q, s.scope,
 		func(q *pgdbgen.Queries) ([]pgdbgen.ChunksInSectionRow, error) {
 			return q.ChunksInSection(ctx, pgdbgen.ChunksInSectionParams{
 				DocID: docID,
@@ -78,7 +78,7 @@ func (s *Store) chunksInSection(ctx context.Context, docID, section string) ([]T
 
 func (s *Store) chunksMatchingHeading(ctx context.Context, docID, heading string) (
 	[]TargetChunk, error) {
-	rows, err := pgsession.Read(ctx, s.db, s.q, s.userID,
+	rows, err := pgsession.Read(ctx, s.db, s.q, s.scope,
 		func(q *pgdbgen.Queries) ([]pgdbgen.ChunksMatchingHeadingRow, error) {
 			return q.ChunksMatchingHeading(ctx, pgdbgen.ChunksMatchingHeadingParams{
 				DocID: docID, Lower: heading,
@@ -126,7 +126,7 @@ func (s *Store) SampleChunks(
 	if stride < 1 {
 		stride = 1
 	}
-	rows, err := pgsession.Read(ctx, s.db, s.q, s.userID,
+	rows, err := pgsession.Read(ctx, s.db, s.q, s.scope,
 		func(q *pgdbgen.Queries) ([]pgdbgen.AllChunksInOrderRow, error) {
 			return q.AllChunksInOrder(ctx, docID)
 		})

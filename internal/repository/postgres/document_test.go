@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/bamsammich/docsearch/internal/domain"
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgtest"
 	"github.com/bamsammich/docsearch/internal/repository/postgres"
 	"github.com/bamsammich/docsearch/internal/schema"
@@ -31,8 +32,8 @@ func (s *DocumentsSuite) SetupTest() {
 	s.Require().NoError(schema.Create(s.T().Context(), pg.Owner))
 
 	s.db = pg.App
-	s.docs = postgres.NewDocuments(pg.App, builtinID)
-	s.write = postgres.New(pg.App, builtinID)
+	s.docs = postgres.NewDocuments(pg.App, pgsession.Personal(builtinID))
+	s.write = postgres.New(pg.App, pgsession.Personal(builtinID))
 }
 
 // ingested writes one document with the chunks given and publishes it.
@@ -219,7 +220,7 @@ func (s *DocumentsSuite) TestDeletingADocumentClearsItsChunks() {
 // failed ingest's cleanup keeps it for the retry to read.
 func (s *DocumentsSuite) TestRemovingAnUploadedDocumentRemovesItsFile() {
 	ctx := s.T().Context()
-	store := pgupload.New(s.db, builtinID)
+	store := pgupload.New(s.db, pgsession.Personal(builtinID))
 	for _, key := range []string{"kept", "removed"} {
 		s.Require().NoError(store.Put(ctx, upload.File{
 			Key: key, Filename: key + ".pdf", SHA256: key, Content: []byte(key),

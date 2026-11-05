@@ -1,9 +1,9 @@
-// Package library builds the view of one user's library.
+// Package library builds the view of one library, as one user sees it.
 //
-// Row-level security scopes a statement by the user its transaction named, so
-// a repository, a store and a crawl cache each belong to one user and take
-// that user when they are constructed. A server serves many, and builds what
-// a request needs once its owner is known.
+// Row-level security scopes a statement by the user and the library its
+// transaction named, so a repository, a store and a crawl cache each belong
+// to one scope and take it when they are constructed. A server serves many,
+// and builds what a request needs once its user and library are known.
 //
 // The services themselves know nothing about any of it. A service reads a
 // library; which library is a wiring question, and the answer lives here.
@@ -17,6 +17,7 @@ import (
 
 	"github.com/bamsammich/docsearch/internal/adapter"
 	"github.com/bamsammich/docsearch/internal/owner"
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgstore"
 	"github.com/bamsammich/docsearch/internal/repository/postgres"
 	"github.com/bamsammich/docsearch/internal/service/document"
@@ -29,11 +30,11 @@ import (
 	"github.com/bamsammich/docsearch/internal/upload/pgupload"
 )
 
-// Libraries builds each user's view of one database.
+// Libraries builds each scope's view of one database.
 //
 // The pool is shared, because a connection pool is a property of the process
-// rather than of a user. What each view carries is the user every transaction
-// it opens will name.
+// rather than of a user. What each view carries is the scope every
+// transaction it opens will name.
 type Libraries struct {
 	db *sql.DB
 	// reader reads a PDF's primitives for reconnaissance, where formats
@@ -64,13 +65,13 @@ func New(
 	}
 }
 
-// Store is how one user's library is read: search, outline, documents and
+// Store is how one library is read: search, outline, documents and
 // the context around a chunk.
-func (l *Libraries) Store(user string) (*pgstore.Store, error) {
-	if err := check(user); err != nil {
+func (l *Libraries) Store(scope pgsession.Scope) (*pgstore.Store, error) {
+	if err := check(scope); err != nil {
 		return nil, err
 	}
-	return pgstore.New(l.db, user), nil
+	return pgstore.New(l.db, scope), nil
 }
 
 // Ready reports whether the database is openable and migrated.
@@ -78,57 +79,57 @@ func (l *Libraries) Store(user string) (*pgstore.Store, error) {
 // No user: the readiness probe answers before anyone has signed in, and
 // neither table it reads carries a policy.
 func (l *Libraries) Ready(ctx context.Context) error {
-	return pgstore.New(l.db, "").Ready(ctx)
+	return pgstore.New(l.db, pgsession.Scope{}).Ready(ctx)
 }
 
-// Documents is the document service over one user's library.
-func (l *Libraries) Documents(user string) (*document.Service, error) {
-	if err := check(user); err != nil {
+// Documents is the document service over one library.
+func (l *Libraries) Documents(scope pgsession.Scope) (*document.Service, error) {
+	if err := check(scope); err != nil {
 		return nil, err
 	}
 	return document.New(
-		postgres.NewDocuments(l.db, user),
+		postgres.NewDocuments(l.db, scope),
 		inspect.New(l.reader, l.formats, nil, l.roots),
 	), nil
 }
 
-// Jobs is the ingest queue of one user, and the targets a request may name.
-func (l *Libraries) Jobs(user string) (*job.Service, error) {
-	if err := check(user); err != nil {
+// Jobs is the ingest queue of one library, and the targets a request may name.
+func (l *Libraries) Jobs(scope pgsession.Scope) (*job.Service, error) {
+	if err := check(scope); err != nil {
 		return nil, err
 	}
-	sources, err := l.Sources(user)
+	sources, err := l.Sources(scope)
 	if err != nil {
 		return nil, err
 	}
-	return job.New(postgres.NewJobs(l.db, user), sources), nil
+	return job.New(postgres.NewJobs(l.db, scope), sources), nil
 }
 
-// Ingester writes into one user's library.
-func (l *Libraries) Ingester(user string) (*ingest.Service, error) {
-	if err := check(user); err != nil {
+// Ingester writes into one library.
+func (l *Libraries) Ingester(scope pgsession.Scope) (*ingest.Service, error) {
+	if err := check(scope); err != nil {
 		return nil, err
 	}
-	return ingest.New(postgres.New(l.db, user), l.now), nil
+	return ingest.New(postgres.New(l.db, scope), l.now), nil
 }
 
 // Sources turns a target into something to read, crawling through the crawl
-// cache of the user asking.
-func (l *Libraries) Sources(user string) (*source.Registry, error) {
-	if err := check(user); err != nil {
+// cache of the library it is read into.
+func (l *Libraries) Sources(scope pgsession.Scope) (*source.Registry, error) {
+	if err := check(scope); err != nil {
 		return nil, err
 	}
-	return source.New(l.formats, l.roots, pgcache.New(l.db, user),
-		pgupload.New(l.db, user), l.site), nil
+	return source.New(l.formats, l.roots, pgcache.New(l.db, scope),
+		pgupload.New(l.db, scope), l.site), nil
 }
 
 // check refuses a view nobody owns.
 //
-// Built for the empty user, every one of these would open transactions that
+// Built for an empty scope, every one of these would open transactions that
 // name no user and match no rows, which reads as an empty library rather than
 // as the wiring fault it is.
-func check(user string) error {
-	if user == "" {
+func check(scope pgsession.Scope) error {
+	if scope.User == "" || scope.Library == "" {
 		return fmt.Errorf("build a library view: %w", owner.ErrNoOwner)
 	}
 	return nil

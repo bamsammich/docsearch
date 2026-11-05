@@ -1,5 +1,5 @@
 // Package pgsession is how every Postgres statement in docsearch names the
-// user it belongs to.
+// user and the library it belongs to.
 //
 // Nothing outside this package should touch the database except through it.
 //
@@ -27,19 +27,34 @@ import (
 	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
 )
 
-// Run opens a transaction scoped to userID and runs work in it.
+// Scope is who a transaction acts for and which library it works in.
+//
+// The two differ once a library is shared: a member reads and writes a
+// library that is not their own, and the policies check that the user holds
+// a grant on the library. A user's personal library carries the user's id.
+type Scope struct {
+	User    string
+	Library string
+}
+
+// Personal is the scope of a user working in their own library.
+func Personal(user string) Scope {
+	return Scope{User: user, Library: user}
+}
+
+// Run opens a transaction in scope and runs work in it.
 func Run(
 	ctx context.Context,
 	db *sql.DB,
 	q *pgdbgen.Queries,
-	userID string,
+	scope Scope,
 	work func(*pgdbgen.Queries) error,
 ) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
 	}
-	if err := setUser(ctx, tx, userID); err != nil {
+	if err := setScope(ctx, tx, scope); err != nil {
 		return errors.Join(err, Rollback(tx))
 	}
 	if err := work(q.WithTx(tx)); err != nil {
@@ -51,23 +66,19 @@ func Run(
 	return nil
 }
 
-// setUser is what the policies read: app.user_id is who is asking, and
-// app.library_id is the library the transaction works in. The policies
-// check that the user holds a grant on that library.
-//
-// A user's personal library carries the user's own id, and until shared
-// libraries reach this layer it is the only library a transaction names.
+// setScope is what the policies read: app.user_id is who is asking, and
+// app.library_id is the library the transaction works in.
 //
 // set_config with is_local true is SET LOCAL as a function, which lets both
-// settings go in one statement with the identifier bound rather than quoted.
-func setUser(ctx context.Context, tx *sql.Tx, userID string) error {
-	if userID == "" {
-		return errors.New("no user: a statement without an owner would match no rows")
+// settings go in one statement with the identifiers bound rather than quoted.
+func setScope(ctx context.Context, tx *sql.Tx, scope Scope) error {
+	if scope.User == "" || scope.Library == "" {
+		return errors.New("no scope: a statement without a user and a library would match no rows")
 	}
 	if _, err := tx.ExecContext(ctx,
-		"SELECT set_config('app.user_id', $1, true), set_config('app.library_id', $1, true)",
-		userID); err != nil {
-		return fmt.Errorf("set the user: %w", err)
+		"SELECT set_config('app.user_id', $1, true), set_config('app.library_id', $2, true)",
+		scope.User, scope.Library); err != nil {
+		return fmt.Errorf("set the scope: %w", err)
 	}
 	return nil
 }
@@ -82,7 +93,7 @@ func Rollback(tx *sql.Tx) error {
 	return fmt.Errorf("roll back: %w", err)
 }
 
-// Read runs one statement in a transaction scoped to userID and answers with
+// Read runs one statement in a transaction in scope and answers with
 // what the statement produced.
 //
 // A read opens a transaction exactly as a write does, so there is one path to
@@ -94,11 +105,11 @@ func Read[T any](
 	ctx context.Context,
 	db *sql.DB,
 	q *pgdbgen.Queries,
-	userID string,
+	scope Scope,
 	statement func(*pgdbgen.Queries) (T, error),
 ) (T, error) {
 	var out T
-	err := Run(ctx, db, q, userID, func(q *pgdbgen.Queries) error {
+	err := Run(ctx, db, q, scope, func(q *pgdbgen.Queries) error {
 		var readErr error
 		out, readErr = statement(q)
 		return readErr
@@ -121,7 +132,7 @@ func Narrow(v int) int32 {
 	return int32(v)
 }
 
-// ReadOnly opens a read-only transaction scoped to userID and runs work in
+// ReadOnly opens a read-only transaction in scope and runs work in
 // it, for a read that asks several questions and wants one round trip to
 // begin and one to end rather than one pair per question.
 //
@@ -130,14 +141,14 @@ func Narrow(v int) int32 {
 func ReadOnly(
 	ctx context.Context,
 	db *sql.DB,
-	userID string,
+	scope Scope,
 	work func(*sql.Tx) error,
 ) error {
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
 	}
-	if err := setUser(ctx, tx, userID); err != nil {
+	if err := setScope(ctx, tx, scope); err != nil {
 		return errors.Join(err, Rollback(tx))
 	}
 	if err := work(tx); err != nil {

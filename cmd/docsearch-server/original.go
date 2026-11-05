@@ -7,6 +7,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/config"
 	"github.com/bamsammich/docsearch/internal/library"
 	"github.com/bamsammich/docsearch/internal/original"
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/repository/postgres"
 	"github.com/bamsammich/docsearch/internal/upload/pgupload"
 )
@@ -20,9 +21,9 @@ func newOriginalRoute(
 	log *slog.Logger,
 ) route {
 	return route{path: original.Pattern, handler: original.Handler{
-		Documents: func(user string) (original.Documents, error) { return libs.Documents(user) },
+		Documents: func(user string) (original.Documents, error) { return libs.Documents(pgsession.Personal(user)) },
 		Uploads: func(user string) (original.Uploads, error) {
-			return pgupload.New(db, user), nil
+			return pgupload.New(db, pgsession.Personal(user)), nil
 		},
 		NotFound: postgres.ErrNotFound,
 		Log:      log,

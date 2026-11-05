@@ -66,7 +66,7 @@ func (s *Store) GetContext(ctx context.Context, docID string, chunkID int64,
 
 // chunkOrdinal is a chunk's position in its document.
 func (s *Store) chunkOrdinal(ctx context.Context, docID string, chunkID int64) (int, error) {
-	ordinal, err := pgsession.Read(ctx, s.db, s.q, s.userID,
+	ordinal, err := pgsession.Read(ctx, s.db, s.q, s.scope,
 		func(q *pgdbgen.Queries) (int32, error) {
 			return q.ChunkOrdinal(ctx, pgdbgen.ChunkOrdinalParams{ID: chunkID, DocID: docID})
 		})
@@ -82,7 +82,7 @@ func (s *Store) chunkOrdinal(ctx context.Context, docID string, chunkID int64) (
 // contextSpan reads the chunks on either side of an anchor, in document order.
 func (s *Store) contextSpan(ctx context.Context, docID string,
 	anchor, before, after int) ([]ContextChunk, error) {
-	rows, err := pgsession.Read(ctx, s.db, s.q, s.userID,
+	rows, err := pgsession.Read(ctx, s.db, s.q, s.scope,
 		func(q *pgdbgen.Queries) ([]pgdbgen.ContextChunksRow, error) {
 			return q.ContextChunks(ctx, pgdbgen.ContextChunksParams{
 				DocID:     docID,
@@ -152,7 +152,7 @@ func (s *Store) GetPages(
 		end = start + maxContextPages - 1
 		truncated = true
 	}
-	rows, err := pgsession.Read(ctx, s.db, s.q, s.userID,
+	rows, err := pgsession.Read(ctx, s.db, s.q, s.scope,
 		func(q *pgdbgen.Queries) ([]pgdbgen.PagesInRangeRow, error) {
 			return q.PagesInRange(ctx, pgdbgen.PagesInRangeParams{
 				DocID: docID, Page: pgsession.Narrow(start), Page_2: pgsession.Narrow(end),

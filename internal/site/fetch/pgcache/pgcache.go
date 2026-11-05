@@ -6,7 +6,7 @@
 // none. internal/site/fetch.SQLiteCache is the same contract over a file, and
 // step 4g of docs/plans/postgres-multiuser.md removes it.
 //
-// A cache belongs to one user, as every other table in the database does.
+// A cache belongs to one library, as every other table in the database does.
 // Which hosts someone crawled is not public even where the responses are.
 package pgcache
 
@@ -21,25 +21,26 @@ import (
 	"github.com/bamsammich/docsearch/internal/site/fetch"
 )
 
-// Cache is a fetch.Cache over one user's rows in a Postgres database.
+// Cache is a fetch.Cache over one library's rows in a Postgres database.
 type Cache struct {
 	db *sql.DB
 	q  *pgdbgen.Queries
-	// userID owns every row read or written. Bound once, because a cache
-	// serves one crawl and a crawl belongs to one user.
-	userID string
+	// scope names the library that owns every row read or written. Bound
+	// once, because a cache serves one crawl and a crawl reads into one
+	// library.
+	scope pgsession.Scope
 }
 
-// New caches one user's responses through db, which the caller opens and
+// New caches one library's responses through db, which the caller opens and
 // closes. The worker already holds a connection pool for the index, and the
 // cache has no reason to open a second.
-func New(db *sql.DB, userID string) *Cache {
-	return &Cache{db: db, q: pgdbgen.New(db), userID: userID}
+func New(db *sql.DB, scope pgsession.Scope) *Cache {
+	return &Cache{db: db, q: pgdbgen.New(db), scope: scope}
 }
 
 // Get is the stored response for url, and whether one was stored.
 func (c *Cache) Get(ctx context.Context, url string) (*fetch.Response, bool, error) {
-	row, err := pgsession.Read(ctx, c.db, c.q, c.userID,
+	row, err := pgsession.Read(ctx, c.db, c.q, c.scope,
 		func(q *pgdbgen.Queries) (pgdbgen.CachedResponseRow, error) {
 			return q.CachedResponse(ctx, url)
 		})
@@ -64,9 +65,9 @@ func (c *Cache) Get(ctx context.Context, url string) (*fetch.Response, bool, err
 
 // Put stores a response, replacing any stored under the same URL.
 func (c *Cache) Put(ctx context.Context, r *fetch.Response) error {
-	err := pgsession.Run(ctx, c.db, c.q, c.userID, func(q *pgdbgen.Queries) error {
+	err := pgsession.Run(ctx, c.db, c.q, c.scope, func(q *pgdbgen.Queries) error {
 		return q.StoreResponse(ctx, pgdbgen.StoreResponseParams{
-			LibraryID:    c.userID,
+			LibraryID:    c.scope.Library,
 			Url:          r.URL,
 			FinalUrl:     r.FinalURL,
 			Status:       pgsession.Narrow(r.Status),
@@ -86,7 +87,7 @@ func (c *Cache) Put(ctx context.Context, r *fetch.Response) error {
 
 // Touch records that a conditional request confirmed the stored copy.
 func (c *Cache) Touch(ctx context.Context, url string) error {
-	err := pgsession.Run(ctx, c.db, c.q, c.userID, func(q *pgdbgen.Queries) error {
+	err := pgsession.Run(ctx, c.db, c.q, c.scope, func(q *pgdbgen.Queries) error {
 		return q.TouchResponse(ctx, url)
 	})
 	if err != nil {
@@ -98,7 +99,7 @@ func (c *Cache) Touch(ctx context.Context, url string) error {
 // Robots is the stored robots.txt for host, and whether one was stored. An
 // empty body means the host serves none, which is permission.
 func (c *Cache) Robots(ctx context.Context, host string) (*fetch.RobotsFile, bool, error) {
-	row, err := pgsession.Read(ctx, c.db, c.q, c.userID,
+	row, err := pgsession.Read(ctx, c.db, c.q, c.scope,
 		func(q *pgdbgen.Queries) (pgdbgen.CachedRobotsRow, error) {
 			return q.CachedRobots(ctx, host)
 		})
@@ -113,9 +114,9 @@ func (c *Cache) Robots(ctx context.Context, host string) (*fetch.RobotsFile, boo
 
 // PutRobots stores a host's robots.txt.
 func (c *Cache) PutRobots(ctx context.Context, host string, r *fetch.RobotsFile) error {
-	err := pgsession.Run(ctx, c.db, c.q, c.userID, func(q *pgdbgen.Queries) error {
+	err := pgsession.Run(ctx, c.db, c.q, c.scope, func(q *pgdbgen.Queries) error {
 		return q.StoreRobots(ctx, pgdbgen.StoreRobotsParams{
-			LibraryID: c.userID, Host: host, Body: r.Body, FetchedAt: r.FetchedAt.UTC(),
+			LibraryID: c.scope.Library, Host: host, Body: r.Body, FetchedAt: r.FetchedAt.UTC(),
 		})
 	})
 	if err != nil {

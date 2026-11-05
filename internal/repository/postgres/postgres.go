@@ -26,19 +26,19 @@ import (
 // reader of documents.ingested_at expects.
 const timeFormat = "2006-01-02T15:04:05Z"
 
-// Repository writes one user's documents.
+// Repository writes one library's documents.
 type Repository struct {
 	db *sql.DB
 	q  *pgdbgen.Queries
-	// userID is the library every statement here reads and writes. Bound
-	// once, because a repository serves one request and a request belongs
-	// to one user.
-	userID string
+	// scope is the user and the library every statement here names. Bound
+	// once, because a repository serves one request and a request works in
+	// one library.
+	scope pgsession.Scope
 }
 
 // New writes through db, which the caller opens and closes.
-func New(db *sql.DB, userID string) *Repository {
-	return &Repository{db: db, q: pgdbgen.New(db), userID: userID}
+func New(db *sql.DB, scope pgsession.Scope) *Repository {
+	return &Repository{db: db, q: pgdbgen.New(db), scope: scope}
 }
 
 // Confirm stamps a document as read at, changing nothing it holds.
@@ -54,7 +54,7 @@ func (r *Repository) ReadyWithDigest(
 	ctx context.Context,
 	digest string,
 ) (*ingest.Existing, error) {
-	row, err := pgsession.Read(ctx, r.db, r.q, r.userID,
+	row, err := pgsession.Read(ctx, r.db, r.q, r.scope,
 		func(q *pgdbgen.Queries) (pgdbgen.ReadyDocumentWithDigestRow, error) {
 			return q.ReadyDocumentWithDigest(ctx, digest)
 		})
@@ -68,7 +68,7 @@ func (r *Repository) ReadyWithDigest(
 		ctx,
 		r.db,
 		r.q,
-		r.userID,
+		r.scope,
 		func(q *pgdbgen.Queries) (int64, error) {
 			return q.CountDocumentChunks(ctx, row.DocID)
 		},
@@ -90,7 +90,7 @@ func (r *Repository) DocIDForIdentity(ctx context.Context, identity string) (str
 		ctx,
 		r.db,
 		r.q,
-		r.userID,
+		r.scope,
 		func(q *pgdbgen.Queries) (string, error) {
 			return q.DocIDForSourcePath(ctx, identity)
 		},
@@ -111,7 +111,7 @@ func (r *Repository) DocIDsWithPrefix(ctx context.Context, prefix string) ([]str
 		ctx,
 		r.db,
 		r.q,
-		r.userID,
+		r.scope,
 		func(q *pgdbgen.Queries) ([]string, error) {
 			return q.DocIDsWithPrefix(ctx, likePrefix(prefix))
 		},
@@ -133,7 +133,7 @@ func (r *Repository) Create(ctx context.Context, doc ingest.Document, stale stri
 			}
 		}
 		return q.InsertDocument(ctx, pgdbgen.InsertDocumentParams{
-			LibraryID:  r.userID,
+			LibraryID:  r.scope.Library,
 			DocID:      doc.DocID,
 			Title:      doc.Title,
 			Format:     doc.Format,
@@ -152,7 +152,7 @@ func (r *Repository) AddChunks(
 ) error {
 	return r.inTx(ctx, func(q *pgdbgen.Queries) error {
 		for _, c := range chunks {
-			if err := q.InsertChunk(ctx, chunkParams(r.userID, docID, c)); err != nil {
+			if err := q.InsertChunk(ctx, chunkParams(r.scope.Library, docID, c)); err != nil {
 				return fmt.Errorf("write chunk %d: %w", c.Ordinal, err)
 			}
 		}
@@ -170,10 +170,10 @@ func (r *Repository) AddPagesAndTerms(
 		return nil
 	}
 	return r.inTx(ctx, func(q *pgdbgen.Queries) error {
-		if err := writePages(ctx, q, r.userID, docID, pages); err != nil {
+		if err := writePages(ctx, q, r.scope.Library, docID, pages); err != nil {
 			return err
 		}
-		return writeTerms(ctx, q, r.userID, docID, terms)
+		return writeTerms(ctx, q, r.scope.Library, docID, terms)
 	})
 }
 
@@ -324,9 +324,9 @@ func deleteRows(ctx context.Context, q *pgdbgen.Queries, docID string) error {
 	return nil
 }
 
-// inTx runs write inside one transaction that names this repository's user.
+// inTx runs write inside one transaction that names this repository's scope.
 func (r *Repository) inTx(ctx context.Context, write func(*pgdbgen.Queries) error) error {
-	return pgsession.Run(ctx, r.db, r.q, r.userID, write)
+	return pgsession.Run(ctx, r.db, r.q, r.scope, write)
 }
 
 // withoutNUL drops a code point Postgres text cannot hold.

@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/bamsammich/docsearch/internal/owner"
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgstore"
 )
 
@@ -139,7 +140,7 @@ func main() {
 	// Runs against any index without an authored query set, so it is resolved
 	// before the committed one is read.
 	if *selfLabel {
-		st, err := pgstore.Open(*dsn, *user)
+		st, err := pgstore.Open(*dsn, pgsession.Personal(*user))
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -166,7 +167,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", *qPath, err)
 		os.Exit(1)
 	}
-	st, err := pgstore.Open(*dsn, *user)
+	st, err := pgstore.Open(*dsn, pgsession.Personal(*user))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
