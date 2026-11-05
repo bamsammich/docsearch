@@ -290,8 +290,9 @@ details.facts dd { margin: 0; overflow-wrap: anywhere; }
 .form-end { margin: 18px 0 0; }
 .drop { border: 1.5px dashed var(--line-strong); border-radius: 8px; padding: 14px; text-align: center; color: var(--muted); font-size: 13px; display: grid; gap: 4px; justify-items: center; cursor: pointer; }
 .drop.has { border-style: solid; color: var(--ink); }
-.jobs { display: grid; gap: 10px; }
-.job { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+/* A card never grows past its column for a long URL or error; those wrap. */
+.jobs { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.job { min-width: 0; overflow-wrap: anywhere; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
 .job.failed { border-color: var(--bad); }
 .job-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: start; }
 .job-top .src { font-weight: 600; overflow-wrap: anywhere; }
@@ -469,16 +470,19 @@ details.help p { margin: 8px 0 0; color: var(--muted); }
   .sources { position: static; }
   .ingest { grid-template-columns: minmax(0, 1fr); }
   /* With the side navigation taking 216px, the table and the detail no
-     longer both fit: the detail opens as a sheet over the table. */
+     longer both fit: the open document takes the table's place inside the
+     frame, and Library goes back to it. */
   .library { grid-template-columns: minmax(0, 1fr); }
   .reading { display: none; }
-  .reading.sheet {
-    display: block; position: fixed; inset: 0; z-index: 35; max-height: none; overflow-y: auto; border: 0; background: var(--bg);
-    padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-  .reading.sheet > * { max-width: 680px; margin-left: auto; margin-right: auto; }
+  .library.sheet-open .lib-list { display: none; }
+  .reading.sheet { display: block; position: static; max-height: none; overflow: visible; border: 0; background: none; }
+  .reading.sheet > * { max-width: 760px; margin-left: auto; margin-right: auto; }
   .sheet-back { display: inline-flex; justify-self: start; align-self: flex-start; margin: 0 0 -10px -10px; }
   .gsearch .scope { max-width: 130px; }
+  /* Too narrow to centre: the field fills the bar up to Add document. */
+  .topbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .gsearch { grid-column: 1; max-width: 600px; }
+  .top-end { grid-column: 2; }
 }
 @media (max-width: 1023px) {
   .reader-body { grid-template-columns: minmax(0, 1fr); gap: 14px; }
@@ -496,10 +500,16 @@ details.help p { margin: 8px 0 0; color: var(--muted); }
   }
   .side-brand { display: none; }
   .sections { flex: 1; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
-  .section { flex-direction: column; justify-content: center; gap: 2px; min-height: 48px; padding: 0 4px; font-size: 12px; }
-  .section svg { width: 20px; height: 20px; }
+  /* A tab bar: icon over name, the count a badge on the icon's corner, the
+     current tab marked by colour rather than a box. */
+  .section { position: relative; flex-direction: column; justify-content: center; gap: 3px; min-height: 50px; padding: 0 4px; font-size: 11px; background: none; }
+  .section:hover, .section[aria-current="page"] { background: none; }
+  .section[aria-current="page"] { color: var(--on-frame); }
+  .section svg { width: 22px; height: 22px; }
   .section-name { flex: none; }
-  .count { font-size: 11px; }
+  .count { position: absolute; top: 4px; left: calc(50% + 5px); min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; display: grid; place-items: center; background: var(--frame-live); color: var(--frame); font-size: 10px; font-weight: 700; line-height: 1; }
+  .count.hot { background: var(--frame-alert); color: var(--frame); }
+  .count-word { display: none; }
   .side-foot { margin: 0; }
   .account-btn { min-height: 48px; width: auto; }
   .account-name, .account-btn > svg { display: none; }

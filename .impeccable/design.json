@@ -968,9 +968,9 @@
     ],
     "breakpoints": [
       {
-        "name": "detail-sheet",
+        "name": "detail-in-place",
         "value": "1180px",
-        "purpose": "At and below, the document detail opens as a full sheet; search sources and ingest form stack."
+        "purpose": "At and below, an open document takes the table's place inside the frame and the top bar stops centring the search field; search sources and ingest form stack."
       },
       {
         "name": "reader-fold",
@@ -1072,7 +1072,7 @@
     "keyCharacteristics": [
       "Dark frame (side navigation and top bar) around a light or graphite working area, in both themes.",
       "Search field centred in the top bar, reachable from anywhere with `/`.",
-      "Library table with the selected document's check-run detail beside it; the detail becomes a full sheet below 1180px.",
+      "Library table with the selected document's check-run detail beside it; below 1180px the open document takes the table's place inside the frame.",
       "Verdicts are an icon plus a word, never colour alone.",
       "Coverage as solid green, amber and grey segments with the numbers beside them.",
       "One blue accent for focus, selection, links and live work.",

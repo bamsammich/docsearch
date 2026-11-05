@@ -112,7 +112,7 @@
           <Icon name="inbox" /><span class="section-name">Ingest</span>
           {#if ingestCount}
             <span class="count" class:hot={ingestAlert > 0}
-              aria-label={ingestAlert ? `${ingestAlert} need attention` : `${queue.active} active`}>{ingestAlert ? ingestAlert : `${queue.active} running`}</span>
+              aria-label={ingestAlert ? `${ingestAlert} need attention` : `${queue.active} active`}>{ingestAlert || queue.active}{#if !ingestAlert}<span class="count-word"> running</span>{/if}</span>
           {/if}
         </a>
       </nav>

@@ -88,25 +88,14 @@
     queueMicrotask(() => document.querySelector<HTMLElement>(`[data-doc="${CSS.escape(id)}"]`)?.focus());
   }
 
-  function trap(event: KeyboardEvent) {
-    if (!sheet) return;
-    if (event.key === "Escape") {
-      closeSheet();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    const box = event.currentTarget as HTMLElement;
-    const stops = [...box.querySelectorAll<HTMLElement>("button:not([disabled]), a[href], summary, [tabindex='0']")];
-    const first = stops[0];
-    const last = stops[stops.length - 1];
-    if (!first || !last) return;
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
+  // On a narrow screen the open document takes the table's place inside the
+  // frame, so it starts at the top, and Escape goes back to the table.
+  $effect(() => {
+    if (sheet) scrollTo({ top: 0 });
+  });
+
+  function back(event: KeyboardEvent) {
+    if (sheet && event.key === "Escape") closeSheet();
   }
 
   /** The first problem a document has, for its row in the table. */
@@ -138,7 +127,7 @@
 {:else if !library.docs.length}
   <EmptyLibrary />
 {:else}
-  <div class="library">
+  <div class="library" class:sheet-open={sheet}>
     <section class="lib-list" aria-labelledby="lib-title">
       <div class="lib-head">
         <h1 id="lib-title">Library</h1>
@@ -206,15 +195,8 @@
         </dl>
       </details>
     </section>
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <div
-      class="reading"
-      class:sheet
-      role={sheet ? "dialog" : undefined}
-      aria-modal={sheet ? "true" : undefined}
-      aria-labelledby={sheet ? "rec-title" : undefined}
-      onkeydown={trap}
-    >
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="reading" class:sheet onkeydown={back}>
       {#if open}
         {#key open.docId}<DocumentPanel doc={open} {sheet} onclose={closeSheet} />{/key}
       {:else if router.docId}

@@ -318,7 +318,7 @@ This world deliberately replaced an earlier one. Rejected and not to return: hat
 **Key Characteristics:**
 - Dark frame (side navigation and top bar) around a light or graphite working area, in both themes.
 - Search field centred in the top bar, reachable from anywhere with `/`.
-- Library table with the selected document's check-run detail beside it; the detail becomes a full sheet below 1180px.
+- Library table with the selected document's check-run detail beside it; below 1180px the open document takes the table's place inside the frame.
 - Verdicts are an icon plus a word, never colour alone.
 - Coverage as solid green, amber and grey segments with the numbers beside them.
 - One blue accent for focus, selection, links and live work.
@@ -385,7 +385,7 @@ A neutral graphite-and-white palette with one blue accent and three state famili
 
 ## Layout
 
-A two-column app grid: a 216px sticky side navigation spanning full height, and a content column whose first row is the 58px sticky top bar. The top bar is a three-column grid (minmax(150px, 1fr), up to 600px, minmax(150px, 1fr)) so the search field stays centred and shrinks before anything overlaps it. Views pad 20px by 24px with 64px at the foot.
+A two-column app grid: a 216px sticky side navigation spanning full height, and a content column whose first row is the 58px sticky top bar. The top bar is a three-column grid (minmax(150px, 1fr), up to 600px, minmax(150px, 1fr)) so the search field stays centred and shrinks before anything overlaps it. At 1180px and below the bar drops to two columns and the field fills it up to Add document. Views pad 20px by 24px with 64px at the foot.
 
 The library view breaks out of that padding into its own grid: the table (minmax(0, 1fr)) and the detail column (400 to 520px), the detail sticky under the top bar, scrolling on its own, separated by a single line. Table rows are a three-column grid: name (with kind and reason line), status (104px), and reach (minmax(128px, 30%)), 14px apart.
 
@@ -394,14 +394,14 @@ Search results run a reading column up to 860px beside a 300px sticky sources ca
 Spacing steps are 2, 4, 6, 8, 10, 12, 14, 16, 20, 24 and 28px; most internal gaps are 8 to 14px, section gaps in the detail are 22px.
 
 Responsive behaviour:
-- At 1180px and below the detail panel leaves the grid and opens as a full sheet over the table (content capped at 680px) with a back button; search sources and the ingest form stack.
+- At 1180px and below the detail panel leaves the grid: an open document takes the table's place inside the frame (content capped at 760px), with a Library button and Escape to go back. The side navigation and top bar never leave. Search sources and the ingest form stack.
 - At 1023px and below the reader's contents fold into a bordered disclosure above the text.
-- At 760px and below the side navigation becomes a fixed bottom bar of icon-over-label sections (48px tall), the brand moves into the top bar, the search field takes its own row (top bar 104px), the shortcut key hides, Add document shrinks to its icon, and table rows put the reach bar on its own line.
+- At 760px and below the side navigation becomes a fixed bottom tab bar: icon over label (50px tall), each count a 16px badge on the icon's top-right corner (frame-live, or frame-alert when something needs attention), the current tab marked by colour alone, the brand moves into the top bar, the search field takes its own row (top bar 104px), the shortcut key hides, Add document shrinks to its icon, and table rows put the reach bar on its own line.
 
 ### Named Rules
 **The One Scale Rule.** Every coverage bar in the library table is drawn on one size scale, chunk count, as a share of the longest document (never shorter than 4%), with a note stating the longest. Degraded and unusable rows keep a 48px minimum bar so their split stays visible.
 
-**The Centred Search Rule.** The search field is centred in the top bar on every page, with its scope select inside it, and `/` focuses it from anywhere outside a text field.
+**The Centred Search Rule.** The search field is centred in the top bar on every page wide enough to centre it, with its scope select inside it, and `/` focuses it from anywhere outside a text field.
 
 ## Elevation & Depth
 
