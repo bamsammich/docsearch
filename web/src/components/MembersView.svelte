@@ -5,6 +5,7 @@
   import { library } from "../lib/library.svelte";
   import { libraries } from "../lib/libraries.svelte";
   import { router } from "../lib/router.svelte";
+  import { initialOf } from "../lib/names";
   import { toast } from "../lib/toast.svelte";
 
   const roles = ["reader", "editor", "admin"] as const;
@@ -212,7 +213,6 @@
     }
   }
 
-  const initial = (name: string) => (name.match(/[a-z0-9]/i)?.[0] ?? "?").toUpperCase();
 </script>
 
 <div class="page-head">
@@ -257,7 +257,7 @@
             {@const self = m.username === me}
             {@const since = story.since.get(m.username)}
             <li class="mrow">
-              <span class="mavatar" aria-hidden="true">{initial(m.username || "?")}</span>
+              <span class="mavatar" aria-hidden="true">{initialOf(m.username || "?")}</span>
               <span class="mwho">
                 <span class="mname">{m.username || "(no username yet)"}{#if self}<span class="muted">{" · you"}</span>{/if}{#if m.role === "admin" && admins === 1}<span class="tag">Only admin</span>{/if}</span>
                 {#if since}<span class="msince">{since}</span>{/if}

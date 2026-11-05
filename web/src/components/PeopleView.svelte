@@ -3,6 +3,7 @@
   import type { Account } from "../gen/docsearch/account/v1/account_pb";
   import { accounts, problem } from "../lib/api";
   import { admin } from "../lib/admin.svelte";
+  import { initialOf } from "../lib/names";
   import { toast } from "../lib/toast.svelte";
   import Icon from "./Icon.svelte";
 
@@ -133,7 +134,6 @@
     menu.style.left = `${Math.round(Math.max(12, at.right - 210))}px`;
   }
 
-  const initial = (name: string) => (name.match(/[a-z0-9]/i)?.[0] ?? "?").toUpperCase();
 </script>
 
 <div class="page-head"><h1>People</h1></div>
@@ -179,7 +179,7 @@
         {@const since = dateOf(p.createdAt)}
         {@const until = dateOf(p.lockedUntil)}
         <li class="mrow prow">
-          <span class="mavatar" aria-hidden="true">{initial(p.username || "?")}</span>
+          <span class="mavatar" aria-hidden="true">{initialOf(p.username || "?")}</span>
           <span class="mwho">
             <span class="mname">{p.username || "(no username yet)"}{#if self}<span class="muted">{" · you"}</span>{/if}{#if locked(p)}<span class="tag">Locked</span>{/if}</span>
             {#if until}

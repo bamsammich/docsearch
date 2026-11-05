@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { labelOf, nameOf, own, slugOf } from "./names";
+import { initialOf, labelOf, nameOf, own, slugOf } from "./names";
 
 describe("slugOf", () => {
   it("joins lower-case words with hyphens", () => {
@@ -18,6 +18,21 @@ describe("slugOf", () => {
   it("ends on a letter or digit when a long name is cut", () => {
     const slug = slugOf(`${"a".repeat(62)} b`);
     expect(slug).toBe("a".repeat(62));
+  });
+});
+
+describe("initialOf", () => {
+  it("is the first letter or digit, upper-cased", () => {
+    expect(initialOf("  runbooks")).toBe("R");
+    expect(initialOf("2026 plans")).toBe("2");
+  });
+
+  it("reads letters in any script", () => {
+    expect(initialOf("運用手順")).toBe("運");
+  });
+
+  it("is a question mark when there is none", () => {
+    expect(initialOf("—!—")).toBe("?");
   });
 });
 

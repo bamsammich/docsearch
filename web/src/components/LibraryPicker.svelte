@@ -3,6 +3,7 @@
   import type { Library } from "../gen/docsearch/library/v1/library_pb";
   import { problem } from "../lib/api";
   import { libraries, nameOf, own, slugOf } from "../lib/libraries.svelte";
+  import { initialOf } from "../lib/names";
   import { router } from "../lib/router.svelte";
   import { toast } from "../lib/toast.svelte";
   import Icon from "./Icon.svelte";
@@ -40,7 +41,7 @@
   }
 
   function initial(lib: Library | undefined): string {
-    return (nameOf(lib).match(/[a-z0-9]/i)?.[0] ?? "?").toUpperCase();
+    return initialOf(nameOf(lib));
   }
 
   function reset(): void {

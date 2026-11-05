@@ -22,6 +22,11 @@ export function labelOf(docId: string): string {
   return at > 0 ? docId.slice(0, at) : own;
 }
 
+/** The letter a tile shows for a name: its first letter or digit, in any script. */
+export function initialOf(name: string): string {
+  return (name.match(/[\p{L}\p{N}]/u)?.[0] ?? "?").toUpperCase();
+}
+
 /** What a person reads a library as. */
 export function nameOf(lib: Library | undefined): string {
   if (!lib) return "";
