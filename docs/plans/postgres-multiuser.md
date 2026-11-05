@@ -69,9 +69,14 @@ and a body counts twice at full strength, while FTS5 adds weighted counts
 before saturation. The one-field index reproduces FTS5's arithmetic, which is
 why it is a requirement and not a preference.
 
-Unscoped search stays a loop over documents. One `LATERAL` statement returned
-the same results and was slower on both engines, so the store keeps the shape
-it has.
+Unscoped search walks the library's BM25 ordering once. One query per document
+was the shape this phase kept, since one `LATERAL` statement returned the same
+results and was slower on both engines. But `pg_textsearch` filters on
+`doc_id` only after ordering the whole partition, so each document's query
+walked every other document's matches, and 500 documents in one library took
+1.3 s. One walk that carries keys and keeps each document's candidate pool,
+followed by scoring only the rows kept, returns the same results;
+`docs/research/unscoped-search-cost.md` has the measurements.
 
 ## Isolation is a test, not a claim
 

@@ -236,7 +236,7 @@ func (s *RepositorySuite) TestAJobIsCompletedWhenItsDocumentBecomesVisible() {
 	var jobID int64
 	pgtest.WriteAs(s.T(), s.db, builtinID, func(tx *sql.Tx) {
 		s.Require().NoError(tx.QueryRowContext(s.T().Context(),
-			`INSERT INTO ingest_jobs (user_id, source_path, status, created_at, updated_at)
+			`INSERT INTO ingest_jobs (library_id, source_path, status, created_at, updated_at)
 			 VALUES ($1, '/library/guide.md', 'running', now(), now())
 			 RETURNING id`, builtinID).Scan(&jobID))
 	})

@@ -34,9 +34,12 @@ import (
 )
 
 const (
-	// DefaultMaxPages is how many pages one crawl will fetch, a backstop
-	// against a seed that addresses a whole site rather than one manual. The
-	// fetcher's own budget sits below it as a floor under a bug.
+	// DefaultMaxPages is how many pages link-following may know before it
+	// stops adding links. It bounds only the URLs a crawl generates. Pages a
+	// sitemap, an llms.txt or the seed declares are a finite list the
+	// publisher wrote, so the declared frontier is never cut: a 1,285-page
+	// section cut at 500 would be refused by the completeness gate, which
+	// counted the remainder as unreachable.
 	DefaultMaxPages = 500
 	// DefaultLinkDepth is how far link-following walks from the seed. It is
 	// reached only when no manifest answered, at which point there is no
@@ -126,7 +129,10 @@ func (p Progress) report(phase Phase, current, total int) {
 type Options struct {
 	// Progress is called as discovery and the walk advance. Nil reports
 	// nothing, which is what a caller with nobody watching wants.
-	Progress  Progress
+	Progress Progress
+	// MaxPages bounds link-following: once the crawl knows this many pages,
+	// it adds no more links. Declared pages are fetched whatever their
+	// number.
 	MaxPages  int
 	LinkDepth int
 	// Revalidate false serves the whole crawl from the fetch cache without a
@@ -281,21 +287,20 @@ func (c *crawler) keepSeed(seedPage *fetch.Fetched, declared []string) error {
 	return c.keep(frontierEntry{url: c.seed}, seedPage)
 }
 
-// start fills the frontier from the coverage set, within the page budget.
+// reserver is a fetcher whose request budget can grow to fit the frontier.
+// The fetcher's budget is a floor under a bug, and a fixed one would cap
+// the declared frontier that the crawler no longer caps.
+type reserver interface {
+	Reserve(requests int)
+}
+
+// start fills the frontier from the coverage set, all of it.
 func (c *crawler) start(urls []string) {
-	frontier := urls
-	if len(frontier) > c.opts.MaxPages {
-		for _, dropped := range frontier[c.opts.MaxPages:] {
-			c.result.Unreachable = append(c.result.Unreachable, Pair{
-				URL: dropped, Reason: fmt.Sprintf("page budget of %d exhausted", c.opts.MaxPages),
-			})
-		}
-		c.note("page budget of %d reached; %d declared page(s) were not fetched and are "+
-			"reported as unreachable", c.opts.MaxPages, len(frontier)-c.opts.MaxPages)
-		frontier = frontier[:c.opts.MaxPages]
+	if r, ok := c.fetcher.(reserver); ok {
+		r.Reserve(len(urls))
 	}
-	c.known = make(map[string]bool, len(frontier))
-	for _, u := range frontier {
+	c.known = make(map[string]bool, len(urls))
+	for _, u := range urls {
 		c.known[u] = true
 		c.queue = append(c.queue, frontierEntry{url: u})
 	}

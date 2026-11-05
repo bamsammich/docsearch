@@ -600,3 +600,103 @@ func (s *MigrationSuite) TestJobForceGoesDownAndUpAgain() {
 	s.Equal(1, total, "the job survives losing the column")
 	s.Equal(0, forced)
 }
+
+// -- 00017_default_partition_grant ----------------------------------------
+
+// readBuiltInPartition is the read search makes when it names the built-in
+// library's own BM25 index, which needs SELECT on the partition itself.
+const readBuiltInPartition = `SELECT 1 FROM chunks_default LIMIT 0`
+
+func (s *MigrationSuite) TestDefaultPartitionGrantUpLetsTheAppReadThePartition() {
+	s.upTo(16)
+	s.True(s.appCannot(readBuiltInPartition), "migration 6 granted the parent alone")
+
+	s.upTo(17)
+
+	s.False(s.appCannot(readBuiltInPartition))
+}
+
+func (s *MigrationSuite) TestDefaultPartitionGrantGoesDownAndUpAgain() {
+	s.upTo(17)
+	s.down()
+	s.True(s.appCannot(readBuiltInPartition), "down takes the grant back")
+	s.upTo(17)
+
+	s.False(s.appCannot(readBuiltInPartition))
+}
+
+// -- 00018_libraries ------------------------------------------------------
+
+func (s *MigrationSuite) TestLibrariesUpKeepsEveryUsersRows() {
+	// Each user's rows become their personal library's without moving: the
+	// owner column is renamed, and the library takes the user's id.
+	s.upTo(17)
+	s.exec(`SELECT create_account('second', 'https://issuer.example', 'subject-2')`)
+	s.ownedLibrary("default")
+	s.ownedLibrary("second")
+
+	s.upTo(18)
+
+	s.Equal(2, s.count(`SELECT COUNT(*) FROM libraries WHERE kind = 'personal'`))
+	s.Equal(2, s.count(
+		`SELECT COUNT(*) FROM library_grants WHERE library_id = user_id AND role = 'admin'`))
+	for _, user := range []string{"default", "second"} {
+		pgtest.ReadAs(s.T(), s.pg.App, user, func(tx *sql.Tx) {
+			var n int
+			s.Require().NoError(tx.QueryRowContext(s.T().Context(),
+				`SELECT COUNT(*) FROM chunks WHERE library_id = $1`, user).Scan(&n))
+			s.Equal(2, n, user)
+		})
+	}
+}
+
+func (s *MigrationSuite) TestAnAccountMadeAfterLibrariesHasOne() {
+	s.upTo(18)
+	s.exec(`SELECT create_account('third', 'https://issuer.example', 'subject-3')`)
+
+	s.Equal(1, s.count(
+		`SELECT COUNT(*) FROM libraries WHERE library_id = 'third' AND kind = 'personal'`))
+	s.Equal(1, s.count(
+		`SELECT COUNT(*) FROM library_grants
+		  WHERE library_id = 'third' AND user_id = 'third' AND role = 'admin'`))
+	s.True(s.tableExists("chunks_third"))
+}
+
+func (s *MigrationSuite) TestLibrariesGoDownAndUpAgain() {
+	// Going down keeps every personal library and drops shared ones, rows
+	// and partition alike, since version 17 has nowhere to put them.
+	s.upTo(17)
+	s.ownedLibrary("default")
+	s.upTo(18)
+	s.exec(`INSERT INTO libraries (library_id, kind, slug, name)
+		VALUES ('lib_team', 'shared', 'team', 'Team docs')`)
+	s.exec(`CREATE TABLE chunks_lib_team PARTITION OF chunks FOR VALUES IN ('lib_team')`)
+	s.exec(`INSERT INTO library_grants (library_id, user_id, role)
+		VALUES ('lib_team', 'default', 'admin')`)
+	tx, err := s.db.BeginTx(s.T().Context(), nil)
+	s.Require().NoError(err)
+	_, err = tx.ExecContext(
+		s.T().Context(),
+		"SELECT set_config('app.user_id', 'default', true), set_config('app.library_id', 'lib_team', true)",
+	)
+	s.Require().NoError(err)
+	_, err = tx.ExecContext(s.T().Context(),
+		`INSERT INTO documents (library_id, doc_id, title, format, source_path, sha256, status)
+		 VALUES ('lib_team', 'team-manual', 'Team Manual', 'pdf', '/team.pdf', 'def', 'ready')`)
+	s.Require().NoError(err)
+	s.Require().NoError(tx.Commit())
+
+	s.down()
+
+	s.False(s.tableExists("libraries"))
+	s.False(s.tableExists("chunks_lib_team"))
+	pgtest.ReadAs(s.T(), s.pg.App, "default", func(tx *sql.Tx) {
+		var n int
+		s.Require().NoError(tx.QueryRowContext(s.T().Context(),
+			`SELECT COUNT(*) FROM chunks WHERE user_id = 'default'`).Scan(&n))
+		s.Equal(2, n, "the personal library survives going down")
+	})
+
+	s.upTo(18)
+	s.Equal(1, s.count(`SELECT COUNT(*) FROM libraries`))
+}

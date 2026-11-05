@@ -66,7 +66,7 @@ func (c *Cache) Get(ctx context.Context, url string) (*fetch.Response, bool, err
 func (c *Cache) Put(ctx context.Context, r *fetch.Response) error {
 	err := pgsession.Run(ctx, c.db, c.q, c.userID, func(q *pgdbgen.Queries) error {
 		return q.StoreResponse(ctx, pgdbgen.StoreResponseParams{
-			UserID:       c.userID,
+			LibraryID:    c.userID,
 			Url:          r.URL,
 			FinalUrl:     r.FinalURL,
 			Status:       pgsession.Narrow(r.Status),
@@ -115,7 +115,7 @@ func (c *Cache) Robots(ctx context.Context, host string) (*fetch.RobotsFile, boo
 func (c *Cache) PutRobots(ctx context.Context, host string, r *fetch.RobotsFile) error {
 	err := pgsession.Run(ctx, c.db, c.q, c.userID, func(q *pgdbgen.Queries) error {
 		return q.StoreRobots(ctx, pgdbgen.StoreRobotsParams{
-			UserID: c.userID, Host: host, Body: r.Body, FetchedAt: r.FetchedAt.UTC(),
+			LibraryID: c.userID, Host: host, Body: r.Body, FetchedAt: r.FetchedAt.UTC(),
 		})
 	})
 	if err != nil {

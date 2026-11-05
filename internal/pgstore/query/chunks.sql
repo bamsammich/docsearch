@@ -1,7 +1,7 @@
 -- Chunk and page reads, through internal/repository/postgres.
 --
--- Every statement runs in a transaction that named its user, so none of
--- these filters on user_id: row-level security is where the library is
+-- Every statement runs in a transaction that named its library, so none of
+-- these filters on library_id: row-level security is where the library is
 -- chosen.
 
 -- name: TopLevelHeadings :many

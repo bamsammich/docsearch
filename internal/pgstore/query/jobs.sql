@@ -3,7 +3,7 @@
 -- Returns the id rather than reporting a row count: Postgres has no
 -- last-insert-id, and RETURNING is how a caller learns what it queued.
 -- name: EnqueueJob :one
-INSERT INTO ingest_jobs (user_id, source_path, title, force, status, created_at, updated_at)
+INSERT INTO ingest_jobs (library_id, source_path, title, force, status, created_at, updated_at)
 VALUES ($1, $2, $3, $4, 'queued', now(), now())
 RETURNING id;
 

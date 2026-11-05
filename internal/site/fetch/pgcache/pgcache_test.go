@@ -119,11 +119,10 @@ func (s *CacheSuite) TestRobotsIsStoredPerHost() {
 func (s *CacheSuite) TestOneUsersCacheIsInvisibleToAnother() {
 	ctx := s.T().Context()
 	// Version 10 allows one account without an identity, the built-in one,
-	// so a second account carries a pair. The cache tables are not
-	// partitioned, so the row is all this needs.
+	// so a second account carries a pair. create_account also makes the
+	// library and the grant a write into it needs.
 	_, err := s.pg.Owner.ExecContext(ctx,
-		`INSERT INTO users (user_id, issuer, subject)
-		 VALUES ('second', 'https://issuer.example', 'subject-2')`)
+		`SELECT create_account('second', 'https://issuer.example', 'subject-2')`)
 	s.Require().NoError(err)
 
 	mine, theirs := s.cache(builtinUser), s.cache("second")

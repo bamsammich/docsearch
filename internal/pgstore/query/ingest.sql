@@ -6,10 +6,10 @@
 -- last statement here flips its status.
 --
 -- Every statement runs in a transaction that opened with
--- SET LOCAL app.user_id, so row-level security scopes it to one library. A
--- read therefore names no user: the policy is where that is decided, and a
+-- SET LOCAL app.library_id, so row-level security scopes it to one library. A
+-- read therefore names no library: the policy is where that is decided, and a
 -- second copy of the filter in 45 queries is 45 places for it to be wrong.
--- A write names user_id because a row has to carry its owner, and the policy
+-- A write names library_id because a row has to carry its owner, and the policy
 -- then refuses a value that disagrees with the session.
 
 -- warnings is read whole because the pipeline version that wrote the
@@ -32,24 +32,24 @@ SELECT doc_id FROM documents WHERE doc_id LIKE $1;
 -- MarkDocumentReady runs.
 -- name: InsertDocument :exec
 INSERT INTO documents (
-  user_id, doc_id, title, format, source_path, source_kind, sha256,
+  library_id, doc_id, title, format, source_path, source_kind, sha256,
   page_count, chunk_count, status, ingested_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, 'ingesting', NULL);
 
 -- name: InsertChunk :exec
 INSERT INTO chunks (
-  user_id, doc_id, ordinal, section, page_start, page_end, printed_page_start,
+  library_id, doc_id, ordinal, section, page_start, page_end, printed_page_start,
   image_count, kind, url, fragment, heading_path, text
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 
 -- A page arrives again when a site is re-crawled, so the write is an upsert
 -- rather than an insert that has to be preceded by a delete.
 -- name: UpsertPage :exec
-INSERT INTO pages (user_id, doc_id, page, text) VALUES ($1, $2, $3, $4)
-ON CONFLICT (user_id, doc_id, page) DO UPDATE SET text = EXCLUDED.text;
+INSERT INTO pages (library_id, doc_id, page, text) VALUES ($1, $2, $3, $4)
+ON CONFLICT (library_id, doc_id, page) DO UPDATE SET text = EXCLUDED.text;
 
 -- name: InsertIndexTerm :exec
-INSERT INTO index_terms (user_id, doc_id, term, section) VALUES ($1, $2, $3, $4);
+INSERT INTO index_terms (library_id, doc_id, term, section) VALUES ($1, $2, $3, $4);
 
 -- The moment a document becomes visible to search.
 -- name: MarkDocumentReady :exec
@@ -128,10 +128,10 @@ UPDATE documents SET ingested_at = $2 WHERE doc_id = $1;
 -- renamed, because the chunks' foreign key names the row they belong to.
 -- name: CopyDocumentAs :exec
 INSERT INTO documents (
-  user_id, doc_id, title, format, source_path, source_kind, sha256,
+  library_id, doc_id, title, format, source_path, source_kind, sha256,
   page_count, chunk_count, status, ingested_at, warnings
 )
-SELECT user_id, sqlc.arg(to_id)::text, title, format, source_path, source_kind, sha256,
+SELECT library_id, sqlc.arg(to_id)::text, title, format, source_path, source_kind, sha256,
        page_count, chunk_count, status, ingested_at, warnings
   FROM documents WHERE doc_id = sqlc.arg(from_id)::text;
 
