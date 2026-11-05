@@ -180,3 +180,71 @@ func (s *StoreSuite) TestListShowsEveryAccount() {
 	s.Require().Len(list, 2)
 	s.Equal("alice", list[0].Username)
 }
+
+// as runs statements as user, the way a request names its user, inside one
+// transaction so the setting goes no further.
+func (s *StoreSuite) as(user string, statements ...string) {
+	ctx := s.T().Context()
+	tx, err := s.pg.Owner.BeginTx(ctx, nil)
+	s.Require().NoError(err)
+	_, err = tx.ExecContext(ctx, `SELECT set_config('app.user_id', $1, true)`, user)
+	s.Require().NoError(err)
+	for _, statement := range statements {
+		_, err = tx.ExecContext(ctx, statement)
+		s.Require().NoError(err)
+	}
+	s.Require().NoError(tx.Commit())
+}
+
+// Removing an account frees its name, so the name can be given again.
+func (s *StoreSuite) TestARemovedUsernameCanBeAddedAgain() {
+	ctx := s.T().Context()
+	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
+	s.Require().NoError(s.app.Remove(ctx, "alice"))
+
+	s.Require().NoError(s.app.Add(ctx, "alice", "user-a2", "hash", false))
+	var owner string
+	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx,
+		`SELECT user_id FROM users WHERE username = 'alice'`).Scan(&owner))
+	s.Equal("user-a2", owner, "the name goes to the new account, not back to the old one")
+}
+
+// A shared library always keeps someone who can manage it.
+func (s *StoreSuite) TestTheOnlyAdminOfASharedLibraryIsNotRemoved() {
+	ctx := s.T().Context()
+	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
+	s.as("user-a", `SELECT create_library('team', 'Team docs')`)
+
+	err := s.app.Remove(ctx, "alice")
+	s.Require().ErrorIs(err, password.ErrStranded)
+	s.Require().ErrorContains(err, "Team docs")
+
+	present, err := s.app.Exists(ctx, "user-a")
+	s.Require().NoError(err)
+	s.True(present, "a refused removal leaves the sign-in in place")
+}
+
+// Once someone else administers the library, removing the account takes it
+// out of the shared library and keeps its own.
+func (s *StoreSuite) TestARemovedAccountLeavesSharedLibrariesAndKeepsItsOwn() {
+	ctx := s.T().Context()
+	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
+	s.Require().NoError(s.admin.Add(ctx, "bob", "user-b", "hash", false))
+	s.as("user-a", `SELECT create_library('team', 'Team docs')`,
+		`SELECT grant_library('team', 'bob', 'admin')`)
+
+	s.Require().NoError(s.app.Remove(ctx, "alice"))
+
+	var shared, own, revoked int
+	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx, `
+		SELECT count(*) FILTER (WHERE l.kind = 'shared'), count(*) FILTER (WHERE l.kind = 'personal')
+		  FROM library_grants g JOIN libraries l ON l.library_id = g.library_id
+		 WHERE g.user_id = 'user-a'`).Scan(&shared, &own))
+	s.Require().NoError(s.pg.Owner.QueryRowContext(
+		ctx,
+		`SELECT count(*) FROM access_events WHERE action = 'revoke' AND subject = 'user-a'`,
+	).Scan(&revoked))
+	s.Equal(0, shared)
+	s.Equal(1, own)
+	s.Equal(1, revoked)
+}

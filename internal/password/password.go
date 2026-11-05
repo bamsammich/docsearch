@@ -47,11 +47,25 @@ var (
 	ErrNoSuchAccount = errors.New("no account with that username")
 	// ErrUsername is a username password mode cannot hold.
 	ErrUsername = errors.New("use 1 to 64 lower-case letters, digits, '.', '_' or '-'")
+	// ErrStranded is removing an account that is the only admin of a shared
+	// library, which would leave the library with nobody to manage it.
+	ErrStranded = errors.New("that would leave a shared library without an admin")
 	// ErrTaken is a username another account already signs in under.
 	ErrTaken = errors.New("an account by that username already exists")
 	// ErrBuiltinTaken is a second account trying to take the built-in library.
 	ErrBuiltinTaken = errors.New("the library from before accounts already has an owner")
 )
+
+// Stranded is ErrStranded in the database's words, which name the libraries
+// removing the account would strand.
+type Stranded struct {
+	Detail string
+}
+
+func (e Stranded) Error() string { return e.Detail }
+
+// Is makes a Stranded match ErrStranded.
+func (Stranded) Is(target error) bool { return target == ErrStranded }
 
 var usernamePattern = regexp.MustCompile(`^[a-z0-9._-]{1,64}$`)
 

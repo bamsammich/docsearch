@@ -465,7 +465,7 @@ docsearch account add bob --generate        # makes one up and prints it once
 docsearch account add carol --takes-builtin # carol keeps the existing library
 docsearch account passwd alice              # reset, and lift any lock
 docsearch account unlock alice
-docsearch account remove alice              # ends sign-in; the library stays
+docsearch account remove alice              # ends sign-in and frees the name; her own library stays
 docsearch account list
 ```
 
@@ -486,6 +486,11 @@ generated password shown once, resets or unlocks a password, and removes an
 account. Each change is recorded in `account_events`. The role covers
 accounts only: an administrator reads a library only through a grant on it,
 like anyone. The last administrator cannot step down.
+
+Removing an account takes it out of every shared library and frees its
+username for someone new. Its own library stays. An account that is the
+only admin of a shared library is not removed until someone else is made
+that library's admin, so no library is left with nobody to manage it.
 
 | | |
 |---|---|

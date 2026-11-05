@@ -108,6 +108,7 @@ func (s *AccountAPISuite) TestEachRefusalAnswersWithItsCode() {
 		admin.ErrNoPasswords: connect.CodeFailedPrecondition,
 		password.ErrTaken:    connect.CodeAlreadyExists,
 		password.ErrUsername: connect.CodeInvalidArgument,
+		password.Stranded{Detail: "removing cy would leave Team docs without an admin"}: connect.CodeFailedPrecondition,
 	} {
 		s.admin.EXPECT().Add(mock.Anything, "cy").Return("", refusal).Once()
 		_, err := s.client.Add(
