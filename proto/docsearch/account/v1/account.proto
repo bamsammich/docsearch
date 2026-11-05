@@ -41,6 +41,25 @@ message Setting {
   // environment variable.
   string flag = 6;
   string env = 7;
+  // Name identifies the setting in an UpdateSignIn change.
+  string name = 8;
+  // Editable is true for a setting the library UI changes, unless the
+  // environment or the command line sets it.
+  bool editable = 9;
+  // Boolean settings take true or false.
+  bool boolean = 10;
+  // Stored is the value the database keeps for a docsearch started without
+  // docsearch.yaml, which takes effect when the server next starts. It is
+  // set only when has_stored is.
+  string stored = 11;
+  bool has_stored = 12;
+}
+
+// Change is one setting's new value. An empty value takes the setting back
+// to its default.
+message Change {
+  string name = 1;
+  string value = 2;
 }
 
 message MeRequest {}
@@ -97,6 +116,21 @@ message SetAdminResponse {}
 
 message SignInRequest {}
 
+message UpdateSignInRequest {
+  repeated Change changes = 1;
+}
+
+message UpdateSignInResponse {
+  // File is docsearch.yaml with the changes made, for a docsearch that reads
+  // one: nothing was stored, and the operator deploys the file.
+  string file = 1;
+  // ChangedLines are the 1-based lines of file the changes touched.
+  repeated int32 changed_lines = 2;
+  // Saved is true when the changes were kept in the database, to take
+  // effect when the server next starts.
+  bool saved = 3;
+}
+
 message SignInResponse {
   repeated Setting settings = 1;
   // File is the docsearch.yaml the server read, and empty when it read
@@ -132,4 +166,8 @@ service AccountService {
 
   // SignIn is how people sign in, as the server's configuration sets it.
   rpc SignIn(SignInRequest) returns (SignInResponse) {}
+
+  // UpdateSignIn changes sign-in settings: into an updated docsearch.yaml
+  // for a docsearch that reads one, or into the database otherwise.
+  rpc UpdateSignIn(UpdateSignInRequest) returns (UpdateSignInResponse) {}
 }

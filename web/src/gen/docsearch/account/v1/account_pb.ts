@@ -19,7 +19,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file docsearch/account/v1/account.proto.
  */
 export const file_docsearch_account_v1_account: GenFile = /*@__PURE__*/
-  fileDesc("CiJkb2NzZWFyY2gvYWNjb3VudC92MS9hY2NvdW50LnByb3RvEhRkb2NzZWFyY2guYWNjb3VudC52MSKeAQoHQWNjb3VudBIQCgh1c2VybmFtZRgBIAEoCRINCgVhZG1pbhgCIAEoCBIuCgpjcmVhdGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIQCghwYXNzd29yZBgEIAEoCBIwCgxsb2NrZWRfdW50aWwYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIm4KB1NldHRpbmcSDQoFbGFiZWwYASABKAkSDQoFdmFsdWUYAiABKAkSDgoGc291cmNlGAMgASgJEg0KBXdoZXJlGAQgASgJEgsKA2tleRgFIAEoCRIMCgRmbGFnGAYgASgJEgsKA2VudhgHIAEoCSILCglNZVJlcXVlc3QiOwoKTWVSZXNwb25zZRIQCgh1c2VybmFtZRgBIAEoCRINCgVhZG1pbhgCIAEoCBIMCgRhdXRoGAMgASgJIg0KC0xpc3RSZXF1ZXN0Ij8KDExpc3RSZXNwb25zZRIvCghhY2NvdW50cxgBIAMoCzIdLmRvY3NlYXJjaC5hY2NvdW50LnYxLkFjY291bnQiHgoKQWRkUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCSIfCgtBZGRSZXNwb25zZRIQCghwYXNzd29yZBgBIAEoCSIgCgxSZXNldFJlcXVlc3QSEAoIdXNlcm5hbWUYASABKAkiIQoNUmVzZXRSZXNwb25zZRIQCghwYXNzd29yZBgBIAEoCSIhCg1VbmxvY2tSZXF1ZXN0EhAKCHVzZXJuYW1lGAEgASgJIhAKDlVubG9ja1Jlc3BvbnNlIiEKDVJlbW92ZVJlcXVlc3QSEAoIdXNlcm5hbWUYASABKAkiEAoOUmVtb3ZlUmVzcG9uc2UiMgoPU2V0QWRtaW5SZXF1ZXN0EhAKCHVzZXJuYW1lGAEgASgJEg0KBWFkbWluGAIgASgIIhIKEFNldEFkbWluUmVzcG9uc2UiDwoNU2lnbkluUmVxdWVzdCJPCg5TaWduSW5SZXNwb25zZRIvCghzZXR0aW5ncxgBIAMoCzIdLmRvY3NlYXJjaC5hY2NvdW50LnYxLlNldHRpbmcSDAoEZmlsZRgCIAEoCTKwBQoOQWNjb3VudFNlcnZpY2USSQoCTWUSHy5kb2NzZWFyY2guYWNjb3VudC52MS5NZVJlcXVlc3QaIC5kb2NzZWFyY2guYWNjb3VudC52MS5NZVJlc3BvbnNlIgASTwoETGlzdBIhLmRvY3NlYXJjaC5hY2NvdW50LnYxLkxpc3RSZXF1ZXN0GiIuZG9jc2VhcmNoLmFjY291bnQudjEuTGlzdFJlc3BvbnNlIgASTAoDQWRkEiAuZG9jc2VhcmNoLmFjY291bnQudjEuQWRkUmVxdWVzdBohLmRvY3NlYXJjaC5hY2NvdW50LnYxLkFkZFJlc3BvbnNlIgASUgoFUmVzZXQSIi5kb2NzZWFyY2guYWNjb3VudC52MS5SZXNldFJlcXVlc3QaIy5kb2NzZWFyY2guYWNjb3VudC52MS5SZXNldFJlc3BvbnNlIgASVQoGVW5sb2NrEiMuZG9jc2VhcmNoLmFjY291bnQudjEuVW5sb2NrUmVxdWVzdBokLmRvY3NlYXJjaC5hY2NvdW50LnYxLlVubG9ja1Jlc3BvbnNlIgASVQoGUmVtb3ZlEiMuZG9jc2VhcmNoLmFjY291bnQudjEuUmVtb3ZlUmVxdWVzdBokLmRvY3NlYXJjaC5hY2NvdW50LnYxLlJlbW92ZVJlc3BvbnNlIgASWwoIU2V0QWRtaW4SJS5kb2NzZWFyY2guYWNjb3VudC52MS5TZXRBZG1pblJlcXVlc3QaJi5kb2NzZWFyY2guYWNjb3VudC52MS5TZXRBZG1pblJlc3BvbnNlIgASVQoGU2lnbkluEiMuZG9jc2VhcmNoLmFjY291bnQudjEuU2lnbkluUmVxdWVzdBokLmRvY3NlYXJjaC5hY2NvdW50LnYxLlNpZ25JblJlc3BvbnNlIgBiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("CiJkb2NzZWFyY2gvYWNjb3VudC92MS9hY2NvdW50LnByb3RvEhRkb2NzZWFyY2guYWNjb3VudC52MSKeAQoHQWNjb3VudBIQCgh1c2VybmFtZRgBIAEoCRINCgVhZG1pbhgCIAEoCBIuCgpjcmVhdGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIQCghwYXNzd29yZBgEIAEoCBIwCgxsb2NrZWRfdW50aWwYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIsMBCgdTZXR0aW5nEg0KBWxhYmVsGAEgASgJEg0KBXZhbHVlGAIgASgJEg4KBnNvdXJjZRgDIAEoCRINCgV3aGVyZRgEIAEoCRILCgNrZXkYBSABKAkSDAoEZmxhZxgGIAEoCRILCgNlbnYYByABKAkSDAoEbmFtZRgIIAEoCRIQCghlZGl0YWJsZRgJIAEoCBIPCgdib29sZWFuGAogASgIEg4KBnN0b3JlZBgLIAEoCRISCgpoYXNfc3RvcmVkGAwgASgIIiUKBkNoYW5nZRIMCgRuYW1lGAEgASgJEg0KBXZhbHVlGAIgASgJIgsKCU1lUmVxdWVzdCI7CgpNZVJlc3BvbnNlEhAKCHVzZXJuYW1lGAEgASgJEg0KBWFkbWluGAIgASgIEgwKBGF1dGgYAyABKAkiDQoLTGlzdFJlcXVlc3QiPwoMTGlzdFJlc3BvbnNlEi8KCGFjY291bnRzGAEgAygLMh0uZG9jc2VhcmNoLmFjY291bnQudjEuQWNjb3VudCIeCgpBZGRSZXF1ZXN0EhAKCHVzZXJuYW1lGAEgASgJIh8KC0FkZFJlc3BvbnNlEhAKCHBhc3N3b3JkGAEgASgJIiAKDFJlc2V0UmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCSIhCg1SZXNldFJlc3BvbnNlEhAKCHBhc3N3b3JkGAEgASgJIiEKDVVubG9ja1JlcXVlc3QSEAoIdXNlcm5hbWUYASABKAkiEAoOVW5sb2NrUmVzcG9uc2UiIQoNUmVtb3ZlUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCSIQCg5SZW1vdmVSZXNwb25zZSIyCg9TZXRBZG1pblJlcXVlc3QSEAoIdXNlcm5hbWUYASABKAkSDQoFYWRtaW4YAiABKAgiEgoQU2V0QWRtaW5SZXNwb25zZSIPCg1TaWduSW5SZXF1ZXN0IkQKE1VwZGF0ZVNpZ25JblJlcXVlc3QSLQoHY2hhbmdlcxgBIAMoCzIcLmRvY3NlYXJjaC5hY2NvdW50LnYxLkNoYW5nZSJKChRVcGRhdGVTaWduSW5SZXNwb25zZRIMCgRmaWxlGAEgASgJEhUKDWNoYW5nZWRfbGluZXMYAiADKAUSDQoFc2F2ZWQYAyABKAgiTwoOU2lnbkluUmVzcG9uc2USLwoIc2V0dGluZ3MYASADKAsyHS5kb2NzZWFyY2guYWNjb3VudC52MS5TZXR0aW5nEgwKBGZpbGUYAiABKAkymQYKDkFjY291bnRTZXJ2aWNlEkkKAk1lEh8uZG9jc2VhcmNoLmFjY291bnQudjEuTWVSZXF1ZXN0GiAuZG9jc2VhcmNoLmFjY291bnQudjEuTWVSZXNwb25zZSIAEk8KBExpc3QSIS5kb2NzZWFyY2guYWNjb3VudC52MS5MaXN0UmVxdWVzdBoiLmRvY3NlYXJjaC5hY2NvdW50LnYxLkxpc3RSZXNwb25zZSIAEkwKA0FkZBIgLmRvY3NlYXJjaC5hY2NvdW50LnYxLkFkZFJlcXVlc3QaIS5kb2NzZWFyY2guYWNjb3VudC52MS5BZGRSZXNwb25zZSIAElIKBVJlc2V0EiIuZG9jc2VhcmNoLmFjY291bnQudjEuUmVzZXRSZXF1ZXN0GiMuZG9jc2VhcmNoLmFjY291bnQudjEuUmVzZXRSZXNwb25zZSIAElUKBlVubG9jaxIjLmRvY3NlYXJjaC5hY2NvdW50LnYxLlVubG9ja1JlcXVlc3QaJC5kb2NzZWFyY2guYWNjb3VudC52MS5VbmxvY2tSZXNwb25zZSIAElUKBlJlbW92ZRIjLmRvY3NlYXJjaC5hY2NvdW50LnYxLlJlbW92ZVJlcXVlc3QaJC5kb2NzZWFyY2guYWNjb3VudC52MS5SZW1vdmVSZXNwb25zZSIAElsKCFNldEFkbWluEiUuZG9jc2VhcmNoLmFjY291bnQudjEuU2V0QWRtaW5SZXF1ZXN0GiYuZG9jc2VhcmNoLmFjY291bnQudjEuU2V0QWRtaW5SZXNwb25zZSIAElUKBlNpZ25JbhIjLmRvY3NlYXJjaC5hY2NvdW50LnYxLlNpZ25JblJlcXVlc3QaJC5kb2NzZWFyY2guYWNjb3VudC52MS5TaWduSW5SZXNwb25zZSIAEmcKDFVwZGF0ZVNpZ25JbhIpLmRvY3NlYXJjaC5hY2NvdW50LnYxLlVwZGF0ZVNpZ25JblJlcXVlc3QaKi5kb2NzZWFyY2guYWNjb3VudC52MS5VcGRhdGVTaWduSW5SZXNwb25zZSIAYgZwcm90bzM", [file_google_protobuf_timestamp]);
 
 /**
  * Account is one account as an administrator sees it.
@@ -120,6 +120,42 @@ export type Setting = Message<"docsearch.account.v1.Setting"> & {
    * @generated from field: string env = 7;
    */
   env: string;
+
+  /**
+   * Name identifies the setting in an UpdateSignIn change.
+   *
+   * @generated from field: string name = 8;
+   */
+  name: string;
+
+  /**
+   * Editable is true for a setting the library UI changes, unless the
+   * environment or the command line sets it.
+   *
+   * @generated from field: bool editable = 9;
+   */
+  editable: boolean;
+
+  /**
+   * Boolean settings take true or false.
+   *
+   * @generated from field: bool boolean = 10;
+   */
+  boolean: boolean;
+
+  /**
+   * Stored is the value the database keeps for a docsearch started without
+   * docsearch.yaml, which takes effect when the server next starts. It is
+   * set only when has_stored is.
+   *
+   * @generated from field: string stored = 11;
+   */
+  stored: string;
+
+  /**
+   * @generated from field: bool has_stored = 12;
+   */
+  hasStored: boolean;
 };
 
 /**
@@ -128,6 +164,31 @@ export type Setting = Message<"docsearch.account.v1.Setting"> & {
  */
 export const SettingSchema: GenMessage<Setting> = /*@__PURE__*/
   messageDesc(file_docsearch_account_v1_account, 1);
+
+/**
+ * Change is one setting's new value. An empty value takes the setting back
+ * to its default.
+ *
+ * @generated from message docsearch.account.v1.Change
+ */
+export type Change = Message<"docsearch.account.v1.Change"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string value = 2;
+   */
+  value: string;
+};
+
+/**
+ * Describes the message docsearch.account.v1.Change.
+ * Use `create(ChangeSchema)` to create a new message.
+ */
+export const ChangeSchema: GenMessage<Change> = /*@__PURE__*/
+  messageDesc(file_docsearch_account_v1_account, 2);
 
 /**
  * @generated from message docsearch.account.v1.MeRequest
@@ -140,7 +201,7 @@ export type MeRequest = Message<"docsearch.account.v1.MeRequest"> & {
  * Use `create(MeRequestSchema)` to create a new message.
  */
 export const MeRequestSchema: GenMessage<MeRequest> = /*@__PURE__*/
-  messageDesc(file_docsearch_account_v1_account, 2);
+  messageDesc(file_docsearch_account_v1_account, 3);
 
 /**
  * @generated from message docsearch.account.v1.MeResponse
@@ -169,7 +230,7 @@ export type MeResponse = Message<"docsearch.account.v1.MeResponse"> & {
  * Use `create(MeResponseSchema)` to create a new message.
  */
 export const MeResponseSchema: GenMessage<MeResponse> = /*@__PURE__*/
-  messageDesc(file_docsearch_account_v1_account, 3);
+  messageDesc(file_docsearch_account_v1_account, 4);
 
 /**
  * @generated from message docsearch.account.v1.ListRequest
@@ -182,7 +243,7 @@ export type ListRequest = Message<"docsearch.account.v1.ListRequest"> & {
  * Use `create(ListRequestSchema)` to create a new message.
  */
 export const ListRequestSchema: GenMessage<ListRequest> = /*@__PURE__*/
-  messageDesc(file_docsearch_account_v1_account, 4);
+  messageDesc(file_docsearch_account_v1_account, 5);
 
 /**
  * @generated from message docsearch.account.v1.ListResponse
@@ -199,7 +260,7 @@ export type ListResponse = Message<"docsearch.account.v1.ListResponse"> & {
  * Use `create(ListResponseSchema)` to create a new message.
  */
 export const ListResponseSchema: GenMessage<ListResponse> = /*@__PURE__*/
-  messageDesc(file_docsearch_account_v1_account, 5);
+  messageDesc(file_docsearch_account_v1_account, 6);
 
 /**
  * @generated from message docsearch.account.v1.AddRequest
@@ -216,7 +277,7 @@ export type AddRequest = Message<"docsearch.account.v1.AddRequest"> & {
  * Use `create(AddRequestSchema)` to create a new message.
  */
 export const AddRequestSchema: GenMessage<AddRequest> = /*@__PURE__*/
-  messageDesc(file_docsearch_account_v1_account, 6);
+  messageDesc(file_docsearch_account_v1_account, 7);
 
 /**
  * @generated from message docsearch.account.v1.AddResponse
@@ -235,7 +296,7 @@ export type AddResponse = Message<"docsearch.account.v1.AddResponse"> & {
  * Use `create(AddResponseSchema)` to create a new message.
  */
 export const AddResponseSchema: GenMessage<AddResponse> = /*@__PURE__*/
-  messageDesc(file_docsearch_account_v1_account, 7);
+  messageDesc(file_docsearch_account_v1_account, 8);
 
 /**
  * @generated from message docsearch.account.v1.ResetRequest
@@ -252,7 +313,7 @@ export type ResetRequest = Message<"docsearch.account.v1.ResetRequest"> & {
  * Use `create(ResetRequestSchema)` to create a new message.
  */
 export const ResetRequestSchema: GenMessage<ResetRequest> = /*@__PURE__*/
-  messageDesc(file_docsearch_account_v1_account, 8);
+  messageDesc(file_docsearch_account_v1_account, 9);
 
 /**
  * @generated from message docsearch.account.v1.ResetResponse
@@ -271,7 +332,7 @@ export type ResetResponse = Message<"docsearch.account.v1.ResetResponse"> & {
  * Use `create(ResetResponseSchema)` to create a new message.
  */
 export const ResetResponseSchema: GenMessage<ResetResponse> = /*@__PURE__*/
-  messageDesc(file_docsearch_account_v1_account, 9);
+  messageDesc(file_docsearch_account_v1_account, 10);
 
 /**
  * @generated from message docsearch.account.v1.UnlockRequest
@@ -288,7 +349,7 @@ export type UnlockRequest = Message<"docsearch.account.v1.UnlockRequest"> & {
  * Use `create(UnlockRequestSchema)` to create a new message.
  */
 export const UnlockRequestSchema: GenMessage<UnlockRequest> = /*@__PURE__*/
-  messageDesc(file_docsearch_account_v1_account, 10);
+  messageDesc(file_docsearch_account_v1_account, 11);
 
 /**
  * @generated from message docsearch.account.v1.UnlockResponse
@@ -301,7 +362,7 @@ export type UnlockResponse = Message<"docsearch.account.v1.UnlockResponse"> & {
  * Use `create(UnlockResponseSchema)` to create a new message.
  */
 export const UnlockResponseSchema: GenMessage<UnlockResponse> = /*@__PURE__*/
-  messageDesc(file_docsearch_account_v1_account, 11);
+  messageDesc(file_docsearch_account_v1_account, 12);
 
 /**
  * @generated from message docsearch.account.v1.RemoveRequest
@@ -318,7 +379,7 @@ export type RemoveRequest = Message<"docsearch.account.v1.RemoveRequest"> & {
  * Use `create(RemoveRequestSchema)` to create a new message.
  */
 export const RemoveRequestSchema: GenMessage<RemoveRequest> = /*@__PURE__*/
-  messageDesc(file_docsearch_account_v1_account, 12);
+  messageDesc(file_docsearch_account_v1_account, 13);
 
 /**
  * @generated from message docsearch.account.v1.RemoveResponse
@@ -331,7 +392,7 @@ export type RemoveResponse = Message<"docsearch.account.v1.RemoveResponse"> & {
  * Use `create(RemoveResponseSchema)` to create a new message.
  */
 export const RemoveResponseSchema: GenMessage<RemoveResponse> = /*@__PURE__*/
-  messageDesc(file_docsearch_account_v1_account, 13);
+  messageDesc(file_docsearch_account_v1_account, 14);
 
 /**
  * @generated from message docsearch.account.v1.SetAdminRequest
@@ -353,7 +414,7 @@ export type SetAdminRequest = Message<"docsearch.account.v1.SetAdminRequest"> & 
  * Use `create(SetAdminRequestSchema)` to create a new message.
  */
 export const SetAdminRequestSchema: GenMessage<SetAdminRequest> = /*@__PURE__*/
-  messageDesc(file_docsearch_account_v1_account, 14);
+  messageDesc(file_docsearch_account_v1_account, 15);
 
 /**
  * @generated from message docsearch.account.v1.SetAdminResponse
@@ -366,7 +427,7 @@ export type SetAdminResponse = Message<"docsearch.account.v1.SetAdminResponse"> 
  * Use `create(SetAdminResponseSchema)` to create a new message.
  */
 export const SetAdminResponseSchema: GenMessage<SetAdminResponse> = /*@__PURE__*/
-  messageDesc(file_docsearch_account_v1_account, 15);
+  messageDesc(file_docsearch_account_v1_account, 16);
 
 /**
  * @generated from message docsearch.account.v1.SignInRequest
@@ -379,7 +440,59 @@ export type SignInRequest = Message<"docsearch.account.v1.SignInRequest"> & {
  * Use `create(SignInRequestSchema)` to create a new message.
  */
 export const SignInRequestSchema: GenMessage<SignInRequest> = /*@__PURE__*/
-  messageDesc(file_docsearch_account_v1_account, 16);
+  messageDesc(file_docsearch_account_v1_account, 17);
+
+/**
+ * @generated from message docsearch.account.v1.UpdateSignInRequest
+ */
+export type UpdateSignInRequest = Message<"docsearch.account.v1.UpdateSignInRequest"> & {
+  /**
+   * @generated from field: repeated docsearch.account.v1.Change changes = 1;
+   */
+  changes: Change[];
+};
+
+/**
+ * Describes the message docsearch.account.v1.UpdateSignInRequest.
+ * Use `create(UpdateSignInRequestSchema)` to create a new message.
+ */
+export const UpdateSignInRequestSchema: GenMessage<UpdateSignInRequest> = /*@__PURE__*/
+  messageDesc(file_docsearch_account_v1_account, 18);
+
+/**
+ * @generated from message docsearch.account.v1.UpdateSignInResponse
+ */
+export type UpdateSignInResponse = Message<"docsearch.account.v1.UpdateSignInResponse"> & {
+  /**
+   * File is docsearch.yaml with the changes made, for a docsearch that reads
+   * one: nothing was stored, and the operator deploys the file.
+   *
+   * @generated from field: string file = 1;
+   */
+  file: string;
+
+  /**
+   * ChangedLines are the 1-based lines of file the changes touched.
+   *
+   * @generated from field: repeated int32 changed_lines = 2;
+   */
+  changedLines: number[];
+
+  /**
+   * Saved is true when the changes were kept in the database, to take
+   * effect when the server next starts.
+   *
+   * @generated from field: bool saved = 3;
+   */
+  saved: boolean;
+};
+
+/**
+ * Describes the message docsearch.account.v1.UpdateSignInResponse.
+ * Use `create(UpdateSignInResponseSchema)` to create a new message.
+ */
+export const UpdateSignInResponseSchema: GenMessage<UpdateSignInResponse> = /*@__PURE__*/
+  messageDesc(file_docsearch_account_v1_account, 19);
 
 /**
  * @generated from message docsearch.account.v1.SignInResponse
@@ -404,7 +517,7 @@ export type SignInResponse = Message<"docsearch.account.v1.SignInResponse"> & {
  * Use `create(SignInResponseSchema)` to create a new message.
  */
 export const SignInResponseSchema: GenMessage<SignInResponse> = /*@__PURE__*/
-  messageDesc(file_docsearch_account_v1_account, 17);
+  messageDesc(file_docsearch_account_v1_account, 20);
 
 /**
  * AccountService is the administrator's work. Every call but Me refuses
@@ -494,6 +607,17 @@ export const AccountService: GenService<{
     methodKind: "unary";
     input: typeof SignInRequestSchema;
     output: typeof SignInResponseSchema;
+  },
+  /**
+   * UpdateSignIn changes sign-in settings: into an updated docsearch.yaml
+   * for a docsearch that reads one, or into the database otherwise.
+   *
+   * @generated from rpc docsearch.account.v1.AccountService.UpdateSignIn
+   */
+  updateSignIn: {
+    methodKind: "unary";
+    input: typeof UpdateSignInRequestSchema;
+    output: typeof UpdateSignInResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_docsearch_account_v1_account, 0);

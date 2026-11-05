@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/bamsammich/docsearch/internal/api/connectapi"
@@ -13,6 +15,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/password/pgpassword"
 	"github.com/bamsammich/docsearch/internal/repository/postgres"
 	"github.com/bamsammich/docsearch/internal/service/admin"
+	"github.com/bamsammich/docsearch/internal/service/settings"
 )
 
 // newAccountRoute is the administrator's work, as the asking user. Only
@@ -37,6 +40,10 @@ func newAccountRoute(cfg config.Config, db *sql.DB) (route, error) {
 				password.Generate,
 				time.Now,
 			), nil
+		},
+		func(user string) (connectapi.Settings, error) {
+			return settings.New(editable, cfg.Origins, cfg.File,
+				postgres.NewSettings(db, user), os.ReadFile), nil
 		},
 		cfg.Auth.String(),
 		signInSettings(cfg),
@@ -78,9 +85,9 @@ func (p passwordAccounts) List(ctx context.Context) ([]password.Account, error) 
 }
 
 // signInSettings are how people sign in, as the configuration sets it, for
-// an administrator to read: each value, where it came from, and the flag
-// that sets it. A rule the server keeps rather than one it is configured
-// with names no flag.
+// an administrator to read and change: each value, where it came from, and
+// the flag that sets it. A rule the server keeps rather than one it is
+// configured with names no flag.
 func signInSettings(cfg config.Config) []connectapi.Setting {
 	method := configured(cfg, "Sign-in", "", "auth", config.EnvAuth)
 	switch cfg.Auth {
@@ -88,7 +95,7 @@ func signInSettings(cfg config.Config) []connectapi.Setting {
 		method.Value = "Accounts docsearch holds, with passwords"
 		return []connectapi.Setting{
 			method,
-			configured(cfg, "Sign-in page", cfg.PublicURL, "public-url", config.EnvPublicURL),
+			configured(cfg, "Sign-in page", cfg.PublicURL, flagPublicURL, config.EnvPublicURL),
 			{
 				Label: "Failed sign-ins",
 				Value: fmt.Sprintf("%d in a row lock an account for %d minutes",
@@ -98,21 +105,15 @@ func signInSettings(cfg config.Config) []connectapi.Setting {
 		}
 	case owner.OIDC:
 		method.Value = "Your OIDC provider"
-		who := "Anyone the provider signs in"
-		if cfg.OIDC.RequiredClaimName != "" {
-			who = fmt.Sprintf("Tokens must carry %s = %s",
-				cfg.OIDC.RequiredClaimName, cfg.OIDC.RequiredClaimValue)
-		}
-		joining := "Refused until an account exists for them"
-		if cfg.OIDC.SignUp {
-			joining = "Get an account and a personal library on their first sign-in"
-		}
 		return []connectapi.Setting{
 			method,
-			configured(cfg, "Provider", cfg.OIDC.Issuer, "oidc-issuer", config.EnvOIDCIssuer),
-			configured(cfg, "Who may sign in", who,
-				"oidc-required-claim-name", config.EnvOIDCRequiredClaimName),
-			configured(cfg, "New people", joining, "oidc-sign-up", config.EnvOIDCSignUp),
+			configured(cfg, "Provider", cfg.OIDC.Issuer, flagOIDCIssuer, config.EnvOIDCIssuer),
+			configured(cfg, "Claim every token must carry", cfg.OIDC.RequiredClaimName,
+				flagClaimName, config.EnvOIDCRequiredClaimName),
+			configured(cfg, "Value that claim must hold", cfg.OIDC.RequiredClaimValue,
+				flagClaimValue, config.EnvOIDCRequiredClaimValue),
+			configured(cfg, "Create an account and a personal library on first sign-in",
+				strconv.FormatBool(cfg.OIDC.SignUp), flagSignUp, config.EnvOIDCSignUp),
 		}
 	case owner.None:
 		method.Value = "No sign-in: local access only"
@@ -122,13 +123,18 @@ func signInSettings(cfg config.Config) []connectapi.Setting {
 	return []connectapi.Setting{method}
 }
 
-// configured is a setting flag makes, with where its value came from.
+// configured is a setting flag makes, with where its value came from, and
+// whether the library UI changes it.
 func configured(cfg config.Config, label, value, flag, env string) connectapi.Setting {
+	e, editable := editable[flag]
 	return connectapi.Setting{
-		Label:  label,
-		Value:  value,
-		Flag:   "--" + flag,
-		Env:    env,
-		Origin: cfg.Origins[flag],
+		Label:    label,
+		Value:    value,
+		Name:     flag,
+		Flag:     "--" + flag,
+		Env:      env,
+		Origin:   cfg.Origins[flag],
+		Editable: editable,
+		Boolean:  e.Boolean,
 	}
 }

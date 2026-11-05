@@ -13,6 +13,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/password"
 	"github.com/bamsammich/docsearch/internal/service/admin"
+	"github.com/bamsammich/docsearch/internal/service/settings"
 )
 
 // Admin is the administrator's work as one user. The port is declared here
@@ -32,6 +33,16 @@ type Admin interface {
 // for.
 type AdminFor func(user string) (Admin, error)
 
+// Settings changes how docsearch is configured, as one user.
+// internal/service/settings.Service satisfies it.
+type Settings interface {
+	Stored(ctx context.Context) (map[string]string, error)
+	Update(ctx context.Context, changes []settings.Change) (settings.Result, error)
+}
+
+// SettingsFor builds the settings service for the user a request acts for.
+type SettingsFor func(user string) (Settings, error)
+
 // Setting is one sign-in setting the server's configuration holds, where its
 // value came from, and the flag and environment variable that set it. A
 // rule the server keeps has no origin and no flag.
@@ -39,31 +50,40 @@ type Setting struct {
 	Origin config.Origin
 	Label  string
 	Value  string
-	Flag   string
-	Env    string
+	// Name is the setting's flag name, which a change names it by.
+	Name string
+	Flag string
+	Env  string
+	// Editable is true for a setting the library UI changes, and Boolean
+	// for one that takes true or false.
+	Editable bool
+	Boolean  bool
 }
 
 // AccountServer implements the generated account handler.
 type AccountServer struct {
-	admins AdminFor
+	admins   AdminFor
+	settings SettingsFor
 	// auth is the sign-in mode, file is the docsearch.yaml the server read
 	// if any, and settings are how its sign-in is configured. All three are
 	// fixed when the server starts.
-	auth     string
-	file     string
-	settings []Setting
+	auth  string
+	file  string
+	shown []Setting
 }
 
 // NewAccountServer returns the path to mount the handler on, and the handler.
 func NewAccountServer(
 	admins AdminFor,
+	settings SettingsFor,
 	auth string,
-	settings []Setting,
+	shown []Setting,
 	file string,
 	opts ...connect.HandlerOption,
 ) (string, http.Handler) {
-	return accountv1connect.NewAccountServiceHandler(
-		&AccountServer{admins: admins, auth: auth, settings: settings, file: file}, opts...)
+	return accountv1connect.NewAccountServiceHandler(&AccountServer{
+		admins: admins, settings: settings, auth: auth, shown: shown, file: file,
+	}, opts...)
 }
 
 func (s *AccountServer) Me(
@@ -187,6 +207,68 @@ func (s *AccountServer) SignIn(
 	ctx context.Context,
 	_ *connect.Request[accountv1.SignInRequest],
 ) (*connect.Response[accountv1.SignInResponse], error) {
+	configure, err := s.administering(ctx)
+	if err != nil {
+		return nil, err
+	}
+	stored, err := configure.Stored(ctx)
+	if err != nil {
+		return nil, settingsError(err)
+	}
+	out := &accountv1.SignInResponse{
+		Settings: make([]*accountv1.Setting, 0, len(s.shown)),
+		File:     s.file,
+	}
+	for _, setting := range s.shown {
+		locked := setting.Origin.Kind == config.FromFlag || setting.Origin.Kind == config.FromEnv
+		value, kept := stored[setting.Name]
+		out.Settings = append(out.Settings, &accountv1.Setting{
+			Label:     setting.Label,
+			Value:     setting.Value,
+			Source:    setting.Origin.Kind,
+			Where:     setting.Origin.Where,
+			Key:       setting.Origin.Key,
+			Flag:      setting.Flag,
+			Env:       setting.Env,
+			Name:      setting.Name,
+			Editable:  setting.Editable && !locked,
+			Boolean:   setting.Boolean,
+			Stored:    value,
+			HasStored: kept,
+		})
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (s *AccountServer) UpdateSignIn(
+	ctx context.Context,
+	req *connect.Request[accountv1.UpdateSignInRequest],
+) (*connect.Response[accountv1.UpdateSignInResponse], error) {
+	configure, err := s.administering(ctx)
+	if err != nil {
+		return nil, err
+	}
+	changes := make([]settings.Change, 0, len(req.Msg.GetChanges()))
+	for _, c := range req.Msg.GetChanges() {
+		changes = append(changes, settings.Change{Flag: c.GetName(), Value: c.GetValue()})
+	}
+	result, err := configure.Update(ctx, changes)
+	if err != nil {
+		return nil, settingsError(err)
+	}
+	lines := make([]int32, 0, len(result.Changed))
+	for _, line := range result.Changed {
+		lines = append(lines, int32(line)) //nolint:gosec // a config file's line numbers fit
+	}
+	return connect.NewResponse(&accountv1.UpdateSignInResponse{
+		File: result.File, ChangedLines: lines, Saved: result.Saved,
+	}), nil
+}
+
+// administering is the settings service, for an administrator only.
+//
+//nolint:ireturn // a factory for a port returns that port; a concrete type here would defeat it.
+func (s *AccountServer) administering(ctx context.Context) (Settings, error) {
 	admins, err := s.forOwner(ctx)
 	if err != nil {
 		return nil, err
@@ -198,22 +280,29 @@ func (s *AccountServer) SignIn(
 	if !me.Admin {
 		return nil, adminError(admin.ErrNotAdmin)
 	}
-	out := &accountv1.SignInResponse{
-		Settings: make([]*accountv1.Setting, 0, len(s.settings)),
-		File:     s.file,
+	user, err := owner.From(ctx)
+	if err != nil {
+		return nil, asConnectError(err)
 	}
-	for _, setting := range s.settings {
-		out.Settings = append(out.Settings, &accountv1.Setting{
-			Label:  setting.Label,
-			Value:  setting.Value,
-			Source: setting.Origin.Kind,
-			Where:  setting.Origin.Where,
-			Key:    setting.Origin.Key,
-			Flag:   setting.Flag,
-			Env:    setting.Env,
-		})
+	configure, err := s.settings(user)
+	if err != nil {
+		return nil, asConnectError(err)
 	}
-	return connect.NewResponse(out), nil
+	return configure, nil
+}
+
+// settingsError answers a refused change with the code that says why.
+func settingsError(err error) error {
+	switch {
+	case errors.Is(err, settings.ErrLocked), errors.Is(err, settings.ErrNotEditable):
+		return connect.NewError(connect.CodeFailedPrecondition, err)
+	case errors.Is(err, settings.ErrInvalid):
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	case errors.Is(err, admin.ErrNotAdmin):
+		return connect.NewError(connect.CodePermissionDenied, err)
+	default:
+		return connect.NewError(connect.CodeInternal, err)
+	}
 }
 
 //nolint:ireturn // a factory for a port returns that port; a concrete type here would defeat it.
