@@ -1,4 +1,4 @@
--- Version 17: rows belong to a library, and a user reaches a library through
+-- Version 18: rows belong to a library, and a user reaches a library through
 -- a grant.
 --
 -- Until now the owner of a row was a user, and a user had one library. A

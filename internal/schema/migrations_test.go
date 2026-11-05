@@ -601,17 +601,41 @@ func (s *MigrationSuite) TestJobForceGoesDownAndUpAgain() {
 	s.Equal(0, forced)
 }
 
-// -- 00017_libraries ------------------------------------------------------
+// -- 00017_default_partition_grant ----------------------------------------
+
+// readBuiltInPartition is the read search makes when it names the built-in
+// library's own BM25 index, which needs SELECT on the partition itself.
+const readBuiltInPartition = `SELECT 1 FROM chunks_default LIMIT 0`
+
+func (s *MigrationSuite) TestDefaultPartitionGrantUpLetsTheAppReadThePartition() {
+	s.upTo(16)
+	s.True(s.appCannot(readBuiltInPartition), "migration 6 granted the parent alone")
+
+	s.upTo(17)
+
+	s.False(s.appCannot(readBuiltInPartition))
+}
+
+func (s *MigrationSuite) TestDefaultPartitionGrantGoesDownAndUpAgain() {
+	s.upTo(17)
+	s.down()
+	s.True(s.appCannot(readBuiltInPartition), "down takes the grant back")
+	s.upTo(17)
+
+	s.False(s.appCannot(readBuiltInPartition))
+}
+
+// -- 00018_libraries ------------------------------------------------------
 
 func (s *MigrationSuite) TestLibrariesUpKeepsEveryUsersRows() {
 	// Each user's rows become their personal library's without moving: the
 	// owner column is renamed, and the library takes the user's id.
-	s.upTo(16)
+	s.upTo(17)
 	s.exec(`SELECT create_account('second', 'https://issuer.example', 'subject-2')`)
 	s.ownedLibrary("default")
 	s.ownedLibrary("second")
 
-	s.upTo(17)
+	s.upTo(18)
 
 	s.Equal(2, s.count(`SELECT COUNT(*) FROM libraries WHERE kind = 'personal'`))
 	s.Equal(2, s.count(
@@ -627,7 +651,7 @@ func (s *MigrationSuite) TestLibrariesUpKeepsEveryUsersRows() {
 }
 
 func (s *MigrationSuite) TestAnAccountMadeAfterLibrariesHasOne() {
-	s.upTo(17)
+	s.upTo(18)
 	s.exec(`SELECT create_account('third', 'https://issuer.example', 'subject-3')`)
 
 	s.Equal(1, s.count(
@@ -640,10 +664,10 @@ func (s *MigrationSuite) TestAnAccountMadeAfterLibrariesHasOne() {
 
 func (s *MigrationSuite) TestLibrariesGoDownAndUpAgain() {
 	// Going down keeps every personal library and drops shared ones, rows
-	// and partition alike, since version 16 has nowhere to put them.
-	s.upTo(16)
-	s.ownedLibrary("default")
+	// and partition alike, since version 17 has nowhere to put them.
 	s.upTo(17)
+	s.ownedLibrary("default")
+	s.upTo(18)
 	s.exec(`INSERT INTO libraries (library_id, kind, slug, name)
 		VALUES ('lib_team', 'shared', 'team', 'Team docs')`)
 	s.exec(`CREATE TABLE chunks_lib_team PARTITION OF chunks FOR VALUES IN ('lib_team')`)
@@ -673,6 +697,6 @@ func (s *MigrationSuite) TestLibrariesGoDownAndUpAgain() {
 		s.Equal(2, n, "the personal library survives going down")
 	})
 
-	s.upTo(17)
+	s.upTo(18)
 	s.Equal(1, s.count(`SELECT COUNT(*) FROM libraries`))
 }
