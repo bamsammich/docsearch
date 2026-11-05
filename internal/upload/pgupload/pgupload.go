@@ -1,9 +1,9 @@
 // Package pgupload keeps uploads and their signed links in Postgres.
 //
 // Uploads are tenant rows under the same row-level security as every other
-// table, so one library's store reads only that library's files. Links are created
-// as their user, and redeemed before any user is known through the definer
-// functions migration 12 made.
+// table, so one library's store reads only that library's files. Links are
+// created by their issuer into a library, and redeemed before any user is
+// known through the definer functions migrations 12 and 21 made.
 package pgupload
 
 import (
@@ -71,10 +71,17 @@ func NewLinks(db *sql.DB) *Links {
 	return &Links{db: db, q: pgdbgen.New(db)}
 }
 
-// Create records a link as its user, in the user's own library, so the row
-// is written under that library's policy like any other.
-func (l *Links) Create(ctx context.Context, user, tokenHash string, expires time.Time) error {
-	err := pgsession.Run(ctx, l.db, l.q, pgsession.Personal(user), func(q *pgdbgen.Queries) error {
+// Create records a link into dest's library, issued by dest's user, so the
+// row is written under that library's policy like any other: only someone who
+// can add to the library can issue a link into it.
+func (l *Links) Create(
+	ctx context.Context,
+	dest upload.Destination,
+	tokenHash string,
+	expires time.Time,
+) error {
+	scope := pgsession.Scope{User: dest.User, Library: dest.Library}
+	err := pgsession.Run(ctx, l.db, l.q, scope, func(q *pgdbgen.Queries) error {
 		return q.CreateUploadLink(ctx, pgdbgen.CreateUploadLinkParams{
 			TokenHash: tokenHash, ExpiresAt: expires,
 		})
@@ -85,13 +92,16 @@ func (l *Links) Create(ctx context.Context, user, tokenHash string, expires time
 	return nil
 }
 
-// Redeem spends a link and names its user.
-func (l *Links) Redeem(ctx context.Context, tokenHash string) (string, bool, error) {
-	user, err := l.q.RedeemUploadLink(ctx, tokenHash)
+// Redeem spends a link and names its library and issuer.
+func (l *Links) Redeem(ctx context.Context, tokenHash string) (upload.Destination, bool, error) {
+	rows, err := l.q.RedeemUploadLink(ctx, tokenHash)
 	if err != nil {
-		return "", false, fmt.Errorf("redeem upload link: %w", err)
+		return upload.Destination{}, false, fmt.Errorf("redeem upload link: %w", err)
 	}
-	return user, user != "", nil
+	if len(rows) == 0 || rows[0].IssuedBy == "" {
+		return upload.Destination{}, false, nil
+	}
+	return upload.Destination{User: rows[0].IssuedBy, Library: rows[0].LibraryID}, true, nil
 }
 
 // Open reports whether a link would still redeem.

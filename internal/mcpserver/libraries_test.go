@@ -3,16 +3,25 @@ package mcpserver
 import (
 	"context"
 	"log/slog"
+	"net/netip"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgstore"
 	"github.com/bamsammich/docsearch/internal/pgtest"
+	"github.com/bamsammich/docsearch/internal/repository/postgres"
 	"github.com/bamsammich/docsearch/internal/schema"
+	"github.com/bamsammich/docsearch/internal/service/job"
+	jobmocks "github.com/bamsammich/docsearch/internal/service/job/mocks"
+	"github.com/bamsammich/docsearch/internal/upload"
+	urlmocks "github.com/bamsammich/docsearch/internal/urlguard/mocks"
 )
 
 // LibrariesSuite drives the read tools against Postgres across two
@@ -21,8 +30,9 @@ import (
 // which is what makes naming a document by its library necessary.
 type LibrariesSuite struct {
 	suite.Suite
-	pg *pgtest.DB
-	d  Deps
+	pg     *pgtest.DB
+	d      Deps
+	issued []pgsession.Scope
 }
 
 func TestLibraries(t *testing.T) { suite.Run(t, new(LibrariesSuite)) }
@@ -52,9 +62,30 @@ func (s *LibrariesSuite) SetupTest() {
 		"the archive password is not here")
 
 	s.d = Deps{
-		Log:    slog.New(slog.DiscardHandler),
-		Stores: func(scope pgsession.Scope) (*pgstore.Store, error) { return pgstore.New(s.pg.App, scope), nil },
+		Log:      slog.New(slog.DiscardHandler),
+		Resolver: s.resolver(),
+		Stores:   func(scope pgsession.Scope) (*pgstore.Store, error) { return pgstore.New(s.pg.App, scope), nil },
+		Jobs: func(scope pgsession.Scope) (*job.Service, error) {
+			targets := jobmocks.NewMockTargets(s.T())
+			targets.EXPECT().Targets(mock.Anything).RunAndReturn(
+				func(target string) ([]string, error) { return []string{target}, nil }).Maybe()
+			return job.New(postgres.NewJobs(s.pg.App, scope), targets), nil
+		},
+		UploadLinks: func(_ context.Context, scope pgsession.Scope) (upload.Link, error) {
+			s.issued = append(s.issued, scope)
+			return upload.Link{URL: "https://docs.example/upload/t", Expires: time.Now()}, nil
+		},
 	}
+	s.issued = nil
+}
+
+// resolver answers every host with a public address, so a URL target passes
+// the guard and the case reaches the queue.
+func (s *LibrariesSuite) resolver() *urlmocks.MockResolver {
+	r := urlmocks.NewMockResolver(s.T())
+	r.EXPECT().LookupNetIP(mock.Anything, mock.Anything, mock.Anything).
+		Return([]netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil).Maybe()
+	return r
 }
 
 // document writes one ready document of one chunk into scope's library.
@@ -209,4 +240,88 @@ func (s *LibrariesSuite) TestOutlineAndContextFollowTheQualifiedDocID() {
 	s.Require().NoError(err)
 	s.Require().NotEmpty(got.Chunks)
 	s.Contains(got.Chunks[0].Text, "shared drive")
+}
+
+func (s *LibrariesSuite) TestAddDocumentQueuesIntoTheNamedLibrary() {
+	_, out, err := s.d.addDocument(as("default"), nil,
+		addDocumentInput{Target: "https://docs.example.com/", Library: "team"})
+	s.Require().NoError(err)
+	s.Require().Len(out.Jobs, 1)
+	s.Equal("team", out.Jobs[0].Library)
+
+	_, status, err := s.d.ingestStatus(
+		as("default"),
+		nil,
+		ingestStatusInput{JobID: out.Jobs[0].JobID},
+	)
+	s.Require().NoError(err)
+	s.Equal("team", status.Jobs[0].Library)
+}
+
+func (s *LibrariesSuite) TestAddDocumentWithNoLibraryQueuesIntoTheUsersOwn() {
+	_, out, err := s.d.addDocument(
+		as("default"),
+		nil,
+		addDocumentInput{Target: "https://docs.example.com/"},
+	)
+	s.Require().NoError(err)
+	s.Equal("personal", out.Jobs[0].Library)
+}
+
+func (s *LibrariesSuite) TestAReaderCannotAddOrIssueALinkAndIsToldTheSameAsAStranger() {
+	_, _, asReader := s.d.addDocument(as("second"), nil,
+		addDocumentInput{Target: "https://docs.example.com/", Library: "team"})
+	_, _, asStranger := s.d.addDocument(as("second"), nil,
+		addDocumentInput{Target: "https://docs.example.com/", Library: "nowhere"})
+	s.Require().Error(asReader)
+	s.Require().Error(asStranger)
+	s.Equal(
+		strings.ReplaceAll(asReader.Error(), `"team"`, `"X"`),
+		strings.ReplaceAll(asStranger.Error(), `"nowhere"`, `"X"`))
+
+	_, _, err := s.d.uploadLink(as("second"), nil, uploadLinkInput{Library: "team"})
+	s.Require().Error(err)
+	s.Empty(s.issued)
+}
+
+func (s *LibrariesSuite) TestAnUploadLinkIsIssuedIntoTheNamedLibrary() {
+	_, _, err := s.d.uploadLink(as("default"), nil, uploadLinkInput{Library: "team"})
+	s.Require().NoError(err)
+	s.Equal([]pgsession.Scope{{User: "default", Library: "lib_team"}}, s.issued)
+}
+
+func (s *LibrariesSuite) TestIngestStatusCoversEveryLibraryTheUserCanAddTo() {
+	_, team, err := s.d.addDocument(as("default"), nil,
+		addDocumentInput{Target: "https://team.example.com/", Library: "team"})
+	s.Require().NoError(err)
+	_, own, err := s.d.addDocument(
+		as("default"),
+		nil,
+		addDocumentInput{Target: "https://own.example.com/"},
+	)
+	s.Require().NoError(err)
+
+	_, status, err := s.d.ingestStatus(as("default"), nil, ingestStatusInput{})
+	s.Require().NoError(err)
+	var ids []int64
+	for _, j := range status.Jobs {
+		ids = append(ids, j.JobID)
+	}
+	s.ElementsMatch([]int64{team.Jobs[0].JobID, own.Jobs[0].JobID}, ids)
+
+	// second reads the team library and cannot add to it, so its queue is
+	// not theirs to see or cancel.
+	_, theirs, err := s.d.ingestStatus(as("second"), nil, ingestStatusInput{})
+	s.Require().NoError(err)
+	s.Empty(theirs.Jobs)
+	_, _, err = s.d.cancelIngest(as("second"), nil, cancelIngestInput{JobID: team.Jobs[0].JobID})
+	s.Require().Error(err)
+
+	_, cancelled, err := s.d.cancelIngest(
+		as("default"),
+		nil,
+		cancelIngestInput{JobID: team.Jobs[0].JobID},
+	)
+	s.Require().NoError(err)
+	s.Equal(team.Jobs[0].JobID, cancelled.JobID)
 }

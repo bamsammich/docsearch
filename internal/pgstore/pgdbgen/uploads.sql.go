@@ -11,8 +11,8 @@ import (
 )
 
 const createUploadLink = `-- name: CreateUploadLink :exec
-INSERT INTO upload_links (token_hash, library_id, expires_at)
-VALUES ($1, current_setting('app.library_id', true), $2)
+INSERT INTO upload_links (token_hash, library_id, issued_by, expires_at)
+VALUES ($1, current_setting('app.library_id', true), current_setting('app.user_id', true), $2)
 `
 
 type CreateUploadLinkParams struct {
@@ -73,16 +73,38 @@ func (q *Queries) PutUpload(ctx context.Context, arg PutUploadParams) error {
 	return err
 }
 
-const redeemUploadLink = `-- name: RedeemUploadLink :one
-SELECT COALESCE(redeem_upload_link($1::text), '')::text AS library_id
+const redeemUploadLink = `-- name: RedeemUploadLink :many
+SELECT library_id::text AS library_id, COALESCE(issued_by, '')::text AS issued_by
+  FROM redeem_upload_link($1::text)
 `
 
+type RedeemUploadLinkRow struct {
+	LibraryID string
+	IssuedBy  string
+}
+
 // Redeeming runs before any user is known, on a bare connection.
-func (q *Queries) RedeemUploadLink(ctx context.Context, tokenHash string) (string, error) {
-	row := q.db.QueryRowContext(ctx, redeemUploadLink, tokenHash)
-	var library_id string
-	err := row.Scan(&library_id)
-	return library_id, err
+func (q *Queries) RedeemUploadLink(ctx context.Context, tokenHash string) ([]RedeemUploadLinkRow, error) {
+	rows, err := q.db.QueryContext(ctx, redeemUploadLink, tokenHash)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RedeemUploadLinkRow{}
+	for rows.Next() {
+		var i RedeemUploadLinkRow
+		if err := rows.Scan(&i.LibraryID, &i.IssuedBy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const uploadLinkOpen = `-- name: UploadLinkOpen :one

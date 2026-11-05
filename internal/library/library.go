@@ -12,6 +12,7 @@ package library
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -121,6 +122,31 @@ func (l *Libraries) Sources(scope pgsession.Scope) (*source.Registry, error) {
 	}
 	return source.New(l.formats, l.roots, pgcache.New(l.db, scope),
 		pgupload.New(l.db, scope), l.site), nil
+}
+
+// ErrNotWritable is a library a caller cannot add to: one they do not read,
+// or one they read as a reader. Both answer alike.
+var ErrNotWritable = errors.New(
+	"you cannot add to that library: name one you edit, or leave library out for your own")
+
+// Destination is the scope that adds to the library user named, or to their
+// own when the name is empty.
+func (l *Libraries) Destination(ctx context.Context, user, label string) (pgsession.Scope, error) {
+	if user == "" {
+		return pgsession.Scope{}, fmt.Errorf("resolve a library: %w", owner.ErrNoOwner)
+	}
+	if label == "" {
+		return pgsession.Personal(user), nil
+	}
+	libs, err := pgstore.New(l.db, pgsession.Personal(user)).Libraries(ctx)
+	if err != nil {
+		return pgsession.Scope{}, err
+	}
+	lib, ok := pgstore.Writable(libs, label)
+	if !ok {
+		return pgsession.Scope{}, ErrNotWritable
+	}
+	return pgsession.Scope{User: user, Library: lib.ID}, nil
 }
 
 // check refuses a view nobody owns.

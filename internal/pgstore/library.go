@@ -84,3 +84,21 @@ func Resolve(libs []Library, docID string) (Library, string, bool) {
 	}
 	return Library{}, "", false
 }
+
+// CanAdd reports whether the user may add to the library: editors and admins
+// may, readers may not.
+func (l Library) CanAdd() bool { return l.Role == "editor" || l.Role == "admin" }
+
+// Writable is the library an agent named as somewhere to add a document, or
+// the user's own when the name is empty. A name the user reads no library
+// under, and one they read but cannot add to, both answer false, so a caller
+// learns nothing about libraries they cannot use.
+func Writable(libs []Library, label string) (Library, bool) {
+	for _, lib := range libs {
+		named := lib.Label == label || (label == "" && lib.own)
+		if named {
+			return lib, lib.CanAdd()
+		}
+	}
+	return Library{}, false
+}

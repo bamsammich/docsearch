@@ -20,6 +20,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"net/http"
 	"strings"
 	"time"
 )
@@ -53,7 +54,23 @@ func Digest(content []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// Store holds one user's uploads.
+// Destination is where an upload goes and who it is written as: a library,
+// and a user who can add to it. A user's own library carries the user's id.
+type Destination struct {
+	User    string
+	Library string
+}
+
+// Own is a user's destination in their own library.
+func Own(user string) Destination { return Destination{User: user, Library: user} }
+
+// ErrNoDestination is a library a caller cannot upload into: one they do not
+// read, or one they read and cannot add to. Both answer alike, so the door
+// does not say which libraries exist.
+var ErrNoDestination = refused(http.StatusForbidden,
+	"you cannot add to that library: name one you edit, or leave library out for your own")
+
+// Store holds one library's uploads.
 type Store interface {
 	Put(ctx context.Context, file File) error
 	// Get is the file under key, or ErrNotFound.
@@ -62,10 +79,11 @@ type Store interface {
 
 // Links keeps signed links by the hash of their token, never the token.
 type Links interface {
-	Create(ctx context.Context, user, tokenHash string, expires time.Time) error
-	// Redeem spends a link and names its user. A link already spent, expired
-	// or never issued reports false.
-	Redeem(ctx context.Context, tokenHash string) (string, bool, error)
+	// Create records a link into dest, issued by dest's user.
+	Create(ctx context.Context, dest Destination, tokenHash string, expires time.Time) error
+	// Redeem spends a link and names its library and issuer. A link already
+	// spent, expired or never issued reports false.
+	Redeem(ctx context.Context, tokenHash string) (Destination, bool, error)
 	// Open reports whether a link would still redeem, without spending it.
 	Open(ctx context.Context, tokenHash string) (bool, error)
 }
@@ -90,11 +108,11 @@ func NewIssuer(links Links, base string, ttl time.Duration, now func() time.Time
 	return &Issuer{links: links, base: strings.TrimSuffix(base, "/"), ttl: ttl, now: now}
 }
 
-// Issue makes a link that uploads one file into user's library.
-func (i *Issuer) Issue(ctx context.Context, user string) (Link, error) {
+// Issue makes a link that uploads one file into dest, as dest's user.
+func (i *Issuer) Issue(ctx context.Context, dest Destination) (Link, error) {
 	token := rand.Text()
 	expires := i.now().Add(i.ttl)
-	if err := i.links.Create(ctx, user, hashToken(token), expires); err != nil {
+	if err := i.links.Create(ctx, dest, hashToken(token), expires); err != nil {
 		return Link{}, err
 	}
 	return Link{URL: i.base + LinkPrefix + token, Expires: expires}, nil

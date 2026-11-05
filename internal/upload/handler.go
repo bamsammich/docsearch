@@ -20,11 +20,14 @@ import (
 // Doors serves both ways in.
 type Doors struct {
 	Links Links
-	// Stores builds the store of the user an upload belongs to.
-	Stores func(user string) (Store, error)
-	// Enqueue queues target into user's library and returns the job. An
-	// empty title takes the name the document gives itself.
-	Enqueue func(ctx context.Context, user, target, title string) (int64, error)
+	// Stores builds the store of the library an upload goes into.
+	Stores func(dest Destination) (Store, error)
+	// Enqueue queues target into dest and returns the job. An empty title
+	// takes the name the document gives itself.
+	Enqueue func(ctx context.Context, dest Destination, target, title string) (int64, error)
+	// Destinations resolves the library a program named with ?library=, as
+	// user. An empty name is user's own library.
+	Destinations func(ctx context.Context, user, library string) (Destination, error)
 	// Supports reports whether an adapter reads a file by its name.
 	Supports func(filename string) bool
 	Log      *slog.Logger
@@ -75,28 +78,37 @@ func (d Doors) Link() http.Handler {
 
 // Direct is the authenticated door, for a program holding a token. It runs
 // behind the server's guard, which named the user. A caller may name the key,
-// which is how a sync replaces a document it uploaded before, and may title
-// the document with ?title=.
+// which is how a sync replaces a document it uploaded before, may title the
+// document with ?title=, and may upload into a library it edits with
+// ?library=.
 func (d Doors) Direct() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPut && r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		user, err := owner.From(r.Context())
-		if err != nil {
-			d.answer(w, r, Received{}, err)
-			return
-		}
-		file, err := d.take(r, r.URL.Query().Get("key"))
-		if err != nil {
-			d.answer(w, r, Received{}, err)
-			return
-		}
-		title := strings.TrimSpace(r.URL.Query().Get("title"))
-		received, err := d.keep(r.Context(), user, file, title)
+		received, err := d.direct(r)
 		d.answer(w, r, received, err)
 	})
+}
+
+// direct takes one file from a program into the library it named, or its
+// user's own, and queues it.
+func (d Doors) direct(r *http.Request) (Received, error) {
+	user, err := owner.From(r.Context())
+	if err != nil {
+		return Received{}, err
+	}
+	query := r.URL.Query()
+	dest, err := d.Destinations(r.Context(), user, query.Get("library"))
+	if err != nil {
+		return Received{}, err
+	}
+	file, err := d.take(r, query.Get("key"))
+	if err != nil {
+		return Received{}, err
+	}
+	return d.keep(r.Context(), dest, file, strings.TrimSpace(query.Get("title")))
 }
 
 // spend checks the link before reading anything, then reads the file before
@@ -122,22 +134,22 @@ func (d Doors) spend(w http.ResponseWriter, r *http.Request, token string) (Rece
 	if err != nil {
 		return Received{}, err
 	}
-	user, err := d.redeem(r.Context(), token)
+	dest, err := d.redeem(r.Context(), token)
 	if err != nil {
 		return Received{}, err
 	}
-	return d.keep(r.Context(), user, file, "")
+	return d.keep(r.Context(), dest, file, "")
 }
 
-func (d Doors) redeem(ctx context.Context, token string) (string, error) {
-	user, ok, err := d.Links.Redeem(ctx, hashToken(token))
+func (d Doors) redeem(ctx context.Context, token string) (Destination, error) {
+	dest, ok, err := d.Links.Redeem(ctx, hashToken(token))
 	if err != nil {
-		return "", err
+		return Destination{}, err
 	}
 	if !ok {
-		return "", errLinkClosed
+		return Destination{}, errLinkClosed
 	}
-	return user, nil
+	return dest, nil
 }
 
 // errLinkClosed is a link that has expired, was used, or was never issued.
@@ -167,15 +179,20 @@ func (d Doors) take(r *http.Request, key string) (File, error) {
 }
 
 // keep stores a file in user's library and queues it under title.
-func (d Doors) keep(ctx context.Context, user string, file File, title string) (Received, error) {
-	store, err := d.Stores(user)
+func (d Doors) keep(
+	ctx context.Context,
+	dest Destination,
+	file File,
+	title string,
+) (Received, error) {
+	store, err := d.Stores(dest)
 	if err != nil {
 		return Received{}, err
 	}
 	if err := store.Put(ctx, file); err != nil {
 		return Received{}, err
 	}
-	jobID, err := d.Enqueue(ctx, user, Target(file.Key), title)
+	jobID, err := d.Enqueue(ctx, dest, Target(file.Key), title)
 	if err != nil {
 		return Received{}, err
 	}
