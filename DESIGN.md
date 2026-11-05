@@ -1,285 +1,295 @@
 ---
 name: docsearch Library
-description: The library UI shows how much of each document an agent can actually reach.
+description: A quiet dark frame around a library table that shows, document by document, how much an agent can actually reach.
 colors:
-  bg: "#f4f5f3"
+  frame: "#14181d"
+  frame-2: "#262c33"
+  frame-3: "#343b43"
+  frame-line: "#2c333b"
+  on-frame: "#ffffff"
+  on-frame-muted: "#c3cad2"
+  frame-live: "#9bb8ff"
+  frame-alert: "#ff9b91"
+  bg: "#ffffff"
   surface: "#ffffff"
-  surface-2: "#eceeeb"
-  line: "#dcdfdb"
-  line-strong: "#c5c9c4"
-  ink: "#17191b"
-  muted: "#586068"
-  accent: "#2350c0"
-  accent-weak: "#e8eefb"
-  good: "#23683f"
-  good-bg: "#e1f0e6"
-  good-fill: "#3f8f5e"
-  warn: "#7a5000"
-  warn-bg: "#faefd2"
-  warn-fill: "#d29a1e"
-  bad: "#a3261b"
-  bad-bg: "#f9e4e1"
-  lost: "#c27b72"
+  surface-2: "#f3f4f6"
+  line: "#e6e7eb"
+  line-soft: "#f0f1f3"
+  line-strong: "#d3d6dc"
+  ink: "#16181d"
+  ink-2: "#3a3f47"
+  muted: "#5d636c"
+  accent: "#3a5ccc"
+  accent-weak: "#eef1fb"
+  good: "#1d7442"
+  good-bg: "#e4f2e9"
+  good-fill: "#2f8f57"
+  warn: "#855000"
+  warn-bg: "#fcf4e0"
+  warn-fill: "#e0a820"
+  bad: "#b42318"
+  bad-bg: "#fdecea"
+  lost: "#bcc2ca"
   on-bad: "#ffffff"
-  code-bg: "#1a1c1f"
+  on-warn: "#1a1400"
+  code-bg: "#14181d"
   code-fg: "#e4e6e8"
-  code-key: "#9fc2ef"
-  code-str: "#d9c48a"
-  bg-dark: "#121417"
-  surface-dark: "#1a1d21"
-  surface-2-dark: "#22262b"
-  line-dark: "#2d3238"
-  line-strong-dark: "#3b4148"
+  frame-dark: "#0b0d10"
+  frame-2-dark: "#1c2127"
+  frame-3-dark: "#2a3038"
+  frame-line-dark: "#20252b"
+  bg-dark: "#15181c"
+  surface-dark: "#1a1d22"
+  surface-2-dark: "#22262c"
+  line-dark: "#2b3037"
+  line-soft-dark: "#23272d"
+  line-strong-dark: "#3a4048"
   ink-dark: "#e8eaed"
-  muted-dark: "#a1a8b0"
-  accent-dark: "#87a8ff"
-  accent-weak-dark: "#1d2740"
-  good-dark: "#80cb9e"
-  good-bg-dark: "#15291c"
+  ink-2-dark: "#c8ccd2"
+  muted-dark: "#a2a9b2"
+  accent-dark: "#8ea8ff"
+  accent-weak-dark: "#1e2742"
+  good-dark: "#7fcf9d"
+  good-bg-dark: "#15291d"
   good-fill-dark: "#4f9d6c"
-  warn-dark: "#e5bb5d"
-  warn-bg-dark: "#2f260e"
+  warn-dark: "#e8be62"
+  warn-bg-dark: "#2b2410"
   warn-fill-dark: "#c99325"
-  bad-dark: "#f3897e"
-  bad-bg-dark: "#351a19"
-  lost-dark: "#a3564e"
-  on-bad-dark: "#1a1d21"
+  bad-dark: "#f4897d"
+  bad-bg-dark: "#351b19"
+  lost-dark: "#59616b"
+  on-bad-dark: "#1a1d22"
 typography:
-  headline:
-    fontFamily: "Libre Franklin, Helvetica Neue, Arial, sans-serif"
-    fontSize: "24px"
+  display:
+    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, sans-serif"
+    fontSize: "48px"
     fontWeight: 600
+    lineHeight: 1
+    letterSpacing: "-0.035em"
+    fontFeature: "\"tnum\", \"cv11\", \"ss01\""
+  headline:
+    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, sans-serif"
+    fontSize: "22px"
+    fontWeight: 700
     lineHeight: 1.25
     letterSpacing: "-0.015em"
   title:
-    fontFamily: "Libre Franklin, Helvetica Neue, Arial, sans-serif"
+    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, sans-serif"
     fontSize: "20px"
     fontWeight: 600
-    lineHeight: 1.3
+    lineHeight: 1.5
     letterSpacing: "-0.01em"
-  title-sm:
-    fontFamily: "Libre Franklin, Helvetica Neue, Arial, sans-serif"
-    fontSize: "17px"
-    fontWeight: 600
-    lineHeight: 1.4
-  brand:
-    fontFamily: "Libre Franklin, Helvetica Neue, Arial, sans-serif"
-    fontSize: "18px"
-    fontWeight: 700
-    letterSpacing: "-0.015em"
-  lead:
-    fontFamily: "Libre Franklin, Helvetica Neue, Arial, sans-serif"
-    fontSize: "16px"
-    fontWeight: 400
-    lineHeight: 1.55
   body:
-    fontFamily: "Libre Franklin, Helvetica Neue, Arial, sans-serif"
-    fontSize: "15px"
-    fontWeight: 400
-    lineHeight: 1.55
-  body-sm:
-    fontFamily: "Libre Franklin, Helvetica Neue, Arial, sans-serif"
+    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, sans-serif"
     fontSize: "14px"
     fontWeight: 400
-    lineHeight: 1.55
-  meta:
-    fontFamily: "Libre Franklin, Helvetica Neue, Arial, sans-serif"
+    lineHeight: 1.5
+    fontFeature: "\"cv11\", \"ss01\""
+  body-dense:
+    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, sans-serif"
     fontSize: "13px"
     fontWeight: 400
     lineHeight: 1.5
+  section-title:
+    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, sans-serif"
+    fontSize: "13px"
+    fontWeight: 600
+    lineHeight: 1.5
   label:
-    fontFamily: "Libre Franklin, Helvetica Neue, Arial, sans-serif"
+    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, sans-serif"
     fontSize: "12px"
     fontWeight: 600
-    letterSpacing: "0.06em"
-  chip:
-    fontFamily: "Libre Franklin, Helvetica Neue, Arial, sans-serif"
+    lineHeight: 1.5
+  meta:
+    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, sans-serif"
     fontSize: "12px"
-    fontWeight: 600
+    fontWeight: 400
+    lineHeight: 1.5
   mono:
-    fontFamily: "Red Hat Mono, ui-monospace, SF Mono, Menlo, monospace"
-    fontSize: "0.94em"
+    fontFamily: "JetBrains Mono, ui-monospace, SF Mono, Menlo, monospace"
+    fontSize: "0.92em"
     fontWeight: 400
   code:
-    fontFamily: "Red Hat Mono, ui-monospace, SF Mono, Menlo, monospace"
-    fontSize: "13px"
+    fontFamily: "JetBrains Mono, ui-monospace, SF Mono, Menlo, monospace"
+    fontSize: "12px"
     fontWeight: 400
-    lineHeight: 1.55
+    lineHeight: 1.6
 rounded:
-  strip: "4px"
-  badge: "5px"
-  control: "7px"
-  inset: "8px"
-  card: "10px"
-  page: "12px"
-  pill: "14px"
-spacing:
+  hair: "2px"
+  bar: "3px"
   xs: "4px"
   sm: "6px"
+  field: "7px"
   md: "8px"
-  lg: "12px"
-  xl: "14px"
-  2xl: "18px"
-  3xl: "24px"
-  gutter: "28px"
+  search: "9px"
+  card: "10px"
+  panel: "12px"
+  pill: "14px"
+spacing:
+  hair: "2px"
+  xs: "4px"
+  sm: "6px"
+  base: "8px"
+  row: "10px"
+  md: "12px"
+  gutter: "14px"
+  lg: "16px"
+  page-y: "20px"
+  page-x: "24px"
+  section: "28px"
 components:
-  button-primary:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.surface}"
-    typography: "{typography.body-sm}"
-    rounded: "{rounded.control}"
-    padding: "7px 13px"
-  button-secondary:
+  button:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
-    typography: "{typography.body-sm}"
-    rounded: "{rounded.control}"
-    padding: "7px 13px"
-  button-secondary-hover:
+    typography: "{typography.body}"
+    rounded: "{rounded.md}"
+    padding: "0 12px"
+    height: "34px"
+  button-hover:
     backgroundColor: "{colors.surface-2}"
-  button-danger:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.bad}"
-    rounded: "{rounded.control}"
-    padding: "7px 13px"
+  button-primary:
+    backgroundColor: "{colors.ink}"
+    textColor: "{colors.bg}"
+    rounded: "{rounded.md}"
+    padding: "0 12px"
+    height: "34px"
+  button-on-frame:
+    backgroundColor: "{colors.on-frame}"
+    textColor: "{colors.frame}"
+    rounded: "{rounded.md}"
+    padding: "0 12px"
+    height: "34px"
+  button-quiet:
+    textColor: "{colors.ink-2}"
+    rounded: "{rounded.md}"
+    padding: "0 12px"
+    height: "34px"
+  button-quiet-hover:
+    backgroundColor: "{colors.surface-2}"
+    textColor: "{colors.ink}"
   button-danger-solid:
     backgroundColor: "{colors.bad}"
     textColor: "{colors.on-bad}"
-    rounded: "{rounded.control}"
-    padding: "7px 13px"
+    rounded: "{rounded.md}"
+    padding: "0 12px"
+    height: "34px"
   button-small:
-    rounded: "{rounded.control}"
-    padding: "4px 10px"
+    rounded: "{rounded.md}"
+    padding: "0 10px"
+    height: "30px"
+  button-block:
+    rounded: "{rounded.md}"
+    width: "100%"
+    height: "42px"
+  input:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    typography: "{typography.body}"
+    rounded: "{rounded.field}"
+    padding: "0 10px"
+    height: "34px"
+  search-field:
+    backgroundColor: "{colors.frame-2}"
+    textColor: "{colors.on-frame}"
+    typography: "{typography.body}"
+    rounded: "{rounded.search}"
+    padding: "0 6px 0 12px"
+    height: "38px"
+  search-scope:
+    backgroundColor: "{colors.frame-3}"
+    textColor: "{colors.on-frame}"
+    rounded: "{rounded.sm}"
+    padding: "0 6px"
+    height: "26px"
+  topbar:
+    backgroundColor: "{colors.frame}"
+    textColor: "{colors.on-frame}"
+    padding: "10px 20px"
+    height: "58px"
+  side-nav:
+    backgroundColor: "{colors.frame}"
+    textColor: "{colors.on-frame-muted}"
+    padding: "12px 10px"
+    width: "216px"
+  nav-item:
+    textColor: "{colors.on-frame-muted}"
+    rounded: "{rounded.field}"
+    padding: "0 10px"
+    height: "36px"
+  nav-item-active:
+    backgroundColor: "{colors.frame-2}"
+    textColor: "{colors.on-frame}"
   badge-good:
     backgroundColor: "{colors.good-bg}"
     textColor: "{colors.good}"
-    typography: "{typography.chip}"
-    rounded: "{rounded.badge}"
+    typography: "{typography.label}"
+    rounded: "{rounded.sm}"
     padding: "2px 8px"
   badge-degraded:
     backgroundColor: "{colors.warn-bg}"
     textColor: "{colors.warn}"
-    typography: "{typography.chip}"
-    rounded: "{rounded.badge}"
+    typography: "{typography.label}"
+    rounded: "{rounded.sm}"
     padding: "2px 8px"
   badge-unusable:
     backgroundColor: "{colors.bad-bg}"
     textColor: "{colors.bad}"
-    typography: "{typography.chip}"
-    rounded: "{rounded.badge}"
+    typography: "{typography.label}"
+    rounded: "{rounded.sm}"
     padding: "2px 8px"
-  tab:
-    textColor: "{colors.muted}"
-    padding: "10px 12px 11px"
-  tab-active:
-    textColor: "{colors.ink}"
-  tab-count:
+  filter-switch:
     backgroundColor: "{colors.surface-2}"
-    textColor: "{colors.muted}"
-    rounded: "{rounded.card}"
-    padding: "1px 6px"
-  tab-count-alert:
-    backgroundColor: "{colors.bad-bg}"
-    textColor: "{colors.bad}"
-  filter-group:
-    backgroundColor: "{colors.surface-2}"
-    rounded: "{rounded.inset}"
-    padding: "3px"
+    rounded: "{rounded.md}"
+    padding: "2px"
   filter-option:
     textColor: "{colors.muted}"
-    rounded: "6px"
-    padding: "5px 11px"
+    typography: "{typography.body-dense}"
+    rounded: "{rounded.sm}"
+    padding: "0 10px"
+    height: "28px"
   filter-option-active:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
-  input:
+  chip:
     backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.control}"
-    padding: "7px 10px"
-  coverage-strip:
-    backgroundColor: "{colors.surface-2}"
-    rounded: "{rounded.strip}"
-    height: "8px"
-  coverage-strip-thin:
-    rounded: "3px"
-    height: "5px"
-  problem-row:
-    backgroundColor: "{colors.surface}"
-    rounded: "{rounded.card}"
-    padding: "13px 15px 14px"
-  healthy-row:
-    backgroundColor: "{colors.surface}"
-    typography: "{typography.body-sm}"
-    padding: "9px 15px"
-  healthy-row-selected:
-    backgroundColor: "{colors.accent-weak}"
-  document-page:
-    backgroundColor: "{colors.surface}"
-    rounded: "{rounded.page}"
-    padding: "22px 26px 24px"
-  finding:
-    backgroundColor: "{colors.surface-2}"
-    rounded: "{rounded.inset}"
-    padding: "12px 14px"
-  finding-degraded:
-    backgroundColor: "{colors.warn-bg}"
-  finding-unusable:
-    backgroundColor: "{colors.bad-bg}"
-  job-card:
-    backgroundColor: "{colors.surface}"
-    rounded: "{rounded.card}"
-    padding: "14px 16px"
-  job-status-running:
-    backgroundColor: "{colors.accent-weak}"
-    textColor: "{colors.accent}"
-    rounded: "{rounded.badge}"
-    padding: "2px 8px"
-  job-status-stalled:
-    backgroundColor: "{colors.warn-bg}"
-    textColor: "{colors.warn}"
-    rounded: "{rounded.badge}"
-    padding: "2px 8px"
-  job-status-failed:
-    backgroundColor: "{colors.bad-bg}"
-    textColor: "{colors.bad}"
-    rounded: "{rounded.badge}"
-    padding: "2px 8px"
-  job-status-done:
-    backgroundColor: "{colors.good-bg}"
-    textColor: "{colors.good}"
-    rounded: "{rounded.badge}"
-    padding: "2px 8px"
-  job-status-queued:
-    backgroundColor: "{colors.surface-2}"
-    textColor: "{colors.muted}"
-    rounded: "{rounded.badge}"
-    padding: "2px 8px"
-  phase-bar:
-    backgroundColor: "{colors.surface-2}"
-    rounded: "2px"
-    height: "4px"
-  search-hit:
-    backgroundColor: "{colors.surface}"
-    typography: "{typography.body-sm}"
-    rounded: "{rounded.card}"
-    padding: "12px 16px 13px"
-  search-sources:
-    backgroundColor: "{colors.surface}"
-    typography: "{typography.body-sm}"
-    rounded: "{rounded.card}"
-    padding: "14px 16px"
-  gate:
-    backgroundColor: "{colors.surface}"
-    rounded: "{rounded.page}"
-    padding: "20px 22px 22px"
-    width: "460px"
-  example-chip:
-    backgroundColor: "{colors.surface}"
-    typography: "{typography.meta}"
+    typography: "{typography.body-dense}"
     rounded: "{rounded.pill}"
-    padding: "2px 10px"
-  raw-response:
+    padding: "0 11px"
+    height: "28px"
+  table-row:
+    textColor: "{colors.ink}"
+    typography: "{typography.body-dense}"
+    padding: "9px 10px"
+  table-row-selected:
+    backgroundColor: "{colors.accent-weak}"
+    rounded: "{rounded.md}"
+  coverage-bar:
+    backgroundColor: "{colors.surface-2}"
+    rounded: "{rounded.bar}"
+    height: "8px"
+  coverage-bar-thin:
+    backgroundColor: "{colors.surface-2}"
+    rounded: "{rounded.hair}"
+    height: "4px"
+  check-degraded:
+    backgroundColor: "{colors.warn-bg}"
+    textColor: "{colors.ink-2}"
+    typography: "{typography.body-dense}"
+    padding: "12px 14px"
+  check-unusable:
+    backgroundColor: "{colors.bad-bg}"
+    textColor: "{colors.ink-2}"
+    typography: "{typography.body-dense}"
+    padding: "12px 14px"
+  card:
+    backgroundColor: "{colors.surface}"
+    rounded: "{rounded.card}"
+    padding: "12px 16px"
+  panel:
+    backgroundColor: "{colors.surface}"
+    rounded: "{rounded.panel}"
+    padding: "18px 20px 20px"
+  code-block:
     backgroundColor: "{colors.code-bg}"
     textColor: "{colors.code-fg}"
     typography: "{typography.code}"
@@ -287,9 +297,9 @@ components:
     padding: "14px 16px"
   toast:
     backgroundColor: "{colors.ink}"
-    textColor: "{colors.surface}"
-    typography: "{typography.body-sm}"
-    rounded: "{rounded.inset}"
+    textColor: "{colors.bg}"
+    typography: "{typography.body-dense}"
+    rounded: "{rounded.md}"
     padding: "9px 14px"
 ---
 
@@ -297,204 +307,188 @@ components:
 
 ## Overview
 
-**Creative North Star: "The Coverage Readout"**
+**Creative North Star: "The Quiet Frame"**
 
-Every document in the library is measured, not described. The one shared visual is the coverage strip, a three-part bar showing how much of a document an agent can reach by chapter, how much it can reach only with unreliable chapters, and how much never reached the index. It appears on problem rows, on the open document, on finished ingest jobs and beside search results, so the same reading carries from queue to library to diagnosis to retrieval. Everything else stays quiet so that the strip and the verdict are what the eye lands on.
+A near-black frame (side navigation and top bar) holds a plain working area, and the working area holds one thing that matters: a table of documents and the selected document's check run beside it. The frame never changes between themes and never competes; it carries the brand mark, the two sections with their counts, and the search field, centred in the top bar, with Add document at its right. Everything a person reads sits in the working area, white in light and graphite in dark.
 
-The ground is neutral and cool: an off-white page in light mode, near-black in dark, with white (or one step lighter) surfaces separated by hairline borders rather than shadows. Type is a single sans family, Libre Franklin, at modest sizes and weights; hierarchy comes from weight (400 to 600) and from muted grey against near-black ink, not from big display sizes. Red Hat Mono appears only where the text is a machine identifier: document and chunk IDs, file names and source URLs. Density is moderate on problems and tight on healthy documents: problems get a card each with their strip and finding, healthy documents collapse into a compact list.
+The system is dense and typographic: Inter at 13 to 14px, small radii, hairline dividers, almost no shadow. Colour is spent on state, not decoration. Healthy documents recede to lighter, tighter rows; degraded and unusable documents lead with heavier names, a reason line in their state colour, and a bar long enough to show its split. Coverage, the share of a document an agent can reach, is the one shared visual: a solid three-part bar, reachable by chapter, reachable with unreliable chapters, not indexed.
 
-The system refuses two things the user has rejected. It does not dress the interface as a physical library or any other costume metaphor, and it does not become an anonymous developer console where every status is an equal-weight pill. State is honest and loud only where something is wrong.
+This world deliberately replaced an earlier one. Rejected and not to return: hatched or textured coverage bars, the previous typeface and looser density, and any dressing of the interface as a physical library (wood, paper, shelves, spines as ornament). The stack-of-books logo is the single sanctioned book reference; it is a mark, not a theme.
 
 **Key Characteristics:**
-- The coverage strip is the signature; green, hatched amber and dusty red belong to it and to verdicts.
-- One blue accent, used for focus, selection, links and live (running) state.
-- Primary actions are near-black ink, not blue.
-- Status is always an icon plus a word; colour is never the only carrier.
-- Flat surfaces with hairline borders; only the open document page lifts.
-- One authored motion: opening a document grows its strip to full length.
-- Prose capped at 72ch; numbers in tabular figures.
+- Dark frame (side navigation and top bar) around a light or graphite working area, in both themes.
+- Search field centred in the top bar, reachable from anywhere with `/`.
+- Library table with the selected document's check-run detail beside it; the detail becomes a full sheet below 1180px.
+- Verdicts are an icon plus a word, never colour alone.
+- Coverage as solid green, amber and grey segments with the numbers beside them.
+- One blue accent for focus, selection, links and live work.
+- Inter for everything a person reads; JetBrains Mono only for machine strings.
 
 ## Colors
 
-A cool neutral ground with one blue accent and three reserved status hues that mean coverage and verdict, nothing else.
+A neutral graphite-and-white palette with one blue accent and three state families (good, warn, bad), each in a text, tint and fill strength.
 
 ### Primary
-- **Signal Blue** (`accent`; dark `accent-dark`): focus rings, the selected problem row's border, links and link buttons, the running job status and the current phase bar. It marks where the person is and what is happening right now.
-- **Signal Blue Wash** (`accent-weak`): the selected healthy row, the running status chip, the input focus halo, text selection and matched terms in search hits and their context.
-
-### Secondary
-- **Reachable Green** (`good-fill`): the "by chapter" segment of the coverage strip and the top bar of the brand mark. `good` and `good-bg` carry the Good verdict and the Done job status.
-- **Caution Amber** (`warn-fill`): the hatched "chapters unreliable" segment and stalled phase bars. `warn` and `warn-bg` carry the Degraded verdict, degraded findings and stalled jobs.
-- **Dusty Red** (`bad`, `bad-bg`): the Unusable verdict, failed jobs and phases, errors, destructive actions and the alert count on tabs. **On Red** (`on-bad`) is the label colour on a solid red fill: white in light mode, the dark surface in dark mode, where the red is light.
-- **Lost Rose** (`lost`): the "not indexed" segment of the strip. A muted, greyed rose, strong enough to show as a segment against the Mist track in both themes, desaturated enough to read as absence rather than alarm.
+- **Index Blue** (accent): focus rings, the selected table row's tint (accent-weak), links, search-term highlights, the running ingest phase and running job status. Nothing else.
+- **Frame Blue** (frame-live): the accent's lighter cousin for use on the dark frame: the search field's focus border and halo, and the side navigation's live counts.
 
 ### Neutral
-- **Cool Paper** (`bg`): the page ground.
-- **White Surface** (`surface`): cards, rows, the document page, inputs, the active filter option.
-- **Mist** (`surface-2`): strip track, filter and segmented-control troughs, neutral findings, hover fills, neutral counts.
-- **Hairline** (`line`) and **Rule** (`line-strong`): card borders and dividers; `line-strong` for control borders, dashed notices, the k cut-off rule and completed phase bars.
-- **Ink** (`ink`): text, the active tab underline and the primary button fill.
-- **Slate** (`muted`): secondary text, metadata, inactive tabs, labels.
-- **Terminal** (`code-bg`, `code-fg`, `code-key`, `code-str`): the raw MCP response view only. The same values serve both themes.
+- **Frame Graphite** (frame): the side navigation and top bar; also the code block ground (code-bg). Deepens to frame-dark in dark theme but stays the darkest surface on screen.
+- **Frame Raised** (frame-2): the search field, the active and hovered navigation item.
+- **Frame Control** (frame-3): the scope select inside the search field, the avatar, the shortcut key's border.
+- **Frame Seam** (frame-line): the search field's resting border and the navigation's edge.
+- **Frame Text** (on-frame / on-frame-muted): white for active items and entered text; the muted grey for resting navigation and placeholders.
+- **Working White** (bg / surface): the working area and every card in light theme; graphite (bg-dark, surface-dark) in dark.
+- **Wash** (surface-2): hover rows, the filter switch track, the coverage bar track, disabled inputs.
+- **Rules** (line, line-soft, line-strong): card borders and table header rule; row dividers; input and button borders and dashed affordances.
+- **Ink** (ink, ink-2, muted): primary text and the primary button; secondary prose and healthy row names; meta, counts and hints.
 
-Dark mode swaps every role to its `-dark` token; it follows `prefers-color-scheme` unless the page carries an explicit `data-theme` of `light` or `dark`.
+### State
+- **Searchable Green** (good, good-bg, good-fill): the good verdict's word and tint; the "reachable by chapter" coverage segment.
+- **Unreliable Amber** (warn, warn-bg, warn-fill): the degraded verdict, degraded checks and reason lines; the "chapters unreliable" segment; the instance-label strip (warn-fill with on-warn text).
+- **Unusable Red** (bad, bad-bg, on-bad): the unusable verdict and checks, errors, failed jobs, the destructive button and its confirmation; the frame's alert count uses frame-alert.
+- **Not Indexed Grey** (lost): the "not indexed" coverage segment. Lost content is neutral, not alarming; the verdict carries the alarm.
 
 ### Named Rules
-**The Reserved Hues Rule.** Green, amber and red mean coverage, verdict, job status, error or destruction. They are never decoration, never a brand colour, never a category tint.
+**The Dark Frame Rule.** The side navigation and top bar are always frame graphite, in light and dark theme alike. Controls on the frame use the frame-* and on-frame tokens, never working-area tokens.
 
-**The One Blue Rule.** Blue is the only accent and it means focus, selection, a link or live work. A primary button is ink, so blue never competes with the action.
+**The One Blue Rule.** The accent marks focus, selection, links and live work only. A second hue for emphasis is not part of this system.
 
-**The Never Colour Alone Rule.** Every verdict, job state and active phase pairs its hue with an icon and a word. The coverage strip carries a full `aria-label` and a numeric key.
+**The Icon-and-Word Rule.** Every verdict and job status is an icon plus a word. Colour reinforces; it never carries state alone.
+
+**The Solid Segment Rule.** Coverage segments are flat fills separated by a 2px gap (1px on the thin bar). Never hatched, striped, patterned or textured.
 
 ## Typography
 
-**Body Font:** Libre Franklin (with Helvetica Neue, Arial, sans-serif), weights 400, 500, 600, 700
-**Mono Font:** Red Hat Mono (with ui-monospace, SF Mono, Menlo, monospace), weights 400, 500
+**Display Font:** Inter (with system-ui, -apple-system, Segoe UI, sans-serif)
+**Body Font:** Inter
+**Label/Mono Font:** JetBrains Mono (with ui-monospace, SF Mono, Menlo, monospace)
 
-Both families are self-hosted, bundled with the app as Latin subsets in exactly these weights; the UI makes no font-CDN request.
-
-**Character:** A plain, slightly warm grotesque used at working sizes, with weight doing the hierarchy. The mono is a tag for machine text, not a voice.
+**Character:** One neutral sans for everything a person reads, set small and tight, with Inter's alternate digits and single-storey a (cv11, ss01). The mono face appears only where the string is the machine's: file names, IDs, page ranges, hosts, URLs, chunk IDs and raw MCP output. Both faces are self-hosted.
 
 ### Hierarchy
-- **Headline** (600, 24px, 1.25, -0.015em, balanced wrap): the open document's title. 21px below 640px.
-- **Title** (600, 20px, -0.01em): page heads, the empty state, the sign-in gate (22px there).
-- **Title Small** (600, 17px): panel headings such as the Add document form.
-- **Brand** (700, 18px, -0.015em): the wordmark beside the three-bar mark.
-- **Lead** (400, 16px): the document's consequence headline ("Agents reach 28 of 240 pages."), and the search query field.
-- **Body** (400, 15px, 1.55): the default; the library summary line.
-- **Body Small** (400 to 600, 14px): rows, findings, buttons, inputs, notes. Most of the interface lives here.
-- **Meta** (400, 13px): sources, row metadata, hints, the coverage key, the k cut-off, field labels (600).
-- **Label** (600, 12px, 0.06em, uppercase, `muted`): section headings in the list, on the document page and over the search sources column ("Needs attention", "Findings", "Index problems", "Warnings", "Where these came from"). Each heads a section of content; none sits above another heading. **Chip** (600, 12px, no tracking or case change) sets badges, status chips and counts.
-- **Mono** (400, 0.94em of its context): IDs, chunk numbers, file names, URLs, environment variables. Identifiers the server quotes in backticks inside its own sentences (findings, evidence, warnings, inspection details) render as inline code at 0.9em.
+- **Display** (600, 48px, line-height 1, -0.035em, tabular): the reach figure, the count of units reachable by chapter, in the document detail. 40px on phones. The only large type in the UI.
+- **Headline** (700, 22px, 1.25, -0.015em, balanced wrap): the selected document's title, the reader's title, sign-in heading (600). 20px on phones.
+- **Title** (600, 20px, -0.01em): page titles (Library, Ingest, Search, empty states).
+- **Body** (400, 14px, 1.5): default text, buttons, inputs, passage text (line-height 1.6). Prose capped at 72ch.
+- **Body Dense** (400, 13px): the library table, checks, hits, notes, outline, summaries.
+- **Section Title** (600, 13px): headings inside the detail and form labels; a lighter muted count may follow.
+- **Label** (600, 12px): verdict badges, job status, navigation counts. Sentence case, no tracking.
+- **Meta** (400, 12px, muted): source lines, hit locations, hints, table header.
 
 ### Named Rules
-**The One Family Rule.** Libre Franklin sets everything a person reads. Red Hat Mono is only for IDs, sources, URLs, backtick-quoted identifiers, and the raw response view.
+**The Two Faces Rule.** Inter for reading, JetBrains Mono for machine strings. Mono never sets prose, headings or labels.
 
-**The Measure Rule.** Running prose (job notes, hit text, context, findings) caps at 72ch.
+**The Tabular Count Rule.** Every number that can be compared (counts, reach figures, ranks, phase values, the coverage key) is tabular.
 
-**The Tabular Rule.** Any count, page number, rank, timing or ratio uses tabular figures so columns of numbers do not shimmer as they update.
+**The Weight Leads Rule.** Problem rows set their names at 600; healthy rows drop to 400 in ink-2. Weight, not size, ranks the table.
 
 ## Layout
 
-A single centred shell (max 1320px, 16px side padding respecting safe-area insets, 18px top and 88px bottom). The header carries the brand mark and the signed-in identity; beneath it a tab bar (Library, Ingest, Search preview), each with a count, sits on a hairline with the Add document button at its right end.
+A two-column app grid: a 216px sticky side navigation spanning full height, and a content column whose first row is the 58px sticky top bar. The top bar is a three-column grid (minmax(150px, 1fr), up to 600px, minmax(150px, 1fr)) so the search field stays centred and shrinks before anything overlaps it. Views pad 20px by 24px with 64px at the foot.
 
-- **Library:** two columns, the list at 340 to 440px and the open document filling the rest, 28px gutter. The document column is sticky. Below 960px the list goes full width and opening a document turns the page into a full-screen sheet (content max 680px) with a Back to library button.
-- **Ingest:** the add form at up to 360px beside the job list, collapsing to one column below 1080px.
-- **Search preview:** a query bar in one bordered row (query, document, section filter, k, Search), wrapping to two columns below 1080px and stacking below 640px. Results take the page width: hits in a column up to 860px beside a sticky "Where these came from" column up to 300px, 28px gutter; below 1080px the column stacks under the hits and stops sticking.
-- **Below 640px:** tabs become an equal three-column grid with short labels, and Add document moves above them at full width.
+The library view breaks out of that padding into its own grid: the table (minmax(0, 1fr)) and the detail column (400 to 520px), the detail sticky under the top bar, scrolling on its own, separated by a single line. Table rows are a three-column grid: name (with kind and reason line), status (104px), and reach (minmax(128px, 30%)), 14px apart.
 
-Spacing runs on a small, slightly irregular step set (4, 6, 8, 12, 14, 18, 24, 28px). Rows in a list sit 8px apart; sections on the document page sit 24px apart; columns sit 28px apart.
+Search results run a reading column up to 860px beside a 300px sticky sources card, 28px apart. The reader puts a 240px sticky contents list beside passages capped at 72ch. Ingest sets a 360px form panel beside the job list.
 
-Breakpoints: 1080px (ingest and search results go single column), 960px (library sheet), 640px (phone).
+Spacing steps are 2, 4, 6, 8, 10, 12, 14, 16, 20, 24 and 28px; most internal gaps are 8 to 14px, section gaps in the detail are 22px.
+
+Responsive behaviour:
+- At 1180px and below the detail panel leaves the grid and opens as a full sheet over the table (content capped at 680px) with a back button; search sources and the ingest form stack.
+- At 1023px and below the reader's contents fold into a bordered disclosure above the text.
+- At 760px and below the side navigation becomes a fixed bottom bar of icon-over-label sections (48px tall), the brand moves into the top bar, the search field takes its own row (top bar 104px), the shortcut key hides, Add document shrinks to its icon, and table rows put the reach bar on its own line.
+
+### Named Rules
+**The One Scale Rule.** Every coverage bar in the library table is drawn on one size scale, chunk count, as a share of the longest document (never shorter than 4%), with a note stating the longest. Degraded and unusable rows keep a 48px minimum bar so their split stays visible.
+
+**The Centred Search Rule.** The search field is centred in the top bar on every page, with its scope select inside it, and `/` focuses it from anywhere outside a text field.
 
 ## Elevation & Depth
 
-Flat by default. Depth comes from the Cool Paper ground against White Surfaces and hairline borders. One ambient shadow exists and it is reserved for things that float above the list: the open document page and the toast. Selected and active states use rings, not lift.
+The working area is flat. Depth comes from tone (the dark frame against the light area, wash on hover, tinted check rows) and from 1px rules. Cards, the table, the detail and the panels carry borders, not shadows. A shadow appears only on things that float above the page: the toast, the account popover and the sign-in card. The filter switch's active option gets a 1px lift so it reads as pressed-out of its track. Focus uses a 2px accent outline at 2px offset; text fields use a 3px soft halo.
 
 ### Shadow Vocabulary
-- **Float** (`box-shadow: 0 1px 2px rgba(20,24,28,.05), 0 6px 18px rgba(20,24,28,.06)`; dark `0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.25)`): the document page, the toast.
-- **Raised option** (`box-shadow: 0 1px 2px rgba(0,0,0,.08)`): the active option inside a filter or segmented control.
-- **Selection ring** (`box-shadow: 0 0 0 1px` accent, with an accent border): the open problem row.
-- **Focus halo** (`box-shadow: 0 0 0 3px` accent-weak, with an accent border): focused text inputs.
+- **Float** (`box-shadow: 0 1px 2px rgba(20, 24, 28, .06), 0 8px 24px rgba(20, 24, 28, .08)`; dark `0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3)`): toast, account popover, sign-in card.
+- **Raised Option** (`box-shadow: 0 1px 2px rgba(0,0,0,.08)`): the active option in a filter or segmented switch.
+- **Field Halo** (`box-shadow: 0 0 0 3px var(--accent-weak)`): focused inputs in the working area.
+- **Frame Halo** (`box-shadow: 0 0 0 3px rgba(155, 184, 255, .22)`): the focused search field on the frame.
+- **Target Ring** (`box-shadow: 0 0 0 1px var(--accent)`): the passage a link landed on in the reader.
 
 ### Named Rules
-**The Only The Page Floats Rule.** Rows, cards and panels sit flat on the ground. The open document is the one surface with the Float shadow.
+**The Flat Working Area Rule.** If it sits in the page, it gets a border; if it floats over the page, it gets the float shadow. Nothing else casts one.
 
 ## Shapes
 
-Softly rounded rectangles throughout, graduated by size: 4px for the strip, 5px for badges and status chips, 7px for buttons and inputs, 8px for findings and control troughs, 10px for rows, job cards and hits, 12px for the document page and panels. Example query chips (14px) and tab counts (10px) are the only full pills. Borders are 1px hairlines; dashed borders mean "not a record": the ingesting notice, the file drop zone, and the k cut-off rule.
+Small, consistent corners on rectangular forms. Radii step from 2px (thin bar, key swatches, highlights) and 3px (coverage bar) through 4px (focus outline, shortcut key), 6px (badges, switch options, scope select), 7px (inputs, navigation items), 8px (buttons, the selected row, notices, alerts), 9px (search field), 10px (cards: checks, hits, notes, sources, passages), to 12px (panels, sign-in card). Chips are the one pill (14px). The avatar is the one circle.
 
-The brand mark is three rounded coverage bars stacked: a full green bar, an ink bar ending in a pale rose segment, and a short ink bar.
+Borders are 1px. Dashed rules mark affordances and gaps, not state: the hidden-documents notice, the file drop zone (1.5px), a reader gap, and the search cutoff line. Icons are one stroke set drawn on a 24-unit grid at 1.7 stroke (2.1 to 2.2 inside badges, checks and statuses), round caps and joins, 16px by default.
+
+The brand mark is a stack of three offset books, spine out, each with a band cut near its end. It is drawn in the text colour with the band cut in the ground colour, so it reads on the frame and on the working area; the favicon is the same stack in white on a frame-graphite rounded square.
 
 ## Components
 
-### Coverage Strip (signature)
-The measure of a document, shown in two sizes.
-- **Full** (8px tall, 4px radius, 2px gaps): on the open document, full width under the headline, followed by a key (13px, `muted`, 10px rounded swatches) that names each non-zero segment with its count: "by chapter", "chapters unreliable", "not indexed".
-- **Thin** (5px tall, 3px radius, 1px gaps): on problem rows, on finished ingest jobs, and per document in the search sources column.
-- **Segments**, proportional by flex: reachable by chapter in solid `good-fill`; reachable but chapters unreliable in a 135° hatch of `warn-fill` stripes (3px on, 3px off) over `warn-bg`; not indexed in `lost`. Zero segments are omitted; each present segment keeps a 3px minimum.
-- **Accessibility:** the strip is `role="img"` with a sentence label giving all three counts and the total.
-- **Signature motion:** opening a document grows its full strip from the left: a `clip-path` inset runs from 62% to 0 over 0.6s on `cubic-bezier(.16,1,.3,1)`, and the key settles in (opacity 0.2 to 1, 2px drop, 0.45s ease-out). The animation has no fill mode, so wherever it does not run the strip rests whole; reduced motion turns it off. The page itself does not move.
-
-**The One Moment Rule.** The strip growing is the system's only authored motion. Everything else is a 0.15s state transition or a progress fill.
-
-### Verdict Badges
-- **Style:** inline icon (13px, stroke 2.1) plus word, 12px 600, 5px radius, tinted background with the matching dark text.
-- **Good:** check icon, `good` on `good-bg`. **Degraded:** warning triangle, `warn` on `warn-bg`. **Unusable:** stop circle, `bad` on `bad-bg`.
-- Badges appear on problem rows, the document page, finished jobs, the verdict legend, beside degraded documents in search results, and on every document in the search sources column. Healthy rows carry no badge; their place in the "Fully searchable" list says it.
-- A document graded Good that still has gaps (pages not indexed, unreliable chapters, or index problems) wears Degraded: the badge follows what an agent loses, not the grade alone.
-
 ### Buttons
-- **Shape:** gently rounded (7px), 1px border, 14px 500 text, 7px icon gap, 16px stroked icons.
-- **Primary:** ink fill with surface text (Add document, Search this document, Sign in). Hover drops opacity to 0.88.
-- **Secondary:** white surface, `line-strong` border, ink text; hover fills with Mist.
-- **Danger:** secondary with red text (Remove). **Danger solid:** red fill with an On Red label, used only to confirm a removal inside its inline confirm block.
-- **Quiet:** borderless and transparent until hover (Dismiss).
-- **Small:** 4px by 10px, 13px; used for remedies and job actions.
-- **Link button:** accent text, underlined (3px offset), for Show context and Show all.
-- **Disabled:** 0.5 opacity, not-allowed cursor. Transitions on background and border, 0.15s.
+Compact and plain; the primary inverts the ink.
+- **Shape:** gently rounded (8px), 34px tall, 12px side padding, 14px weight 500, icon and label 7px apart.
+- **Default:** surface ground, line-strong border, ink text; hover washes to surface-2.
+- **Primary:** ink ground and border with bg-coloured text (so it is near-black on light and near-white on dark); hover drops to 88% opacity.
+- **On Frame:** white with frame text, weight 600, for Add document in the top bar.
+- **Quiet:** no border or ground, ink-2 text; hover washes. Used for secondary actions in the detail's foot and back buttons.
+- **Danger / Danger Solid:** bad-coloured text on default, or a bad ground with on-bad text inside the delete confirmation.
+- **Small** (30px, 13px) and **Block** (full width, 42px, 15px, centred) variants. Disabled is 50% opacity.
+- **Link Button:** accent text, underlined at a 3px offset, no chrome.
 
-### Tabs
-- Muted 500 text, 2px transparent underline sitting on the bar's hairline; hover darkens to ink; the current tab is ink, 600, with an ink underline.
-- Each tab carries a count pill (12px 600, `surface-2`/`muted`); a count that needs attention switches to `bad-bg`/`bad`.
+### Verdict Badge
+An icon and a word: check and "Good", warning triangle and "Degraded", stop circle and "Unusable". 12px weight 600, 13px icon, 6px radius, tinted ground (good-bg, warn-bg, bad-bg) with matching text. In the library table's status column it is plain (no tint, no padding) so a column of healthy rows does not weigh as much as a broken one; on the document it is tinted. Job statuses follow the same pattern (running and cancelling in accent, queued and cancelled in wash, stalled in warn, failed in bad, done in good).
 
-### Filters and Segmented Controls
-- A Mist trough (8px radius, 3px padding) holding borderless options (14px 500, muted). The pressed option becomes a white surface with ink text and the Raised option shadow. Filter options carry their counts in tabular figures.
-- The library's verdict filter (All, Needs attention, Good) and the add form's Site/File switch share this form. The title filter beside it is a search input with a leading search icon.
+### Coverage Bar
+The signature component. A flex row of up to three solid segments, each sized by its count: reachable by chapter (good-fill), reachable with unreliable chapters (warn-fill), not indexed (lost), on a surface-2 track, 8px tall with a 3px radius and 2px gaps; the thin variant is 4px, 2px radius, 1px gaps. Each segment keeps a 3px minimum. It is an image with a full sentence as its label. In the detail it sits under the reach figure with a key of 9px swatches and tabular counts, and opening a document grows it from the left (0.6s, cubic-bezier(.16, 1, .3, 1)) while the key settles in; with no fill mode, the bar rests whole wherever the animation does not run.
 
-### Disclosures
-- A summary line in muted 500 text led by the system's drawn chevron (14px, same stroke set), which turns 90° over 0.15s ease-out when open. The browser's own triangle is hidden.
-- Used for the verdict legend, the document's Details, and Recently finished jobs.
+### Library Table
+A grid list, not a table of cards. Header row in 12px muted meta over a line; rows 9px by 10px with a line-soft divider, hover wash, and the selected row tinted accent-weak with an 8px radius and no divider. Healthy rows tighten to 7px block padding with 400-weight ink-2 names. Problem rows carry a 12px reason line in warn or bad. The reach cell stacks the tabular count over the thin coverage bar. Above the table, a filter switch (surface-2 track, 2px padding, 28px options, the active one on surface with the raised-option shadow) and a 30px title filter with an inset search icon.
+
+### Check Run
+The selected document's checks are one bordered list (10px radius, rows separated by lines). Each row is a 16px icon column and the body: a 600-weight check name, its page range as a small mono pill (11px, 5px radius, bordered), what agents lose, and a remedy line with actions. Degraded rows tint warn-bg with warn icon and name; unusable rows tint bad-bg with bad icon and name; passing rows are untinted ink-2 with a good check icon.
+
+### Cards / Containers
+- **Corner Style:** 10px for cards (hits, notes, passages, sources, jobs), 12px for panels and the sign-in card.
+- **Background:** surface, with warn-bg for a warning note, bad-bg for banners and the delete confirmation.
+- **Shadow Strategy:** none; see the Flat Working Area Rule.
+- **Border:** 1px line; a failed job's border turns bad; a targeted passage gets the accent target ring; a passage with no heading path gets a warn-fill border.
+- **Internal Padding:** 12 to 16px for cards, 18 to 20px for panels, 28px for the sign-in card.
 
 ### Inputs / Fields
-- **Style:** white surface, `line-strong` border, 7px radius, 7px by 10px padding, 14px. Labels 13px 600 above, 5px gap; hints 13px muted; errors 13px `bad`.
-- **Focus:** accent border plus the 3px accent-weak halo. Every other focusable element gets a 2px accent outline at 2px offset.
-- **Disabled:** Mist background.
+- **Style:** 34px, surface ground, 1px line-strong border, 7px radius, 10px side padding, 14px text; placeholders in muted at full opacity.
+- **Focus:** border turns accent with a 3px accent-weak halo (the field halo).
+- **Error / Disabled:** errors are 13px bad text under the field; disabled fields wash to surface-2. The password field is 44px with an inline reveal button.
 
-### Problem Rows versus Healthy Rows
-- **Problem row** (one card per document needing attention, 8px apart): white surface, hairline border, 10px radius. Top line is the title (600) with its verdict badge at the right; then the thin coverage strip; then the finding, bolded in the verdict's text colour, followed by the consequence in muted 14px. Hover strengthens the border; the open row gets an accent border and ring.
-- **Healthy rows** (one bordered list, 10px radius, rows divided by hairlines): 14px title with right-aligned muted metadata ("site · 214 pp · 1 warning") in tabular figures, 9px by 15px. Hover fills with Mist; the open row fills with accent-weak.
-- Problems always lead. The summary line above both reads "**9 of 12** fully searchable · **2** degraded · **1** unusable", in tabular figures; each count stays on one line with its label when the line wraps, and the separators are muted. Zero counts are left out.
+### Search Field
+Lives on the frame: frame-2 ground, frame-line border, 9px radius, 38px tall, a search icon, the input, a scope select in a frame-3 chip ("All documents" or one document), and a `/` key hint. Focus turns the border frame-live with the frame halo.
 
-### Document Page
-In order: title (Headline) with verdict badge at the right; the consequence headline (Lead); the full coverage strip and key; **Findings**; **Index problems** and **Warnings** as muted bulleted lists holding only what no finding already states; **Outline** as a numbered list with right-aligned page numbers, six shown with a Show all link; a collapsed **Details** disclosure (source in mono, extent, added date, ID in mono); and an action row above a hairline: Search this document (primary), Re-ingest, Re-chunk from cache for sites, and Remove pushed to the far right. Remove opens an inline red confirm block stating exactly what agents lose. Re-ingest leaves the action row when a finding already offers it.
+### Navigation
+The side navigation is frame graphite with the brand at top, sections in the middle, and the account button at the foot. Sections are 36px, 7px radius, 14px weight 500 in on-frame-muted with a 16px icon; hover and the current page take frame-2 and on-frame. A section may carry a tabular 12px count at its right: frame-live for running work, frame-alert for documents or jobs that need attention. On phones it becomes the fixed bottom bar described in Layout. The account popover opens above the account button as a 270px floating card.
 
-**Finding blocks.** One block per problem, 12px apart, each an 8px-radius block tinted by the document's verdict (warn-bg for Degraded, bad-bg for Unusable). A block carries its name in 600 and the verdict's text colour, one or more evidence lines at 72ch, an "**Agents lose:**" line, and optionally a remedy row: a small button (Inspect structure or Re-ingest) and a 13px muted hint. Inspect expands a white inset (6px radius) listing the structure sources the file offers. The structural findings (no addressable sections, a flat hierarchy) merge into one block with one Inspect remedy; chunks without headings form that block when no structural finding does; pages that never reached the index form their own block with Re-ingest, even with no finding code behind them. The server's sentences render as written, with backtick identifiers set as mono code.
-
-**The One Problem, One Block Rule.** A problem is stated once, in its block, with its evidence, its cost and its remedy together. Lists below the findings hold only what no block covers.
-
-### Job Cards and Phase Bars
-- **Card:** white surface, hairline border, 10px radius, 14px by 16px. A failed card swaps its border for a `bad-bg` ring. Top line: title (600) and a status chip, a 12px icon (stroke 2.2, 4px gap) before a 12px 600 word: Running (play) and Cancelling (cross) in accent, Stalled (warning) in amber, Failed (stop) in red, Done (check) in green, Queued (plus) and Cancelled (cross) in Mist. Beneath, a muted meta line: source in mono, job ID in mono, elapsed or finish time.
-- **Phase bars:** five equal columns (discover, fetch, extract, chunk, index), each a 4px track with a fill scaled from the left (0.5s linear), then an icon and phase name (12px), then a tabular value (time taken or `cur / tot`). Done: `line-strong` fill, check icon. Now: accent fill and accent label, play icon. Stalled: amber fill and label, warning icon. Failed: full red fill and label, stop icon. Each phase carries a screen-reader state.
-- **Notes and results:** stalled jobs get an amber note on when the lease ends; failed jobs get the error in bold red then the reason; finished jobs show the thin coverage strip, verdict badge and headline, with Open in library.
-
-### Search Preview Ranked List
-- **Hit:** a 10px-radius card with a 30px rank column (600, muted, tabular). The body shows the document title (13px muted, with a badge if not Good), the heading path joined by › in 600 (or "No heading" in red), a location line (mono URL with fragment, or page range; chunk ID in mono; Show context link), and the chunk text at 72ch, clamped to six lines, with matched terms marked in Signal Blue Wash. Show context reveals neighbouring chunks behind a 2px hairline left rule, neighbours in muted.
-- **k cut-off marker:** after the last hit, a centred 13px muted sentence flanked by dashed `line-strong` rules: "k = 8. 3 more chunks matched; the agent never sees them." When fewer than k matched it says so instead.
-- **Server note:** an amber-washed note above results when a degraded document is among them or a section filter cannot work.
-- **Where these came from:** a flat white column (10px radius, hairline border, 14px by 16px) under a Label heading. One entry per document, 14px apart: the title as a 600 ink link-button, then a 13px muted line with the hit count in tabular figures and the verdict badge, then the thin coverage strip. Selecting a title opens that document in the library.
-- Results can be read ranked or grouped by document, or as the raw MCP response in the Terminal palette.
-
-### Sign-in Gate
-A single panel (12px radius, hairline border, up to 460px, 64px below the header) with a Title at 22px, 14px body copy, a muted line on where the token lives, and a primary button with the key icon. The copy and the button follow the server's auth mode: sign in with the OIDC issuer named by host, sign in with a docsearch account when docsearch is its own issuer (password mode), or paste the server token into a field (token mode). An OIDC server without a browser client gets an explanation naming the setting, with its identifiers in mono; a failed sign-in shows the error in red with Try again.
+### Toast and Instance Strip
+The toast is an inverted (ink ground, bg text) 8px-radius box of 13px text centred at the bottom, with the float shadow. When the operator names an instance, a warn-fill strip with on-warn text spans the top of every page so a test server is never taken for the real library.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** put a coverage strip wherever a document's reachability is the point: problem rows, the document page, finished jobs, the search sources column.
-- **Do** pair every verdict, job state and active phase with an icon and a word.
-- **Do** keep primary actions ink and reserve blue for focus (2px outline, 2px offset), selection, links and running work.
-- **Do** lead with problems and collapse healthy documents into the dense list.
-- **Do** cap running prose at 72ch and set every number in tabular figures.
-- **Do** keep motion to the 0.6s strip grow on opening a document, 0.15s state transitions and 0.5s phase fills, and drop all of it under `prefers-reduced-motion: reduce`.
-- **Do** state each document problem once, as a finding block with its evidence, what agents lose and its remedy.
-- **Do** define every colour role for both themes and honour an explicit `data-theme` over the system setting.
+- **Do** keep the side navigation and top bar on frame graphite (#14181d light, #0b0d10 dark) in both themes, with the search field centred in the top bar.
+- **Do** pair every verdict and status with its icon and its word; use the plain badge in table columns and the tinted badge on a document.
+- **Do** draw coverage as solid good-fill, warn-fill and lost segments with the numbers alongside, and draw every library-table bar on the one chunk-count scale with a 48px floor for problem rows.
+- **Do** let healthy rows recede (400 weight, ink-2, 7px padding) and let problem rows lead (600 weight, a reason line in their state colour).
+- **Do** reserve the accent for focus, selection, links, search highlights and live work.
+- **Do** set file names, IDs, page ranges, hosts, URLs and raw MCP output in JetBrains Mono, and everything else in Inter.
+- **Do** use tabular numerals for every comparable number.
+- **Do** honour reduced motion: all animation and transition stops; the coverage bar rests whole.
 
 ### Don't:
-- **Don't** dress the interface in a physical-library or any other costume metaphor; the user rejected it.
-- **Don't** reduce state to a row of equal-weight coloured pills.
-- **Don't** use green, amber or red for anything but coverage, verdicts, job status, errors and destructive actions.
-- **Don't** add a second accent colour or make blue a fill for primary buttons.
-- **Don't** set headings, labels or prose in Red Hat Mono.
-- **Don't** load fonts from a CDN; the families ship with the app.
-- **Don't** give rows, cards or panels a shadow; only the open document page and floating messages lift.
+- **Don't** hatch, stripe, texture or pattern a coverage bar or any fill.
+- **Don't** dress the interface as a physical library: no wood, paper, shelves, card-catalogue or spine ornament. The book-stack logo is the one book reference, and it stays a mark.
+- **Don't** carry state by colour alone.
+- **Don't** return to the previous typeface or the looser density this system replaced; stay on Inter at 13 to 14px.
+- **Don't** give in-page cards, tables or the detail panel a shadow; borders and tone carry depth.
+- **Don't** add a second accent hue, or use the accent for decoration.
+- **Don't** set prose, headings or labels in the mono face.
+- **Don't** size table bars on per-document or mixed scales; one scale, chunk count.

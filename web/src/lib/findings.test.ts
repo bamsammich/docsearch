@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codeSpans, findingsOf } from "./findings";
+import { codeSpans, findingsOf, pageRuns, pagesLabel } from "./findings";
 
 const none = { byChapter: 0, unreliable: 0, lost: 0, unit: "pages" as const };
 
@@ -17,7 +17,7 @@ describe("findingsOf", () => {
       headlessChunks: 0,
     });
     expect(out.blocks).toHaveLength(1);
-    expect(out.blocks[0]).toMatchObject({ name: "Flat hierarchy and Unaddressable", remedy: "inspect" });
+    expect(out.blocks[0]).toMatchObject({ name: "No usable chapters", remedy: "inspect" });
     expect(out.blocks[0]?.evidence).toHaveLength(2);
     expect(out.warnings).toEqual([]);
   });
@@ -58,9 +58,39 @@ describe("findingsOf", () => {
       warnings: [],
       chunkCount: 3,
       headlessChunks: 0,
+      uncoveredPages: [2, 1],
     });
-    expect(out.blocks).toEqual([expect.objectContaining({ key: "lost", remedy: "reingest", evidence: [problem] })]);
+    expect(out.blocks).toEqual([
+      expect.objectContaining({
+        key: "lost",
+        remedy: "reingest",
+        pages: "pp. 1–2",
+        evidence: ["2 of 4 pages produced no stored text, so no search can return them."],
+        cost: "anything on pages 1–2.",
+      }),
+    ]);
     expect(out.problems).toEqual(["chunk ordinals skip at [4]"]);
+  });
+
+  it("says those pages when verify did not list them", () => {
+    const out = findingsOf({
+      coverage: { byChapter: 9, unreliable: 0, lost: 1, unit: "pages" },
+      findings: [],
+      problems: [],
+      warnings: [],
+      chunkCount: 9,
+      headlessChunks: 0,
+    });
+    expect(out.blocks[0]).toMatchObject({ pages: "", cost: "anything on those pages." });
+  });
+});
+
+describe("pageRuns", () => {
+  it("joins consecutive pages into runs", () => {
+    expect(pageRuns([9, 1, 2, 5, 6, 7, 2])).toBe("1–2, 5–7, 9");
+    expect(pagesLabel([4])).toBe("p. 4");
+    expect(pagesLabel([131, 132, 133])).toBe("pp. 131–133");
+    expect(pagesLabel([])).toBe("");
   });
 
   it("keeps a finding with no remedy as its own block", () => {

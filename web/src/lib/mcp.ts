@@ -1,4 +1,4 @@
-// Search preview calls the MCP tools themselves, over the same /mcp endpoint
+// Search calls the MCP tools themselves, over the same /mcp endpoint
 // and with the same bearer an agent uses, so what it shows is what an agent
 // gets. The server is stateless, so one POST per call needs no session.
 

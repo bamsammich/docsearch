@@ -4,11 +4,15 @@
 
 import { costOf, type Coverage, findingName } from "./coverage";
 
+// Every cost reads after "Agents lose:", so each is the loss itself.
+
 export type Remedy = "inspect" | "reingest";
 
 export interface Block {
   key: string;
   name: string;
+  /** The pages the problem sits on, such as "pp. 131–138", or "". */
+  pages: string;
   evidence: string[];
   cost: string;
   remedy: Remedy | null;
@@ -22,6 +26,27 @@ export interface FindingsInput {
   warnings: readonly string[];
   chunkCount: number;
   headlessChunks: number;
+  /** The pages no chunk claims, when verify listed them. */
+  uncoveredPages?: readonly number[];
+}
+
+/** Page numbers as runs: [1, 2, 5, 6, 7, 9] reads "1–2, 5–7, 9". */
+export function pageRuns(pages: readonly number[]): string {
+  const sorted = [...new Set(pages)].sort((a, b) => a - b);
+  const runs: string[] = [];
+  for (let i = 0; i < sorted.length; ) {
+    let j = i;
+    while (j + 1 < sorted.length && sorted[j + 1] === sorted[j]! + 1) j++;
+    runs.push(i === j ? `${sorted[i]}` : `${sorted[i]}–${sorted[j]}`);
+    i = j + 1;
+  }
+  return runs.join(", ");
+}
+
+/** "p. 4" for one page, "pp. 1–2" for more. */
+export function pagesLabel(pages: readonly number[]): string {
+  if (!pages.length) return "";
+  return `${new Set(pages).size === 1 ? "p." : "pp."} ${pageRuns(pages)}`;
 }
 
 export interface Findings {
@@ -47,7 +72,9 @@ export function findingsOf(input: FindingsInput): Findings {
   if (structural.length) {
     blocks.push({
       key: "chapters",
-      name: structural.map((f) => findingName(f.code)).join(" and "),
+      // One block for both structural codes, named for what they share.
+      name: "No usable chapters",
+      pages: "",
       evidence: structural.map((f) => f.detail),
       cost: chapterCost,
       remedy: "inspect",
@@ -57,6 +84,7 @@ export function findingsOf(input: FindingsInput): Findings {
     blocks.push({
       key: "headless",
       name: "Chunks without headings",
+      pages: "",
       evidence: [`${input.headlessChunks} of ${input.chunkCount} chunks have no heading.`],
       cost: chapterCost,
       remedy: "inspect",
@@ -64,18 +92,21 @@ export function findingsOf(input: FindingsInput): Findings {
     });
   }
   for (const f of input.findings.filter((f) => !chapterless.has(f.code))) {
-    blocks.push({ key: f.code, name: findingName(f.code), evidence: [f.detail], cost: costOf(f.code), remedy: null, hint: "" });
+    blocks.push({ key: f.code, name: findingName(f.code), pages: "", evidence: [f.detail], cost: costOf(f.code), remedy: null, hint: "" });
   }
   let problems = [...input.problems];
   if (input.coverage.lost > 0) {
-    const stated = problems.filter((p) => aboutUnclaimedPages.test(p));
+    // The block states the server's unclaimed-pages problem in its own words,
+    // so the problem list leaves it out.
     problems = problems.filter((p) => !aboutUnclaimedPages.test(p));
     const all = input.coverage.byChapter + input.coverage.unreliable + input.coverage.lost;
+    const pages = input.uncoveredPages ?? [];
     blocks.push({
       key: "lost",
       name: "Pages not indexed",
-      evidence: stated.length ? stated : [`${input.coverage.lost} of ${all} pages never reached the index.`],
-      cost: "Agents can't search those pages.",
+      pages: pagesLabel(pages),
+      evidence: [`${input.coverage.lost} of ${all} pages produced no stored text, so no search can return them.`],
+      cost: pages.length ? `anything on ${pagesLabel(pages).replace(/^pp?\. /, pages.length === 1 ? "page " : "pages ")}.` : "anything on those pages.",
       remedy: "reingest",
       hint: "If it's a scan, run OCR on it first. docsearch reads only the text layer.",
     });

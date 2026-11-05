@@ -73,7 +73,7 @@ person's library.
 
 1. Honest state over reassurance. `ready` is not the same as searchable, and
    the UI says so loudly.
-2. Show what the agent sees. Search preview returns exactly what MCP returns.
+2. Show what the agent sees. Search returns exactly what MCP returns.
 3. One credential. Nothing the web UI does creates a second way in.
 4. Quiet until something is wrong. Healthy documents recede; problems lead.
 
