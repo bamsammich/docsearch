@@ -1,5 +1,6 @@
 <script lang="ts">
   import { problem } from "../lib/api";
+  import { libraries } from "../lib/libraries.svelte";
   import { queue } from "../lib/queue.svelte";
   import { session } from "../lib/session.svelte";
   import { toast } from "../lib/toast.svelte";
@@ -59,8 +60,14 @@
   const maxMB = $derived(session.config?.uploadMaxMB ?? 0);
 </script>
 
-<div class="page-head"><h1>Ingest</h1></div>
+<div class="page-head"><h1>Ingest</h1>{#if !libraries.isOwn}<p>Into {libraries.name}</p>{/if}</div>
 <div class="ingest">
+  {#if !libraries.canEdit}
+  <div class="panel">
+    <h2>Add a document</h2>
+    <p class="muted">You read {libraries.name}. Ask one of its admins to make you an editor to add documents.</p>
+  </div>
+  {:else}
   <form class="panel" onsubmit={submit} novalidate>
     <h2>Add a document</h2>
     <div class="field">
@@ -94,6 +101,7 @@
     {#if error}<p class="err" role="alert">{error}</p>{/if}
     <p class="form-end"><button class="btn primary" type="submit" disabled={sending}>{sending ? "Queueing…" : "Queue for ingest"}</button></p>
   </form>
+  {/if}
 
   <div class="jobs">
     {#if queue.error}<div class="banner" role="alert"><span>{queue.error}</span></div>{/if}

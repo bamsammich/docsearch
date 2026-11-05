@@ -49,7 +49,7 @@ var migrations embed.FS
 // section did when it began holding section numbers rather than page
 // numbers, is invisible to any structural check while silently changing what
 // queries return.
-const Version = 23
+const Version = 24
 
 // History is readable, so a version mismatch can be diagnosed without
 // reading the git log.
@@ -84,6 +84,7 @@ var History = map[int]string{
 	21: "an upload link records who issued it, and redeeming one names the library and the issuer",
 	22: "an account has a username, from its password sign-in or its token, so it can be invited by name",
 	23: "libraries are created, shared and left through definer functions that record access_events",
+	24: "own_username lets an account read its own username, which the request role cannot",
 }
 
 // The tables this package names. Written once, so a typo cannot reach a

@@ -3,8 +3,9 @@
 //   #/library            #/library/<doc_id>
 //   #/ingest             #/search             #/search/<doc_id>
 //   #/read/<doc_id>      #/read/<doc_id>/<chunk_id>
+//   #/members
 
-export type View = "library" | "ingest" | "search" | "read";
+export type View = "library" | "ingest" | "members" | "search" | "read";
 
 interface Route {
   view: View;
@@ -14,7 +15,7 @@ interface Route {
 
 function parse(hash: string): Route {
   const [, view = "", ...rest] = hash.replace(/^#/, "").split("/");
-  if (view === "ingest") return { view, docId: "", chunkId: null };
+  if (view === "ingest" || view === "members") return { view, docId: "", chunkId: null };
   if (view === "read") {
     const chunk = Number(rest[1]);
     return { view, docId: decodeURIComponent(rest[0] ?? ""), chunkId: Number.isInteger(chunk) && rest[1] ? chunk : null };

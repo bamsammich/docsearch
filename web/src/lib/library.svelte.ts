@@ -4,6 +4,7 @@
 import type { Document, VerifyReport } from "../gen/docsearch/document/v1/document_pb";
 import { Quality, Verdict as VerdictEnum } from "../gen/docsearch/type/v1/common_pb";
 import { documents, problem } from "./api";
+import { libraries } from "./libraries.svelte";
 import { type Coverage, coverageOf, type Verdict, verdictOrder } from "./coverage";
 
 function fromReport(report?: VerifyReport): Verdict {
@@ -55,9 +56,15 @@ class Library {
   reports = $state<Record<string, VerifyReport>>({});
   reportErrors = $state<Record<string, string>>({});
 
+  #asked = 0;
+
+  /** Loads the library the pages show. A switch while one loads wins over it. */
   async load(): Promise<void> {
+    const asked = ++this.#asked;
+    const label = libraries.named;
     try {
-      const { documents: all } = await documents.list({});
+      const { documents: all } = await documents.list({ library: label });
+      if (asked !== this.#asked) return;
       // A document is invisible to search until its ingest completes; the
       // ingest tab shows the rest.
       this.docs = all.filter((d) => d.status === "" || d.status === "ready");

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { libraries } from "../lib/libraries.svelte";
   import { tick } from "svelte";
   import type { ReadChunk } from "../gen/docsearch/document/v1/document_pb";
   import { documents, problem } from "../lib/api";
@@ -175,7 +176,7 @@
 
 <div class="reader">
   <div class="reader-head">
-    <a class="btn quiet small" href={`#/library/${encodeURIComponent(docId)}`}><Icon name="back" /> Library</a>
+    <a class="btn quiet small" href={`#/library/${encodeURIComponent(docId)}`}><Icon name="back" /> {libraries.name}</a>
     <div class="reader-title">
       <h1>{doc?.title ?? docId}</h1>
       {#if doc}<Badge verdict={verdictOf(doc, report)} /><OriginalButton {doc} small />{/if}

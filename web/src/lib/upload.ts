@@ -2,6 +2,7 @@
 // by ?title= when the person gave one.
 
 import { authHeaders, refusal } from "./api";
+import { libraries } from "./libraries.svelte";
 import { session } from "./session.svelte";
 
 export interface Received {
@@ -13,6 +14,7 @@ export interface Received {
 export async function upload(file: File, title = ""): Promise<Received> {
   const query = new URLSearchParams({ name: file.name });
   if (title) query.set("title", title);
+  if (libraries.named) query.set("library", libraries.named);
   const response = await fetch(`/upload?${query}`, {
     method: "PUT",
     headers: { Accept: "application/json", ...authHeaders() },

@@ -107,6 +107,8 @@ export interface ContextOutput {
 /** A job as ingest_status reports it, which includes whether it stalled. */
 export interface JobView {
   job_id: number;
+  /** The label of the library the job fills: "personal" for the account's own. */
+  library?: string;
   source_path: string;
   title?: string;
   doc_id?: string;

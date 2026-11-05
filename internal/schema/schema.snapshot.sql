@@ -255,6 +255,18 @@ $$;
 
 
 --
+-- Name: own_username(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.own_username() RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT COALESCE(username, '') FROM users WHERE user_id = current_setting('app.user_id', true);
+$$;
+
+
+--
 -- Name: password_account_username(); Type: FUNCTION; Schema: public; Owner: -
 --
 

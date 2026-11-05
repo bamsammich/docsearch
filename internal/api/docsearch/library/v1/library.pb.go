@@ -265,8 +265,11 @@ func (*ListRequest) Descriptor() ([]byte, []int) {
 }
 
 type ListResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Libraries     []*Library             `protobuf:"bytes,1,rep,name=libraries,proto3" json:"libraries,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Libraries []*Library             `protobuf:"bytes,1,rep,name=libraries,proto3" json:"libraries,omitempty"`
+	// Username is the caller's own, as others invite them by. Empty for an
+	// account that has not signed in since usernames were recorded.
+	Username      string `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -306,6 +309,13 @@ func (x *ListResponse) GetLibraries() []*Library {
 		return x.Libraries
 	}
 	return nil
+}
+
+func (x *ListResponse) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
 }
 
 type CreateRequest struct {
@@ -785,9 +795,10 @@ const file_docsearch_library_v1_library_proto_rawDesc = "" +
 	"\x06action\x18\x03 \x01(\tR\x06action\x12\x18\n" +
 	"\asubject\x18\x04 \x01(\tR\asubject\x12\x12\n" +
 	"\x04role\x18\x05 \x01(\tR\x04role\"\r\n" +
-	"\vListRequest\"K\n" +
+	"\vListRequest\"g\n" +
 	"\fListResponse\x12;\n" +
-	"\tlibraries\x18\x01 \x03(\v2\x1d.docsearch.library.v1.LibraryR\tlibraries\"7\n" +
+	"\tlibraries\x18\x01 \x03(\v2\x1d.docsearch.library.v1.LibraryR\tlibraries\x12\x1a\n" +
+	"\busername\x18\x02 \x01(\tR\busername\"7\n" +
 	"\rCreateRequest\x12\x12\n" +
 	"\x04slug\x18\x01 \x01(\tR\x04slug\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"I\n" +

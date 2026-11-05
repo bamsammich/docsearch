@@ -21,3 +21,6 @@ SELECT m.username::text AS username, m.role::text AS role
 SELECT e.at::timestamptz AS at, e.actor::text AS actor, e.action::text AS action,
        e.subject::text AS subject, e.role::text AS role
   FROM library_events(sqlc.arg(slug)::text) AS e(at, actor, action, subject, role);
+
+-- name: OwnUsername :one
+SELECT COALESCE(own_username(), '')::text AS username;

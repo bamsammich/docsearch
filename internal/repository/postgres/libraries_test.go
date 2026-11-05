@@ -167,3 +167,18 @@ func (s *LibrariesSuite) TestMembersAreSeenByMembersAndEventsByAdmins() {
 		s.Equal(want, events[i])
 	}
 }
+
+// An account reads its own username and nobody else's, and one that has not
+// signed in since usernames were recorded reads none.
+func (s *LibrariesSuite) TestAnAccountReadsItsOwnUsername() {
+	name, err := s.as("ben").Username(s.T().Context())
+	s.Require().NoError(err)
+	s.Equal("ben", name)
+
+	_, err = s.db.Owner.ExecContext(s.T().Context(),
+		`SELECT create_account('dee', 'https://issuer.example', 'dee')`)
+	s.Require().NoError(err)
+	name, err = s.as("dee").Username(s.T().Context())
+	s.Require().NoError(err)
+	s.Empty(name)
+}

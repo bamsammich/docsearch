@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { libraries, nameOf } from "../lib/libraries.svelte";
   import { untrack } from "svelte";
   import { coverageFor, library, verdictOf } from "../lib/library.svelte";
   import CoverageStrip from "./CoverageStrip.svelte";
@@ -63,6 +64,7 @@
       output = await callTool<SearchOutput>("search", {
         query: query.trim(),
         ...(docId ? { doc_id: docId } : {}),
+        ...(!docId && search.library ? { libraries: [search.library] } : {}),
         ...(docId && section.trim() ? { section_filter: section.trim() } : {}),
         k: limit,
       });
@@ -162,7 +164,7 @@
 
 <div class="page-head">
   <h1>{#if asked.query}Results for “{asked.query}”{:else}Search{/if}</h1>
-  <p>{#if scopeTitle}In {scopeTitle}. <button class="link-btn" onclick={() => (search.docId = "")}>Search all documents</button>{:else}Across all documents. The same results an agent gets from the search tool.{/if}</p>
+  <p>{#if scopeTitle}In {scopeTitle}. <button class="link-btn" onclick={() => (search.docId = "")}>Search every library</button>{:else if search.library}In {nameOf(libraries.all.find((l) => l.library === search.library)) || search.library}. <button class="link-btn" onclick={() => (search.library = "")}>Search every library</button>{:else}Across every library you can read. The same results an agent gets from the search tool.{/if}</p>
 </div>
 <form class="qbar" onsubmit={run} novalidate>
   <div class="field">

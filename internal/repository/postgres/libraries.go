@@ -43,6 +43,17 @@ func (l *Libraries) List(ctx context.Context) ([]sharing.Library, error) {
 	return out, nil
 }
 
+// Username is the user's own, empty until a sign-in records it.
+func (l *Libraries) Username(ctx context.Context) (string, error) {
+	var name string
+	err := l.run(ctx, func(q *pgdbgen.Queries) error {
+		var err error
+		name, err = q.OwnUsername(ctx)
+		return err
+	})
+	return name, err
+}
+
 // Create makes a shared library with the user as its admin.
 func (l *Libraries) Create(ctx context.Context, slug, name string) (sharing.Library, error) {
 	err := l.run(ctx, func(q *pgdbgen.Queries) error {
