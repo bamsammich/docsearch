@@ -17,6 +17,9 @@ type Client struct {
 	http  *http.Client
 	base  string
 	token string
+	// library is the label of the library uploads go into. Empty is the
+	// caller's own.
+	library string
 }
 
 // NewClient talks to the server at base with token.
@@ -24,9 +27,20 @@ func NewClient(httpClient *http.Client, base, token string) *Client {
 	return &Client{http: httpClient, base: strings.TrimSuffix(base, "/"), token: token}
 }
 
+// In is a client whose uploads go into the library label names, or into the
+// caller's own when label is empty.
+func (c *Client) In(label string) *Client {
+	scoped := *c
+	scoped.library = label
+	return &scoped
+}
+
 // Put uploads body as filename under key, replacing whatever key held.
 func (c *Client) Put(ctx context.Context, filename, key string, body io.Reader) (Received, error) {
 	query := url.Values{"name": {filename}, "key": {key}}
+	if c.library != "" {
+		query.Set("library", c.library)
+	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPut,
 		c.base+"/upload?"+query.Encode(), body)
 	if err != nil {
