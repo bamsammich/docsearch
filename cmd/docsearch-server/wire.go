@@ -65,6 +65,7 @@ func serve(cfg config.Config, log *slog.Logger) error {
 			grouped(newDocumentRoute),
 			grouped(newJobRoute),
 			grouped(newLibraryRoute),
+			grouped(newAccountRoute),
 			grouped(newUploadRoute),
 			grouped(newOriginalRoute),
 			fx.Annotate(newMux, fx.ParamTags(routeGroup)),

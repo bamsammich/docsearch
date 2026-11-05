@@ -231,6 +231,8 @@ unless its scope picker names one library or one document.
 | Reader | A document's chunks in order, as agents receive them, beside its outline. Chunks without a heading and pages that never reached the index are marked. A search result opens the reader at its chunk. Original opens the file the document was read from. |
 | Ingest | Add a site or upload a file, with an optional title, and follow each job through discover, fetch, extract, chunk and index. Failures are listed first. |
 | Members | Who may use the library and in which role. An admin invites someone by username, changes a role, removes a member and reads the log of changes. Anyone but the last admin can leave. |
+| People | For administrators, from the account menu: every account, and in `password` mode adding, resetting, unlocking and removing them. |
+| Sign-in | For administrators: how people sign in, and the flag or environment variable that sets each part. |
 | Search | The field at the top of every page, focused with `/`. Search the whole library or one document, narrow by section, and see the ranked results and the raw response an agent receives. |
 
 The page signs in with the credential an MCP client uses, and the server
@@ -442,8 +444,22 @@ docsearch account list
 ```
 
 `docsearch account` connects as the database owner, through `--dsn` or
-`DOCSEARCH_DSN`, the same credential `migrate` uses. Whoever can migrate the
-schema can manage accounts, and nobody else can.
+`DOCSEARCH_DSN`, the same credential `migrate` uses.
+
+**Administrators** manage accounts from the library UI, in `password` and
+`oidc` mode. Make the first one with the owner DSN; after that,
+administrators make others from the People page.
+
+```bash
+docsearch account admin alice               # works in oidc mode too, once alice has signed in
+docsearch account admin alice --revoke
+```
+
+An administrator sees every account, and in `password` mode adds one with a
+generated password shown once, resets or unlocks a password, and removes an
+account. Each change is recorded in `account_events`. The role covers
+accounts only: an administrator reads a library only through a grant on it,
+like anyone. The last administrator cannot step down.
 
 | | |
 |---|---|

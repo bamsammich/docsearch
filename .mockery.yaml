@@ -20,6 +20,11 @@ packages:
       Sources:
       Documents:
       Jobs:
+      Admin:
+  github.com/bamsammich/docsearch/internal/service/admin:
+    interfaces:
+      Store:
+      Passwords:
   github.com/bamsammich/docsearch/internal/service/job:
     interfaces:
       Queue:

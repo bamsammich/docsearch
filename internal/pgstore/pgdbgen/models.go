@@ -20,6 +20,14 @@ type AccessEvent struct {
 	Role      sql.NullString
 }
 
+type AccountEvent struct {
+	ID      int64
+	At      time.Time
+	Actor   sql.NullString
+	Action  string
+	Subject sql.NullString
+}
+
 type Chunk struct {
 	LibraryID        string
 	ID               int64
@@ -213,4 +221,5 @@ type User struct {
 	Issuer    sql.NullString
 	Subject   sql.NullString
 	Username  sql.NullString
+	Admin     bool
 }

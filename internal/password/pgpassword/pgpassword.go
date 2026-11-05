@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/bamsammich/docsearch/internal/password"
 	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
@@ -29,6 +31,10 @@ func New(db *sql.DB) *Store {
 	return &Store{db: db, q: pgdbgen.New(db)}
 }
 
+// uniqueViolation is the SQLSTATE of a username another account holds,
+// whether in password_accounts or in users.
+const uniqueViolation = "23505"
+
 // Add creates the account's library and its sign-in in one transaction, so
 // there is never a library nobody can sign in to, nor a sign-in with no
 // library.
@@ -44,6 +50,12 @@ func (s *Store) Add(ctx context.Context, username, userID, hash string, builtin 
 	if err := q.InsertPasswordAccount(ctx, pgdbgen.InsertPasswordAccountParams{
 		Username: username, UserID: userID, PasswordHash: hash,
 	}); err != nil {
+		if pgErr := (*pgconn.PgError)(
+			nil,
+		); errors.As(err, &pgErr) &&
+			pgErr.Code == uniqueViolation {
+			return errors.Join(password.ErrTaken, tx.Rollback())
+		}
 		return errors.Join(fmt.Errorf("add account %s: %w", username, err), tx.Rollback())
 	}
 	return tx.Commit()
