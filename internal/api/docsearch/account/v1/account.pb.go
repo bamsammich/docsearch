@@ -116,11 +116,19 @@ type Setting struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Label string                 `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
 	Value string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
-	// Flag and env are where the setting is made: a command-line flag and
-	// the environment variable that sets it. Both are empty for a rule the
-	// server keeps rather than one it is configured with.
-	Flag          string `protobuf:"bytes,3,opt,name=flag,proto3" json:"flag,omitempty"`
-	Env           string `protobuf:"bytes,4,opt,name=env,proto3" json:"env,omitempty"`
+	// Source is where the value came from: flag, environment, file or
+	// default. It is empty for a rule the server keeps rather than one it is
+	// configured with.
+	Source string `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
+	// Where names the flag, the environment variable or the file the value
+	// came from.
+	Where string `protobuf:"bytes,4,opt,name=where,proto3" json:"where,omitempty"`
+	// Key is the setting's key in docsearch.yaml.
+	Key string `protobuf:"bytes,5,opt,name=key,proto3" json:"key,omitempty"`
+	// Flag and env are the ways to set it: its command-line flag and its
+	// environment variable.
+	Flag          string `protobuf:"bytes,6,opt,name=flag,proto3" json:"flag,omitempty"`
+	Env           string `protobuf:"bytes,7,opt,name=env,proto3" json:"env,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -165,6 +173,27 @@ func (x *Setting) GetLabel() string {
 func (x *Setting) GetValue() string {
 	if x != nil {
 		return x.Value
+	}
+	return ""
+}
+
+func (x *Setting) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *Setting) GetWhere() string {
+	if x != nil {
+		return x.Where
+	}
+	return ""
+}
+
+func (x *Setting) GetKey() string {
+	if x != nil {
+		return x.Key
 	}
 	return ""
 }
@@ -823,8 +852,11 @@ func (*SignInRequest) Descriptor() ([]byte, []int) {
 }
 
 type SignInResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Settings      []*Setting             `protobuf:"bytes,1,rep,name=settings,proto3" json:"settings,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Settings []*Setting             `protobuf:"bytes,1,rep,name=settings,proto3" json:"settings,omitempty"`
+	// File is the docsearch.yaml the server read, and empty when it read
+	// none.
+	File          string `protobuf:"bytes,2,opt,name=file,proto3" json:"file,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -866,6 +898,13 @@ func (x *SignInResponse) GetSettings() []*Setting {
 	return nil
 }
 
+func (x *SignInResponse) GetFile() string {
+	if x != nil {
+		return x.File
+	}
+	return ""
+}
+
 var File_docsearch_account_v1_account_proto protoreflect.FileDescriptor
 
 const file_docsearch_account_v1_account_proto_rawDesc = "" +
@@ -877,12 +916,15 @@ const file_docsearch_account_v1_account_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x1a\n" +
 	"\bpassword\x18\x04 \x01(\bR\bpassword\x12=\n" +
-	"\flocked_until\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vlockedUntil\"[\n" +
+	"\flocked_until\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vlockedUntil\"\x9b\x01\n" +
 	"\aSetting\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\x12\x12\n" +
-	"\x04flag\x18\x03 \x01(\tR\x04flag\x12\x10\n" +
-	"\x03env\x18\x04 \x01(\tR\x03env\"\v\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\x12\x16\n" +
+	"\x06source\x18\x03 \x01(\tR\x06source\x12\x14\n" +
+	"\x05where\x18\x04 \x01(\tR\x05where\x12\x10\n" +
+	"\x03key\x18\x05 \x01(\tR\x03key\x12\x12\n" +
+	"\x04flag\x18\x06 \x01(\tR\x04flag\x12\x10\n" +
+	"\x03env\x18\a \x01(\tR\x03env\"\v\n" +
 	"\tMeRequest\"R\n" +
 	"\n" +
 	"MeResponse\x12\x1a\n" +
@@ -911,9 +953,10 @@ const file_docsearch_account_v1_account_proto_rawDesc = "" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x14\n" +
 	"\x05admin\x18\x02 \x01(\bR\x05admin\"\x12\n" +
 	"\x10SetAdminResponse\"\x0f\n" +
-	"\rSignInRequest\"K\n" +
+	"\rSignInRequest\"_\n" +
 	"\x0eSignInResponse\x129\n" +
-	"\bsettings\x18\x01 \x03(\v2\x1d.docsearch.account.v1.SettingR\bsettings2\xb0\x05\n" +
+	"\bsettings\x18\x01 \x03(\v2\x1d.docsearch.account.v1.SettingR\bsettings\x12\x12\n" +
+	"\x04file\x18\x02 \x01(\tR\x04file2\xb0\x05\n" +
 	"\x0eAccountService\x12I\n" +
 	"\x02Me\x12\x1f.docsearch.account.v1.MeRequest\x1a .docsearch.account.v1.MeResponse\"\x00\x12O\n" +
 	"\x04List\x12!.docsearch.account.v1.ListRequest\x1a\".docsearch.account.v1.ListResponse\"\x00\x12L\n" +

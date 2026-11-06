@@ -49,28 +49,35 @@ func command() *cli.Command {
 			"client, from one index and behind one bearer token.",
 		SliceFlagSeparator: string(filepath.ListSeparator),
 		Flags: append([]cli.Flag{
+			// First, so every other flag's file source knows the file.
 			&cli.StringFlag{
-				Name:    "addr",
-				Value:   "127.0.0.1:8765",
-				Usage:   "listen `ADDRESS`",
-				Sources: cli.EnvVars(config.EnvAddr),
+				Name:        "config",
+				Usage:       "a docsearch.yaml `FILE`; the environment and the command line override it",
+				Sources:     cli.EnvVars(config.EnvConfig),
+				Destination: &configPath,
 			},
 			&cli.StringFlag{
-				Name:    "dsn",
+				Name:    flagAddr,
+				Value:   "127.0.0.1:8765",
+				Usage:   "listen `ADDRESS`",
+				Sources: from(flagAddr, config.EnvAddr),
+			},
+			&cli.StringFlag{
+				Name:    flagDSN,
 				Usage:   "Postgres `DSN` of the database holding every library",
-				Sources: cli.EnvVars(config.EnvDSN),
+				Sources: from(flagDSN, config.EnvDSN),
 			},
 			&cli.StringFlag{
 				Name:    "auth",
 				Usage:   "how a request's user is decided: one of " + modes(),
 				Value:   owner.Token.String(),
-				Sources: cli.EnvVars(config.EnvAuth),
+				Sources: from("auth", config.EnvAuth),
 			},
 			&cli.StringSliceFlag{
 				Name: "root",
 				Usage: "library `ROOT`; the only paths add_document accepts. Repeat for more " +
 					"than one. Required without accounts; with them, needs --shared-paths.",
-				Sources: cli.EnvVars(config.EnvRoot),
+				Sources: rootsFrom(),
 			},
 			// Origins are comma-separated rather than a slice flag: urfave
 			// takes one separator per command, roots need the path-list
@@ -79,39 +86,39 @@ func command() *cli.Command {
 			&cli.StringFlag{
 				Name:    "allowed-origins",
 				Usage:   "comma-separated browser `ORIGIN` allowlist",
-				Sources: cli.EnvVars(config.EnvOrigins),
+				Sources: from("allowed-origins", config.EnvOrigins),
 			},
 			&cli.BoolFlag{
 				Name:    "allow-public-bind",
 				Usage:   "permit binding a non-loopback address",
-				Sources: cli.EnvVars(config.EnvAllowPublicBind),
+				Sources: from("allow-public-bind", config.EnvAllowPublicBind),
 			},
 			&cli.BoolFlag{
 				Name: "shared-paths",
 				Usage: "with accounts (oidc or password), take paths under --root; every " +
 					"account then reads the same directories",
-				Sources: cli.EnvVars(config.EnvSharedPaths),
+				Sources: from("shared-paths", config.EnvSharedPaths),
 			},
 			&cli.StringFlag{
 				Name:    "public-url",
 				Usage:   "`URL` a browser reaches this server at, for upload links",
-				Sources: cli.EnvVars(config.EnvPublicURL),
+				Sources: from("public-url", config.EnvPublicURL),
 			},
 			&cli.StringFlag{
 				Name:    "ui-client-id",
 				Usage:   "the library UI's public client `ID` at the oidc provider",
-				Sources: cli.EnvVars(config.EnvUIClientID),
+				Sources: from("ui-client-id", config.EnvUIClientID),
 			},
 			&cli.StringFlag{
 				Name:    "instance-label",
 				Usage:   "a `LABEL` the library UI shows on every page, such as \"Test instance\"",
-				Sources: cli.EnvVars(config.EnvInstanceLabel),
+				Sources: from("instance-label", config.EnvInstanceLabel),
 			},
 			&cli.Int64Flag{
 				Name:    "upload-max-mb",
 				Value:   config.DefaultUploadMaxMB,
 				Usage:   "refuse an upload larger than `MB` megabytes",
-				Sources: cli.EnvVars(config.EnvUploadMaxMB),
+				Sources: from("upload-max-mb", config.EnvUploadMaxMB),
 			},
 		}, oidcFlags()...),
 		Action: run,
@@ -125,7 +132,7 @@ func command() *cli.Command {
 // flags split on here.
 func oidcFlags() []cli.Flag {
 	text := func(name, env, usage string) cli.Flag {
-		return &cli.StringFlag{Name: name, Usage: usage, Sources: cli.EnvVars(env)}
+		return &cli.StringFlag{Name: name, Usage: usage, Sources: from(name, env)}
 	}
 	return []cli.Flag{
 		text("oidc-issuer", config.EnvOIDCIssuer, "the provider's issuer `URL`"),
@@ -148,7 +155,7 @@ func oidcFlags() []cli.Flag {
 		&cli.BoolFlag{
 			Name:    "oidc-sign-up",
 			Usage:   "create an account for an identity that has none",
-			Sources: cli.EnvVars(config.EnvOIDCSignUp),
+			Sources: from("oidc-sign-up", config.EnvOIDCSignUp),
 		},
 	}
 }
@@ -169,13 +176,28 @@ func commaList(list string) []string {
 func modes() string { return strings.Join(owner.Spellings(), ", ") }
 
 func run(_ context.Context, cmd *cli.Command) error {
-	auth, err := owner.ParseMode(cmd.String("auth"))
+	cfg, err := configFrom(cmd, os.Args[1:])
 	if err != nil {
 		return err
 	}
+	return start(cfg)
+}
+
+// configFrom is the configuration the command was given, each setting from
+// the strongest place that holds it: the command line, the environment,
+// docsearch.yaml, then the default. args are the command line, which is how
+// a setting passed there is told from one read from a source.
+func configFrom(cmd *cli.Command, args []string) (config.Config, error) {
+	if err := checkConfig(configPath); err != nil {
+		return config.Config{}, err
+	}
+	auth, err := owner.ParseMode(cmd.String("auth"))
+	if err != nil {
+		return config.Config{}, err
+	}
 	cfg := config.Config{
-		Addr:         cmd.String("addr"),
-		DSN:          cmd.String("dsn"),
+		Addr:         cmd.String(flagAddr),
+		DSN:          cmd.String(flagDSN),
 		Auth:         auth,
 		LibraryRoots: cmd.StringSlice("root"),
 		// The token is read from the environment alone, deliberately not
@@ -202,8 +224,13 @@ func run(_ context.Context, cmd *cli.Command) error {
 			RequiredScopes:     commaList(cmd.String("oidc-required-scopes")),
 			SignUp:             cmd.Bool("oidc-sign-up"),
 		},
+		File:    configPath,
+		Origins: origins(cmd, args),
 	}
+	return cfg, nil
+}
 
+func start(cfg config.Config) error {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	if err := cfg.Validate(); err != nil {

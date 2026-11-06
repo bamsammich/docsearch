@@ -409,18 +409,43 @@ an in-flight job can checkpoint or roll back instead of being killed mid-write.
 
 ## Configuration
 
-| | flag | environment |
-|---|---|---|
-| bind address | `--addr` | `DOCSEARCH_ADDR` |
-| database | `--dsn` | `DOCSEARCH_DSN` |
-| auth mode | `--auth` | `DOCSEARCH_AUTH` |
-| pin the worker to one library | `--user` (worker only) | `DOCSEARCH_USER` |
-| library roots | `--root` (repeatable) | `DOCSEARCH_ROOT` (`:`-separated) |
-| bearer token | — | `DOCSEARCH_TOKEN` |
-| Origin allowlist | `--allowed-origins` | `DOCSEARCH_ALLOWED_ORIGINS` |
-| library UI's client at the oidc provider | `--ui-client-id` | `DOCSEARCH_UI_CLIENT_ID` |
-| label the library UI shows on every page, such as `Test instance` | `--instance-label` | `DOCSEARCH_INSTANCE_LABEL` |
-| permit public bind | `--allow-public-bind` | `DOCSEARCH_ALLOW_PUBLIC_BIND=true` |
+| | flag | environment | docsearch.yaml (server) |
+|---|---|---|---|
+| bind address | `--addr` | `DOCSEARCH_ADDR` | `addr` |
+| database | `--dsn` | `DOCSEARCH_DSN` | `dsn` |
+| auth mode | `--auth` | `DOCSEARCH_AUTH` | `auth.mode` |
+| pin the worker to one library | `--user` (worker only) | `DOCSEARCH_USER` | — |
+| library roots | `--root` (repeatable) | `DOCSEARCH_ROOT` (`:`-separated) | `roots` |
+| bearer token | — | `DOCSEARCH_TOKEN` | — |
+| Origin allowlist | `--allowed-origins` | `DOCSEARCH_ALLOWED_ORIGINS` | `allowed_origins` |
+| library UI's client at the oidc provider | `--ui-client-id` | `DOCSEARCH_UI_CLIENT_ID` | `ui.client_id` |
+| label the library UI shows on every page, such as `Test instance` | `--instance-label` | `DOCSEARCH_INSTANCE_LABEL` | `ui.instance_label` |
+| permit public bind | `--allow-public-bind` | `DOCSEARCH_ALLOW_PUBLIC_BIND=true` | `allow_public_bind` |
+
+`docsearch-server --config docsearch.yaml` (or `DOCSEARCH_CONFIG`) reads the
+server's settings from a file, so a deployment repository can hold them. The
+environment overrides the file, and the command line overrides both. Nested
+keys nest in the file:
+
+```yaml
+addr: 0.0.0.0:8765
+public_url: https://docs.example.com
+auth:
+  mode: oidc
+  oidc:
+    issuer: https://id.example.com
+    sign_up: true
+    required_claim:
+      name: groups
+      value: docsearch-users
+roots:
+  - /srv/docs
+```
+
+A key no setting reads is refused at startup rather than ignored, so a typo
+cannot leave a setting at its default. Secrets, the bearer token and the
+oidc client secret, come from the environment alone. An administrator sees
+on the Sign-in page where each sign-in setting came from.
 
 `--auth` is `none`, `token`, `oidc` or `password`, and defaults to `token`,
 which is what a v1 install already runs. `none` asks for no credential and
@@ -494,19 +519,19 @@ docsearch reads the tokens it issues. Each identity gets a library of its
 own. Any OIDC provider works; what docsearch needs from it is a token whose
 audience names docsearch.
 
-| | flag | environment |
-|---|---|---|
-| issuer | `--oidc-issuer` | `DOCSEARCH_OIDC_ISSUER` |
-| docsearch's `/mcp` URI | `--oidc-resource` | `DOCSEARCH_OIDC_RESOURCE` |
-| expected audience, if not the URI | `--oidc-audience` | `DOCSEARCH_OIDC_AUDIENCE` |
-| scopes a client should request | `--oidc-scopes-supported` | `DOCSEARCH_OIDC_SCOPES_SUPPORTED` |
-| scopes every token must carry | `--oidc-required-scopes` | `DOCSEARCH_OIDC_REQUIRED_SCOPES` |
-| client ID, to introspect opaque tokens | `--oidc-client-id` | `DOCSEARCH_OIDC_CLIENT_ID` |
-| client secret | — | `DOCSEARCH_OIDC_CLIENT_SECRET` |
-| subject who keeps the existing library | `--oidc-default-owner` | `DOCSEARCH_OIDC_DEFAULT_OWNER` |
-| create accounts on first sign-in | `--oidc-sign-up` | `DOCSEARCH_OIDC_SIGN_UP` |
-| claim every token must carry | `--oidc-required-claim-name` | `DOCSEARCH_OIDC_REQUIRED_CLAIM_NAME` |
-| value that claim must hold | `--oidc-required-claim-value` | `DOCSEARCH_OIDC_REQUIRED_CLAIM_VALUE` |
+| | flag | environment | docsearch.yaml (server) |
+|---|---|---|---|
+| issuer | `--oidc-issuer` | `DOCSEARCH_OIDC_ISSUER` | `auth.oidc.issuer` |
+| docsearch's `/mcp` URI | `--oidc-resource` | `DOCSEARCH_OIDC_RESOURCE` | `auth.oidc.resource` |
+| expected audience, if not the URI | `--oidc-audience` | `DOCSEARCH_OIDC_AUDIENCE` | `auth.oidc.audience` |
+| scopes a client should request | `--oidc-scopes-supported` | `DOCSEARCH_OIDC_SCOPES_SUPPORTED` | `auth.oidc.scopes_supported` |
+| scopes every token must carry | `--oidc-required-scopes` | `DOCSEARCH_OIDC_REQUIRED_SCOPES` | `auth.oidc.required_scopes` |
+| client ID, to introspect opaque tokens | `--oidc-client-id` | `DOCSEARCH_OIDC_CLIENT_ID` | `auth.oidc.client_id` |
+| client secret | — | `DOCSEARCH_OIDC_CLIENT_SECRET` | — |
+| subject who keeps the existing library | `--oidc-default-owner` | `DOCSEARCH_OIDC_DEFAULT_OWNER` | `auth.oidc.default_owner` |
+| create accounts on first sign-in | `--oidc-sign-up` | `DOCSEARCH_OIDC_SIGN_UP` | `auth.oidc.sign_up` |
+| claim every token must carry | `--oidc-required-claim-name` | `DOCSEARCH_OIDC_REQUIRED_CLAIM_NAME` | `auth.oidc.required_claim.name` |
+| value that claim must hold | `--oidc-required-claim-value` | `DOCSEARCH_OIDC_REQUIRED_CLAIM_VALUE` | `auth.oidc.required_claim.value` |
 
 Scope lists are comma-separated. A signed JWT is checked against the keys the
 issuer publishes. An opaque token is sent back to the issuer for
