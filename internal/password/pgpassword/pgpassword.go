@@ -1,9 +1,10 @@
 // Package pgpassword keeps password accounts in Postgres.
 //
-// The sign-in page reads through the request role. Adding and removing
-// accounts runs as whoever holds the owner's DSN, the same credential that
-// migrates the schema, so administering accounts needs no role system inside
-// docsearch: the operator is whoever can reach the database as its owner.
+// The sign-in page reads through the request role, and updates the failure
+// count, the lock and a rehashed password. Adding, resetting and removing an
+// account goes through definer functions, which refuse anyone but a
+// docsearch administrator or the owner role, the credential `docsearch
+// account` connects with.
 package pgpassword
 
 import (
@@ -15,6 +16,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/password"
 	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
@@ -42,26 +44,22 @@ const stranded = "DSA04"
 // there is never a library nobody can sign in to, nor a sign-in with no
 // library.
 func (s *Store) Add(ctx context.Context, username, userID, hash string, builtin bool) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("add account: %w", err)
-	}
-	q := s.q.WithTx(tx)
-	if err := library(ctx, q, userID, builtin); err != nil {
-		return errors.Join(err, tx.Rollback())
-	}
-	if err := q.InsertPasswordAccount(ctx, pgdbgen.InsertPasswordAccountParams{
-		Username: username, UserID: userID, PasswordHash: hash,
-	}); err != nil {
-		if pgErr := (*pgconn.PgError)(
-			nil,
-		); errors.As(err, &pgErr) &&
-			pgErr.Code == uniqueViolation {
-			return errors.Join(password.ErrTaken, tx.Rollback())
+	return s.administer(ctx, func(q *pgdbgen.Queries) error {
+		if err := library(ctx, q, userID, builtin); err != nil {
+			return err
 		}
-		return errors.Join(fmt.Errorf("add account %s: %w", username, err), tx.Rollback())
-	}
-	return tx.Commit()
+		err := q.AddPasswordAccount(ctx, pgdbgen.AddPasswordAccountParams{
+			Username: username, UserID: userID, PasswordHash: hash,
+		})
+		if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) &&
+			pgErr.Code == uniqueViolation {
+			return password.ErrTaken
+		}
+		if err != nil {
+			return fmt.Errorf("add account %s: %w", username, err)
+		}
+		return nil
+	})
 }
 
 // library is the account's library: the built-in one, claimed, or a new one.
@@ -150,53 +148,67 @@ func (s *Store) SetHash(ctx context.Context, username, hash string) error {
 // Reset replaces a password, lifts any lock, and ends every sign-in the
 // account holds.
 func (s *Store) Reset(ctx context.Context, username, hash string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("reset password: %w", err)
-	}
-	q := s.q.WithTx(tx)
-	userID, err := q.ResetPasswordHash(ctx, pgdbgen.ResetPasswordHashParams{
-		Username: username, PasswordHash: hash,
+	return s.administer(ctx, func(q *pgdbgen.Queries) error {
+		found, err := q.ResetPassword(ctx, pgdbgen.ResetPasswordParams{
+			Username: username, PasswordHash: hash,
+		})
+		if err != nil {
+			return fmt.Errorf("reset password: %w", err)
+		}
+		if !found {
+			return password.ErrNoSuchAccount
+		}
+		return nil
 	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return errors.Join(password.ErrNoSuchAccount, tx.Rollback())
-	}
-	if err != nil {
-		return errors.Join(fmt.Errorf("reset password: %w", err), tx.Rollback())
-	}
-	if err := q.DeleteRefreshTokensOfUser(ctx, userID); err != nil {
-		return errors.Join(fmt.Errorf("end sign-ins: %w", err), tx.Rollback())
-	}
-	return tx.Commit()
 }
 
 // Remove ends the account's sign-in and every refresh token it holds. A
 // shared library only it administered passes on as handover says.
 func (s *Store) Remove(ctx context.Context, username string, handover password.Handover) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	return s.administer(ctx, func(q *pgdbgen.Queries) error {
+		if err := q.NameHeir(ctx, handover.To); err != nil {
+			return fmt.Errorf("remove account: %w", err)
+		}
+		found, err := q.RemovePasswordAccount(ctx, username)
+		return removal(found, err)
+	})
+}
+
+// removal is the error a removal answered with, in the terms the password
+// package uses.
+func removal(found bool, err error) error {
+	if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) && pgErr.Code == stranded {
+		// The database names the libraries, which is what the operator needs.
+		return password.Stranded{Detail: pgErr.Message}
+	}
 	if err != nil {
 		return fmt.Errorf("remove account: %w", err)
 	}
-	q := s.q.WithTx(tx)
-	err = q.NameHandover(ctx, pgdbgen.NameHandoverParams{Heir: handover.To, Actor: handover.By})
+	if !found {
+		return password.ErrNoSuchAccount
+	}
+	return nil
+}
+
+// administer runs an account change in one transaction, for the
+// administrator the context names. The database checks that the user is an
+// administrator, and records them in each library's log. A context naming
+// nobody is the CLI, which connects as the owner role and needs no user.
+func (s *Store) administer(ctx context.Context, work func(*pgdbgen.Queries) error) error {
+	if user, err := owner.From(ctx); err == nil {
+		return pgsession.Run(ctx, s.db, s.q, pgsession.Personal(user), work)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return errors.Join(fmt.Errorf("remove account: %w", err), tx.Rollback())
+		return fmt.Errorf("begin: %w", err)
 	}
-	userID, err := q.DeletePasswordAccount(ctx, username)
-	if errors.Is(err, sql.ErrNoRows) {
-		return errors.Join(password.ErrNoSuchAccount, tx.Rollback())
+	if err := work(s.q.WithTx(tx)); err != nil {
+		return errors.Join(err, pgsession.Rollback(tx))
 	}
-	if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) && pgErr.Code == stranded {
-		// The database names the libraries, which is what the operator needs.
-		return errors.Join(password.Stranded{Detail: pgErr.Message}, tx.Rollback())
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
 	}
-	if err != nil {
-		return errors.Join(fmt.Errorf("remove account: %w", err), tx.Rollback())
-	}
-	if err := q.DeleteRefreshTokensOfUser(ctx, userID); err != nil {
-		return errors.Join(fmt.Errorf("end sign-ins: %w", err), tx.Rollback())
-	}
-	return tx.Commit()
+	return nil
 }
 
 // List is every account, by username.

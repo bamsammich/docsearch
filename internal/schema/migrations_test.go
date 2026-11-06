@@ -823,3 +823,29 @@ func (s *MigrationSuite) TestUsernamesGoDownAndUpAgain() {
 	s.upTo(22)
 	s.True(s.columnExists("users", "username"))
 }
+
+// -- 00031_account_definers -----------------------------------------------
+
+// appMay reports whether the request role holds privilege on
+// password_accounts.
+func (s *MigrationSuite) appMay(privilege string) bool {
+	var held bool
+	s.Require().NoError(s.db.QueryRowContext(s.T().Context(),
+		`SELECT has_table_privilege('docsearch_app', 'password_accounts', $1)`,
+		privilege).Scan(&held))
+	return held
+}
+
+func (s *MigrationSuite) TestAccountDefinersGoDownAndUpAgain() {
+	s.upTo(31)
+	s.False(s.appMay("INSERT"))
+	s.False(s.appMay("DELETE"))
+	s.down()
+	s.True(s.appMay("INSERT"))
+	s.True(s.appMay("DELETE"))
+	s.True(s.appMay("UPDATE"))
+	s.upTo(31)
+	s.False(s.appMay("INSERT"))
+	s.False(s.appMay("DELETE"))
+	s.False(s.appMay("UPDATE"), "only three columns may be updated, not the table")
+}

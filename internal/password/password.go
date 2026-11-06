@@ -70,15 +70,13 @@ func (e Stranded) Error() string { return e.Detail }
 func (Stranded) Is(target error) bool { return target == ErrStranded }
 
 // Handover says who takes over the shared libraries only a removed account
-// administered, and who removed it.
+// administered. Each library's log records the user the context names as
+// the one who removed it.
 type Handover struct {
 	// To is the username of the administrator who takes over. Empty, or
 	// someone who is no administrator, leaves it to the longest-standing
 	// other administrator.
 	To string
-	// By is the user ID of the account removing it, which each library's
-	// log records. Empty for an operator working from the CLI.
-	By string
 }
 
 var usernamePattern = regexp.MustCompile(`^[a-z0-9._-]{1,64}$`)
@@ -115,6 +113,11 @@ type Record struct {
 }
 
 // Store is where accounts live.
+//
+// Add, Reset and Remove act for the user the context names, through
+// owner.With, and the database refuses them unless that user is an
+// administrator. A context naming nobody acts as the role the store
+// connected as, which only the owner role may do: that is the CLI.
 type Store interface {
 	// Add creates the account and the library it signs in to. builtin
 	// gives it the library from before accounts instead of a new one.
