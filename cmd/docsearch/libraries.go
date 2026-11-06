@@ -112,6 +112,35 @@ func libraryCommand() *cli.Command {
 				Action:    declineInvitation,
 			},
 			{
+				Name:      "rename",
+				Usage:     "change the name people read a library you administer by; agents keep its slug",
+				ArgsUsage: argLibrary,
+				Flags: append(serverFlags(), &cli.StringFlag{
+					Name: flagName, Usage: "the library's new `NAME`", Required: true,
+				}),
+				Action: renameLibrary,
+			},
+			{
+				Name:      "delete",
+				Usage:     "delete a shared library you administer; it can be restored for 14 days",
+				ArgsUsage: argLibrary,
+				Flags:     serverFlags(),
+				Action:    deleteLibrary,
+			},
+			{
+				Name:      "restore",
+				Usage:     "bring back a library you deleted, within 14 days",
+				ArgsUsage: argLibrary,
+				Flags:     serverFlags(),
+				Action:    restoreLibrary,
+			},
+			{
+				Name:   "deleted",
+				Usage:  "list the deleted libraries you can still restore",
+				Flags:  serverFlags(),
+				Action: listDeleted,
+			},
+			{
 				Name:      "log",
 				Usage:     "show who changed which role on a library you administer",
 				ArgsUsage: argLibrary,
@@ -200,6 +229,61 @@ func grantRole(ctx context.Context, cmd *cli.Command) error {
 	return nil
 }
 
+func renameLibrary(ctx context.Context, cmd *cli.Command) error {
+	slug := cmd.Args().First()
+	if slug == "" {
+		return errNoLibrary
+	}
+	renamed, err := clientFor(cmd).Rename(ctx, slug, cmd.String(flagName))
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s is now called %s\n", renamed.Name, renamed.Title)
+	return nil
+}
+
+func deleteLibrary(ctx context.Context, cmd *cli.Command) error {
+	slug := cmd.Args().First()
+	if slug == "" {
+		return errNoLibrary
+	}
+	purgeAt, err := clientFor(cmd).Delete(ctx, slug)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("deleted %s; `docsearch library restore %s` brings it back until %s\n",
+		slug, slug, purgeAt.Local().Format(time.DateTime))
+	return nil
+}
+
+func restoreLibrary(ctx context.Context, cmd *cli.Command) error {
+	slug := cmd.Args().First()
+	if slug == "" {
+		return errNoLibrary
+	}
+	restored, err := clientFor(cmd).Restore(ctx, slug)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("restored %s (%s)\n", restored.Name, restored.Title)
+	return nil
+}
+
+func listDeleted(ctx context.Context, cmd *cli.Command) error {
+	deleted, err := clientFor(cmd).Deleted(ctx)
+	if err != nil {
+		return err
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "LIBRARY\tDELETED\tBY\tPURGED\tNAME")
+	for _, d := range deleted {
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", d.Library,
+			d.DeletedAt.Local().Format(time.DateTime), dash(d.DeletedBy),
+			d.PurgeAt.Local().Format(time.DateTime), dash(d.Title))
+	}
+	return w.Flush()
+}
+
 func listInvitations(ctx context.Context, cmd *cli.Command) error {
 	invitations, err := clientFor(cmd).Invitations(ctx)
 	if err != nil {
@@ -261,10 +345,10 @@ func showEvents(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "WHEN\tWHO\tACTION\tWHOSE\tROLE")
+	fmt.Fprintln(w, "WHEN\tWHO\tACTION\tWHOSE\tROLE\tDETAIL")
 	for _, e := range events {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", e.At.Local().Format(time.DateTime),
-			dash(e.Actor), e.Action, dash(e.Subject), dash(e.Role))
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", e.At.Local().Format(time.DateTime),
+			dash(e.Actor), e.Action, dash(e.Subject), dash(e.Role), dash(e.Detail))
 	}
 	return w.Flush()
 }

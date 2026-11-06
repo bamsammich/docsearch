@@ -52,6 +52,60 @@ func (q *Queries) DeclineInvitation(ctx context.Context, slug string) error {
 	return err
 }
 
+const deleteLibrary = `-- name: DeleteLibrary :one
+SELECT delete_library($1::text)::timestamptz AS purge_at
+`
+
+func (q *Queries) DeleteLibrary(ctx context.Context, slug string) (time.Time, error) {
+	row := q.db.QueryRowContext(ctx, deleteLibrary, slug)
+	var purge_at time.Time
+	err := row.Scan(&purge_at)
+	return purge_at, err
+}
+
+const deletedLibraries = `-- name: DeletedLibraries :many
+SELECT d.slug::text AS slug, d.name::text AS name, d.deleted_at::timestamptz AS deleted_at,
+       d.purge_at::timestamptz AS purge_at, d.deleted_by::text AS deleted_by
+  FROM deleted_libraries() AS d(slug, name, deleted_at, purge_at, deleted_by)
+`
+
+type DeletedLibrariesRow struct {
+	Slug      string
+	Name      string
+	DeletedAt time.Time
+	PurgeAt   time.Time
+	DeletedBy string
+}
+
+func (q *Queries) DeletedLibraries(ctx context.Context) ([]DeletedLibrariesRow, error) {
+	rows, err := q.db.QueryContext(ctx, deletedLibraries)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DeletedLibrariesRow{}
+	for rows.Next() {
+		var i DeletedLibrariesRow
+		if err := rows.Scan(
+			&i.Slug,
+			&i.Name,
+			&i.DeletedAt,
+			&i.PurgeAt,
+			&i.DeletedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const grantLibrary = `-- name: GrantLibrary :one
 SELECT grant_library($1::text, $2::text, $3::text)::text
   AS outcome
@@ -72,8 +126,8 @@ func (q *Queries) GrantLibrary(ctx context.Context, arg GrantLibraryParams) (str
 
 const libraryEvents = `-- name: LibraryEvents :many
 SELECT e.at::timestamptz AS at, e.actor::text AS actor, e.action::text AS action,
-       e.subject::text AS subject, e.role::text AS role
-  FROM library_events($1::text) AS e(at, actor, action, subject, role)
+       e.subject::text AS subject, e.role::text AS role, e.detail::text AS detail
+  FROM library_events($1::text) AS e(at, actor, action, subject, role, detail)
 `
 
 type LibraryEventsRow struct {
@@ -82,6 +136,7 @@ type LibraryEventsRow struct {
 	Action  string
 	Subject string
 	Role    string
+	Detail  string
 }
 
 func (q *Queries) LibraryEvents(ctx context.Context, slug string) ([]LibraryEventsRow, error) {
@@ -99,6 +154,7 @@ func (q *Queries) LibraryEvents(ctx context.Context, slug string) ([]LibraryEven
 			&i.Action,
 			&i.Subject,
 			&i.Role,
+			&i.Detail,
 		); err != nil {
 			return nil, err
 		}
@@ -202,6 +258,29 @@ func (q *Queries) OwnUsername(ctx context.Context) (string, error) {
 	var username string
 	err := row.Scan(&username)
 	return username, err
+}
+
+const renameLibrary = `-- name: RenameLibrary :exec
+SELECT rename_library($1::text, $2::text)
+`
+
+type RenameLibraryParams struct {
+	Slug string
+	Name string
+}
+
+func (q *Queries) RenameLibrary(ctx context.Context, arg RenameLibraryParams) error {
+	_, err := q.db.ExecContext(ctx, renameLibrary, arg.Slug, arg.Name)
+	return err
+}
+
+const restoreLibrary = `-- name: RestoreLibrary :exec
+SELECT restore_library($1::text)
+`
+
+func (q *Queries) RestoreLibrary(ctx context.Context, slug string) error {
+	_, err := q.db.ExecContext(ctx, restoreLibrary, slug)
+	return err
 }
 
 const revokeLibrary = `-- name: RevokeLibrary :exec

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -111,16 +112,11 @@ func (l *Libraries) Accept(ctx context.Context, slug string) (sharing.Library, e
 	if err != nil {
 		return sharing.Library{}, err
 	}
-	libs, err := l.List(ctx)
+	joined, err := l.find(ctx, slug)
 	if err != nil {
-		return sharing.Library{}, err
+		return sharing.Library{Name: slug, Role: role}, nil
 	}
-	for _, lib := range libs {
-		if lib.Name == slug {
-			return lib, nil
-		}
-	}
-	return sharing.Library{Name: slug, Role: role}, nil
+	return joined, nil
 }
 
 // Decline refuses the invitation to the library slug names.
@@ -166,11 +162,78 @@ func (l *Libraries) Events(ctx context.Context, slug string) ([]sharing.Event, e
 				Action:  row.Action,
 				Subject: row.Subject,
 				Role:    row.Role,
+				Detail:  row.Detail,
 			})
 		}
 		return err
 	})
 	return out, err
+}
+
+// Rename changes the name of the library slug names.
+func (l *Libraries) Rename(ctx context.Context, slug, name string) (sharing.Library, error) {
+	err := l.run(ctx, func(q *pgdbgen.Queries) error {
+		return q.RenameLibrary(ctx, pgdbgen.RenameLibraryParams{Slug: slug, Name: name})
+	})
+	if err != nil {
+		return sharing.Library{}, err
+	}
+	return l.find(ctx, slug)
+}
+
+// Delete deletes the library slug names, and answers when it is purged.
+func (l *Libraries) Delete(ctx context.Context, slug string) (time.Time, error) {
+	var at time.Time
+	err := l.run(ctx, func(q *pgdbgen.Queries) error {
+		var err error
+		at, err = q.DeleteLibrary(ctx, slug)
+		return err
+	})
+	return at, err
+}
+
+// Restore brings back the deleted library slug names.
+func (l *Libraries) Restore(ctx context.Context, slug string) (sharing.Library, error) {
+	err := l.run(ctx, func(q *pgdbgen.Queries) error {
+		return q.RestoreLibrary(ctx, slug)
+	})
+	if err != nil {
+		return sharing.Library{}, err
+	}
+	return l.find(ctx, slug)
+}
+
+// Deleted are the deleted libraries the user administers and can restore.
+func (l *Libraries) Deleted(ctx context.Context) ([]sharing.Deleted, error) {
+	var out []sharing.Deleted
+	err := l.run(ctx, func(q *pgdbgen.Queries) error {
+		rows, err := q.DeletedLibraries(ctx)
+		for _, row := range rows {
+			out = append(out, sharing.Deleted{
+				DeletedAt: row.DeletedAt,
+				PurgeAt:   row.PurgeAt,
+				Library:   row.Slug,
+				Title:     row.Name,
+				DeletedBy: row.DeletedBy,
+			})
+		}
+		return err
+	})
+	return out, err
+}
+
+// find is the library slug names, as the user reads it.
+func (l *Libraries) find(ctx context.Context, slug string) (sharing.Library, error) {
+	libs, err := l.List(ctx)
+	if err != nil {
+		return sharing.Library{}, err
+	}
+	for _, lib := range libs {
+		if lib.Name == slug {
+			return lib, nil
+		}
+	}
+	return sharing.Library{}, sharing.ErrNoLibrary
 }
 
 // run calls one management function as the user, and names its refusal.

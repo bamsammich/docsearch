@@ -20,8 +20,8 @@ SELECT m.username::text AS username, m.role::text AS role, m.invited::boolean AS
 
 -- name: LibraryEvents :many
 SELECT e.at::timestamptz AS at, e.actor::text AS actor, e.action::text AS action,
-       e.subject::text AS subject, e.role::text AS role
-  FROM library_events(sqlc.arg(slug)::text) AS e(at, actor, action, subject, role);
+       e.subject::text AS subject, e.role::text AS role, e.detail::text AS detail
+  FROM library_events(sqlc.arg(slug)::text) AS e(at, actor, action, subject, role, detail);
 
 -- The request role reads users, so an account's own username needs no
 -- definer.
@@ -39,3 +39,17 @@ SELECT accept_invitation(sqlc.arg(slug)::text)::text AS role;
 
 -- name: DeclineInvitation :exec
 SELECT decline_invitation(sqlc.arg(slug)::text);
+
+-- name: RenameLibrary :exec
+SELECT rename_library(sqlc.arg(slug)::text, sqlc.arg(name)::text);
+
+-- name: DeleteLibrary :one
+SELECT delete_library(sqlc.arg(slug)::text)::timestamptz AS purge_at;
+
+-- name: RestoreLibrary :exec
+SELECT restore_library(sqlc.arg(slug)::text);
+
+-- name: DeletedLibraries :many
+SELECT d.slug::text AS slug, d.name::text AS name, d.deleted_at::timestamptz AS deleted_at,
+       d.purge_at::timestamptz AS purge_at, d.deleted_by::text AS deleted_by
+  FROM deleted_libraries() AS d(slug, name, deleted_at, purge_at, deleted_by);

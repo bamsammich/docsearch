@@ -1,6 +1,6 @@
 // The libraries the signed-in account reads, and the one the pages show.
 
-import type { Invitation, Library } from "../gen/docsearch/library/v1/library_pb";
+import type { DeletedLibrary, Invitation, Library } from "../gen/docsearch/library/v1/library_pb";
 import { problem, shelves } from "./api";
 import { nameOf, own } from "./names";
 
@@ -22,6 +22,8 @@ class Libraries {
   all = $state<Library[]>([]);
   /** Libraries this account is asked to join, newest first. */
   invitations = $state<Invitation[]>([]);
+  /** Deleted libraries this account administers and can still restore. */
+  deleted = $state<DeletedLibrary[]>([]);
   error = $state("");
   loaded = $state(false);
   /** The label of the library the pages show. */
@@ -58,13 +60,15 @@ class Libraries {
 
   async load(): Promise<void> {
     try {
-      const [{ libraries, username }, { invitations }] = await Promise.all([
+      const [{ libraries, username }, { invitations }, deleted] = await Promise.all([
         shelves.list({}),
         shelves.invitations({}),
+        shelves.deleted({}),
       ]);
       const first = !this.loaded;
       this.all = libraries;
       this.invitations = invitations;
+      this.deleted = deleted.libraries;
       this.username = username;
       this.error = "";
       if (first && username) this.label = recalled(username);
@@ -105,6 +109,29 @@ class Libraries {
   async decline(label: string): Promise<void> {
     await shelves.decline({ library: label });
     this.invitations = this.invitations.filter((i) => i.library !== label);
+  }
+
+  /** Renames the current library: the name people read, never its slug. */
+  async rename(name: string): Promise<void> {
+    const { library } = await shelves.rename({ library: this.label, name });
+    if (library) this.all = this.all.map((l) => (l.library === library.library ? library : l));
+  }
+
+  /** Deletes the current library, goes back to the account's own, and answers when it is purged. */
+  async remove(): Promise<Date | undefined> {
+    const label = this.label;
+    const { purgeAt } = await shelves.delete({ library: label });
+    this.all = this.all.filter((l) => l.library !== label);
+    this.choose(own);
+    void this.load();
+    return purgeAt ? new Date(Number(purgeAt.seconds) * 1000) : undefined;
+  }
+
+  /** Brings back a deleted library and shows it. */
+  async restore(label: string): Promise<void> {
+    await shelves.restore({ library: label });
+    await this.load();
+    this.choose(label);
   }
 
   /** Takes this account out of the current library and goes back to its own. */

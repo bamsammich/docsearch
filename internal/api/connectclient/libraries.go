@@ -2,6 +2,7 @@ package connectclient
 
 import (
 	"context"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -112,7 +113,53 @@ func (c *Client) Events(ctx context.Context, library string) ([]sharing.Event, e
 	for _, e := range resp.Msg.GetEvents() {
 		out = append(out, sharing.Event{
 			At: e.GetAt().AsTime(), Actor: e.GetActor(), Action: e.GetAction(),
-			Subject: e.GetSubject(), Role: e.GetRole(),
+			Subject: e.GetSubject(), Role: e.GetRole(), Detail: e.GetDetail(),
+		})
+	}
+	return out, nil
+}
+
+// Rename changes the name people read library by.
+func (c *Client) Rename(ctx context.Context, library, name string) (sharing.Library, error) {
+	resp, err := c.libraries.Rename(ctx,
+		connect.NewRequest(&libraryv1.RenameRequest{Library: library, Name: name}))
+	if err != nil {
+		return sharing.Library{}, err
+	}
+	return libraryOf(resp.Msg.GetLibrary()), nil
+}
+
+// Delete deletes library, and answers when it is purged unless restored.
+func (c *Client) Delete(ctx context.Context, library string) (time.Time, error) {
+	resp, err := c.libraries.Delete(ctx,
+		connect.NewRequest(&libraryv1.DeleteRequest{Library: library}))
+	if err != nil {
+		return time.Time{}, err
+	}
+	return resp.Msg.GetPurgeAt().AsTime(), nil
+}
+
+// Restore brings back the deleted library.
+func (c *Client) Restore(ctx context.Context, library string) (sharing.Library, error) {
+	resp, err := c.libraries.Restore(ctx,
+		connect.NewRequest(&libraryv1.RestoreRequest{Library: library}))
+	if err != nil {
+		return sharing.Library{}, err
+	}
+	return libraryOf(resp.Msg.GetLibrary()), nil
+}
+
+// Deleted are the deleted libraries the caller can restore.
+func (c *Client) Deleted(ctx context.Context) ([]sharing.Deleted, error) {
+	resp, err := c.libraries.Deleted(ctx, connect.NewRequest(&libraryv1.DeletedRequest{}))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]sharing.Deleted, 0, len(resp.Msg.GetLibraries()))
+	for _, d := range resp.Msg.GetLibraries() {
+		out = append(out, sharing.Deleted{
+			DeletedAt: d.GetDeletedAt().AsTime(), PurgeAt: d.GetPurgeAt().AsTime(),
+			Library: d.GetLibrary(), Title: d.GetName(), DeletedBy: d.GetDeletedBy(),
 		})
 	}
 	return out, nil

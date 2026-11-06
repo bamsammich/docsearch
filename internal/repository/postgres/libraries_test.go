@@ -317,6 +317,141 @@ func (s *LibrariesSuite) TestTheLogKeepsAUsernameTheAccountLost() {
 	s.Equal("ben", events[2].Actor)
 }
 
+// An admin renames a library; its slug stays, and the log keeps the old
+// name. Nobody else may.
+func (s *LibrariesSuite) TestAnAdminRenamesALibrary() {
+	s.team()
+	ctx := s.T().Context()
+	_, err := s.as("ben").Rename(ctx, "team", "Ben's docs")
+	s.Require().ErrorIs(err, sharing.ErrNoLibrary, "an editor is no admin")
+	_, err = s.as("ana").Rename(ctx, "team", "  ")
+	s.Require().ErrorIs(err, sharing.ErrInvalid)
+
+	renamed, err := s.as("ana").Rename(ctx, "team", "Platform docs")
+	s.Require().NoError(err)
+	s.Equal(sharing.Library{Name: "team", Title: "Platform docs", Role: sharing.Admin}, renamed)
+	events, err := s.as("ana").Events(ctx, "team")
+	s.Require().NoError(err)
+	last := events[len(events)-1]
+	s.Equal("rename", last.Action)
+	s.Equal("Team docs", last.Detail)
+}
+
+// Deleting a library takes it from every member at once and fails its
+// jobs; an admin restores it within the grace period.
+func (s *LibrariesSuite) TestADeletedLibraryLeavesEveryoneUntilRestored() {
+	s.team()
+	ctx := s.T().Context()
+	jobs := postgres.NewJobs(s.db.App, pgsession.Scope{User: "ben", Library: s.libraryID("team")})
+	id, _, err := jobs.Add(ctx, "https://example.com/docs", "", false)
+	s.Require().NoError(err)
+
+	_, err = s.as("ben").Delete(ctx, "team")
+	s.Require().ErrorIs(err, sharing.ErrNoLibrary, "an editor is no admin")
+	purgeAt, err := s.as("ana").Delete(ctx, "team")
+	s.Require().NoError(err)
+	s.WithinDuration(time.Now().Add(14*24*time.Hour), purgeAt, time.Minute)
+
+	for _, who := range []string{"ana", "ben"} {
+		libs, err := s.as(who).List(ctx)
+		s.Require().NoError(err)
+		s.Len(libs, 1, who+" reads only their own library")
+	}
+	_, _, err = jobs.Add(ctx, "https://example.com/more", "", false)
+	s.Require().Error(err, "nothing is written into a deleted library")
+	var status string
+	s.Require().NoError(s.db.Owner.QueryRowContext(ctx,
+		`SELECT status FROM ingest_jobs WHERE id = $1`, id).Scan(&status))
+	s.Equal("failed", status)
+
+	deleted, err := s.as("ben").Deleted(ctx)
+	s.Require().NoError(err)
+	s.Empty(deleted, "only an admin sees it to restore")
+	deleted, err = s.as("ana").Deleted(ctx)
+	s.Require().NoError(err)
+	s.Require().Len(deleted, 1)
+	s.Equal("team", deleted[0].Library)
+	s.Equal("ana", deleted[0].DeletedBy)
+
+	_, err = s.as("ben").Restore(ctx, "team")
+	s.Require().ErrorIs(err, sharing.ErrNoLibrary)
+	restored, err := s.as("ana").Restore(ctx, "team")
+	s.Require().NoError(err)
+	s.Equal("team", restored.Name)
+	libs, err := s.as("ben").List(ctx)
+	s.Require().NoError(err)
+	s.Len(libs, 2, "ben reads it again")
+}
+
+// A personal library has no slug, so it is never deleted.
+func (s *LibrariesSuite) TestAPersonalLibraryIsNotDeleted() {
+	_, err := s.as("ana").Delete(s.T().Context(), "personal")
+	s.Require().ErrorIs(err, sharing.ErrNoLibrary)
+}
+
+// Past its grace period a deleted library is purged with everything in it,
+// and its slug is free again.
+func (s *LibrariesSuite) TestALibraryPastItsGracePeriodIsPurged() {
+	s.team()
+	ctx := s.T().Context()
+	lib := s.libraryID("team")
+	_, _, err := postgres.NewJobs(s.db.App, pgsession.Scope{User: "ben", Library: lib}).
+		Add(ctx, "https://example.com/docs", "", false)
+	s.Require().NoError(err)
+	s.document(pgsession.Scope{User: "ben", Library: lib})
+	_, err = s.as("ana").Delete(ctx, "team")
+	s.Require().NoError(err)
+
+	queues := postgres.NewQueues(s.db.App)
+	_, err = queues.Waiting(ctx)
+	s.Require().NoError(err)
+	s.Equal(1, s.count(`SELECT count(*) FROM libraries WHERE slug = 'team'`),
+		"within grace it stays")
+
+	_, err = s.db.Owner.ExecContext(ctx,
+		`UPDATE libraries SET deleted_at = now() - interval '15 days' WHERE library_id = $1`, lib)
+	s.Require().NoError(err)
+	_, err = queues.Waiting(ctx)
+	s.Require().NoError(err)
+
+	s.Zero(s.count(`SELECT count(*) FROM libraries WHERE slug = 'team'`))
+	s.Zero(s.count(`SELECT count(*) FROM documents WHERE library_id = $1`, lib))
+	s.Zero(s.count(`SELECT count(*) FROM pg_class WHERE relname = 'chunks_' || $1`, lib))
+	s.Zero(s.count(`SELECT count(*) FROM library_grants WHERE library_id = $1`, lib))
+	deleted, err := s.as("ana").Deleted(ctx)
+	s.Require().NoError(err)
+	s.Empty(deleted)
+	_, err = s.as("cy").Create(ctx, "team", "A new team")
+	s.Require().NoError(err, "the slug is free once purged")
+}
+
+// document writes one document and its chunk into scope's library.
+func (s *LibrariesSuite) document(scope pgsession.Scope) {
+	ctx := s.T().Context()
+	tx, err := s.db.App.BeginTx(ctx, nil)
+	s.Require().NoError(err)
+	defer func() { s.NoError(pgsession.Rollback(tx)) }()
+	for _, statement := range []string{
+		`SELECT set_config('app.user_id', $1, true), set_config('app.library_id', $2, true)`,
+		`INSERT INTO documents (library_id, doc_id, title, format, source_path, sha256, status)
+		   VALUES ($2, 'guide', 'Guide', 'markdown', '/library/guide.md', 'abc', 'ready')
+		   RETURNING $1::text`,
+		`INSERT INTO chunks (library_id, doc_id, ordinal, heading_path, text)
+		   VALUES ($2, 'guide', 0, 'Guide', 'a chunk') RETURNING $1::text`,
+	} {
+		_, err := tx.ExecContext(ctx, statement, scope.User, scope.Library)
+		s.Require().NoError(err)
+	}
+	s.Require().NoError(tx.Commit())
+}
+
+// count runs a count query as the owner.
+func (s *LibrariesSuite) count(query string, args ...any) int {
+	var n int
+	s.Require().NoError(s.db.Owner.QueryRowContext(s.T().Context(), query, args...).Scan(&n))
+	return n
+}
+
 // An account reads its own username and nobody else's, and one that has not
 // signed in since usernames were recorded reads none.
 func (s *LibrariesSuite) TestAnAccountReadsItsOwnUsername() {

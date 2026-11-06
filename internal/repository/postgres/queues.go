@@ -23,13 +23,17 @@ func NewQueues(db *sql.DB) *Queues {
 	return &Queues{q: pgdbgen.New(db)}
 }
 
-// Waiting fails the queued jobs nobody can be written as any longer, then
-// names each library and requester that has work.
+// Waiting purges libraries deleted longer ago than their grace period,
+// fails the queued jobs nobody can be written as any longer, then names
+// each library and requester that has work.
 //
 // Failing first means a job whose requester lost the right to add to its
 // library is answered in the queue rather than left to wait for a claim
 // that cannot come.
 func (w *Queues) Waiting(ctx context.Context) ([]worker.Queue, error) {
+	if _, err := w.q.PurgeDeletedLibraries(ctx); err != nil {
+		return nil, fmt.Errorf("purge deleted libraries: %w", err)
+	}
 	if _, err := w.q.FailUnclaimableJobs(ctx); err != nil {
 		return nil, fmt.Errorf("fail jobs nobody can claim: %w", err)
 	}

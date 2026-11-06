@@ -125,10 +125,11 @@ CREATE FUNCTION public.app_libraries(min_role text) RETURNS text[]
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
-  SELECT COALESCE(array_agg(library_id), '{}')
-    FROM library_grants
-   WHERE user_id = current_setting('app.user_id', true)
-     AND role_rank(role) >= role_rank(min_role);
+  SELECT COALESCE(array_agg(g.library_id), '{}')
+    FROM library_grants g JOIN libraries l ON l.library_id = g.library_id
+   WHERE g.user_id = current_setting('app.user_id', true)
+     AND role_rank(g.role) >= role_rank(min_role)
+     AND l.deleted_at IS NULL;
 $$;
 
 
@@ -232,6 +233,52 @@ $$;
 
 
 --
+-- Name: delete_library(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.delete_library(lib_slug text) RETURNS timestamp with time zone
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor text := current_setting('app.user_id', true);
+  lib   text := library_by_slug(lib_slug, 'admin');
+  at    timestamptz := now();
+BEGIN
+  IF lib IS NULL THEN
+    RAISE EXCEPTION 'no library named % that you administer', lib_slug USING ERRCODE = 'DSL01';
+  END IF;
+  UPDATE libraries SET deleted_at = at, deleted_by = actor WHERE library_id = lib;
+  UPDATE ingest_jobs
+     SET status = 'failed', permanent = true, lease_until = NULL, updated_at = at,
+         error = 'the library was deleted'
+   WHERE library_id = lib AND status IN ('queued', 'running', 'cancelling');
+  INSERT INTO access_events (library_id, actor, action, subject)
+    VALUES (lib, actor, 'delete', actor);
+  RETURN at + library_grace();
+END;
+$$;
+
+
+--
+-- Name: deleted_libraries(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.deleted_libraries() RETURNS TABLE(slug text, name text, deleted_at timestamp with time zone, purge_at timestamp with time zone, deleted_by text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT l.slug, l.name, l.deleted_at, l.deleted_at + library_grace(), COALESCE(u.username, '')
+    FROM libraries l
+    JOIN library_grants g ON g.library_id = l.library_id
+    LEFT JOIN users u ON u.user_id = l.deleted_by
+   WHERE g.user_id = current_setting('app.user_id', true) AND g.role = 'admin'
+     AND l.deleted_at IS NOT NULL AND NOT library_purgeable(l.library_id)
+   ORDER BY l.deleted_at DESC, l.slug;
+$$;
+
+
+--
 -- Name: fail_unclaimable_jobs(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -311,7 +358,8 @@ CREATE FUNCTION public.invitation_for(lib_slug text) RETURNS text
     AS $$
   SELECT i.library_id
     FROM library_invitations i JOIN libraries l ON l.library_id = i.library_id
-   WHERE l.slug = lib_slug AND i.user_id = current_setting('app.user_id', true);
+   WHERE l.slug = lib_slug AND l.deleted_at IS NULL
+     AND i.user_id = current_setting('app.user_id', true);
 $$;
 
 
@@ -327,6 +375,7 @@ CREATE FUNCTION public.library_by_slug(lib_slug text, min_role text) RETURNS tex
     FROM libraries l
     JOIN library_grants g ON g.library_id = l.library_id
    WHERE l.slug = lib_slug
+     AND l.deleted_at IS NULL
      AND g.user_id = current_setting('app.user_id', true)
      AND role_rank(g.role) >= role_rank(min_role);
 $$;
@@ -336,7 +385,7 @@ $$;
 -- Name: library_events(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.library_events(lib_slug text) RETURNS TABLE(at timestamp with time zone, actor text, action text, subject text, role text)
+CREATE FUNCTION public.library_events(lib_slug text) RETURNS TABLE(at timestamp with time zone, actor text, action text, subject text, role text, detail text)
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
@@ -348,7 +397,7 @@ BEGIN
   END IF;
   RETURN QUERY
     SELECT e.at, COALESCE(a.username, e.actor_name, ''), e.action,
-           COALESCE(s.username, e.subject_name, ''), COALESCE(e.role, '')
+           COALESCE(s.username, e.subject_name, ''), COALESCE(e.role, ''), COALESCE(e.detail, '')
       FROM access_events e
       LEFT JOIN users a ON a.user_id = e.actor
       LEFT JOIN users s ON s.user_id = e.subject
@@ -356,6 +405,15 @@ BEGIN
      ORDER BY e.at, e.id;
 END;
 $$;
+
+
+--
+-- Name: library_grace(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.library_grace() RETURNS interval
+    LANGUAGE sql IMMUTABLE
+    AS $$ SELECT interval '14 days' $$;
 
 
 --
@@ -388,6 +446,19 @@ $$;
 
 
 --
+-- Name: library_purgeable(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.library_purgeable(lib text) RETURNS boolean
+    LANGUAGE sql STABLE
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT EXISTS (SELECT 1 FROM libraries
+                  WHERE library_id = lib AND deleted_at < now() - library_grace());
+$$;
+
+
+--
 -- Name: my_invitations(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -400,6 +471,7 @@ CREATE FUNCTION public.my_invitations() RETURNS TABLE(slug text, name text, role
     JOIN libraries l ON l.library_id = i.library_id
     LEFT JOIN users u ON u.user_id = i.invited_by
    WHERE i.user_id = current_setting('app.user_id', true)
+     AND l.deleted_at IS NULL
    ORDER BY i.invited_at DESC, l.slug;
 $$;
 
@@ -478,6 +550,37 @@ $$;
 
 
 --
+-- Name: purge_deleted_libraries(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.purge_deleted_libraries() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  lib    text;
+  purged integer := 0;
+BEGIN
+  FOR lib IN SELECT library_id FROM libraries
+              WHERE kind = 'shared' AND library_purgeable(library_id) LOOP
+    EXECUTE format('DROP TABLE IF EXISTS %I', 'chunks_' || lib);
+    DELETE FROM index_terms WHERE library_id = lib;
+    DELETE FROM pages WHERE library_id = lib;
+    DELETE FROM documents WHERE library_id = lib;
+    DELETE FROM ingest_jobs WHERE library_id = lib;
+    DELETE FROM responses WHERE library_id = lib;
+    DELETE FROM robots WHERE library_id = lib;
+    DELETE FROM upload_links WHERE library_id = lib;
+    DELETE FROM uploads WHERE library_id = lib;
+    DELETE FROM libraries WHERE library_id = lib;
+    purged := purged + 1;
+  END LOOP;
+  RETURN purged;
+END;
+$$;
+
+
+--
 -- Name: readable_libraries(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -489,6 +592,7 @@ CREATE FUNCTION public.readable_libraries() RETURNS TABLE(library_id text, kind 
     FROM library_grants g
     JOIN libraries l ON l.library_id = g.library_id
    WHERE g.user_id = current_setting('app.user_id', true)
+     AND l.deleted_at IS NULL
    ORDER BY (l.library_id = g.user_id) DESC, l.slug NULLS LAST, l.library_id;
 $$;
 
@@ -552,6 +656,36 @@ $$;
 
 
 --
+-- Name: rename_library(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rename_library(lib_slug text, new_name text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor text := current_setting('app.user_id', true);
+  lib   text := library_by_slug(lib_slug, 'admin');
+  old   text;
+BEGIN
+  IF lib IS NULL THEN
+    RAISE EXCEPTION 'no library named % that you administer', lib_slug USING ERRCODE = 'DSL01';
+  END IF;
+  IF btrim(coalesce(new_name, '')) = '' THEN
+    RAISE EXCEPTION 'a library needs a name' USING ERRCODE = '22023';
+  END IF;
+  SELECT name INTO old FROM libraries WHERE library_id = lib;
+  IF old = btrim(new_name) THEN
+    RETURN;
+  END IF;
+  UPDATE libraries SET name = btrim(new_name) WHERE library_id = lib;
+  INSERT INTO access_events (library_id, actor, action, subject, detail)
+    VALUES (lib, actor, 'rename', actor, old);
+END;
+$$;
+
+
+--
 -- Name: reset_password(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -574,6 +708,32 @@ BEGIN
   END IF;
   DELETE FROM oauth_refresh_tokens WHERE user_id = member;
   RETURN true;
+END;
+$$;
+
+
+--
+-- Name: restore_library(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.restore_library(lib_slug text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor text := current_setting('app.user_id', true);
+  lib   text;
+BEGIN
+  SELECT l.library_id INTO lib
+    FROM libraries l JOIN library_grants g ON g.library_id = l.library_id
+   WHERE l.slug = lib_slug AND l.deleted_at IS NOT NULL AND NOT library_purgeable(l.library_id)
+     AND g.user_id = actor AND g.role = 'admin';
+  IF lib IS NULL THEN
+    RAISE EXCEPTION 'no deleted library named % that you administer', lib_slug USING ERRCODE = 'DSL01';
+  END IF;
+  UPDATE libraries SET deleted_at = NULL, deleted_by = NULL WHERE library_id = lib;
+  INSERT INTO access_events (library_id, actor, action, subject)
+    VALUES (lib, actor, 'restore', actor);
 END;
 $$;
 
@@ -736,7 +896,9 @@ CREATE FUNCTION public.waiting_queues() RETURNS TABLE(library_id text, requested
   SELECT DISTINCT j.library_id, j.requested_by
     FROM ingest_jobs j
     JOIN library_grants g ON g.library_id = j.library_id AND g.user_id = j.requested_by
+    JOIN libraries l ON l.library_id = j.library_id
    WHERE role_rank(g.role) >= role_rank('editor')
+     AND l.deleted_at IS NULL
      AND (j.status = 'queued' OR (j.status = 'running' AND j.lease_until < now()))
    ORDER BY j.library_id, j.requested_by;
 $$;
@@ -758,7 +920,8 @@ CREATE TABLE public.access_events (
     role text,
     actor_name text,
     subject_name text,
-    CONSTRAINT access_events_action_check CHECK ((action = ANY (ARRAY['create'::text, 'grant'::text, 'revoke'::text, 'invite'::text, 'accept'::text, 'decline'::text, 'withdraw'::text])))
+    detail text,
+    CONSTRAINT access_events_action_check CHECK ((action = ANY (ARRAY['create'::text, 'grant'::text, 'revoke'::text, 'invite'::text, 'accept'::text, 'decline'::text, 'withdraw'::text, 'rename'::text, 'delete'::text, 'restore'::text])))
 );
 
 
@@ -981,6 +1144,8 @@ CREATE TABLE public.libraries (
     name text,
     created_by text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone,
+    deleted_by text,
     CONSTRAINT libraries_kind_check CHECK ((kind = ANY (ARRAY['personal'::text, 'shared'::text]))),
     CONSTRAINT libraries_library_id_check CHECK ((library_id ~ '^[a-z0-9_-]{1,40}$'::text)),
     CONSTRAINT libraries_shared_named CHECK (((kind = 'shared'::text) = ((slug IS NOT NULL) AND (name IS NOT NULL)))),
@@ -1669,6 +1834,14 @@ ALTER TABLE ONLY public.libraries
 
 
 --
+-- Name: libraries libraries_deleted_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.libraries
+    ADD CONSTRAINT libraries_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+
+--
 -- Name: library_grants library_grants_granted_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2099,6 +2272,90 @@ CREATE POLICY lib_update ON public.uploads FOR UPDATE USING (((library_id = curr
 --
 
 ALTER TABLE public.pages ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: documents purge; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY purge ON public.documents FOR DELETE TO docsearch_owner USING (public.library_purgeable(library_id));
+
+
+--
+-- Name: index_terms purge; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY purge ON public.index_terms FOR DELETE TO docsearch_owner USING (public.library_purgeable(library_id));
+
+
+--
+-- Name: pages purge; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY purge ON public.pages FOR DELETE TO docsearch_owner USING (public.library_purgeable(library_id));
+
+
+--
+-- Name: responses purge; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY purge ON public.responses FOR DELETE TO docsearch_owner USING (public.library_purgeable(library_id));
+
+
+--
+-- Name: robots purge; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY purge ON public.robots FOR DELETE TO docsearch_owner USING (public.library_purgeable(library_id));
+
+
+--
+-- Name: uploads purge; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY purge ON public.uploads FOR DELETE TO docsearch_owner USING (public.library_purgeable(library_id));
+
+
+--
+-- Name: documents purge_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY purge_read ON public.documents FOR SELECT TO docsearch_owner USING (public.library_purgeable(library_id));
+
+
+--
+-- Name: index_terms purge_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY purge_read ON public.index_terms FOR SELECT TO docsearch_owner USING (public.library_purgeable(library_id));
+
+
+--
+-- Name: pages purge_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY purge_read ON public.pages FOR SELECT TO docsearch_owner USING (public.library_purgeable(library_id));
+
+
+--
+-- Name: responses purge_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY purge_read ON public.responses FOR SELECT TO docsearch_owner USING (public.library_purgeable(library_id));
+
+
+--
+-- Name: robots purge_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY purge_read ON public.robots FOR SELECT TO docsearch_owner USING (public.library_purgeable(library_id));
+
+
+--
+-- Name: uploads purge_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY purge_read ON public.uploads FOR SELECT TO docsearch_owner USING (public.library_purgeable(library_id));
+
 
 --
 -- Name: upload_links redeem; Type: POLICY; Schema: public; Owner: -

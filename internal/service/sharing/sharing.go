@@ -44,13 +44,24 @@ type Invitation struct {
 	InvitedBy string
 }
 
-// Event is one change to who may use a library.
+// Event is one change to a library or to who may use it. Detail is a
+// rename's old name.
 type Event struct {
 	At      time.Time
 	Actor   string
 	Action  string
 	Subject string
 	Role    string
+	Detail  string
+}
+
+// Deleted is a deleted library its admin can still restore until PurgeAt.
+type Deleted struct {
+	DeletedAt time.Time
+	PurgeAt   time.Time
+	Library   string
+	Title     string
+	DeletedBy string
 }
 
 var (

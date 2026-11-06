@@ -20,6 +20,7 @@ type AccessEvent struct {
 	Role        sql.NullString
 	ActorName   sql.NullString
 	SubjectName sql.NullString
+	Detail      sql.NullString
 }
 
 type AccountEvent struct {
@@ -115,6 +116,8 @@ type Library struct {
 	Name      sql.NullString
 	CreatedBy sql.NullString
 	CreatedAt time.Time
+	DeletedAt sql.NullTime
+	DeletedBy sql.NullString
 }
 
 type LibraryGrant struct {
