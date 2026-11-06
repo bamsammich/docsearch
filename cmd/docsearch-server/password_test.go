@@ -372,7 +372,7 @@ func (s *PasswordSuite) TestARefreshTokenRotates() {
 // Removing an account stops its tokens at once, not when they expire.
 func (s *PasswordSuite) TestARemovedAccountsTokensStopWorking() {
 	found, clientID, issued := s.signedIn()
-	s.Require().NoError(s.admin.Remove(s.T().Context(), "alice"))
+	s.Require().NoError(s.admin.Remove(s.T().Context(), "alice", password.Handover{}))
 
 	status, _ := s.callMCP(issued.Access)
 	s.Equal(http.StatusUnauthorized, status, "refused as invalid, so the client signs in again")

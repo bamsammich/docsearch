@@ -38,6 +38,20 @@ UPDATE password_accounts
    SET password_hash = $2, failed_attempts = 0, locked_until = NULL
  WHERE username = $1;
 
+-- Setting a password for someone also ends their sign-ins, by name.
+-- name: ResetPasswordHash :one
+UPDATE password_accounts
+   SET password_hash = $2, failed_attempts = 0, locked_until = NULL
+ WHERE username = $1
+RETURNING user_id;
+
+-- A removal names the administrator who takes over the shared libraries
+-- only the removed account administered, and the account removing it, for
+-- the trigger that hands them on and records it.
+-- name: NameHandover :exec
+SELECT set_config('app.heir', sqlc.arg(heir)::text, true),
+       set_config('app.user_id', sqlc.arg(actor)::text, true);
+
 -- name: DeletePasswordAccount :one
 DELETE FROM password_accounts WHERE username = $1 RETURNING user_id;
 

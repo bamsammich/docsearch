@@ -76,8 +76,14 @@ func (p passwordAccounts) Unlock(ctx context.Context, username string) error {
 	return p.store.Succeeded(ctx, username)
 }
 
-func (p passwordAccounts) Remove(ctx context.Context, username string) error {
-	return p.store.Remove(ctx, username)
+// Remove hands the removed account's libraries to heir, the administrator
+// removing it, and records them as the one who did.
+func (p passwordAccounts) Remove(ctx context.Context, username, heir string) error {
+	by, err := owner.From(ctx)
+	if err != nil {
+		return err
+	}
+	return p.store.Remove(ctx, username, password.Handover{To: heir, By: by})
 }
 
 func (p passwordAccounts) List(ctx context.Context) ([]password.Account, error) {

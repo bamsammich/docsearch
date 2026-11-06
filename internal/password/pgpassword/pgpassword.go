@@ -147,13 +147,41 @@ func (s *Store) SetHash(ctx context.Context, username, hash string) error {
 	return nil
 }
 
-// Remove ends the account's sign-in and every refresh token it holds.
-func (s *Store) Remove(ctx context.Context, username string) error {
+// Reset replaces a password, lifts any lock, and ends every sign-in the
+// account holds.
+func (s *Store) Reset(ctx context.Context, username, hash string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("reset password: %w", err)
+	}
+	q := s.q.WithTx(tx)
+	userID, err := q.ResetPasswordHash(ctx, pgdbgen.ResetPasswordHashParams{
+		Username: username, PasswordHash: hash,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return errors.Join(password.ErrNoSuchAccount, tx.Rollback())
+	}
+	if err != nil {
+		return errors.Join(fmt.Errorf("reset password: %w", err), tx.Rollback())
+	}
+	if err := q.DeleteRefreshTokensOfUser(ctx, userID); err != nil {
+		return errors.Join(fmt.Errorf("end sign-ins: %w", err), tx.Rollback())
+	}
+	return tx.Commit()
+}
+
+// Remove ends the account's sign-in and every refresh token it holds. A
+// shared library only it administered passes on as handover says.
+func (s *Store) Remove(ctx context.Context, username string, handover password.Handover) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("remove account: %w", err)
 	}
 	q := s.q.WithTx(tx)
+	err = q.NameHandover(ctx, pgdbgen.NameHandoverParams{Heir: handover.To, Actor: handover.By})
+	if err != nil {
+		return errors.Join(fmt.Errorf("remove account: %w", err), tx.Rollback())
+	}
 	userID, err := q.DeletePasswordAccount(ctx, username)
 	if errors.Is(err, sql.ErrNoRows) {
 		return errors.Join(password.ErrNoSuchAccount, tx.Rollback())

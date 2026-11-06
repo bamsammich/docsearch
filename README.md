@@ -509,9 +509,11 @@ accounts only: an administrator reads a library only through a grant on it,
 like anyone. The last administrator cannot step down.
 
 Removing an account takes it out of every shared library and frees its
-username for someone new. Its own library stays. An account that is the
-only admin of a shared library is not removed until someone else is made
-that library's admin, so no library is left with nobody to manage it.
+username for someone new. Its own library stays. A shared library it alone
+administered passes to the administrator removing it, and the change shows
+in that library's log. `docsearch account remove` hands such a library to
+the administrator `--to` names, or else to the longest-standing other
+administrator. Resetting a password signs the account out everywhere.
 
 | | |
 |---|---|

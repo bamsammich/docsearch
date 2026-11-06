@@ -359,29 +359,50 @@ CREATE FUNCTION public.password_account_removed() RETURNS trigger
     SET search_path TO 'public', 'pg_temp'
     AS $$
 DECLARE
-  stranded text;
+  actor    text := NULLIF(current_setting('app.user_id', true), '');
+  heir     text;
+  stranded text[];
 BEGIN
-  SELECT string_agg(l.name, ', ' ORDER BY l.name) INTO stranded
+  SELECT array_agg(g.library_id ORDER BY l.name) INTO stranded
     FROM library_grants g JOIN libraries l ON l.library_id = g.library_id
    WHERE g.user_id = OLD.user_id AND g.role = 'admin' AND l.kind = 'shared'
      AND NOT EXISTS (SELECT 1 FROM library_grants other
                       WHERE other.library_id = g.library_id AND other.role = 'admin'
                         AND other.user_id <> OLD.user_id);
   IF stranded IS NOT NULL THEN
-    RAISE EXCEPTION 'removing % would leave % without an admin: make someone else its admin first',
-      OLD.username, stranded USING ERRCODE = 'DSA04';
+    SELECT user_id INTO heir FROM users
+     WHERE username = NULLIF(current_setting('app.heir', true), '')
+       AND admin AND user_id <> OLD.user_id;
+    IF heir IS NULL THEN
+      SELECT user_id INTO heir FROM users
+       WHERE admin AND user_id <> OLD.user_id AND username IS NOT NULL
+       ORDER BY created_at, user_id LIMIT 1;
+    END IF;
+    IF heir IS NULL THEN
+      RAISE EXCEPTION 'removing % would leave % without an admin, and no other administrator can take over: make someone an administrator first',
+        OLD.username,
+        (SELECT string_agg(name, ', ' ORDER BY name) FROM libraries WHERE library_id = ANY (stranded))
+        USING ERRCODE = 'DSA04';
+    END IF;
+    DELETE FROM library_invitations WHERE user_id = heir AND library_id = ANY (stranded);
+    INSERT INTO library_grants (library_id, user_id, role, granted_by)
+      SELECT unnest(stranded), heir, 'admin', actor
+    ON CONFLICT (library_id, user_id) DO UPDATE
+      SET role = 'admin', granted_by = EXCLUDED.granted_by, granted_at = now();
+    INSERT INTO access_events (library_id, actor, action, subject, role)
+      SELECT unnest(stranded), actor, 'grant', heir, 'admin';
   END IF;
   INSERT INTO access_events (library_id, actor, action, subject)
-    SELECT g.library_id, NULLIF(current_setting('app.user_id', true), ''), 'revoke', OLD.user_id
+    SELECT g.library_id, actor, 'revoke', OLD.user_id
       FROM library_grants g JOIN libraries l ON l.library_id = g.library_id
      WHERE g.user_id = OLD.user_id AND l.kind = 'shared';
   DELETE FROM library_grants g USING libraries l
    WHERE l.library_id = g.library_id AND g.user_id = OLD.user_id AND l.kind = 'shared';
   INSERT INTO access_events (library_id, actor, action, subject)
-    SELECT i.library_id, NULLIF(current_setting('app.user_id', true), ''), 'withdraw', OLD.user_id
+    SELECT i.library_id, actor, 'withdraw', OLD.user_id
       FROM library_invitations i WHERE i.user_id = OLD.user_id;
   DELETE FROM library_invitations WHERE user_id = OLD.user_id;
-  UPDATE users SET username = NULL WHERE user_id = OLD.user_id;
+  UPDATE users SET username = NULL, admin = false WHERE user_id = OLD.user_id;
   RETURN OLD;
 END;
 $$;
