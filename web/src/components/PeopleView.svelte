@@ -3,6 +3,7 @@
   import type { Account } from "../gen/docsearch/account/v1/account_pb";
   import { accounts, problem } from "../lib/api";
   import { admin } from "../lib/admin.svelte";
+  import { initialOf } from "../lib/names";
   import { toast } from "../lib/toast.svelte";
   import Icon from "./Icon.svelte";
 
@@ -87,7 +88,8 @@
     try {
       await run();
       toast.show(done);
-      await load();
+      // An administrator who gave up the role leaves Administration.
+      if (admin.available) await load();
     } catch (err) {
       rowError = { ...rowError, [p.username]: refusal(err, p.username) };
     } finally {
@@ -102,7 +104,10 @@
     }, `Reset the password for ${p.username}.`);
   const unlock = (p: Account) => act(p, () => accounts.unlock({ username: p.username }), `Unlocked ${p.username}.`);
   const promote = (p: Account) =>
-    act(p, () => accounts.setAdmin({ username: p.username, admin: !p.admin }),
+    act(p, async () => {
+      await accounts.setAdmin({ username: p.username, admin: !p.admin });
+      if (p.username === admin.username) await admin.load();
+    },
       p.admin ? `${p.username} is no longer an administrator.` : `${p.username} is now an administrator.`);
   const remove = (p: Account) =>
     act(p, async () => {
@@ -129,7 +134,6 @@
     menu.style.left = `${Math.round(Math.max(12, at.right - 210))}px`;
   }
 
-  const initial = (name: string) => (name.match(/[a-z0-9]/i)?.[0] ?? "?").toUpperCase();
 </script>
 
 <div class="page-head"><h1>People</h1></div>
@@ -175,7 +179,7 @@
         {@const since = dateOf(p.createdAt)}
         {@const until = dateOf(p.lockedUntil)}
         <li class="mrow prow">
-          <span class="mavatar" aria-hidden="true">{initial(p.username || "?")}</span>
+          <span class="mavatar" aria-hidden="true">{initialOf(p.username || "?")}</span>
           <span class="mwho">
             <span class="mname">{p.username || "(no username yet)"}{#if self}<span class="muted">{" · you"}</span>{/if}{#if locked(p)}<span class="tag">Locked</span>{/if}</span>
             {#if until}

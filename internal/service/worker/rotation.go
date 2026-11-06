@@ -87,17 +87,38 @@ func (r *Rotation) round(ctx context.Context, built map[Queue]*Service) (bool, e
 		return false, fmt.Errorf("list waiting queues: %w", err)
 	}
 	worked := false
+	var failed []error
 	for _, queue := range queues {
-		service, ok := built[queue]
-		if !ok {
-			service = r.worker(queue)
-			built[queue] = service
-		}
-		did, err := service.Next(ctx)
+		did, err := r.serve(ctx, built, queue)
 		if err != nil {
-			return false, fmt.Errorf("library %s, queued by %s: %w", queue.Library, queue.User, err)
+			failed = append(failed, err)
+			continue
 		}
 		worked = worked || did
 	}
+	// One queue failing is that queue's trouble: a requester who lost the
+	// grant mid-job, say. It is logged and the rest are served. Every queue
+	// failing at once is the worker's own, a database gone away, and stops
+	// it so its supervisor restarts it.
+	if len(failed) > 0 && len(failed) == len(queues) {
+		return false, failed[0]
+	}
+	for _, err := range failed {
+		r.log.ErrorContext(ctx, "a queue failed; serving the others", "err", err)
+	}
 	return worked, nil
+}
+
+// serve offers one queue a job.
+func (r *Rotation) serve(ctx context.Context, built map[Queue]*Service, queue Queue) (bool, error) {
+	service, ok := built[queue]
+	if !ok {
+		service = r.worker(queue)
+		built[queue] = service
+	}
+	did, err := service.Next(ctx)
+	if err != nil {
+		return false, fmt.Errorf("library %s, queued by %s: %w", queue.Library, queue.User, err)
+	}
+	return did, nil
 }

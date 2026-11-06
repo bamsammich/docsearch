@@ -1,5 +1,6 @@
 <script lang="ts">
   import { admin } from "../lib/admin.svelte";
+  import { initialOf } from "../lib/names";
   import { session } from "../lib/session.svelte";
   import Icon from "./Icon.svelte";
 
@@ -7,7 +8,7 @@
   const issuerHost = $derived(config?.issuer ? new URL(config.issuer).host : "");
   // One letter for the button: the account's own name, or the mode's.
   const initial = $derived(
-    config?.auth === "token" ? "T" : (session.who.match(/[a-z0-9]/i)?.[0] ?? "?").toUpperCase(),
+    config?.auth === "token" ? "T" : initialOf(session.who),
   );
   const who = $derived(
     config?.auth === "token" ? "Server token" : config?.auth === "none" ? "Local server" : session.who,

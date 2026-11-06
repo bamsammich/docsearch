@@ -3,6 +3,7 @@
   import type { Library } from "../gen/docsearch/library/v1/library_pb";
   import { problem } from "../lib/api";
   import { libraries, nameOf, own, slugOf } from "../lib/libraries.svelte";
+  import { initialOf } from "../lib/names";
   import { router } from "../lib/router.svelte";
   import { toast } from "../lib/toast.svelte";
   import Icon from "./Icon.svelte";
@@ -31,7 +32,7 @@
   );
   const ownShown = $derived(shown.filter((l) => l.library === own));
   const shared = $derived(shown.filter((l) => l.library !== own));
-  const agentName = $derived(editingSlug ? slug : slugOf(name));
+  const agentName = $derived(editingSlug ? slug.trim().toLowerCase() : slugOf(name));
 
   const roles: Record<string, string> = { admin: "Admin", editor: "Editor", reader: "Reader" };
   function roleOf(lib: Library | undefined): string {
@@ -40,7 +41,7 @@
   }
 
   function initial(lib: Library | undefined): string {
-    return (nameOf(lib).match(/[a-z0-9]/i)?.[0] ?? "?").toUpperCase();
+    return initialOf(nameOf(lib));
   }
 
   function reset(): void {
@@ -105,6 +106,7 @@
     }
     if (!label) {
       error = "The name agents use needs a letter or a digit.";
+      editingSlug = true;
       return;
     }
     busy = true;
@@ -147,13 +149,16 @@
       <form class="picker-new" onsubmit={create} novalidate>
         <label class="lbl" for={`${id}-name`}>New library</label>
         <input class="input" id={`${id}-name`} type="text" maxlength="120" placeholder="Platform docs" autocomplete="off"
-          bind:value={name} bind:this={nameField} aria-invalid={error ? "true" : undefined}
+          bind:value={name} bind:this={nameField} oninput={() => (error = "")} aria-invalid={error ? "true" : undefined}
           aria-describedby={error ? `${id}-err` : undefined} />
         {#if editingSlug}
           <label class="lbl" for={`${id}-slug`}>Name agents use</label>
-          <input class="input mono" id={`${id}-slug`} type="text" maxlength="63" autocomplete="off" spellcheck="false" bind:value={slug} />
+          <input class="input mono" id={`${id}-slug`} type="text" maxlength="63" autocomplete="off" spellcheck="false"
+            bind:value={slug} oninput={() => (error = "")} />
         {:else if agentName}
           <p class="hint">Agents name it <span class="mono">{agentName}</span> · <button type="button" class="linkish" onclick={changeSlug}>Change</button></p>
+        {:else if name.trim()}
+          <p class="hint"><button type="button" class="linkish" onclick={changeSlug}>Choose the name agents use</button></p>
         {/if}
         {#if error}<p class="err" id={`${id}-err`} role="alert">{error}</p>{/if}
         <div class="row-btns">

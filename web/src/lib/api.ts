@@ -8,15 +8,38 @@ import { JobService } from "../gen/docsearch/ingest/v1/job_pb";
 import { LibraryService } from "../gen/docsearch/library/v1/library_pb";
 import { session } from "./session.svelte";
 
+/**
+ * Sent when a handler refuses what the account's role no longer allows: the
+ * page reads the account's libraries and its administrator role again.
+ */
+export const roleChanged = "docsearch:role-changed";
+
 const bearer: Interceptor = (next) => async (req) => {
   if (session.token) req.header.set("Authorization", `Bearer ${session.token}`);
   try {
     return await next(req);
   } catch (err) {
     if (err instanceof ConnectError && err.code === Code.Unauthenticated) session.rejected();
+    if (handlerRefusal(err)) window.dispatchEvent(new Event(roleChanged));
     throw err;
   }
 };
+
+/**
+ * A refusal a handler made, which says why in words. The doors in front of
+ * the handlers, the page address check and the account check, answer a bare
+ * 403 that reads as "HTTP 403".
+ */
+function handlerRefusal(err: unknown): boolean {
+  return err instanceof ConnectError && err.code === Code.PermissionDenied &&
+    err.rawMessage !== "" && !/^HTTP \d+$/.test(err.rawMessage);
+}
+
+/** A server message as a sentence: capitalized, with a full stop. */
+export function sentence(message: string): string {
+  const s = message.replace(/^./, (c) => c.toUpperCase());
+  return /[.!?]$/.test(s) ? s : `${s}.`;
+}
 
 const transport = createConnectTransport({ baseUrl: location.origin, interceptors: [bearer] });
 
@@ -47,6 +70,7 @@ export function refusal(reason = ""): string {
 export function problem(err: unknown): string {
   if (err instanceof ConnectError) {
     if (err.code === Code.Unauthenticated) return "Sign-in failed.";
+    if (err.code === Code.PermissionDenied && handlerRefusal(err)) return sentence(err.rawMessage);
     if (err.code === Code.PermissionDenied) return refusal();
     if (err.code === Code.Unavailable || /fetch|network/i.test(err.rawMessage)) return "docsearch isn't answering.";
     return err.rawMessage || err.message;

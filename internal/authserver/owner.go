@@ -12,7 +12,9 @@ import (
 // Owner names the user a verified request acts for. A token this server
 // issued carries the user as its subject, so no lookup maps one to the
 // other; what is checked is that the account still exists, so removing one
-// stops its tokens at once rather than within the hour. It runs behind
+// stops its tokens at once rather than within the hour. Such a token is
+// refused as invalid, 401, so a client signs in again rather than taking it
+// for a request it may not make. It runs behind
 // resource.Server.Protect, which already checked the issuer and audience.
 func (s *Server) Owner(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -29,7 +31,9 @@ func (s *Server) Owner(next http.Handler) http.Handler {
 			return
 		}
 		if !present {
-			http.Error(w, "this account no longer exists", http.StatusForbidden)
+			w.Header().Set("WWW-Authenticate",
+				`Bearer error="invalid_token", error_description="this account no longer exists"`)
+			http.Error(w, "this account no longer exists", http.StatusUnauthorized)
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(owner.With(r.Context(), identity.Subject)))

@@ -5,6 +5,7 @@
   import { library } from "../lib/library.svelte";
   import { libraries } from "../lib/libraries.svelte";
   import { router } from "../lib/router.svelte";
+  import { initialOf } from "../lib/names";
   import { toast } from "../lib/toast.svelte";
 
   const roles = ["reader", "editor", "admin"] as const;
@@ -42,6 +43,7 @@
       members = listed.members;
       events = logged.events;
     } catch (err) {
+      if (lostLibrary(err)) return void (await lost());
       loadError = problem(err);
     } finally {
       loaded = true;
@@ -108,6 +110,21 @@
     return { lines: lines.reverse(), since };
   });
 
+  // The server answers a library this account no longer changes, or no
+  // longer reads, as one it has no library by.
+  const lostLibrary = (err: unknown) =>
+    err instanceof ConnectError && err.code === Code.NotFound && /^no library/.test(err.rawMessage);
+
+  /** Reads the libraries again after a refusal that says the role changed, and says what changed. */
+  async function lost(): Promise<void> {
+    const name = libraries.name;
+    const of = label;
+    await libraries.load();
+    toast.show(libraries.all.some((l) => l.library === of)
+      ? `You're no longer an admin of ${name}.`
+      : `You're no longer a member of ${name}.`);
+  }
+
   function refusal(err: unknown, who: string): string {
     if (err instanceof ConnectError && err.code === Code.NotFound)
       return `No account named ${who} yet. They need to sign in once before you can invite them.`;
@@ -136,6 +153,7 @@
       invitee = "";
       await load(label);
     } catch (err) {
+      if (lostLibrary(err)) return void (await lost());
       inviteError = refusal(err, who);
       inviteField?.focus();
     } finally {
@@ -155,6 +173,7 @@
       await load(label);
     } catch (err) {
       m.role = before;
+      if (lostLibrary(err)) return void (await lost());
       rowError = { ...rowError, [m.username]: refusal(err, m.username) };
     } finally {
       busy = false;
@@ -169,6 +188,7 @@
       removing = "";
       await load(label);
     } catch (err) {
+      if (lostLibrary(err)) return void (await lost());
       rowError = { ...rowError, [m.username]: refusal(err, m.username) };
     } finally {
       busy = false;
@@ -183,14 +203,16 @@
       toast.show(`You left ${left}.`);
       router.go("library");
     } catch (err) {
-      loadError = refusal(err, me);
       leaving = false;
+      if (lostLibrary(err)) return void (await lost());
+      loadError = err instanceof ConnectError && err.code === Code.FailedPrecondition
+        ? "You're its only admin. Make someone else an admin before you leave."
+        : problem(err);
     } finally {
       busy = false;
     }
   }
 
-  const initial = (name: string) => (name.match(/[a-z0-9]/i)?.[0] ?? "?").toUpperCase();
 </script>
 
 <div class="page-head">
@@ -235,7 +257,7 @@
             {@const self = m.username === me}
             {@const since = story.since.get(m.username)}
             <li class="mrow">
-              <span class="mavatar" aria-hidden="true">{initial(m.username || "?")}</span>
+              <span class="mavatar" aria-hidden="true">{initialOf(m.username || "?")}</span>
               <span class="mwho">
                 <span class="mname">{m.username || "(no username yet)"}{#if self}<span class="muted">{" · you"}</span>{/if}{#if m.role === "admin" && admins === 1}<span class="tag">Only admin</span>{/if}</span>
                 {#if since}<span class="msince">{since}</span>{/if}

@@ -142,7 +142,8 @@ BEGIN
   UPDATE ingest_jobs j
      SET status = 'failed', permanent = true, lease_until = NULL, updated_at = now(),
          error = 'the account that queued it can no longer add to this library'
-   WHERE j.status = 'queued'
+   WHERE (j.status = 'queued'
+          OR (j.status IN ('running', 'cancelling') AND j.lease_until < now()))
      AND NOT EXISTS (
        SELECT 1 FROM library_grants g
         WHERE g.library_id = j.library_id AND g.user_id = j.requested_by

@@ -88,3 +88,42 @@ func (s *RotationSuite) TestANewQueueIsServedWithoutARestart() {
 	s.Require().NoError(rotation.Run(ctx))
 	s.Equal([]string{"new"}, s.claimed)
 }
+
+// One queue failing does not stop the others: a requester who lost the
+// grant mid-job leaves that queue unable to finish, and every other
+// library's work goes on.
+func (s *RotationSuite) TestAFailingQueueDoesNotStopTheOthers() {
+	broken := mocks.NewMockJobs(s.T())
+	broken.EXPECT().Claim(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, errors.New("another worker has taken this job over"))
+	libraries := map[worker.Queue]*worker.Service{
+		queue("gone"): worker.New(broken, mocks.NewMockIngester(s.T()), mocks.NewMockSources(s.T()),
+			worker.Options{Log: slog.New(slog.DiscardHandler)}),
+		queue("b"): s.library("b", 4),
+	}
+	queues := mocks.NewMockQueues(s.T())
+	queues.EXPECT().Waiting(mock.Anything).Return([]worker.Queue{queue("gone"), queue("b")}, nil)
+
+	err := worker.NewRotation(queues, func(q worker.Queue) *worker.Service {
+		return libraries[q]
+	}, time.Millisecond, true, slog.New(slog.DiscardHandler)).Run(s.T().Context())
+
+	s.Require().NoError(err)
+	s.Equal([]string{"b"}, s.claimed)
+}
+
+// Every queue failing at once is the worker's own trouble, and stops it.
+func (s *RotationSuite) TestEveryQueueFailingStopsTheWorker() {
+	broken := mocks.NewMockJobs(s.T())
+	broken.EXPECT().Claim(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, errors.New("connection refused"))
+	queues := mocks.NewMockQueues(s.T())
+	queues.EXPECT().Waiting(mock.Anything).Return([]worker.Queue{queue("a")}, nil)
+
+	err := worker.NewRotation(queues, func(worker.Queue) *worker.Service {
+		return worker.New(broken, mocks.NewMockIngester(s.T()), mocks.NewMockSources(s.T()),
+			worker.Options{Log: slog.New(slog.DiscardHandler)})
+	}, time.Millisecond, true, slog.New(slog.DiscardHandler)).Run(s.T().Context())
+
+	s.Require().ErrorContains(err, "connection refused")
+}

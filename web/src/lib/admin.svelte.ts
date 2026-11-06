@@ -9,6 +9,8 @@ class Admin {
   /** The sign-in mode: none, token, password or oidc. */
   auth = $state("");
   error = $state("");
+  /** Whether the account has been read: until then nothing is known to refuse. */
+  loaded = $state(false);
 
   /** Only password and oidc mode have accounts to manage. */
   get available(): boolean {
@@ -28,6 +30,8 @@ class Admin {
       this.error = "";
     } catch (err) {
       this.error = problem(err);
+    } finally {
+      this.loaded = true;
     }
   }
 }
