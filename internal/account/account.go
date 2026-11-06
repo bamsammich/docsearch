@@ -57,6 +57,9 @@ type Policy struct {
 	// Required is checked on every request, so revoking the claim at the
 	// provider revokes access here. An empty Name requires nothing.
 	Required RequiredClaim
+	// UsernameClaim names the one claim a username is taken from. Empty
+	// takes a verified email, else preferred_username.
+	UsernameClaim string
 	// SignUp creates an account for an identity that has none.
 	SignUp bool
 }
@@ -127,23 +130,54 @@ func (a *Accounts) create(ctx context.Context, identity resource.Identity) (stri
 // checks. A claim that does not fit is not recorded.
 var usernameShape = regexp.MustCompile(`^[a-z0-9._@+-]{1,128}$`)
 
-// UsernameOf is the name a token's account is invited by: its
-// preferred_username, or its email where the provider sends no username,
-// lower-cased. A token with neither, or one whose value does not fit, names
-// none.
-func UsernameOf(info *auth.TokenInfo) (string, bool) {
-	for _, claim := range []string{"preferred_username", "email"} {
-		stated, ok := resource.Stated(info, claim)
-		if !ok {
-			continue
-		}
-		name, ok := stated.(string)
-		name = strings.ToLower(strings.TrimSpace(name))
-		if ok && usernameShape.MatchString(name) {
+// UsernameOf is the name a token's account is invited by, lower-cased.
+//
+// A username decides whose invitations an account receives, so it comes
+// from a claim the provider vouches for. With claim named, it is that claim
+// alone. Otherwise it is the email when email_verified is true, and else
+// preferred_username, which many providers let a user choose. A token
+// whose claims give no name, or a value that does not fit, names none.
+func UsernameOf(info *auth.TokenInfo, claim string) (string, bool) {
+	if claim != "" {
+		return nameIn(info, claim)
+	}
+	if verified(info) {
+		if name, ok := nameIn(info, "email"); ok {
 			return name, true
 		}
 	}
-	return "", false
+	return nameIn(info, "preferred_username")
+}
+
+// nameIn is claim's value as a username, when it holds one.
+func nameIn(info *auth.TokenInfo, claim string) (string, bool) {
+	stated, ok := resource.Stated(info, claim)
+	if !ok {
+		return "", false
+	}
+	name, ok := stated.(string)
+	name = strings.ToLower(strings.TrimSpace(name))
+	if !ok || !usernameShape.MatchString(name) {
+		return "", false
+	}
+	return name, true
+}
+
+// verified reports whether the provider vouches for the token's email. Some
+// providers send email_verified as the string "true" rather than a boolean.
+func verified(info *auth.TokenInfo) bool {
+	stated, ok := resource.Stated(info, "email_verified")
+	if !ok {
+		return false
+	}
+	switch value := stated.(type) {
+	case bool:
+		return value
+	case string:
+		return strings.EqualFold(value, "true")
+	default:
+		return false
+	}
 }
 
 // remember records the username a request's token names, once per account
@@ -151,7 +185,7 @@ func UsernameOf(info *auth.TokenInfo) (string, bool) {
 // request still acts for the right account, and only an invitation by name
 // waits for the next sign-in.
 func (a *Accounts) remember(ctx context.Context, user string, info *auth.TokenInfo) {
-	name, ok := UsernameOf(info)
+	name, ok := UsernameOf(info, a.policy.UsernameClaim)
 	if !ok {
 		return
 	}

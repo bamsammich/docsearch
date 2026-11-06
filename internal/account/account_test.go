@@ -194,10 +194,18 @@ func (s *AccountSuite) TestTheRequiredClaimIsCheckedEveryTime() {
 
 // -- usernames ------------------------------------------------------------
 
-func (s *AccountSuite) TestAUsernameComesFromPreferredUsernameThenEmail() {
+// A username comes from an email the provider verified, else from
+// preferred_username, which many providers let a user choose.
+func (s *AccountSuite) TestAUsernameComesFromAVerifiedEmailThenPreferredUsername() {
 	for want, stated := range map[string]map[string]any{
-		"alice":             {"preferred_username": "Alice", "email": "a@example.com"},
-		"alice@example.com": {"email": "Alice@Example.com"},
+		"bob@example.com": {
+			"preferred_username": "alice", "email": "Bob@Example.com", "email_verified": true,
+		},
+		"carol@example.com": {"email": "carol@example.com", "email_verified": "true"},
+		"alice":             {"preferred_username": "Alice", "email": "dee@example.com"},
+		"eve": {
+			"preferred_username": "eve", "email": "eve@example.com", "email_verified": false,
+		},
 	} {
 		s.SetupTest()
 		s.store.EXPECT().Find(mock.Anything, alice).Return("u-alice", true, nil)
@@ -206,16 +214,40 @@ func (s *AccountSuite) TestAUsernameComesFromPreferredUsernameThenEmail() {
 	}
 }
 
+// An operator who names the claim gets that claim and no other.
+func (s *AccountSuite) TestANamedClaimIsTheOnlySource() {
+	s.store.EXPECT().Find(mock.Anything, alice).Return("u-alice", true, nil)
+	s.store.EXPECT().Name(mock.Anything, "u-alice", "carol").Return(true, nil).Once()
+	stated := map[string]any{
+		"upn": "Carol", "email": "bob@example.com", "email_verified": true,
+	}
+	got := s.send(s.accounts(account.Policy{UsernameClaim: "upn"}), claimsOf(alice, stated))
+	s.Equal(http.StatusOK, got.code)
+}
+
 func (s *AccountSuite) TestAClaimThatIsNoUsernameRecordsNothing() {
-	for _, stated := range []map[string]any{
-		{"preferred_username": "has space"},
-		{"email": 42},
-		nil,
+	for name, c := range map[string]struct {
+		stated map[string]any
+		claim  string
+	}{
+		"a name that does not fit": {stated: map[string]any{"preferred_username": "has space"}},
+		"an unverified email":      {stated: map[string]any{"email": "alice@example.com"}},
+		"an email that is no text": {stated: map[string]any{"email": 42, "email_verified": true}},
+		"a named claim not sent": {
+			stated: map[string]any{"preferred_username": "alice"}, claim: "upn",
+		},
+		"no claims": {},
 	} {
-		s.SetupTest()
-		s.store.EXPECT().Find(mock.Anything, alice).Return("u-alice", true, nil)
-		s.Equal(http.StatusOK, s.send(s.accounts(account.Policy{}), claimsOf(alice, stated)).code)
-		s.store.AssertNotCalled(s.T(), "Name", mock.Anything, mock.Anything, mock.Anything)
+		s.Run(name, func() {
+			s.SetupTest()
+			s.store.EXPECT().Find(mock.Anything, alice).Return("u-alice", true, nil)
+			got := s.send(
+				s.accounts(account.Policy{UsernameClaim: c.claim}),
+				claimsOf(alice, c.stated),
+			)
+			s.Equal(http.StatusOK, got.code)
+			s.store.AssertNotCalled(s.T(), "Name", mock.Anything, mock.Anything, mock.Anything)
+		})
 	}
 }
 

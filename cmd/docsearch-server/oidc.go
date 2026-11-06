@@ -102,7 +102,8 @@ func oidcAccess(
 		Required: account.RequiredClaim{
 			Name: cfg.RequiredClaimName, Value: cfg.RequiredClaimValue,
 		},
-		SignUp: cfg.SignUp,
+		SignUp:        cfg.SignUp,
+		UsernameClaim: cfg.UsernameClaim,
 	}, log)
 	return access{
 		guard: func(next http.Handler) http.Handler {

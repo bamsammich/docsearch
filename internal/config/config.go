@@ -100,8 +100,11 @@ type OIDC struct {
 	// carry.
 	RequiredClaimName  string
 	RequiredClaimValue string
-	ScopesSupported    []string
-	RequiredScopes     []string
+	// UsernameClaim names the claim usernames come from. Empty takes a
+	// verified email, else preferred_username.
+	UsernameClaim   string
+	ScopesSupported []string
+	RequiredScopes  []string
 	// SignUp creates an account for an identity that has none.
 	SignUp bool
 }
@@ -144,6 +147,7 @@ const (
 	EnvOIDCClientSecret       = "DOCSEARCH_OIDC_CLIENT_SECRET" //nolint:gosec // name of a variable, not a credential
 	EnvOIDCDefaultOwner       = "DOCSEARCH_OIDC_DEFAULT_OWNER"
 	EnvOIDCSignUp             = "DOCSEARCH_OIDC_SIGN_UP"
+	EnvOIDCUsernameClaim      = "DOCSEARCH_OIDC_USERNAME_CLAIM"
 	EnvOIDCRequiredClaimName  = "DOCSEARCH_OIDC_REQUIRED_CLAIM_NAME"
 	EnvOIDCRequiredClaimValue = "DOCSEARCH_OIDC_REQUIRED_CLAIM_VALUE"
 
