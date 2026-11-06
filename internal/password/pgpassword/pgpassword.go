@@ -35,6 +35,9 @@ func New(db *sql.DB) *Store {
 // whether in password_accounts or in users.
 const uniqueViolation = "23505"
 
+// stranded is the SQLSTATE of removing a shared library's only admin.
+const stranded = "DSA04"
+
 // Add creates the account's library and its sign-in in one transaction, so
 // there is never a library nobody can sign in to, nor a sign-in with no
 // library.
@@ -154,6 +157,10 @@ func (s *Store) Remove(ctx context.Context, username string) error {
 	userID, err := q.DeletePasswordAccount(ctx, username)
 	if errors.Is(err, sql.ErrNoRows) {
 		return errors.Join(password.ErrNoSuchAccount, tx.Rollback())
+	}
+	if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) && pgErr.Code == stranded {
+		// The database names the libraries, which is what the operator needs.
+		return errors.Join(password.Stranded{Detail: pgErr.Message}, tx.Rollback())
 	}
 	if err != nil {
 		return errors.Join(fmt.Errorf("remove account: %w", err), tx.Rollback())

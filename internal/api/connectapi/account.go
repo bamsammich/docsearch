@@ -326,6 +326,7 @@ var adminCodes = map[error]connect.Code{
 	admin.ErrLastAdmin:        connect.CodeFailedPrecondition,
 	admin.ErrNoPasswords:      connect.CodeFailedPrecondition,
 	admin.ErrSelf:             connect.CodeFailedPrecondition,
+	password.ErrStranded:      connect.CodeFailedPrecondition,
 	password.ErrTaken:         connect.CodeAlreadyExists,
 	password.ErrUsername:      connect.CodeInvalidArgument,
 }

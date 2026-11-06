@@ -255,6 +255,39 @@ $$;
 
 
 --
+-- Name: password_account_removed(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.password_account_removed() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  stranded text;
+BEGIN
+  SELECT string_agg(l.name, ', ' ORDER BY l.name) INTO stranded
+    FROM library_grants g JOIN libraries l ON l.library_id = g.library_id
+   WHERE g.user_id = OLD.user_id AND g.role = 'admin' AND l.kind = 'shared'
+     AND NOT EXISTS (SELECT 1 FROM library_grants other
+                      WHERE other.library_id = g.library_id AND other.role = 'admin'
+                        AND other.user_id <> OLD.user_id);
+  IF stranded IS NOT NULL THEN
+    RAISE EXCEPTION 'removing % would leave % without an admin: make someone else its admin first',
+      OLD.username, stranded USING ERRCODE = 'DSA04';
+  END IF;
+  INSERT INTO access_events (library_id, actor, action, subject)
+    SELECT g.library_id, NULLIF(current_setting('app.user_id', true), ''), 'revoke', OLD.user_id
+      FROM library_grants g JOIN libraries l ON l.library_id = g.library_id
+     WHERE g.user_id = OLD.user_id AND l.kind = 'shared';
+  DELETE FROM library_grants g USING libraries l
+   WHERE l.library_id = g.library_id AND g.user_id = OLD.user_id AND l.kind = 'shared';
+  UPDATE users SET username = NULL WHERE user_id = OLD.user_id;
+  RETURN OLD;
+END;
+$$;
+
+
+--
 -- Name: password_account_username(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1256,6 +1289,13 @@ ALTER INDEX public.idx_chunks_doc_ord ATTACH PARTITION public.chunks_default_use
 --
 
 ALTER INDEX public.idx_chunks_doc_section ATTACH PARTITION public.chunks_default_user_id_doc_id_section_idx;
+
+
+--
+-- Name: password_accounts password_account_removed; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER password_account_removed BEFORE DELETE ON public.password_accounts FOR EACH ROW EXECUTE FUNCTION public.password_account_removed();
 
 
 --
