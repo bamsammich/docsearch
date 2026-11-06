@@ -1,9 +1,11 @@
 -- Password accounts are read before any user is known, by the sign-in page,
--- and written by an operator through `docsearch account`. Neither names a
--- user, and the table carries no row-level security.
+-- and the table carries no row-level security. Adding, resetting and
+-- removing one goes through definer functions, which refuse anyone but an
+-- administrator or the owner role.
 
--- name: InsertPasswordAccount :exec
-INSERT INTO password_accounts (username, user_id, password_hash) VALUES ($1, $2, $3);
+-- name: AddPasswordAccount :exec
+SELECT add_password_account(sqlc.arg(username)::text, sqlc.arg(user_id)::text,
+                            sqlc.arg(password_hash)::text);
 
 -- name: PasswordAccountByUsername :one
 SELECT username, user_id, password_hash, failed_attempts, locked_until, created_at
@@ -38,26 +40,20 @@ UPDATE password_accounts
    SET password_hash = $2, failed_attempts = 0, locked_until = NULL
  WHERE username = $1;
 
--- Setting a password for someone also ends their sign-ins, by name.
--- name: ResetPasswordHash :one
-UPDATE password_accounts
-   SET password_hash = $2, failed_attempts = 0, locked_until = NULL
- WHERE username = $1
-RETURNING user_id;
+-- Setting a password for someone also ends their sign-ins. found is false
+-- when no account holds the name.
+-- name: ResetPassword :one
+SELECT reset_password(sqlc.arg(username)::text, sqlc.arg(password_hash)::text)::boolean AS found;
 
 -- A removal names the administrator who takes over the shared libraries
--- only the removed account administered, and the account removing it, for
--- the trigger that hands them on and records it.
--- name: NameHandover :exec
-SELECT set_config('app.heir', sqlc.arg(heir)::text, true),
-       set_config('app.user_id', sqlc.arg(actor)::text, true);
+-- only the removed account administered, for the trigger that hands them on.
+-- name: NameHeir :exec
+SELECT set_config('app.heir', sqlc.arg(heir)::text, true);
 
--- name: DeletePasswordAccount :one
-DELETE FROM password_accounts WHERE username = $1 RETURNING user_id;
-
--- Removing an account ends every sign-in it holds.
--- name: DeleteRefreshTokensOfUser :exec
-DELETE FROM oauth_refresh_tokens WHERE user_id = $1;
+-- Removing an account ends every sign-in it holds. found is false when no
+-- account holds the name.
+-- name: RemovePasswordAccount :one
+SELECT remove_password_account(sqlc.arg(username)::text)::boolean AS found;
 
 -- name: ListPasswordAccounts :many
 SELECT username, user_id, failed_attempts, locked_until, created_at

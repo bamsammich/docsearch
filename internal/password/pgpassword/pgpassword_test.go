@@ -1,11 +1,14 @@
 package pgpassword_test
 
 import (
+	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/bamsammich/docsearch/internal/owner"
@@ -203,9 +206,9 @@ func (s *StoreSuite) as(user string, statements ...string) {
 func (s *StoreSuite) TestARemovedUsernameCanBeAddedAgain() {
 	ctx := s.T().Context()
 	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
-	s.Require().NoError(s.app.Remove(ctx, "alice", password.Handover{}))
+	s.Require().NoError(s.admin.Remove(ctx, "alice", password.Handover{}))
 
-	s.Require().NoError(s.app.Add(ctx, "alice", "user-a2", "hash", false))
+	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a2", "hash", false))
 	var owner string
 	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx,
 		`SELECT user_id FROM users WHERE username = 'alice'`).Scan(&owner))
@@ -251,7 +254,8 @@ func (s *StoreSuite) TestASharedLibraryPassesToTheNamedAdministrator() {
 	s.admins("carol", "bob")
 	s.as("user-a", `SELECT create_library('team', 'Team docs')`)
 
-	s.Require().NoError(s.app.Remove(ctx, "alice", password.Handover{To: "bob", By: "user-b"}))
+	s.Require().NoError(s.app.Remove(owner.With(ctx, "user-b"), "alice",
+		password.Handover{To: "bob"}))
 
 	s.Equal([]string{"bob"}, s.adminsOf("team"))
 	var granted int
@@ -276,7 +280,8 @@ func (s *StoreSuite) TestWithoutAnAdministratorNamedTheLongestStandingTakesOver(
 		`SELECT create_library('ops', 'Ops docs')`)
 	s.as("user-a", `SELECT grant_library('ops', 'dave', 'editor')`)
 
-	s.Require().NoError(s.app.Remove(ctx, "alice", password.Handover{To: "dave"}))
+	s.Require().NoError(s.app.Remove(owner.With(ctx, "user-b"), "alice",
+		password.Handover{To: "dave"}))
 
 	s.Equal([]string{"carol"}, s.adminsOf("team"))
 	s.Equal([]string{"carol"}, s.adminsOf("ops"))
@@ -292,7 +297,8 @@ func (s *StoreSuite) TestAnInvitedHeirBecomesAdmin() {
 	s.as("user-a", `SELECT create_library('team', 'Team docs')`,
 		`SELECT grant_library('team', 'bob', 'reader')`)
 
-	s.Require().NoError(s.app.Remove(ctx, "alice", password.Handover{To: "bob", By: "user-b"}))
+	s.Require().NoError(s.app.Remove(owner.With(ctx, "user-b"), "alice",
+		password.Handover{To: "bob"}))
 
 	s.Equal([]string{"bob"}, s.adminsOf("team"))
 	var open int
@@ -309,7 +315,7 @@ func (s *StoreSuite) TestWithNoAdministratorToTakeOverTheRemovalIsRefused() {
 	s.admins("alice")
 	s.as("user-a", `SELECT create_library('team', 'Team docs')`)
 
-	err := s.app.Remove(ctx, "alice", password.Handover{})
+	err := s.admin.Remove(ctx, "alice", password.Handover{})
 	s.Require().ErrorIs(err, password.ErrStranded)
 	s.Require().ErrorContains(err, "Team docs")
 
@@ -324,7 +330,7 @@ func (s *StoreSuite) TestARemovedAccountIsNoLongerAnAdministrator() {
 	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
 	s.admins("alice")
 
-	s.Require().NoError(s.app.Remove(ctx, "alice", password.Handover{}))
+	s.Require().NoError(s.admin.Remove(ctx, "alice", password.Handover{}))
 
 	var admin bool
 	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx,
@@ -348,13 +354,13 @@ func (s *StoreSuite) TestAResetEndsTheAccountsSignIns() {
 		s.Require().NoError(err)
 	}
 
-	s.Require().NoError(s.app.Reset(ctx, "alice", "new-hash"))
+	s.Require().NoError(s.admin.Reset(ctx, "alice", "new-hash"))
 
 	var tokens int
 	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx,
 		`SELECT count(*) FROM oauth_refresh_tokens WHERE user_id = 'user-a'`).Scan(&tokens))
 	s.Equal(0, tokens)
-	s.Require().ErrorIs(s.app.Reset(ctx, "nobody", "x"), password.ErrNoSuchAccount)
+	s.Require().ErrorIs(s.admin.Reset(ctx, "nobody", "x"), password.ErrNoSuchAccount)
 }
 
 // Once someone else administers the library, removing the account takes it
@@ -367,7 +373,7 @@ func (s *StoreSuite) TestARemovedAccountLeavesSharedLibrariesAndKeepsItsOwn() {
 		`SELECT grant_library('team', 'bob', 'admin')`)
 	s.as("user-b", `SELECT accept_invitation('team')`)
 
-	s.Require().NoError(s.app.Remove(ctx, "alice", password.Handover{}))
+	s.Require().NoError(s.admin.Remove(ctx, "alice", password.Handover{}))
 
 	var shared, own, revoked int
 	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx, `
@@ -392,7 +398,7 @@ func (s *StoreSuite) TestARemovedAccountsInvitationsAreWithdrawn() {
 	s.as("user-b", `SELECT create_library('team', 'Team docs')`,
 		`SELECT grant_library('team', 'alice', 'reader')`)
 
-	s.Require().NoError(s.app.Remove(ctx, "alice", password.Handover{}))
+	s.Require().NoError(s.admin.Remove(ctx, "alice", password.Handover{}))
 
 	var open, withdrawn int
 	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx,
@@ -403,4 +409,102 @@ func (s *StoreSuite) TestARemovedAccountsInvitationsAreWithdrawn() {
 	).Scan(&withdrawn))
 	s.Equal(0, open)
 	s.Equal(1, withdrawn)
+}
+
+// sqlstate is the SQLSTATE err carries, or empty when it carries none.
+func sqlstate(err error) string {
+	if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) {
+		return pgErr.Code
+	}
+	return ""
+}
+
+// insufficientPrivilege is the SQLSTATE of a statement the role holds no
+// grant for.
+const insufficientPrivilege = "42501"
+
+// notAdministrator is the SQLSTATE an account definer refuses with.
+const notAdministrator = "DSA01"
+
+// The request role reads accounts and updates what signing in writes, and
+// nothing more: adding a row, removing one, or renaming one is refused.
+func (s *StoreSuite) TestTheRequestRoleCannotWriteAccountsDirectly() {
+	ctx := s.T().Context()
+	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
+	s.Require().NoError(s.admin.Add(ctx, "bob", "user-b", "hash", false))
+
+	for _, statement := range []string{
+		`INSERT INTO password_accounts (username, user_id, password_hash)
+		   VALUES ('mallory', 'user-b', 'hash')`,
+		`DELETE FROM password_accounts WHERE username = 'alice'`,
+		`UPDATE password_accounts SET username = 'mallory' WHERE username = 'alice'`,
+		`UPDATE password_accounts SET user_id = 'user-b' WHERE username = 'alice'`,
+	} {
+		_, err := s.pg.App.ExecContext(ctx, statement)
+		s.Equal(insufficientPrivilege, sqlstate(err), statement)
+	}
+
+	s.Require().NoError(s.app.SetHash(ctx, "alice", "rehashed"),
+		"a correct password is rehashed as the request role")
+	s.Require().NoError(s.app.Succeeded(ctx, "alice"))
+	record, found, err := s.app.Find(ctx, "alice")
+	s.Require().NoError(err)
+	s.True(found)
+	s.Equal("rehashed", record.Hash)
+}
+
+// Each account change asked for by someone who is no administrator, or by
+// nobody at all, is refused by the database and changes nothing.
+func (s *StoreSuite) TestANonAdministratorCannotManageAccounts() {
+	ctx := s.T().Context()
+	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
+	s.Require().NoError(s.admin.Add(ctx, "bob", "user-b", "hash", false))
+
+	for name, asker := range map[string]context.Context{
+		"a member": owner.With(ctx, "user-a"),
+		"nobody":   ctx,
+	} {
+		err := s.app.Add(asker, "mallory", "user-m", "hash", false)
+		s.Equal(notAdministrator, sqlstate(err), "add, asked by %s", name)
+		err = s.app.Reset(asker, "bob", "new-hash")
+		s.Equal(notAdministrator, sqlstate(err), "reset, asked by %s", name)
+		err = s.app.Remove(asker, "bob", password.Handover{})
+		s.Equal(notAdministrator, sqlstate(err), "remove, asked by %s", name)
+	}
+
+	_, found, err := s.app.Find(ctx, "mallory")
+	s.Require().NoError(err)
+	s.False(found, "the refused add left no sign-in")
+	var users int
+	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx,
+		`SELECT count(*) FROM users WHERE user_id = 'user-m'`).Scan(&users))
+	s.Zero(users, "the refused add left no library")
+	record, found, err := s.app.Find(ctx, "bob")
+	s.Require().NoError(err)
+	s.True(found, "the refused removal left the sign-in")
+	s.Equal("hash", record.Hash, "the refused reset left the password")
+}
+
+// An administrator manages accounts through the request role, as the
+// library UI does.
+func (s *StoreSuite) TestAnAdministratorManagesAccountsAsTheRequestRole() {
+	ctx := s.T().Context()
+	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
+	s.admins("alice")
+	asAlice := owner.With(ctx, "user-a")
+
+	s.Require().NoError(s.app.Add(asAlice, "bob", "user-b", "hash", false))
+	s.Require().ErrorIs(s.app.Add(asAlice, "bob", "user-b2", "hash", false), password.ErrTaken)
+	s.Require().NoError(s.app.Reset(asAlice, "bob", "new-hash"))
+	record, _, err := s.app.Find(ctx, "bob")
+	s.Require().NoError(err)
+	s.Equal("new-hash", record.Hash)
+	s.Require().ErrorIs(s.app.Reset(asAlice, "nobody", "x"), password.ErrNoSuchAccount)
+
+	s.Require().NoError(s.app.Remove(asAlice, "bob", password.Handover{}))
+	_, found, err := s.app.Find(ctx, "bob")
+	s.Require().NoError(err)
+	s.False(found)
+	s.Require().ErrorIs(s.app.Remove(asAlice, "bob", password.Handover{}),
+		password.ErrNoSuchAccount)
 }

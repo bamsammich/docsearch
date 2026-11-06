@@ -11,6 +11,27 @@ import (
 	"time"
 )
 
+const addPasswordAccount = `-- name: AddPasswordAccount :exec
+
+SELECT add_password_account($1::text, $2::text,
+                            $3::text)
+`
+
+type AddPasswordAccountParams struct {
+	Username     string
+	UserID       string
+	PasswordHash string
+}
+
+// Password accounts are read before any user is known, by the sign-in page,
+// and the table carries no row-level security. Adding, resetting and
+// removing one goes through definer functions, which refuse anyone but an
+// administrator or the owner role.
+func (q *Queries) AddPasswordAccount(ctx context.Context, arg AddPasswordAccountParams) error {
+	_, err := q.db.ExecContext(ctx, addPasswordAccount, arg.Username, arg.UserID, arg.PasswordHash)
+	return err
+}
+
 const beginSignIn = `-- name: BeginSignIn :one
 UPDATE password_accounts
    SET failed_attempts = CASE WHEN locked_until IS NULL THEN failed_attempts + 1 ELSE 1 END,
@@ -76,46 +97,6 @@ func (q *Queries) CreatePasswordUser(ctx context.Context, userID string) error {
 	return err
 }
 
-const deletePasswordAccount = `-- name: DeletePasswordAccount :one
-DELETE FROM password_accounts WHERE username = $1 RETURNING user_id
-`
-
-func (q *Queries) DeletePasswordAccount(ctx context.Context, username string) (string, error) {
-	row := q.db.QueryRowContext(ctx, deletePasswordAccount, username)
-	var user_id string
-	err := row.Scan(&user_id)
-	return user_id, err
-}
-
-const deleteRefreshTokensOfUser = `-- name: DeleteRefreshTokensOfUser :exec
-DELETE FROM oauth_refresh_tokens WHERE user_id = $1
-`
-
-// Removing an account ends every sign-in it holds.
-func (q *Queries) DeleteRefreshTokensOfUser(ctx context.Context, userID string) error {
-	_, err := q.db.ExecContext(ctx, deleteRefreshTokensOfUser, userID)
-	return err
-}
-
-const insertPasswordAccount = `-- name: InsertPasswordAccount :exec
-
-INSERT INTO password_accounts (username, user_id, password_hash) VALUES ($1, $2, $3)
-`
-
-type InsertPasswordAccountParams struct {
-	Username     string
-	UserID       string
-	PasswordHash string
-}
-
-// Password accounts are read before any user is known, by the sign-in page,
-// and written by an operator through `docsearch account`. Neither names a
-// user, and the table carries no row-level security.
-func (q *Queries) InsertPasswordAccount(ctx context.Context, arg InsertPasswordAccountParams) error {
-	_, err := q.db.ExecContext(ctx, insertPasswordAccount, arg.Username, arg.UserID, arg.PasswordHash)
-	return err
-}
-
 const listPasswordAccounts = `-- name: ListPasswordAccounts :many
 SELECT username, user_id, failed_attempts, locked_until, created_at
   FROM password_accounts ORDER BY username
@@ -158,21 +139,14 @@ func (q *Queries) ListPasswordAccounts(ctx context.Context) ([]ListPasswordAccou
 	return items, nil
 }
 
-const nameHandover = `-- name: NameHandover :exec
-SELECT set_config('app.heir', $1::text, true),
-       set_config('app.user_id', $2::text, true)
+const nameHeir = `-- name: NameHeir :exec
+SELECT set_config('app.heir', $1::text, true)
 `
 
-type NameHandoverParams struct {
-	Heir  string
-	Actor string
-}
-
 // A removal names the administrator who takes over the shared libraries
-// only the removed account administered, and the account removing it, for
-// the trigger that hands them on and records it.
-func (q *Queries) NameHandover(ctx context.Context, arg NameHandoverParams) error {
-	_, err := q.db.ExecContext(ctx, nameHandover, arg.Heir, arg.Actor)
+// only the removed account administered, for the trigger that hands them on.
+func (q *Queries) NameHeir(ctx context.Context, heir string) error {
+	_, err := q.db.ExecContext(ctx, nameHeir, heir)
 	return err
 }
 
@@ -206,24 +180,35 @@ func (q *Queries) PasswordAccountExists(ctx context.Context, userID string) (boo
 	return present, err
 }
 
-const resetPasswordHash = `-- name: ResetPasswordHash :one
-UPDATE password_accounts
-   SET password_hash = $2, failed_attempts = 0, locked_until = NULL
- WHERE username = $1
-RETURNING user_id
+const removePasswordAccount = `-- name: RemovePasswordAccount :one
+SELECT remove_password_account($1::text)::boolean AS found
 `
 
-type ResetPasswordHashParams struct {
+// Removing an account ends every sign-in it holds. found is false when no
+// account holds the name.
+func (q *Queries) RemovePasswordAccount(ctx context.Context, username string) (bool, error) {
+	row := q.db.QueryRowContext(ctx, removePasswordAccount, username)
+	var found bool
+	err := row.Scan(&found)
+	return found, err
+}
+
+const resetPassword = `-- name: ResetPassword :one
+SELECT reset_password($1::text, $2::text)::boolean AS found
+`
+
+type ResetPasswordParams struct {
 	Username     string
 	PasswordHash string
 }
 
-// Setting a password for someone also ends their sign-ins, by name.
-func (q *Queries) ResetPasswordHash(ctx context.Context, arg ResetPasswordHashParams) (string, error) {
-	row := q.db.QueryRowContext(ctx, resetPasswordHash, arg.Username, arg.PasswordHash)
-	var user_id string
-	err := row.Scan(&user_id)
-	return user_id, err
+// Setting a password for someone also ends their sign-ins. found is false
+// when no account holds the name.
+func (q *Queries) ResetPassword(ctx context.Context, arg ResetPasswordParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, resetPassword, arg.Username, arg.PasswordHash)
+	var found bool
+	err := row.Scan(&found)
+	return found, err
 }
 
 const setPasswordHash = `-- name: SetPasswordHash :execrows

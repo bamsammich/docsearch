@@ -52,7 +52,8 @@ func newAccountRoute(cfg config.Config, db *sql.DB) (route, error) {
 }
 
 // passwordAccounts are password mode's accounts as an administrator changes
-// them: the same operations `docsearch account` runs with the owner DSN.
+// them: the same operations `docsearch account` runs with the owner DSN. The
+// context names the administrator, and the database refuses anyone else.
 type passwordAccounts struct {
 	accounts *password.Accounts
 	store    *pgpassword.Store
@@ -77,13 +78,10 @@ func (p passwordAccounts) Unlock(ctx context.Context, username string) error {
 }
 
 // Remove hands the removed account's libraries to heir, the administrator
-// removing it, and records them as the one who did.
+// removing it. The store records the user the context names as the one who
+// did.
 func (p passwordAccounts) Remove(ctx context.Context, username, heir string) error {
-	by, err := owner.From(ctx)
-	if err != nil {
-		return err
-	}
-	return p.store.Remove(ctx, username, password.Handover{To: heir, By: by})
+	return p.store.Remove(ctx, username, password.Handover{To: heir})
 }
 
 func (p passwordAccounts) List(ctx context.Context) ([]password.Account, error) {

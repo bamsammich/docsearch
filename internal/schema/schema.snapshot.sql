@@ -72,6 +72,38 @@ $$;
 
 
 --
+-- Name: add_password_account(text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.add_password_account(new_username text, new_user_id text, new_hash text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+BEGIN
+  IF NOT administers_accounts() THEN
+    RAISE EXCEPTION 'only an administrator manages accounts' USING ERRCODE = 'DSA01';
+  END IF;
+  INSERT INTO password_accounts (username, user_id, password_hash)
+    VALUES (new_username, new_user_id, new_hash);
+END;
+$$;
+
+
+--
+-- Name: administers_accounts(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.administers_accounts() RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT session_user = current_user
+      OR COALESCE((SELECT admin FROM users
+                    WHERE user_id = NULLIF(current_setting('app.user_id', true), '')), false);
+$$;
+
+
+--
 -- Name: admins_left(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -491,6 +523,58 @@ CREATE FUNCTION public.redeem_upload_link(link_hash text) RETURNS TABLE(library_
   UPDATE upload_links SET used_at = now()
    WHERE token_hash = link_hash AND used_at IS NULL AND expires_at > now()
   RETURNING library_id, issued_by;
+$$;
+
+
+--
+-- Name: remove_password_account(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.remove_password_account(member_username text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  member text;
+BEGIN
+  IF NOT administers_accounts() THEN
+    RAISE EXCEPTION 'only an administrator manages accounts' USING ERRCODE = 'DSA01';
+  END IF;
+  DELETE FROM password_accounts WHERE username = member_username
+  RETURNING user_id INTO member;
+  IF member IS NULL THEN
+    RETURN false;
+  END IF;
+  DELETE FROM oauth_refresh_tokens WHERE user_id = member;
+  RETURN true;
+END;
+$$;
+
+
+--
+-- Name: reset_password(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.reset_password(member_username text, new_hash text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  member text;
+BEGIN
+  IF NOT administers_accounts() THEN
+    RAISE EXCEPTION 'only an administrator manages accounts' USING ERRCODE = 'DSA01';
+  END IF;
+  UPDATE password_accounts
+     SET password_hash = new_hash, failed_attempts = 0, locked_until = NULL
+   WHERE username = member_username
+  RETURNING user_id INTO member;
+  IF member IS NULL THEN
+    RETURN false;
+  END IF;
+  DELETE FROM oauth_refresh_tokens WHERE user_id = member;
+  RETURN true;
+END;
 $$;
 
 
