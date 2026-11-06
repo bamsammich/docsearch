@@ -114,8 +114,8 @@ spec:
           env:
             - name: DOCSEARCH_DSN
               valueFrom: { secretKeyRef: { name: docsearch-db, key: appDSN } }
-            # No DOCSEARCH_USER: the worker takes a job from every account
-            # in turn, so an account created by a sign-up is served at once.
+            # No DOCSEARCH_USER: the worker takes a job from every waiting
+            # queue in turn, so an account created by a sign-up is served at once.
           volumeMounts:
             # Read-write: the worker is what actually opens the documents.
             - { name: library, mountPath: /library }

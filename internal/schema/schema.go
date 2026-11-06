@@ -49,7 +49,7 @@ var migrations embed.FS
 // section did when it began holding section numbers rather than page
 // numbers, is invisible to any structural check while silently changing what
 // queries return.
-const Version = 18
+const Version = 19
 
 // History is readable, so a version mismatch can be diagnosed without
 // reading the git log.
@@ -79,6 +79,7 @@ var History = map[int]string{
 	17: "the app role may read chunks_default, so search can name its own BM25 index",
 	18: "rows belong to a library, reached through a grant: libraries, library_grants, " +
 		"user_id renamed library_id on every tenant table, and policies that check both",
+	19: "a job records who queued it, and the worker finds waiting work through definer functions",
 }
 
 // The tables this package names. Written once, so a typo cannot reach a

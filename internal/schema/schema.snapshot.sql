@@ -82,6 +82,31 @@ $$;
 
 
 --
+-- Name: fail_unclaimable_jobs(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fail_unclaimable_jobs() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  failed integer;
+BEGIN
+  UPDATE ingest_jobs j
+     SET status = 'failed', permanent = true, lease_until = NULL, updated_at = now(),
+         error = 'the account that queued it can no longer add to this library'
+   WHERE j.status = 'queued'
+     AND NOT EXISTS (
+       SELECT 1 FROM library_grants g
+        WHERE g.library_id = j.library_id AND g.user_id = j.requested_by
+          AND role_rank(g.role) >= role_rank('editor'));
+  GET DIAGNOSTICS failed = ROW_COUNT;
+  RETURN failed;
+END;
+$$;
+
+
+--
 -- Name: redeem_upload_link(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -116,6 +141,23 @@ CREATE FUNCTION public.upload_link_open(link_hash text) RETURNS boolean
     AS $$
   SELECT EXISTS (SELECT 1 FROM upload_links
                   WHERE token_hash = link_hash AND used_at IS NULL AND expires_at > now());
+$$;
+
+
+--
+-- Name: waiting_queues(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.waiting_queues() RETURNS TABLE(library_id text, requested_by text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT DISTINCT j.library_id, j.requested_by
+    FROM ingest_jobs j
+    JOIN library_grants g ON g.library_id = j.library_id AND g.user_id = j.requested_by
+   WHERE role_rank(g.role) >= role_rank('editor')
+     AND (j.status = 'queued' OR (j.status = 'running' AND j.lease_until < now()))
+   ORDER BY j.library_id, j.requested_by;
 $$;
 
 
@@ -266,7 +308,8 @@ CREATE TABLE public.ingest_jobs (
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     library_id text NOT NULL,
-    force boolean DEFAULT false NOT NULL
+    force boolean DEFAULT false NOT NULL,
+    requested_by text
 );
 
 ALTER TABLE ONLY public.ingest_jobs FORCE ROW LEVEL SECURITY;
@@ -735,6 +778,13 @@ CREATE INDEX idx_jobs_status ON public.ingest_jobs USING btree (status, created_
 
 
 --
+-- Name: ingest_jobs_waiting; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ingest_jobs_waiting ON public.ingest_jobs USING btree (library_id, requested_by) WHERE (status = ANY (ARRAY['queued'::text, 'running'::text]));
+
+
+--
 -- Name: library_grants_user; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -798,6 +848,14 @@ ALTER TABLE ONLY public.documents
 
 ALTER TABLE ONLY public.index_terms
     ADD CONSTRAINT index_terms_doc_fkey FOREIGN KEY (library_id, doc_id) REFERENCES public.documents(library_id, doc_id);
+
+
+--
+-- Name: ingest_jobs ingest_jobs_requested_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ingest_jobs
+    ADD CONSTRAINT ingest_jobs_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
 
 
 --
@@ -1224,6 +1282,13 @@ ALTER TABLE public.upload_links ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.uploads ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: ingest_jobs worker; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY worker ON public.ingest_jobs TO docsearch_owner USING (true) WITH CHECK (true);
+
 
 --
 -- PostgreSQL database dump complete

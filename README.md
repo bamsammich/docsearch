@@ -339,12 +339,15 @@ index is fully regenerable**, which is what makes refusing the right answer.
 docsearch-worker --dsn "$DOCSEARCH_DSN" --root ~/Documents/library
 ```
 
-One worker serves every library, taking a job from each account in turn, so
-one library's long queue cannot starve another and an account created by a
-sign-up is served from its first upload. Each job still runs entirely as its
-own library's user: the job, the document it produces and the responses it
-crawled all belong to one library. `--user` pins a worker to a single
-library instead.
+One worker serves every library. A queue is the jobs one person queued in
+one library, and the worker takes a job from each waiting queue in turn, so
+one queue's long backlog cannot starve another and an account created by a
+sign-up is served from its first upload. Each job runs entirely as the person
+who queued it: the job, the document it produces and the responses it
+crawled all belong to one library, and every write is checked against that
+person's grant on it. A job whose requester can no longer add to the library
+fails with a message saying so. `--user` pins a worker to the jobs one
+person queued in their own library instead.
 
 Jobs are claimed under a lease. A worker killed mid-job leaves an expired
 lease, and the next worker reclaims and restarts the job with no intervention.

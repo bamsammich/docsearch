@@ -7,33 +7,42 @@ import (
 	"time"
 )
 
-// Accounts lists every library there is.
-type Accounts interface {
-	Users(ctx context.Context) ([]string, error)
+// Queue is the jobs one person queued in one library. A worker writes as
+// User in Library, so the database checks each write against that person's
+// grant there.
+type Queue struct {
+	User    string
+	Library string
 }
 
-// Rotation is one worker serving every library, a job from each in turn.
+// Queues lists the queues holding work.
+type Queues interface {
+	Waiting(ctx context.Context) ([]Queue, error)
+}
+
+// Rotation is one worker serving every library, a job from each queue in
+// turn.
 //
-// A job writes into one library, and row-level security binds each
-// statement to one user, so a worker for a single library is the natural
-// unit. A deployment with accounts gains one with every sign-up, though, and
-// a worker per account would have to be started for each. A rotation lists
-// the accounts each round, so a new one is served from its first upload,
-// and takes at most one job from each before going round again, so one
-// library's long queue cannot starve the rest.
+// A job writes into one library as the person who queued it, and row-level
+// security binds each statement to that pair, so a worker for one queue is
+// the natural unit. A deployment gains queues as people sign up and share
+// libraries, though, and a worker for each would have to be started by
+// hand. A rotation lists the waiting queues each round, so a new one is
+// served from its first job, and takes at most one job from each before
+// going round again, so one queue's long backlog cannot starve the rest.
 type Rotation struct {
-	accounts Accounts
-	worker   func(user string) *Service
-	log      *slog.Logger
-	poll     time.Duration
-	once     bool
+	queues Queues
+	worker func(Queue) *Service
+	log    *slog.Logger
+	poll   time.Duration
+	once   bool
 }
 
-// NewRotation serves every account, building each library's worker with
+// NewRotation serves every waiting queue, building each one's worker with
 // worker. A round that finds no work waits poll; once stops after it.
 func NewRotation(
-	accounts Accounts,
-	worker func(user string) *Service,
+	queues Queues,
+	worker func(Queue) *Service,
 	poll time.Duration,
 	once bool,
 	log *slog.Logger,
@@ -41,12 +50,12 @@ func NewRotation(
 	if poll == 0 {
 		poll = DefaultPoll
 	}
-	return &Rotation{accounts: accounts, worker: worker, poll: poll, once: once, log: log}
+	return &Rotation{queues: queues, worker: worker, poll: poll, once: once, log: log}
 }
 
 // Run takes turns until the context is cancelled.
 func (r *Rotation) Run(ctx context.Context) error {
-	built := map[string]*Service{}
+	built := map[Queue]*Service{}
 	for ctx.Err() == nil {
 		done, err := r.turn(ctx, built)
 		if err != nil || done {
@@ -57,7 +66,7 @@ func (r *Rotation) Run(ctx context.Context) error {
 }
 
 // turn is one round and the wait after it, and reports whether to stop.
-func (r *Rotation) turn(ctx context.Context, built map[string]*Service) (bool, error) {
+func (r *Rotation) turn(ctx context.Context, built map[Queue]*Service) (bool, error) {
 	worked, err := r.round(ctx, built)
 	switch {
 	case err != nil:
@@ -71,22 +80,22 @@ func (r *Rotation) turn(ctx context.Context, built map[string]*Service) (bool, e
 	}
 }
 
-// round offers each library one job and reports whether any had one.
-func (r *Rotation) round(ctx context.Context, built map[string]*Service) (bool, error) {
-	users, err := r.accounts.Users(ctx)
+// round offers each waiting queue one job and reports whether any had one.
+func (r *Rotation) round(ctx context.Context, built map[Queue]*Service) (bool, error) {
+	queues, err := r.queues.Waiting(ctx)
 	if err != nil {
-		return false, fmt.Errorf("list accounts: %w", err)
+		return false, fmt.Errorf("list waiting queues: %w", err)
 	}
 	worked := false
-	for _, user := range users {
-		service, ok := built[user]
+	for _, queue := range queues {
+		service, ok := built[queue]
 		if !ok {
-			service = r.worker(user)
-			built[user] = service
+			service = r.worker(queue)
+			built[queue] = service
 		}
 		did, err := service.Next(ctx)
 		if err != nil {
-			return false, fmt.Errorf("library %s: %w", user, err)
+			return false, fmt.Errorf("library %s, queued by %s: %w", queue.Library, queue.User, err)
 		}
 		worked = worked || did
 	}

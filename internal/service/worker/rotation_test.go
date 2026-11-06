@@ -26,6 +26,9 @@ func TestRotation(t *testing.T) { suite.Run(t, new(RotationSuite)) }
 
 func (s *RotationSuite) SetupTest() { s.claimed = nil }
 
+// queue names the jobs user queued in their own library.
+func queue(user string) worker.Queue { return worker.Queue{User: user, Library: user} }
+
 // library is a worker over a queue holding jobs, in order, for user.
 func (s *RotationSuite) library(user string, jobs ...int64) *worker.Service {
 	queue := mocks.NewMockJobs(s.T())
@@ -46,37 +49,39 @@ func (s *RotationSuite) library(user string, jobs ...int64) *worker.Service {
 		worker.Options{Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 }
 
-// One library's long queue does not starve another: each gets a job per
-// round, and a library with none is passed over.
-func (s *RotationSuite) TestEachLibraryTakesATurn() {
-	libraries := map[string]*worker.Service{
-		"a": s.library("a", 1, 2, 3),
-		"b": s.library("b", 4),
-		"c": s.library("c"),
+// One queue's long backlog does not starve another: each gets a job per
+// round, and a queue with none is passed over.
+func (s *RotationSuite) TestEachQueueTakesATurn() {
+	libraries := map[worker.Queue]*worker.Service{
+		queue("a"): s.library("a", 1, 2, 3),
+		queue("b"): s.library("b", 4),
+		queue("c"): s.library("c"),
 	}
-	accounts := mocks.NewMockAccounts(s.T())
-	accounts.EXPECT().Users(mock.Anything).Return([]string{"a", "b", "c"}, nil)
+	queues := mocks.NewMockQueues(s.T())
+	queues.EXPECT().
+		Waiting(mock.Anything).
+		Return([]worker.Queue{queue("a"), queue("b"), queue("c")}, nil)
 
-	err := worker.NewRotation(accounts, func(user string) *worker.Service {
-		return libraries[user]
+	err := worker.NewRotation(queues, func(q worker.Queue) *worker.Service {
+		return libraries[q]
 	}, time.Millisecond, true, slog.New(slog.DiscardHandler)).Run(s.T().Context())
 
 	s.Require().NoError(err)
 	s.Equal([]string{"a", "b", "a", "a"}, s.claimed)
 }
 
-// An account created while the worker runs is served from the next round.
-func (s *RotationSuite) TestANewAccountIsServedWithoutARestart() {
-	libraries := map[string]*worker.Service{
-		"a":   s.library("a"),
-		"new": s.library("new", 9),
+// A queue that appears while the worker runs is served from the next round.
+func (s *RotationSuite) TestANewQueueIsServedWithoutARestart() {
+	libraries := map[worker.Queue]*worker.Service{
+		queue("a"):   s.library("a"),
+		queue("new"): s.library("new", 9),
 	}
-	accounts := mocks.NewMockAccounts(s.T())
-	accounts.EXPECT().Users(mock.Anything).Return([]string{"a"}, nil).Once()
-	accounts.EXPECT().Users(mock.Anything).Return([]string{"a", "new"}, nil)
+	queues := mocks.NewMockQueues(s.T())
+	queues.EXPECT().Waiting(mock.Anything).Return([]worker.Queue{queue("a")}, nil).Once()
+	queues.EXPECT().Waiting(mock.Anything).Return([]worker.Queue{queue("a"), queue("new")}, nil)
 
-	rotation := worker.NewRotation(accounts, func(user string) *worker.Service {
-		return libraries[user]
+	rotation := worker.NewRotation(queues, func(q worker.Queue) *worker.Service {
+		return libraries[q]
 	}, time.Millisecond, false, slog.New(slog.DiscardHandler))
 	ctx, cancel := context.WithTimeout(s.T().Context(), 200*time.Millisecond)
 	defer cancel()

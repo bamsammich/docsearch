@@ -1,8 +1,8 @@
 // Command docsearch-worker runs queued ingests.
 //
 // It shares the database with the server, which reads documents while this
-// writes them. One worker serves one library: a job, the document it
-// produces and the responses it crawled all belong to the same user.
+// writes them. A worker serves one queue at a time, the jobs one person
+// queued in one library, and writes as that person.
 package main
 
 import (
@@ -19,7 +19,6 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // the driver the library is read through
 	"github.com/urfave/cli/v3"
 
-	"github.com/bamsammich/docsearch/internal/account/pgaccount"
 	"github.com/bamsammich/docsearch/internal/adapter"
 	"github.com/bamsammich/docsearch/internal/adapter/pdf"
 	"github.com/bamsammich/docsearch/internal/config"
@@ -62,9 +61,9 @@ func command() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name: "user",
-				Usage: "serve only this `USER`'s library. Unset, the worker takes a " +
-					"job from every account in turn, so a new account is served from " +
-					"its first upload.",
+				Usage: "serve only the jobs this `USER` queued in their own library. " +
+					"Unset, the worker takes a job from every waiting queue in turn, so " +
+					"a new account or library is served from its first upload.",
 				Sources: cli.EnvVars(config.EnvUser),
 			},
 			&cli.StringSliceFlag{
@@ -153,11 +152,11 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		MaxAttempts: cmd.Int("max-attempts"),
 		Once:        cmd.Bool("once"),
 	}
-	// Every one of the three reads and writes as the same user, because a
+	// Every one of the three reads and writes in the same scope, because a
 	// job, the document it produces and the responses it crawled all belong
-	// to one library.
-	library := func(user string) *worker.Service {
-		scope := pgsession.Personal(user)
+	// to one library, and are written as the person who queued the job.
+	library := func(queue worker.Queue) *worker.Service {
+		scope := pgsession.Scope{User: queue.User, Library: queue.Library}
 		return worker.New(
 			postgres.NewJobs(db, scope),
 			ingest.New(postgres.New(db, scope), time.Now),
@@ -180,20 +179,21 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	return nil
 }
 
-// serve runs one library's worker when a user is pinned, and otherwise a
-// rotation over every account.
+// serve runs one queue's worker when a user is pinned, and otherwise a
+// rotation over every waiting queue.
 func serve(
 	ctx context.Context,
 	user string,
-	library func(string) *worker.Service,
+	library func(worker.Queue) *worker.Service,
 	db *sql.DB,
 	options worker.Options,
 	log *slog.Logger,
 ) error {
 	if user != "" {
 		log.Info("worker started", "user", user)
-		return library(user).Run(ctx)
+		return library(worker.Queue{User: user, Library: user}).Run(ctx)
 	}
-	log.Info("worker started", "user", "every account")
-	return worker.NewRotation(pgaccount.New(db), library, options.Poll, options.Once, log).Run(ctx)
+	log.Info("worker started", "user", "every waiting queue")
+	return worker.NewRotation(postgres.NewQueues(db), library, options.Poll, options.Once, log).
+		Run(ctx)
 }

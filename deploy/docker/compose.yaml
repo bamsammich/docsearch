@@ -114,7 +114,7 @@ services:
     command: ["--root", "${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}"]
     environment:
       DOCSEARCH_DSN: postgres://docsearch_app:docsearch@db:5432/docsearch?sslmode=disable
-      # No DOCSEARCH_USER: the worker takes a job from every account in turn.
+      # No DOCSEARCH_USER: the worker takes a job from every waiting queue in turn.
     volumes:
       # Read-write: the worker is what actually opens the documents.
       - ${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}:${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}
