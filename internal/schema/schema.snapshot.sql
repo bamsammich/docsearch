@@ -286,6 +286,25 @@ $$;
 
 
 --
+-- Name: record_account_event(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.record_account_event(event_action text, member_username text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+BEGIN
+  IF NOT COALESCE((SELECT admin FROM users WHERE user_id = current_setting('app.user_id', true)), false) THEN
+    RAISE EXCEPTION 'only an administrator manages accounts' USING ERRCODE = 'DSA01';
+  END IF;
+  INSERT INTO account_events (actor, action, subject)
+    VALUES (current_setting('app.user_id', true), event_action,
+            (SELECT user_id FROM users WHERE username = member_username));
+END;
+$$;
+
+
+--
 -- Name: redeem_upload_link(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -347,6 +366,36 @@ CREATE FUNCTION public.role_rank(role text) RETURNS integer
     LANGUAGE sql IMMUTABLE STRICT
     AS $$
   SELECT CASE role WHEN 'admin' THEN 3 WHEN 'editor' THEN 2 WHEN 'reader' THEN 1 END;
+$$;
+
+
+--
+-- Name: set_admin(text, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_admin(member_username text, make boolean) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  member text;
+BEGIN
+  IF NOT COALESCE((SELECT admin FROM users WHERE user_id = current_setting('app.user_id', true)), false) THEN
+    RAISE EXCEPTION 'only an administrator changes who administers' USING ERRCODE = 'DSA01';
+  END IF;
+  SELECT user_id INTO member FROM users WHERE username = member_username;
+  IF member IS NULL THEN
+    RAISE EXCEPTION 'no account named %', member_username USING ERRCODE = 'DSA02';
+  END IF;
+  IF NOT make AND (SELECT count(*) FROM users WHERE admin AND user_id <> member) = 0 THEN
+    RAISE EXCEPTION 'that would leave nobody to administer docsearch' USING ERRCODE = 'DSA03';
+  END IF;
+  UPDATE users SET admin = make WHERE user_id = member AND admin IS DISTINCT FROM make;
+  IF FOUND THEN
+    INSERT INTO account_events (actor, action, subject)
+      VALUES (current_setting('app.user_id', true), CASE WHEN make THEN 'admin' ELSE 'unadmin' END, member);
+  END IF;
+END;
 $$;
 
 
@@ -423,6 +472,34 @@ CREATE TABLE public.access_events (
 
 ALTER TABLE public.access_events ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
     SEQUENCE NAME public.access_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: account_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.account_events (
+    id bigint NOT NULL,
+    at timestamp with time zone DEFAULT now() NOT NULL,
+    actor text,
+    action text NOT NULL,
+    subject text,
+    CONSTRAINT account_events_action_check CHECK ((action = ANY (ARRAY['add'::text, 'reset'::text, 'unlock'::text, 'remove'::text, 'admin'::text, 'unadmin'::text])))
+);
+
+
+--
+-- Name: account_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.account_events ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.account_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -798,6 +875,7 @@ CREATE TABLE public.users (
     issuer text,
     subject text,
     username text,
+    admin boolean DEFAULT false NOT NULL,
     CONSTRAINT users_id_is_identifier_safe CHECK ((user_id ~ '^[a-z0-9_-]{1,40}$'::text)),
     CONSTRAINT users_identity_whole CHECK (((issuer IS NULL) = (subject IS NULL))),
     CONSTRAINT users_username_check CHECK ((username ~ '^[a-z0-9._@+-]{1,128}$'::text))
@@ -817,6 +895,14 @@ ALTER TABLE ONLY public.chunks ATTACH PARTITION public.chunks_default FOR VALUES
 
 ALTER TABLE ONLY public.access_events
     ADD CONSTRAINT access_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: account_events account_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.account_events
+    ADD CONSTRAINT account_events_pkey PRIMARY KEY (id);
 
 
 --
@@ -1003,6 +1089,13 @@ CREATE INDEX access_events_library ON public.access_events USING btree (library_
 
 
 --
+-- Name: account_events_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX account_events_at ON public.account_events USING btree (at);
+
+
+--
 -- Name: chunks_bm25; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1150,6 +1243,22 @@ ALTER TABLE ONLY public.access_events
 
 ALTER TABLE ONLY public.access_events
     ADD CONSTRAINT access_events_subject_fkey FOREIGN KEY (subject) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+
+--
+-- Name: account_events account_events_actor_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.account_events
+    ADD CONSTRAINT account_events_actor_fkey FOREIGN KEY (actor) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+
+--
+-- Name: account_events account_events_subject_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.account_events
+    ADD CONSTRAINT account_events_subject_fkey FOREIGN KEY (subject) REFERENCES public.users(user_id) ON DELETE SET NULL;
 
 
 --

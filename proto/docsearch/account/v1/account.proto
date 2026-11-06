@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+// Package docsearch.account.v1 is what a docsearch administrator does.
+//
+// An administrator sees every account, adds and removes password accounts,
+// resets and unlocks them, and chooses who else administers. The role
+// covers accounts and nothing else: an administrator reads a library only
+// through a grant on it, like anyone.
+package docsearch.account.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Account is one account as an administrator sees it.
+message Account {
+  // Username is empty for an account that has not signed in since
+  // usernames were recorded.
+  string username = 1;
+  bool admin = 2;
+  google.protobuf.Timestamp created_at = 3;
+  // Password is true for an account that signs in with a docsearch
+  // password, which an administrator can reset, unlock and remove.
+  bool password = 4;
+  // LockedUntil is set while failed sign-ins lock a password account.
+  google.protobuf.Timestamp locked_until = 5;
+}
+
+// Setting is one sign-in setting the server's configuration holds.
+message Setting {
+  string label = 1;
+  string value = 2;
+  // Flag and env are where the setting is made: a command-line flag and
+  // the environment variable that sets it. Both are empty for a rule the
+  // server keeps rather than one it is configured with.
+  string flag = 3;
+  string env = 4;
+}
+
+message MeRequest {}
+
+message MeResponse {
+  string username = 1;
+  bool admin = 2;
+  // Auth is the sign-in mode: none, token, password or oidc.
+  string auth = 3;
+}
+
+message ListRequest {}
+
+message ListResponse {
+  repeated Account accounts = 1;
+}
+
+message AddRequest {
+  string username = 1;
+}
+
+message AddResponse {
+  // Password is the account's new password, shown once.
+  string password = 1;
+}
+
+message ResetRequest {
+  string username = 1;
+}
+
+message ResetResponse {
+  // Password is the account's new password, shown once.
+  string password = 1;
+}
+
+message UnlockRequest {
+  string username = 1;
+}
+
+message UnlockResponse {}
+
+message RemoveRequest {
+  string username = 1;
+}
+
+message RemoveResponse {}
+
+message SetAdminRequest {
+  string username = 1;
+  bool admin = 2;
+}
+
+message SetAdminResponse {}
+
+message SignInRequest {}
+
+message SignInResponse {
+  repeated Setting settings = 1;
+}
+
+// AccountService is the administrator's work. Every call but Me refuses
+// anyone who is not an administrator with PermissionDenied.
+service AccountService {
+  // Me is the caller's own account, and whether it administers.
+  rpc Me(MeRequest) returns (MeResponse) {}
+
+  // List is every account.
+  rpc List(ListRequest) returns (ListResponse) {}
+
+  // Add creates a password account and its library. Password mode only.
+  rpc Add(AddRequest) returns (AddResponse) {}
+
+  // Reset gives a password account a new password and lifts any lock.
+  rpc Reset(ResetRequest) returns (ResetResponse) {}
+
+  // Unlock clears a password account's failed sign-ins.
+  rpc Unlock(UnlockRequest) returns (UnlockResponse) {}
+
+  // Remove ends a password account's sign-in and every token it holds. Its
+  // libraries stay.
+  rpc Remove(RemoveRequest) returns (RemoveResponse) {}
+
+  // SetAdmin makes an account an administrator, or stops it being one. The
+  // last administrator stays one.
+  rpc SetAdmin(SetAdminRequest) returns (SetAdminResponse) {}
+
+  // SignIn is how people sign in, as the server's configuration sets it.
+  rpc SignIn(SignInRequest) returns (SignInResponse) {}
+}

@@ -16,6 +16,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/config"
 	"github.com/bamsammich/docsearch/internal/password"
 	"github.com/bamsammich/docsearch/internal/password/pgpassword"
+	"github.com/bamsammich/docsearch/internal/repository/postgres"
 )
 
 // argUsername is the argument every account subcommand but list takes.
@@ -79,6 +80,18 @@ func accountCommand() *cli.Command {
 			{
 				Name: commandList, Usage: "show every account", Flags: []cli.Flag{dsn},
 				Action: withAccounts(listAccounts),
+			},
+			{
+				Name:      "admin",
+				Usage:     "make an account a docsearch administrator, in any auth mode",
+				ArgsUsage: argUsername,
+				Description: "An administrator manages accounts from the library UI. Make the " +
+					"first one here; after that, administrators make others in the UI.",
+				Flags: []cli.Flag{dsn, &cli.BoolFlag{
+					Name:  "revoke",
+					Usage: "stop the account being an administrator",
+				}},
+				Action: setAdmin,
 			},
 		},
 	}
@@ -252,3 +265,41 @@ func prompt(fd int, label string) (string, error) {
 	}
 	return string(typed), nil
 }
+
+// setAdmin makes or unmakes an administrator as the database owner, which is
+// how the first one is made: in the UI, only an administrator can.
+func setAdmin(ctx context.Context, cmd *cli.Command) error {
+	username, err := usernameOf(cmd)
+	if err != nil {
+		return err
+	}
+	dsn := cmd.String("dsn")
+	if dsn == "" {
+		return fmt.Errorf("no database: pass --dsn or set %s", config.EnvDSN)
+	}
+	db, err := open(dsn)
+	if err != nil {
+		return err
+	}
+	defer func(db *sql.DB) { _ = db.Close() }(db)
+	grant := !cmd.Bool("revoke")
+	found, err := postgres.GrantAdmin(ctx, db, username, grant)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("%s: %w", username, errNoAdminAccount)
+	}
+	if grant {
+		fmt.Printf("%s is an administrator\n", username)
+	} else {
+		fmt.Printf("%s is no longer an administrator\n", username)
+	}
+	return nil
+}
+
+// errNoAdminAccount is a username no account holds yet: an oidc account has
+// one once it has signed in.
+var errNoAdminAccount = errors.New(
+	"no account by that username: an account has one once it has signed in",
+)

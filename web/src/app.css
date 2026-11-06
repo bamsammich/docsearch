@@ -144,6 +144,38 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .picker-new .row-btns { display: flex; gap: 6px; margin-top: 2px; }
 .linkish { border: 0; padding: 0; background: none; color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 
+/* Administration: its own navigation, since its pages belong to docsearch
+   rather than to the library the picker shows. */
+.side-back { display: flex; align-items: center; gap: 6px; min-height: 32px; margin: 0 0 6px; padding: 0 10px; border-radius: 7px; color: var(--on-frame-muted); font-size: 13px; text-decoration: none; }
+.side-back:hover { background: var(--frame-2); color: var(--on-frame); }
+.side-back .i { width: 14px; height: 14px; }
+.side-back span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sections-label { padding: 8px 10px 4px; font-size: 12px; font-weight: 500; color: var(--on-frame-muted); }
+.people { max-width: 860px; display: grid; gap: 22px; }
+.people-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between; }
+.people-head .find { max-width: 220px; }
+.prow { grid-template-columns: 28px minmax(0, 1fr) auto 32px; }
+.role-badge { display: inline-flex; align-items: center; min-height: 24px; padding: 0 8px; border-radius: 6px; background: var(--accent-weak); color: var(--accent); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.mrow-none { padding: 14px; color: var(--muted); font-size: 13px; }
+.issued { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px; background: var(--surface-2); font-size: 13px; }
+.issued-what { flex: 1 1 220px; }
+.issued code { padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); font-size: 13px; user-select: all; }
+.issued .row-btns { display: flex; gap: 6px; }
+.row-menu { position: fixed; inset: auto; margin: 0; width: 210px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.row-menu:popover-open { display: grid; }
+.row-menu button { display: flex; align-items: center; min-height: 32px; padding: 0 10px; border: 0; border-radius: 7px; background: none; color: var(--ink); font-size: 13px; text-align: left; }
+.row-menu button:hover, .row-menu button:focus-visible { background: var(--surface-2); }
+.row-menu button.danger { color: var(--bad); }
+.row-menu hr { margin: 4px 0; border: 0; border-top: 1px solid var(--line-soft); }
+.settings { max-width: 640px; margin: 0; border: 1px solid var(--line); border-radius: 10px; }
+.setting { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 4px 16px; padding: 12px 14px; border-bottom: 1px solid var(--line-soft); font-size: 13px; }
+.setting:last-child { border-bottom: 0; }
+.setting dt { font-weight: 600; }
+.setting dd { margin: 0; display: grid; gap: 4px; min-width: 0; }
+.setting-value { overflow-wrap: anywhere; }
+.setting-source { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.setting-source .i { width: 12px; height: 12px; }
+
 /* A library's members, who may invite, and what changed. */
 .members { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 28px; }
 .members-main { flex: 999 1 460px; min-width: 0; max-width: 720px; display: grid; gap: 22px; }
@@ -613,6 +645,9 @@ details.help p { margin: 8px 0 0; color: var(--muted); }
   .picker.at-top { min-height: 40px; }
   .picker-pop.at-top { left: 12px; right: 12px; width: auto; }
   .mrow { grid-template-columns: 28px minmax(0, 1fr) auto; }
+  .prow { grid-template-columns: 28px minmax(0, 1fr) auto 32px; }
+  .prow .mact { grid-column: auto; }
+  .setting { grid-template-columns: minmax(0, 1fr); }
   .mrow .mact { grid-column: 2 / -1; justify-content: flex-start; }
   .mrow .mact:empty { display: none; }
   .top-end { grid-column: 2; grid-row: 1; }

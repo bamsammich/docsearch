@@ -3,7 +3,8 @@
   import { library } from "./lib/library.svelte";
   import { libraries, nameOf } from "./lib/libraries.svelte";
   import { queue } from "./lib/queue.svelte";
-  import { router } from "./lib/router.svelte";
+  import { adminViews, router } from "./lib/router.svelte";
+  import { admin } from "./lib/admin.svelte";
   import { search } from "./lib/search.svelte";
   import { session } from "./lib/session.svelte";
   import { toast } from "./lib/toast.svelte";
@@ -14,6 +15,8 @@
   import LibraryPicker from "./components/LibraryPicker.svelte";
   import LibraryView from "./components/LibraryView.svelte";
   import MembersView from "./components/MembersView.svelte";
+  import PeopleView from "./components/PeopleView.svelte";
+  import SignInView from "./components/SignInView.svelte";
   import ReaderView from "./components/ReaderView.svelte";
   import SearchView from "./components/SearchView.svelte";
   import SignIn from "./components/SignIn.svelte";
@@ -31,6 +34,7 @@
   $effect(() => {
     if (session.status !== "signed-in") return;
     void libraries.load();
+    void admin.load();
     return queue.watch();
   });
 
@@ -64,12 +68,15 @@
   const ingestAlert = $derived(queue.failed + queue.stalled);
   const ingestCount = $derived(ingestAlert || queue.active);
   const config = $derived(session.config);
-  const titles = { library: "Documents", ingest: "Ingest", members: "Members", search: "Search", read: "Reader" } as const;
+  const titles = { library: "Documents", ingest: "Ingest", members: "Members", people: "People", signin: "Sign-in", search: "Search", read: "Reader" } as const;
+  const administering = $derived(adminViews.includes(router.view));
 
   const instance = $derived(config?.instanceLabel ?? "");
 
   $effect(() => {
-    const page = session.status === "signed-in" ? `${titles[router.view]} · ${libraries.name} · docsearch` : "docsearch";
+    const page = session.status !== "signed-in" ? "docsearch"
+      : administering ? `${titles[router.view]} · Administration · docsearch`
+      : `${titles[router.view]} · ${libraries.name} · docsearch`;
     document.title = instance ? `${instance} · ${page}` : page;
   });
 
@@ -117,23 +124,36 @@
   <div class="app">
     <aside class="side">
       <a class="side-brand" href="#/library" aria-label="docsearch library"><Brand /></a>
-      <div class="side-picker"><LibraryPicker id="library-picker" where="side" /></div>
-      <nav class="sections" aria-label={libraries.name}>
-        <a class="section" href="#/library" aria-current={router.view === "library" || router.view === "read" ? "page" : undefined}>
-          <Icon name="library" /><span class="section-name">Documents</span>
-          {#if attention}<span class="count hot" aria-label={`${attention} need attention`}>{attention}</span>{/if}
-        </a>
-        <a class="section" href="#/ingest" aria-current={router.view === "ingest" ? "page" : undefined}>
-          <Icon name="inbox" /><span class="section-name">Ingest</span>
-          {#if ingestCount}
-            <span class="count" class:hot={ingestAlert > 0}
-              aria-label={ingestAlert ? `${ingestAlert} need attention` : `${queue.active} active`}>{ingestAlert || queue.active}{#if !ingestAlert}<span class="count-word"> running</span>{/if}</span>
-          {/if}
-        </a>
-        <a class="section" href="#/members" aria-current={router.view === "members" ? "page" : undefined}>
-          <Icon name="members" /><span class="section-name">Members</span>
-        </a>
-      </nav>
+      {#if administering}
+        <a class="side-back" href="#/library"><Icon name="back" /><span>{libraries.name}</span></a>
+        <nav class="sections" aria-label="Administration">
+          <span class="sections-label">Administration</span>
+          <a class="section" href="#/people" aria-current={router.view === "people" ? "page" : undefined}>
+            <Icon name="person" /><span class="section-name">People</span>
+          </a>
+          <a class="section" href="#/signin" aria-current={router.view === "signin" ? "page" : undefined}>
+            <Icon name="lock" /><span class="section-name">Sign-in</span>
+          </a>
+        </nav>
+      {:else}
+        <div class="side-picker"><LibraryPicker id="library-picker" where="side" /></div>
+        <nav class="sections" aria-label={libraries.name}>
+          <a class="section" href="#/library" aria-current={router.view === "library" || router.view === "read" ? "page" : undefined}>
+            <Icon name="library" /><span class="section-name">Documents</span>
+            {#if attention}<span class="count hot" aria-label={`${attention} need attention`}>{attention}</span>{/if}
+          </a>
+          <a class="section" href="#/ingest" aria-current={router.view === "ingest" ? "page" : undefined}>
+            <Icon name="inbox" /><span class="section-name">Ingest</span>
+            {#if ingestCount}
+              <span class="count" class:hot={ingestAlert > 0}
+                aria-label={ingestAlert ? `${ingestAlert} need attention` : `${queue.active} active`}>{ingestAlert || queue.active}{#if !ingestAlert}<span class="count-word"> running</span>{/if}</span>
+            {/if}
+          </a>
+          <a class="section" href="#/members" aria-current={router.view === "members" ? "page" : undefined}>
+            <Icon name="members" /><span class="section-name">Members</span>
+          </a>
+        </nav>
+      {/if}
       <div class="side-foot"><AccountMenu /></div>
     </aside>
 
@@ -161,7 +181,7 @@
         <kbd class="key" aria-hidden="true">/</kbd>
       </form>
       <div class="top-end">
-        {#if router.view !== "ingest" && libraries.canEdit}
+        {#if router.view !== "ingest" && !administering && libraries.canEdit}
           <a class="btn on-frame add" href="#/ingest"><Icon name="plus" /><span>Add document</span></a>
         {/if}
       </div>
@@ -174,7 +194,7 @@
           <button class="btn primary" onclick={() => session.signOut()}>Sign in again</button>
         </div>
       {/if}
-      {#if router.view === "ingest"}<IngestView />{:else if router.view === "members"}<MembersView />{:else if router.view === "search"}<SearchView />{:else if router.view === "read"}<ReaderView />{:else}<LibraryView />{/if}
+      {#if router.view === "people"}<PeopleView />{:else if router.view === "signin"}<SignInView />{:else if router.view === "ingest"}<IngestView />{:else if router.view === "members"}<MembersView />{:else if router.view === "search"}<SearchView />{:else if router.view === "read"}<ReaderView />{:else}<LibraryView />{/if}
     </main>
   </div>
 {/if}

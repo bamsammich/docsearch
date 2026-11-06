@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { admin } from "../lib/admin.svelte";
   import { session } from "../lib/session.svelte";
   import Icon from "./Icon.svelte";
 
@@ -30,6 +31,9 @@
   <p class="account-who">{who}</p>
   <p class="account-how">{how}</p>
   <p class="account-where mono">{location.host}</p>
+  {#if admin.available}
+    <a class="btn block" href="#/people" onclick={() => document.getElementById("account-menu")?.hidePopover()}><Icon name="shield" /> Administration</a>
+  {/if}
   {#if config?.auth !== "none"}
     <button class="btn block" onclick={() => session.signOut()}>Sign out</button>
   {/if}

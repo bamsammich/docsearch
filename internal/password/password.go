@@ -45,6 +45,10 @@ var (
 		"locked after too many attempts; try again later or ask whoever runs this server")
 	// ErrNoSuchAccount is an operator naming an account that does not exist.
 	ErrNoSuchAccount = errors.New("no account with that username")
+	// ErrUsername is a username password mode cannot hold.
+	ErrUsername = errors.New("use 1 to 64 lower-case letters, digits, '.', '_' or '-'")
+	// ErrTaken is a username another account already signs in under.
+	ErrTaken = errors.New("an account by that username already exists")
 	// ErrBuiltinTaken is a second account trying to take the built-in library.
 	ErrBuiltinTaken = errors.New("the library from before accounts already has an owner")
 )
@@ -240,8 +244,7 @@ func Generate() string { return rand.Text() }
 
 func checkUsername(username string) error {
 	if !usernamePattern.MatchString(username) {
-		return fmt.Errorf("username %q: use 1 to 64 lower-case letters, digits, '.', '_' or '-'",
-			username)
+		return fmt.Errorf("username %q: %w", username, ErrUsername)
 	}
 	return nil
 }
