@@ -160,6 +160,9 @@ func oidcFlags() []cli.Flag {
 			Usage:   "create an account for an identity that has none",
 			Sources: from(flagSignUp, config.EnvOIDCSignUp),
 		},
+		text(flagUsername, config.EnvOIDCUsernameClaim,
+			"the `CLAIM` usernames come from; a verified email, else preferred_username, "+
+				"when unset"),
 	}
 }
 
@@ -226,6 +229,7 @@ func configFrom(cmd *cli.Command, args []string) (config.Config, error) {
 			ScopesSupported:    commaList(cmd.String("oidc-scopes-supported")),
 			RequiredScopes:     commaList(cmd.String("oidc-required-scopes")),
 			SignUp:             cmd.Bool(flagSignUp),
+			UsernameClaim:      strings.TrimSpace(cmd.String(flagUsername)),
 		},
 		File:    configPath,
 		Origins: origins(cmd, args),

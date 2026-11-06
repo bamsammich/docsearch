@@ -120,6 +120,8 @@ func signInSettings(cfg config.Config) []connectapi.Setting {
 				flagClaimValue, config.EnvOIDCRequiredClaimValue),
 			configured(cfg, "Create an account and a personal library on first sign-in",
 				strconv.FormatBool(cfg.OIDC.SignUp), flagSignUp, config.EnvOIDCSignUp),
+			configured(cfg, "Usernames come from", usernameSource(cfg.OIDC.UsernameClaim),
+				flagUsername, config.EnvOIDCUsernameClaim),
 		}
 	case owner.None:
 		method.Value = "No sign-in: local access only"
@@ -127,6 +129,15 @@ func signInSettings(cfg config.Config) []connectapi.Setting {
 		method.Value = "The server token"
 	}
 	return []connectapi.Setting{method}
+}
+
+// usernameSource is where OIDC usernames come from, as an administrator
+// reads it.
+func usernameSource(claim string) string {
+	if claim != "" {
+		return "The " + claim + " claim"
+	}
+	return "A verified email, else preferred_username"
 }
 
 // configured is a setting flag makes, with where its value came from, and

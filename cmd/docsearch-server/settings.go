@@ -30,6 +30,7 @@ const (
 	flagClaimName  = "oidc-required-claim-name"
 	flagClaimValue = "oidc-required-claim-value"
 	flagSignUp     = "oidc-sign-up"
+	flagUsername   = "oidc-username-claim"
 )
 
 // fileKeys are where each setting lives in docsearch.yaml. A flag missing
@@ -57,6 +58,7 @@ var fileKeys = map[string]string{
 	flagClaimName:           "auth.oidc.required_claim.name",
 	flagClaimValue:          "auth.oidc.required_claim.value",
 	flagSignUp:              "auth.oidc.sign_up",
+	flagUsername:            "auth.oidc.username_claim",
 }
 
 // editable are the settings an administrator changes from the library UI:

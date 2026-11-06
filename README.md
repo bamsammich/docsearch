@@ -558,6 +558,7 @@ audience names docsearch.
 | client secret | — | `DOCSEARCH_OIDC_CLIENT_SECRET` | — |
 | subject who keeps the existing library | `--oidc-default-owner` | `DOCSEARCH_OIDC_DEFAULT_OWNER` | `auth.oidc.default_owner` |
 | create accounts on first sign-in | `--oidc-sign-up` | `DOCSEARCH_OIDC_SIGN_UP` | `auth.oidc.sign_up` |
+| claim usernames come from | `--oidc-username-claim` | `DOCSEARCH_OIDC_USERNAME_CLAIM` | `auth.oidc.username_claim` |
 | claim every token must carry | `--oidc-required-claim-name` | `DOCSEARCH_OIDC_REQUIRED_CLAIM_NAME` | `auth.oidc.required_claim.name` |
 | value that claim must hold | `--oidc-required-claim-value` | `DOCSEARCH_OIDC_REQUIRED_CLAIM_VALUE` | `auth.oidc.required_claim.value` |
 
@@ -575,9 +576,12 @@ their access here.
 
 **Usernames** are how someone is invited to a shared library. A password
 account's is the name it signs in with. An `oidc` account's is the token's
-`preferred_username`, or its `email` when the provider sends no username,
-recorded when the account signs in. An account that has never signed in has
-none yet. A name another account already holds stays with that account.
+`email` when `email_verified` is true, and otherwise its
+`preferred_username`, recorded when the account signs in. Many providers let
+people choose their own `preferred_username`, so name the claim your
+provider controls with `--oidc-username-claim` where you can: only that
+claim is then read. An account that has never signed in has no username
+yet. A name another account already holds stays with that account.
 
 **Switching an existing install** keeps its library. Name your own subject
 with `--oidc-default-owner`, and your first sign-in takes the library the
