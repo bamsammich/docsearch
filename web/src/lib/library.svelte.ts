@@ -71,9 +71,12 @@ class Library {
       this.error = "";
       void this.#verifyAll();
     } catch (err) {
+      // A library left behind by a switch answers late; its error is not
+      // the shown library's.
+      if (asked !== this.#asked) return;
       this.error = problem(err);
     } finally {
-      this.loaded = true;
+      if (asked === this.#asked) this.loaded = true;
     }
   }
 

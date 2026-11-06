@@ -6,11 +6,13 @@ import { nameOf, own } from "./names";
 
 export { labelOf, nameOf, own, slugOf } from "./names";
 
-const remember = "docsearch.library";
+// Each account remembers its own last library, so one person's choice in a
+// shared browser never decides what another opens.
+const remember = (username: string) => `docsearch.library:${username}`;
 
-function recalled(): string {
+function recalled(username: string): string {
   try {
-    return localStorage.getItem(remember) || own;
+    return localStorage.getItem(remember(username)) || own;
   } catch {
     return own;
   }
@@ -23,7 +25,7 @@ class Libraries {
   error = $state("");
   loaded = $state(false);
   /** The label of the library the pages show. */
-  label = $state(recalled());
+  label = $state(own);
   /** This account's username, as others invite it by. */
   username = $state("");
 
@@ -60,10 +62,12 @@ class Libraries {
         shelves.list({}),
         shelves.invitations({}),
       ]);
+      const first = !this.loaded;
       this.all = libraries;
       this.invitations = invitations;
       this.username = username;
       this.error = "";
+      if (first && username) this.label = recalled(username);
       if (!this.current) this.choose(own);
     } catch (err) {
       this.error = problem(err);
@@ -74,8 +78,9 @@ class Libraries {
 
   choose(label: string): void {
     this.label = label;
+    if (!this.username) return;
     try {
-      localStorage.setItem(remember, label);
+      localStorage.setItem(remember(this.username), label);
     } catch {
       // A browser that keeps nothing starts on the personal library next time.
     }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { libraries, nameOf } from "../lib/libraries.svelte";
+  import { labelOf, libraries, nameOf } from "../lib/libraries.svelte";
   import { untrack } from "svelte";
   import { coverageFor, library, verdictOf } from "../lib/library.svelte";
   import CoverageStrip from "./CoverageStrip.svelte";
@@ -123,13 +123,18 @@
   }
 </script>
 
+{#snippet from(docId: string)}
+  {@const label = labelOf(docId)}
+  {#if label !== libraries.label}<span class="tag">{nameOf(libraries.all.find((l) => l.library === label)) || label}</span>{/if}
+{/snippet}
+
 {#snippet hitCard(hit: SearchHit, rank: number, showDoc: boolean)}
   {@const ctx = contexts[hit.chunk_id]}
   {@const verdict = verdictFor(hit.doc_id)}
   <li class="hit">
     <span class="rank">{rank}</span>
     <div>
-      {#if showDoc}<div class="doc">{hit.title}{#if verdict !== "good"} <Badge {verdict} />{/if}</div>{/if}
+      {#if showDoc}<div class="doc">{hit.title}{#if verdict !== "good"} <Badge {verdict} />{/if}{@render from(hit.doc_id)}</div>{/if}
       <div class="path">{#if hit.heading_path}{hit.heading_path}{:else}<span class="none">No heading</span>{/if}</div>
       <div class="loc">
         {#if hit.url}
@@ -218,7 +223,7 @@
         {#each groups as [id, hits] (id)}
           {@const verdict = verdictFor(id)}
           <section class="group">
-            <h3>{hits[0]?.hit.title}{#if verdict !== "good"} <Badge {verdict} />{/if}</h3>
+            <h3>{hits[0]?.hit.title}{#if verdict !== "good"} <Badge {verdict} />{/if}{@render from(id)}</h3>
             <ol class="ranked">{#each hits as h (h.hit.chunk_id)}{@render hitCard(h.hit, h.rank, false)}{/each}</ol>
           </section>
         {/each}

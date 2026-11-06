@@ -64,7 +64,7 @@
   // A link to a document shows the library that holds it, so the reader and
   // the scope find it among that library's documents.
   $effect(() => {
-    if ((router.view !== "search" && router.view !== "read") || !router.docId) return;
+    if (!["search", "read", "library"].includes(router.view) || !router.docId) return;
     const label = labelOf(router.docId);
     if (label !== libraries.label && libraries.all.some((l) => l.library === label)) libraries.choose(label);
   });
@@ -183,7 +183,7 @@
     </aside>
 
     <header class="topbar">
-      <div class="top-picker"><LibraryPicker id="library-picker-top" where="top" /></div>
+      {#if !administering}<div class="top-picker"><LibraryPicker id="library-picker-top" where="top" /></div>{/if}
       <form class="gsearch" role="search" onsubmit={submit} novalidate>
         <Icon name="search" />
         <label class="sr-only" for="g-q">Search every library you can read</label>

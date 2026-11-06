@@ -11,13 +11,15 @@ import (
 )
 
 type AccessEvent struct {
-	ID        int64
-	At        time.Time
-	LibraryID string
-	Actor     sql.NullString
-	Action    string
-	Subject   sql.NullString
-	Role      sql.NullString
+	ID          int64
+	At          time.Time
+	LibraryID   string
+	Actor       sql.NullString
+	Action      string
+	Subject     sql.NullString
+	Role        sql.NullString
+	ActorName   sql.NullString
+	SubjectName sql.NullString
 }
 
 type AccountEvent struct {

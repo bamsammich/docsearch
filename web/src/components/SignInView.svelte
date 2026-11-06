@@ -119,12 +119,12 @@
               {#if s.editable && s.boolean}
                 <label class="setting-check">
                   <input type="checkbox" checked={draft[s.name] === "true"}
-                    onchange={(e) => (draft[s.name] = e.currentTarget.checked ? "true" : "false")} />
+                    onchange={(e) => { draft[s.name] = e.currentTarget.checked ? "true" : "false"; updated = null; }} />
                   <span>{draft[s.name] === "true" ? "Yes" : "No"}</span>
                 </label>
               {:else if s.editable}
                 <input class="input mono" id={`set-${s.name}`} type="text" autocomplete="off" spellcheck="false"
-                  bind:value={draft[s.name]} />
+                  bind:value={draft[s.name]} oninput={() => (updated = null)} />
               {:else}
                 <span class="setting-value">{s.value || "Not set"}</span>
               {/if}

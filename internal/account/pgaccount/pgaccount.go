@@ -11,18 +11,20 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
 	"github.com/bamsammich/docsearch/internal/resource"
 )
 
 // Store is the account.Store on Postgres.
 type Store struct {
+	db      *sql.DB
 	queries *pgdbgen.Queries
 }
 
 // New reads and writes accounts through db, as the request role.
 func New(db *sql.DB) *Store {
-	return &Store{queries: pgdbgen.New(db)}
+	return &Store{db: db, queries: pgdbgen.New(db)}
 }
 
 // Find is the account an identity already has.
@@ -73,11 +75,18 @@ func (s *Store) Users(ctx context.Context) ([]string, error) {
 }
 
 // Name records the username an account signed in under, and reports whether
-// the name is now the account's.
+// the name is now the account's. The transaction names the account, since
+// an account may name only itself.
 func (s *Store) Name(ctx context.Context, userID, username string) (bool, error) {
-	named, err := s.queries.SetUsername(ctx, pgdbgen.SetUsernameParams{
-		UserID: userID, Username: username,
-	})
+	var named bool
+	err := pgsession.Run(ctx, s.db, s.queries, pgsession.Personal(userID),
+		func(q *pgdbgen.Queries) error {
+			var err error
+			named, err = q.SetUsername(ctx, pgdbgen.SetUsernameParams{
+				UserID: userID, Username: username,
+			})
+			return err
+		})
 	if err != nil {
 		return false, fmt.Errorf("record username: %w", err)
 	}

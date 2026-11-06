@@ -17,6 +17,7 @@ func TestSharingRefusalsAnswerWithTheirCodes(t *testing.T) {
 		sharing.ErrNoLibrary:                            connect.CodeNotFound,
 		sharing.ErrNoAccount:                            connect.CodeNotFound,
 		sharing.ErrNoInvitation:                         connect.CodeNotFound,
+		sharing.ErrTooMany:                              connect.CodeResourceExhausted,
 		sharing.ErrLastAdmin:                            connect.CodeFailedPrecondition,
 		sharing.ErrNameTaken:                            connect.CodeAlreadyExists,
 		sharing.ErrInvalid:                              connect.CodeInvalidArgument,

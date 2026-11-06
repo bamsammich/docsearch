@@ -12,7 +12,7 @@ export function slugOf(name: string): string {
     .normalize("NFKD")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+/, "")
-    .slice(0, 63)
+    .slice(0, 40)
     .replace(/-+$/, "");
 }
 

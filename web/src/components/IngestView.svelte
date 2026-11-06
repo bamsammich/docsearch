@@ -47,7 +47,7 @@
         await upload(file, title.trim());
         toast.show(`Uploaded ${title.trim() || file.name} and queued it.`);
         file = null;
-        void queue.refresh();
+        queue.nudge();
       }
       title = "";
     } catch (err) {
