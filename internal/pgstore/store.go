@@ -146,7 +146,9 @@ func (s *Store) Ready(ctx context.Context) error {
 // Document is a ready document as reported by list_documents.
 type Document struct {
 	DocID string `json:"doc_id"`
-	Title string `json:"title"`
+	// Library is the library the document is in, as the caller names it.
+	Library string `json:"library,omitempty"`
+	Title   string `json:"title"`
 	// Format is the extraction format; SourceKind is where it came from.
 	// A site is 'site' whatever its pages were parsed as.
 	Format     string   `json:"format"`

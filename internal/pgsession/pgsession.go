@@ -66,6 +66,14 @@ func Run(
 	return nil
 }
 
+// Rescope moves an open transaction to another scope, for a read that visits
+// several libraries in one transaction, as a search across them does. The
+// policies check the grant again on every statement, so a library the user
+// holds no grant on still answers nothing.
+func Rescope(ctx context.Context, tx *sql.Tx, scope Scope) error {
+	return setScope(ctx, tx, scope)
+}
+
 // setScope is what the policies read: app.user_id is who is asking, and
 // app.library_id is the library the transaction works in.
 //

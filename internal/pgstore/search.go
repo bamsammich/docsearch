@@ -29,6 +29,9 @@ type SearchResult struct {
 	PageEnd     *int   `json:"page_end,omitempty"`
 	PrintedPage *int   `json:"printed_page_start,omitempty"`
 	DocID       string `json:"doc_id"`
+	// Library is the library the document is in, as the caller names it.
+	// Empty in a search of one library, which the caller already named.
+	Library     string `json:"library,omitempty"`
 	Title       string `json:"title"`
 	HeadingPath string `json:"heading_path"`
 	Section     string `json:"section,omitempty"`
@@ -107,13 +110,7 @@ const maxK = 200
 // points at depth 8 for it. Migration 7 declares the index; this has to order
 // by the same expression verbatim or the planner will not use it.
 func (s *Store) Search(ctx context.Context, p SearchParams) ([]SearchResult, error) {
-	if p.K <= 0 {
-		p.K = 8
-	}
-	if p.K > maxK {
-		p.K = maxK
-	}
-	match, err := ftsQuery(p.Query)
+	p, match, err := prepared(p)
 	if err != nil {
 		return nil, err
 	}
@@ -122,12 +119,10 @@ func (s *Store) Search(ctx context.Context, p SearchParams) ([]SearchResult, err
 	// document it holds.
 	var out []SearchResult
 	err = pgsession.ReadOnly(ctx, s.db, s.scope, func(tx *sql.Tx) error {
-		run := searcher{tx: tx, q: s.q.WithTx(tx), library: s.scope.Library}
-		index, err := run.ownIndex(ctx)
-		if err != nil || index == "" {
+		run, ok, err := s.searcherIn(ctx, tx, s.scope.Library)
+		if err != nil || !ok {
 			return err
 		}
-		run.index = index
 		var searchErr error
 		if p.DocID == "" {
 			out, searchErr = run.acrossDocuments(ctx, p, match)
@@ -137,6 +132,107 @@ func (s *Store) Search(ctx context.Context, p SearchParams) ([]SearchResult, err
 		return searchErr
 	})
 	return out, err
+}
+
+// SearchLibraries runs one unscoped search over every library in libs, in
+// one transaction, and merges them as a search of one library merges its
+// documents: by each document's own ranking, so the libraries' different
+// BM25 statistics are never compared. Each result names its library, and
+// its doc_id is the one an agent uses for it.
+//
+// The transaction moves from library to library, and the policies check the
+// store's user against each one, so a library in libs the user holds no
+// grant on contributes nothing.
+func (s *Store) SearchLibraries(
+	ctx context.Context,
+	libs []Library,
+	p SearchParams,
+) ([]SearchResult, error) {
+	p, match, err := prepared(p)
+	if err != nil || len(libs) == 0 {
+		return nil, err
+	}
+	p.DocID = ""
+	var perDoc [][]SearchResult
+	err = pgsession.ReadOnly(ctx, s.db, pgsession.Personal(s.scope.User), func(tx *sql.Tx) error {
+		for _, lib := range libs {
+			pools, err := s.poolsIn(ctx, tx, lib, p, match)
+			if err != nil {
+				return err
+			}
+			perDoc = append(perDoc, pools...)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return numbered(interleave(perDoc, p.K)), nil
+}
+
+// poolsIn moves tx to lib and ranks each of its documents' results, labelled
+// with the library.
+func (s *Store) poolsIn(
+	ctx context.Context,
+	tx *sql.Tx,
+	lib Library,
+	p SearchParams,
+	match string,
+) ([][]SearchResult, error) {
+	if err := pgsession.Rescope(ctx, tx,
+		pgsession.Scope{User: s.scope.User, Library: lib.ID}); err != nil {
+		return nil, err
+	}
+	run, ok, err := s.searcherIn(ctx, tx, lib.ID)
+	if err != nil || !ok {
+		return nil, err
+	}
+	pools, err := run.rankedPools(ctx, p, match)
+	if err != nil {
+		return nil, fmt.Errorf("search %s: %w", lib.Label, err)
+	}
+	for i := range pools {
+		pools[i] = Labelled(lib, pools[i])
+	}
+	return pools, nil
+}
+
+// Labelled names lib on each result and gives it the doc_id an agent uses.
+func Labelled(lib Library, results []SearchResult) []SearchResult {
+	for i := range results {
+		results[i].Library = lib.Label
+		results[i].DocID = lib.Qualify(results[i].DocID)
+	}
+	return results
+}
+
+// prepared applies the defaults and the cap, and builds the match.
+func prepared(p SearchParams) (SearchParams, string, error) {
+	if p.K <= 0 {
+		p.K = 8
+	}
+	if p.K > maxK {
+		p.K = maxK
+	}
+	match, err := ftsQuery(p.Query)
+	return p, match, err
+}
+
+// searcherIn is the statements of a search of library, through that
+// library's own BM25 index. A library with no partition holds no chunks,
+// and answers false.
+func (s *Store) searcherIn(
+	ctx context.Context,
+	tx *sql.Tx,
+	library string,
+) (searcher, bool, error) {
+	run := searcher{tx: tx, q: s.q.WithTx(tx), library: library}
+	index, err := run.ownIndex(ctx)
+	if err != nil || index == "" {
+		return searcher{}, false, err
+	}
+	run.index = index
+	return run, true, nil
 }
 
 // searcher is one search's statements, all in the transaction that named the
@@ -213,6 +309,20 @@ func (r searcher) acrossDocuments(
 	p SearchParams,
 	match string,
 ) ([]SearchResult, error) {
+	perDoc, err := r.rankedPools(ctx, p, match)
+	if err != nil {
+		return nil, err
+	}
+	return numbered(interleave(perDoc, p.K)), nil
+}
+
+// rankedPools is every ready document's results, each ranked as a search of
+// that document alone ranks it, in document order.
+func (r searcher) rankedPools(
+	ctx context.Context,
+	p SearchParams,
+	match string,
+) ([][]SearchResult, error) {
 	ready, err := r.readyTitles(ctx)
 	if err != nil {
 		return nil, err
@@ -235,12 +345,15 @@ func (r searcher) acrossDocuments(
 	for _, id := range slices.Sorted(maps.Keys(pools)) {
 		perDoc = append(perDoc, rankCandidates(pools[id], p.K))
 	}
+	return perDoc, nil
+}
 
-	out := interleave(perDoc, p.K)
+// numbered gives merged results their rank in the merged list.
+func numbered(out []SearchResult) []SearchResult {
 	for i := range out {
 		out[i].Rank = i + 1
 	}
-	return out, nil
+	return out
 }
 
 // walk reads the library's BM25 ordering once and keeps each ready

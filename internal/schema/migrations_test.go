@@ -735,3 +735,29 @@ func (s *MigrationSuite) columnExists(table, column string) bool {
 	return s.count(`SELECT COUNT(*) FROM information_schema.columns
 		  WHERE table_name = $1 AND column_name = $2`, table, column) == 1
 }
+
+// -- 00020_readable_libraries ---------------------------------------------
+
+func (s *MigrationSuite) TestReadableLibrariesNamesOnlyTheUsersGrants() {
+	s.upTo(20)
+	s.exec(`SELECT create_account('second', 'https://issuer.example', 'subject-2')`)
+	s.exec(`INSERT INTO libraries (library_id, kind, slug, name)
+		VALUES ('lib_team', 'shared', 'team', 'Team docs')`)
+	s.exec(`INSERT INTO library_grants (library_id, user_id, role)
+		VALUES ('lib_team', 'second', 'reader')`)
+
+	var libs []string
+	pgtest.ReadAs(s.T(), s.pg.App, "second", func(tx *sql.Tx) {
+		rows, err := tx.QueryContext(s.T().Context(),
+			`SELECT library_id || ':' || role FROM readable_libraries()`)
+		s.Require().NoError(err)
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var lib string
+			s.Require().NoError(rows.Scan(&lib))
+			libs = append(libs, lib)
+		}
+		s.Require().NoError(rows.Err())
+	})
+	s.Equal([]string{"second:admin", "lib_team:reader"}, libs, "their own first, and nobody else's")
+}

@@ -15,3 +15,11 @@ SELECT version FROM schema_version LIMIT 1;
 -- caller holding it still finds the document.
 -- name: RenameDocument :execrows
 UPDATE documents SET title = $2 WHERE doc_id = $1;
+
+-- The libraries the transaction's user reads, their own first. A definer
+-- function, because the request role cannot read library_grants.
+-- name: ReadableLibraries :many
+SELECT library_id::text AS library_id, kind::text AS kind,
+       COALESCE(slug, '')::text AS slug, COALESCE(name, '')::text AS name,
+       role::text AS role
+  FROM readable_libraries();

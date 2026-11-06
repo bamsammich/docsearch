@@ -74,6 +74,52 @@ func (q *Queries) ListReadyDocuments(ctx context.Context) ([]ListReadyDocumentsR
 	return items, nil
 }
 
+const readableLibraries = `-- name: ReadableLibraries :many
+SELECT library_id::text AS library_id, kind::text AS kind,
+       COALESCE(slug, '')::text AS slug, COALESCE(name, '')::text AS name,
+       role::text AS role
+  FROM readable_libraries()
+`
+
+type ReadableLibrariesRow struct {
+	LibraryID string
+	Kind      string
+	Slug      string
+	Name      string
+	Role      string
+}
+
+// The libraries the transaction's user reads, their own first. A definer
+// function, because the request role cannot read library_grants.
+func (q *Queries) ReadableLibraries(ctx context.Context) ([]ReadableLibrariesRow, error) {
+	rows, err := q.db.QueryContext(ctx, readableLibraries)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReadableLibrariesRow{}
+	for rows.Next() {
+		var i ReadableLibrariesRow
+		if err := rows.Scan(
+			&i.LibraryID,
+			&i.Kind,
+			&i.Slug,
+			&i.Name,
+			&i.Role,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const renameDocument = `-- name: RenameDocument :execrows
 UPDATE documents SET title = $2 WHERE doc_id = $1
 `

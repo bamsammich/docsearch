@@ -25,7 +25,6 @@ import (
 	"github.com/bamsammich/docsearch/internal/mcpserver"
 	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/pgsession"
-	"github.com/bamsammich/docsearch/internal/pgstore"
 	"github.com/bamsammich/docsearch/internal/repository/postgres"
 	"github.com/bamsammich/docsearch/internal/service/job"
 	"github.com/bamsammich/docsearch/internal/source/site"
@@ -218,7 +217,7 @@ func newMCPRoute(
 	log *slog.Logger,
 ) route {
 	srv := mcpserver.New(mcpserver.Deps{
-		Stores:       func(user string) (*pgstore.Store, error) { return libs.Store(pgsession.Personal(user)) },
+		Stores:       libs.Store,
 		LibraryRoots: cfg.LibraryRoots,
 		Log:          log,
 		UploadLinks:  ups.issuer.Issue,
