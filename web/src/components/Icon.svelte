@@ -26,6 +26,8 @@
     filter: '<path d="M4 6.5h16M7 12h10M10 17.5h4"/>',
     expand: '<path d="M14 4.5h5.5V10"/><path d="M19.5 4.5L13.5 10.5"/><path d="M10 19.5H4.5V14"/><path d="M4.5 19.5l6-6"/>',
     collapse: '<path d="M19.5 10H14V4.5"/><path d="M14 10l5.5-5.5"/><path d="M4.5 14H10v5.5"/><path d="M10 14l-5.5 5.5"/>',
+    selector: '<path d="M8 9.5l4-4 4 4"/><path d="M8 14.5l4 4 4-4"/>',
+    members: '<circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 19.5c.8-3.4 3.4-5.5 6.5-5.5s5.7 2.1 6.5 5.5"/><path d="M15.5 5.2a3.5 3.5 0 0 1 0 6.6M18 14.4c1.8.9 3 2.7 3.5 5.1"/>',
     copy: '<rect x="8.5" y="8.5" width="11" height="11" rx="1.5"/><path d="M15.5 8.5V6A1.5 1.5 0 0 0 14 4.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/>',
   } as const;
 

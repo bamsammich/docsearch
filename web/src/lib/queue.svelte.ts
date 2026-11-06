@@ -2,6 +2,7 @@
 // which unlike ListJobs says when a job has stalled.
 
 import { jobs } from "./api";
+import { libraries, own } from "./libraries.svelte";
 import { callTool, type JobView } from "./mcp";
 
 export const phases = ["discover", "fetch", "extract", "chunk", "index"] as const;
@@ -24,24 +25,29 @@ class Queue {
   #timer: ReturnType<typeof setTimeout> | undefined;
   #watchers = 0;
 
+  /** The jobs of the library the pages show. */
+  get shown(): JobView[] {
+    return this.all.filter((j) => (j.library ?? own) === libraries.label);
+  }
+
   get open(): JobView[] {
-    return this.all.filter((j) => !finished.has(j.status)).sort((a, b) => rank(a) - rank(b) || a.job_id - b.job_id);
+    return this.shown.filter((j) => !finished.has(j.status)).sort((a, b) => rank(a) - rank(b) || a.job_id - b.job_id);
   }
 
   get done(): JobView[] {
-    return this.all.filter((j) => finished.has(j.status)).sort((a, b) => b.job_id - a.job_id);
+    return this.shown.filter((j) => finished.has(j.status)).sort((a, b) => b.job_id - a.job_id);
   }
 
   get active(): number {
-    return this.all.filter((j) => busy.has(j.status)).length;
+    return this.shown.filter((j) => busy.has(j.status)).length;
   }
 
   get failed(): number {
-    return this.all.filter((j) => j.status === "failed").length;
+    return this.shown.filter((j) => j.status === "failed").length;
   }
 
   get stalled(): number {
-    return this.all.filter((j) => j.stalled).length;
+    return this.shown.filter((j) => j.stalled).length;
   }
 
   async refresh(): Promise<void> {
@@ -77,13 +83,14 @@ class Queue {
    * holds its bytes, which is what re-ingesting an unchanged file means.
    */
   async enqueue(source: string, title: string, force = false): Promise<number> {
-    const { jobs: queued } = await jobs.enqueue({ source, title, force });
+    const { jobs: queued } = await jobs.enqueue({ source, title, force, library: libraries.named });
     void this.refresh();
     return Number(queued[0]?.queuePosition ?? 0n);
   }
 
   async cancel(jobId: number): Promise<void> {
-    await jobs.cancelJob({ jobId: BigInt(jobId) });
+    const label = this.all.find((j) => j.job_id === jobId)?.library ?? own;
+    await jobs.cancelJob({ jobId: BigInt(jobId), library: label === own ? "" : label });
     void this.refresh();
   }
 

@@ -123,6 +123,20 @@ func (q *Queries) LibraryMembers(ctx context.Context, slug string) ([]LibraryMem
 	return items, nil
 }
 
+const ownUsername = `-- name: OwnUsername :one
+SELECT COALESCE(username, '')::text AS username
+  FROM users WHERE user_id = current_setting('app.user_id', true)
+`
+
+// The request role reads users, so an account's own username needs no
+// definer.
+func (q *Queries) OwnUsername(ctx context.Context) (string, error) {
+	row := q.db.QueryRowContext(ctx, ownUsername)
+	var username string
+	err := row.Scan(&username)
+	return username, err
+}
+
 const revokeLibrary = `-- name: RevokeLibrary :exec
 SELECT revoke_library($1::text, $2::text)
 `

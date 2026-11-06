@@ -4,6 +4,7 @@ import { Code, ConnectError, createClient, type Interceptor } from "@connectrpc/
 import { createConnectTransport } from "@connectrpc/connect-web";
 import { DocumentService } from "../gen/docsearch/document/v1/document_pb";
 import { JobService } from "../gen/docsearch/ingest/v1/job_pb";
+import { LibraryService } from "../gen/docsearch/library/v1/library_pb";
 import { session } from "./session.svelte";
 
 const bearer: Interceptor = (next) => async (req) => {
@@ -20,6 +21,7 @@ const transport = createConnectTransport({ baseUrl: location.origin, interceptor
 
 export const documents = createClient(DocumentService, transport);
 export const jobs = createClient(JobService, transport);
+export const shelves = createClient(LibraryService, transport);
 
 /** The server refuses requests from a page opened at an address it does not accept. */
 export function forbiddenOrigin(): string {

@@ -19,6 +19,7 @@ import (
 // satisfies it, and the database decides every rule.
 type Libraries interface {
 	List(ctx context.Context) ([]sharing.Library, error)
+	Username(ctx context.Context) (string, error)
 	Create(ctx context.Context, slug, name string) (sharing.Library, error)
 	Members(ctx context.Context, slug string) ([]sharing.Member, error)
 	Grant(ctx context.Context, slug, username, role string) error
@@ -55,7 +56,14 @@ func (s *LibraryServer) List(
 	if err != nil {
 		return nil, sharingError(err)
 	}
-	out := &libraryv1.ListResponse{Libraries: make([]*libraryv1.Library, 0, len(listed))}
+	username, err := libs.Username(ctx)
+	if err != nil {
+		return nil, sharingError(err)
+	}
+	out := &libraryv1.ListResponse{
+		Libraries: make([]*libraryv1.Library, 0, len(listed)),
+		Username:  username,
+	}
 	for _, lib := range listed {
 		out.Libraries = append(out.Libraries, libraryMessage(lib))
 	}

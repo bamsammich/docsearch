@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { libraries } from "../lib/libraries.svelte";
   import type { Document } from "../gen/docsearch/document/v1/document_pb";
   import { SourceKind } from "../gen/docsearch/type/v1/common_pb";
   import { total, verdictOrder } from "../lib/coverage";
@@ -179,7 +180,7 @@
     bind:this={box} style:--panel-w={`${panel.width}px`}>
     <section class="lib-list" aria-labelledby="lib-title">
       <div class="lib-head">
-        <h1 id="lib-title">Library</h1>
+        <h1 id="lib-title">{libraries.name}</h1>
         <p class="summary tnum">
           {#each summary as part, i (part.label)}{#if i}<span class="sep" aria-hidden="true">{" · "}</span>{/if}<span class="part"><b>{part.n}</b> {part.label}</span>{/each}
         </p>

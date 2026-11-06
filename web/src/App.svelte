@@ -1,6 +1,7 @@
 <script lang="ts">
   import { loadConfig } from "./lib/config";
   import { library } from "./lib/library.svelte";
+  import { libraries, nameOf } from "./lib/libraries.svelte";
   import { queue } from "./lib/queue.svelte";
   import { router } from "./lib/router.svelte";
   import { search } from "./lib/search.svelte";
@@ -10,7 +11,9 @@
   import Brand from "./components/Brand.svelte";
   import Icon from "./components/Icon.svelte";
   import IngestView from "./components/IngestView.svelte";
+  import LibraryPicker from "./components/LibraryPicker.svelte";
   import LibraryView from "./components/LibraryView.svelte";
+  import MembersView from "./components/MembersView.svelte";
   import ReaderView from "./components/ReaderView.svelte";
   import SearchView from "./components/SearchView.svelte";
   import SignIn from "./components/SignIn.svelte";
@@ -24,11 +27,22 @@
       .catch((err: unknown) => (bootError = err instanceof Error ? err.message : String(err)));
   });
 
-  // Signing in loads the library and starts watching the queue for the counts.
+  // Signing in loads the libraries and starts watching the queue for the counts.
   $effect(() => {
     if (session.status !== "signed-in") return;
-    void library.load();
+    void libraries.load();
     return queue.watch();
+  });
+
+  // The pages show one library: choosing another loads its documents, and a
+  // search scoped to a document of the last one no longer applies.
+  let shownLabel = "";
+  $effect(() => {
+    const label = libraries.label;
+    if (session.status !== "signed-in") return;
+    if (shownLabel && shownLabel !== label) search.docId = "";
+    shownLabel = label;
+    void library.load();
   });
 
   $effect(() => search.attach(field));
@@ -50,12 +64,12 @@
   const ingestAlert = $derived(queue.failed + queue.stalled);
   const ingestCount = $derived(ingestAlert || queue.active);
   const config = $derived(session.config);
-  const titles = { library: "Library", ingest: "Ingest", search: "Search", read: "Reader" } as const;
+  const titles = { library: "Documents", ingest: "Ingest", members: "Members", search: "Search", read: "Reader" } as const;
 
   const instance = $derived(config?.instanceLabel ?? "");
 
   $effect(() => {
-    const page = session.status === "signed-in" ? `${titles[router.view]} · docsearch` : "docsearch";
+    const page = session.status === "signed-in" ? `${titles[router.view]} · ${libraries.name} · docsearch` : "docsearch";
     document.title = instance ? `${instance} · ${page}` : page;
   });
 
@@ -103,9 +117,10 @@
   <div class="app">
     <aside class="side">
       <a class="side-brand" href="#/library" aria-label="docsearch library"><Brand /></a>
-      <nav class="sections" aria-label="Sections">
+      <div class="side-picker"><LibraryPicker id="library-picker" where="side" /></div>
+      <nav class="sections" aria-label={libraries.name}>
         <a class="section" href="#/library" aria-current={router.view === "library" || router.view === "read" ? "page" : undefined}>
-          <Icon name="library" /><span class="section-name">Library</span>
+          <Icon name="library" /><span class="section-name">Documents</span>
           {#if attention}<span class="count hot" aria-label={`${attention} need attention`}>{attention}</span>{/if}
         </a>
         <a class="section" href="#/ingest" aria-current={router.view === "ingest" ? "page" : undefined}>
@@ -115,26 +130,38 @@
               aria-label={ingestAlert ? `${ingestAlert} need attention` : `${queue.active} active`}>{ingestAlert || queue.active}{#if !ingestAlert}<span class="count-word"> running</span>{/if}</span>
           {/if}
         </a>
+        <a class="section" href="#/members" aria-current={router.view === "members" ? "page" : undefined}>
+          <Icon name="members" /><span class="section-name">Members</span>
+        </a>
       </nav>
       <div class="side-foot"><AccountMenu /></div>
     </aside>
 
     <header class="topbar">
-      <a class="top-brand" href="#/library" aria-label="docsearch library"><Brand /></a>
+      <div class="top-picker"><LibraryPicker id="library-picker-top" where="top" /></div>
       <form class="gsearch" role="search" onsubmit={submit} novalidate>
         <Icon name="search" />
-        <label class="sr-only" for="g-q">Search the library</label>
-        <input id="g-q" type="search" placeholder="Search the library" autocomplete="off"
+        <label class="sr-only" for="g-q">Search every library you can read</label>
+        <input id="g-q" type="search" placeholder={search.library || search.docId ? "Search" : "Search every library you can read"} autocomplete="off"
           bind:value={search.query} bind:this={field} />
         <label class="sr-only" for="g-scope">Search in</label>
-        <select id="g-scope" class="scope" bind:value={search.docId}>
-          <option value="">All documents</option>
-          {#each library.docs as d (d.docId)}<option value={d.docId}>{d.title}</option>{/each}
+        <select id="g-scope" class="scope" bind:value={search.scope}>
+          <option value="">All libraries</option>
+          {#if libraries.all.length > 1}
+            <optgroup label="One library">
+              {#each libraries.all as l (l.library)}<option value={`library:${l.library}`}>{nameOf(l)}</option>{/each}
+            </optgroup>
+          {/if}
+          {#if library.docs.length}
+            <optgroup label={`In ${libraries.name}`}>
+              {#each library.docs as d (d.docId)}<option value={d.docId}>{d.title}</option>{/each}
+            </optgroup>
+          {/if}
         </select>
         <kbd class="key" aria-hidden="true">/</kbd>
       </form>
       <div class="top-end">
-        {#if router.view !== "ingest"}
+        {#if router.view !== "ingest" && libraries.canEdit}
           <a class="btn on-frame add" href="#/ingest"><Icon name="plus" /><span>Add document</span></a>
         {/if}
       </div>
@@ -147,7 +174,7 @@
           <button class="btn primary" onclick={() => session.signOut()}>Sign in again</button>
         </div>
       {/if}
-      {#if router.view === "ingest"}<IngestView />{:else if router.view === "search"}<SearchView />{:else if router.view === "read"}<ReaderView />{:else}<LibraryView />{/if}
+      {#if router.view === "ingest"}<IngestView />{:else if router.view === "members"}<MembersView />{:else if router.view === "search"}<SearchView />{:else if router.view === "read"}<ReaderView />{:else}<LibraryView />{/if}
     </main>
   </div>
 {/if}

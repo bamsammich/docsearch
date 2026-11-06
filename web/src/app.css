@@ -91,7 +91,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 /* the app frame */
 .app { display: grid; grid-template-columns: 216px minmax(0, 1fr); grid-template-rows: auto 1fr; min-height: 100dvh; }
 .side { grid-row: 1 / -1; position: sticky; top: 0; height: 100dvh; display: flex; flex-direction: column; gap: 4px; padding: calc(12px + env(safe-area-inset-top, 0px)) 10px 12px max(10px, env(safe-area-inset-left, 0px)); background: var(--frame); color: var(--on-frame-muted); border-right: 1px solid var(--frame-line); color-scheme: dark; }
-.side .mark, .top-brand .mark { --mark-cut: var(--frame); }
+.side .mark { --mark-cut: var(--frame); }
 .side-brand { display: flex; align-items: center; min-height: 34px; padding: 0 8px; margin-bottom: 12px; color: var(--on-frame); text-decoration: none; border-radius: 7px; }
 .sections { display: grid; gap: 2px; }
 .section { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border-radius: 7px; color: var(--on-frame-muted); font-size: 14px; font-weight: 500; text-decoration: none; transition: background .15s, color .15s; }
@@ -105,7 +105,79 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 /* The side columns keep room for Add document, so the field stays centred
    and shrinks before anything overlaps it. */
 .topbar { position: sticky; top: 0; z-index: 20; display: grid; grid-template-columns: minmax(150px, 1fr) minmax(0, 600px) minmax(150px, 1fr); align-items: center; gap: 12px; min-height: var(--topbar-h); padding: 10px 20px; padding-top: max(10px, env(safe-area-inset-top, 0px)); background: var(--frame); color: var(--on-frame); color-scheme: dark; }
-.top-brand { display: none; color: var(--on-frame); text-decoration: none; }
+.top-picker { display: none; }
+
+/* The library picker heads the side navigation: the pages below it are that
+   library's. */
+.side-picker { margin: 0 0 10px; }
+.picker { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 46px; padding: 0 8px 0 6px; border: 1px solid var(--frame-line); border-radius: 9px; background: var(--frame-2); color: var(--on-frame); text-align: left; transition: border-color .15s, background .15s; }
+.picker:hover, .picker:focus-visible { border-color: var(--frame-3); background: var(--frame-3); }
+.picker > .i { width: 14px; height: 14px; flex: none; color: var(--on-frame-muted); }
+.tile { width: 28px; height: 28px; flex: none; border-radius: 6px; display: grid; place-items: center; background: var(--frame-3); color: var(--on-frame); font-size: 12px; font-weight: 700; }
+.tile.current { background: var(--accent); color: #ffffff; }
+.picker-text { flex: 1; min-width: 0; display: grid; line-height: 1.25; }
+.picker-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-role { font-size: 12px; color: var(--on-frame-muted); }
+.picker-pop { position: fixed; inset: auto; left: 10px; top: 110px; margin: 0; width: 320px; max-height: min(560px, calc(100dvh - 150px)); overflow: auto; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.picker-find { display: flex; align-items: center; gap: 8px; min-height: 34px; margin: 2px 2px 6px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 7px; color: var(--muted); }
+.picker-find:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+.picker-find .i { width: 14px; height: 14px; }
+.picker-find input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--ink); font-size: 14px; }
+.picker-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+.picker-group { padding: 10px 10px 4px; font-size: 12px; color: var(--muted); }
+.picker-none { padding: 10px; font-size: 13px; color: var(--muted); }
+.picker-opt { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--ink); text-align: left; font-size: 14px; }
+.picker-opt:hover, .picker-opt:focus-visible { background: var(--surface-2); }
+.picker-opt[aria-current="true"] { background: var(--accent-weak); }
+.picker-opt .tile { width: 24px; height: 24px; background: var(--surface-2); color: var(--ink-2); }
+.picker-opt .tile.current { background: var(--accent); color: #ffffff; }
+.opt-name { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.opt-role { font-size: 12px; color: var(--muted); }
+.picker-foot { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--line-soft); }
+.picker-action { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 38px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--ink-2); font-size: 14px; font-weight: 500; }
+.picker-action:hover, .picker-action:focus-visible { background: var(--surface-2); color: var(--ink); }
+.picker-action .i { width: 15px; height: 15px; }
+.picker-new { display: grid; gap: 6px; padding: 8px 8px 10px; border-radius: 8px; background: var(--surface-2); }
+.picker-new .input { background: var(--surface); }
+.picker-new .hint { margin: 0; }
+.picker-new .err { margin: 0; }
+.picker-new .row-btns { display: flex; gap: 6px; margin-top: 2px; }
+.linkish { border: 0; padding: 0; background: none; color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+
+/* A library's members, who may invite, and what changed. */
+.members { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 28px; }
+.members-main { flex: 999 1 460px; min-width: 0; max-width: 720px; display: grid; gap: 22px; }
+.members-solo { max-width: 620px; color: var(--ink-2); }
+.invite { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; }
+.invite .err, .invite .hint { margin: 0; }
+.invite-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.invite-row .input { flex: 1 1 200px; width: auto; }
+.role-pick { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 4px 0 10px; border: 1px solid var(--line-strong); border-radius: 7px; font-size: 13px; color: var(--muted); }
+.role-pick select { border: 0; outline: 0; background: none; color: var(--ink); font-size: 14px; }
+.role-pick:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+.mlist-wrap { display: grid; gap: 8px; }
+.mlist-head { margin: 0; font-size: 13px; font-weight: 600; }
+.mlist-head .muted { font-weight: 400; }
+.mlist { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; font-size: 13px; }
+.mrow { display: grid; grid-template-columns: 28px minmax(0, 1fr) 132px auto; gap: 12px; align-items: center; min-height: 50px; padding: 8px 14px; border-bottom: 1px solid var(--line-soft); }
+.mrow:last-child { border-bottom: 0; }
+.mavatar { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); font-size: 12px; font-weight: 600; }
+.mwho { display: grid; min-width: 0; line-height: 1.35; }
+.mname { font-weight: 500; overflow-wrap: anywhere; }
+.msince { font-size: 12px; color: var(--muted); }
+.mwho .err { margin: 2px 0 0; font-size: 12px; }
+.tag { display: inline-flex; align-items: center; min-height: 20px; margin-left: 8px; padding: 0 6px; border-radius: 5px; background: var(--surface-2); color: var(--ink-2); font-size: 12px; font-weight: 500; vertical-align: 1px; }
+.mrole { min-height: 30px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--ink); font-size: 13px; }
+.mrole:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+.mrole-text { color: var(--ink-2); }
+.mact { display: flex; gap: 6px; justify-content: flex-end; }
+.leave { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 12px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }
+.leave > span:first-child { flex: 1 1 280px; }
+.leave .row-btns { display: flex; gap: 6px; }
+.mlog { flex: 1 1 280px; max-width: 340px; min-width: 0; display: grid; gap: 8px; }
+.mlog-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; font-size: 13px; }
+.mlog-list li { display: grid; padding: 9px 14px; border-bottom: 1px solid var(--line-soft); }
+.mlog-list li:last-child { border-bottom: 0; }
 .gsearch { grid-column: 2; display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 6px 0 12px; border: 1px solid var(--frame-line); border-radius: 9px; background: var(--frame-2); color: var(--on-frame-muted); transition: border-color .15s, box-shadow .15s; }
 .gsearch:focus-within { border-color: var(--frame-live); box-shadow: 0 0 0 3px rgba(155, 184, 255, .22); }
 .gsearch input { flex: 1; min-width: 0; height: 36px; border: 0; outline: 0; background: transparent; color: var(--on-frame); font-size: 14px; }
@@ -536,7 +608,13 @@ details.help p { margin: 8px 0 0; color: var(--muted); }
   .account-name, .account-btn > svg { display: none; }
   .account-pop { left: 12px; right: 12px; width: auto; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
   .topbar { grid-template-columns: minmax(0, 1fr) auto; row-gap: 8px; padding: 8px 12px 10px; padding-top: max(8px, env(safe-area-inset-top, 0px)); }
-  .top-brand { display: flex; grid-column: 1; grid-row: 1; }
+  .side-picker { display: none; }
+  .top-picker { display: block; grid-column: 1; grid-row: 1; min-width: 0; max-width: 260px; }
+  .picker.at-top { min-height: 40px; }
+  .picker-pop.at-top { left: 12px; right: 12px; width: auto; }
+  .mrow { grid-template-columns: 28px minmax(0, 1fr) auto; }
+  .mrow .mact { grid-column: 2 / -1; justify-content: flex-start; }
+  .mrow .mact:empty { display: none; }
   .top-end { grid-column: 2; grid-row: 1; }
   .gsearch { grid-column: 1 / -1; grid-row: 2; }
   .gsearch .scope { max-width: none; flex: none; }

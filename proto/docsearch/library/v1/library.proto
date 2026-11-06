@@ -44,6 +44,9 @@ message ListRequest {}
 
 message ListResponse {
   repeated Library libraries = 1;
+  // Username is the caller's own, as others invite them by. Empty for an
+  // account that has not signed in since usernames were recorded.
+  string username = 2;
 }
 
 message CreateRequest {

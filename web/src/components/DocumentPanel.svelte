@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { libraries } from "../lib/libraries.svelte";
   import { tick } from "svelte";
   import type { Document, InspectReport } from "../gen/docsearch/document/v1/document_pb";
   import { SourceKind } from "../gen/docsearch/type/v1/common_pb";
@@ -193,7 +194,7 @@
 
 <article class="record" aria-labelledby="rec-title">
   {#if sheet}
-    <button class="btn quiet small sheet-back" onclick={onclose}><Icon name="back" /> Library</button>
+    <button class="btn quiet small sheet-back" onclick={onclose}><Icon name="back" /> {libraries.name}</button>
   {:else if onexpand || onclose}
     <div class="rec-tools">
       {#if onexpand}
@@ -266,7 +267,7 @@
                       <Icon name="scan" /> {inspect ? "Hide structure" : "Inspect structure"}
                     </button>
                   {:else}
-                    <button class="btn small" onclick={reingest} disabled={busy}><Icon name="refresh" /> Re-ingest</button>
+                    {#if libraries.canEdit}<button class="btn small" onclick={reingest} disabled={busy}><Icon name="refresh" /> Re-ingest</button>{/if}
                   {/if}
                   {#if b.hint}<span class="hint">{b.hint}</span>{/if}
                 </div>
@@ -355,11 +356,13 @@
   </details>
 
   <footer class="rec-foot">
-    {#if !offersReingest}<button class="btn quiet small" onclick={reingest} disabled={busy}><Icon name="refresh" /> Re-ingest</button>{/if}
-    <button class="btn quiet small" onclick={startRename} disabled={busy}><Icon name="pencil" /> Rename</button>
+    {#if libraries.canEdit}
+      {#if !offersReingest}<button class="btn quiet small" onclick={reingest} disabled={busy}><Icon name="refresh" /> Re-ingest</button>{/if}
+      <button class="btn quiet small" onclick={startRename} disabled={busy}><Icon name="pencil" /> Rename</button>
+    {/if}
     <button class="btn quiet small" onclick={copyId}><Icon name="copy" /> Copy ID</button>
     <span class="spacer"></span>
-    <button class="btn danger small" onclick={() => (confirming = true)} disabled={busy}><Icon name="trash" /> Remove</button>
+    {#if libraries.canEdit}<button class="btn danger small" onclick={() => (confirming = true)} disabled={busy}><Icon name="trash" /> Remove</button>{/if}
   </footer>
   {#if confirming}
     <div class="confirm" role="alert">
