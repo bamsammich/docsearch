@@ -29,6 +29,18 @@ type Client struct {
 	ingest    ingestv1connect.IngestServiceClient
 	jobs      ingestv1connect.JobServiceClient
 	libraries libraryv1connect.LibraryServiceClient
+	// library is the label of the library the document and job calls act
+	// on. Empty is the caller's own.
+	library string
+}
+
+// In is a client whose document and job calls act on the library label
+// names, or on the caller's own when label is empty. A doc_id from another
+// library is library/doc_id, as List returns it, and works from any client.
+func (c *Client) In(label string) *Client {
+	scoped := *c
+	scoped.library = label
+	return &scoped
 }
 
 // New builds a client for the server at baseURL, authenticating with token.
@@ -88,7 +100,10 @@ func (b bearer) authorize(header http.Header) {
 
 // List is every document the index holds.
 func (c *Client) List(ctx context.Context) ([]document.Document, error) {
-	res, err := c.documents.List(ctx, connect.NewRequest(&documentv1.ListRequest{}))
+	res, err := c.documents.List(
+		ctx,
+		connect.NewRequest(&documentv1.ListRequest{Library: c.library}),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -134,9 +149,10 @@ func (c *Client) Enqueue(
 	force bool,
 ) ([]job.Queued, error) {
 	res, err := c.jobs.Enqueue(ctx, connect.NewRequest(&ingestv1.EnqueueRequest{
-		Source: target,
-		Title:  title,
-		Force:  force,
+		Source:  target,
+		Title:   title,
+		Force:   force,
+		Library: c.library,
 	}))
 	if err != nil {
 		return nil, err
@@ -157,6 +173,7 @@ func (c *Client) Jobs(ctx context.Context, includeCompleted bool, limit int) ([]
 	res, err := c.jobs.ListJobs(ctx, connect.NewRequest(&ingestv1.ListJobsRequest{
 		IncludeCompleted: includeCompleted,
 		Limit:            int64(limit),
+		Library:          c.library,
 	}))
 	if err != nil {
 		return nil, err
@@ -171,7 +188,7 @@ func (c *Client) Jobs(ctx context.Context, includeCompleted bool, limit int) ([]
 // Cancel asks a job to stop and reports what it reads as now.
 func (c *Client) Cancel(ctx context.Context, id int64) (string, error) {
 	res, err := c.jobs.CancelJob(ctx,
-		connect.NewRequest(&ingestv1.CancelJobRequest{JobId: id}))
+		connect.NewRequest(&ingestv1.CancelJobRequest{JobId: id, Library: c.library}))
 	if err != nil {
 		return "", err
 	}

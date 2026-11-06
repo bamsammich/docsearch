@@ -9,6 +9,9 @@ import "google/protobuf/timestamp.proto";
 
 // Document is one document the index holds.
 message Document {
+  // DocId is bare in your own library and library/doc_id in any other, the
+  // same identifier an agent sees. Every request that takes a doc_id takes
+  // it in that form.
   string doc_id = 1;
   string title = 2;
   // Format is how the document was extracted; source_kind is where it came
@@ -124,7 +127,11 @@ message InspectReport {
   bool blocked = 7;
 }
 
-message ListRequest {}
+message ListRequest {
+  // Library is the label of a library you read, as LibraryService.List
+  // names it. Empty is your own.
+  string library = 1;
+}
 
 message ListResponse {
   repeated Document documents = 1;

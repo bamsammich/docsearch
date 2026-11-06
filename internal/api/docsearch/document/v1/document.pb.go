@@ -29,8 +29,11 @@ const (
 // Document is one document the index holds.
 type Document struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	DocId string                 `protobuf:"bytes,1,opt,name=doc_id,json=docId,proto3" json:"doc_id,omitempty"`
-	Title string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	// DocId is bare in your own library and library/doc_id in any other, the
+	// same identifier an agent sees. Every request that takes a doc_id takes
+	// it in that form.
+	DocId string `protobuf:"bytes,1,opt,name=doc_id,json=docId,proto3" json:"doc_id,omitempty"`
+	Title string `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
 	// Format is how the document was extracted; source_kind is where it came
 	// from. A site is a site whatever its pages were parsed as.
 	Format     string        `protobuf:"bytes,3,opt,name=format,proto3" json:"format,omitempty"`
@@ -758,7 +761,10 @@ func (x *InspectReport) GetBlocked() bool {
 }
 
 type ListRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Library is the label of a library you read, as LibraryService.List
+	// names it. Empty is your own.
+	Library       string `protobuf:"bytes,1,opt,name=library,proto3" json:"library,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -791,6 +797,13 @@ func (x *ListRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListRequest.ProtoReflect.Descriptor instead.
 func (*ListRequest) Descriptor() ([]byte, []int) {
 	return file_docsearch_document_v1_document_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ListRequest) GetLibrary() string {
+	if x != nil {
+		return x.Library
+	}
+	return ""
 }
 
 type ListResponse struct {
@@ -1492,8 +1505,9 @@ const file_docsearch_document_v1_document_proto_rawDesc = "" +
 	"page_count\x18\x05 \x01(\x03H\x00R\tpageCount\x88\x01\x01\x12A\n" +
 	"\bfindings\x18\x06 \x03(\v2%.docsearch.document.v1.InspectFindingR\bfindings\x12\x18\n" +
 	"\ablocked\x18\a \x01(\bR\ablockedB\r\n" +
-	"\v_page_count\"\r\n" +
-	"\vListRequest\"M\n" +
+	"\v_page_count\"'\n" +
+	"\vListRequest\x12\x18\n" +
+	"\alibrary\x18\x01 \x01(\tR\alibrary\"M\n" +
 	"\fListResponse\x12=\n" +
 	"\tdocuments\x18\x01 \x03(\v2\x1f.docsearch.document.v1.DocumentR\tdocuments\"&\n" +
 	"\rVerifyRequest\x12\x15\n" +

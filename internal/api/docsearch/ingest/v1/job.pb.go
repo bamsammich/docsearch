@@ -205,7 +205,9 @@ type EnqueueRequest struct {
 	// document whose file never changed. The document stays searchable until
 	// the new read replaces it. Without force, held bytes are skipped unless
 	// an older pipeline read them.
-	Force         bool `protobuf:"varint,3,opt,name=force,proto3" json:"force,omitempty"`
+	Force bool `protobuf:"varint,3,opt,name=force,proto3" json:"force,omitempty"`
+	// Library is the label of a library you edit. Empty is your own.
+	Library       string `protobuf:"bytes,4,opt,name=library,proto3" json:"library,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -259,6 +261,13 @@ func (x *EnqueueRequest) GetForce() bool {
 		return x.Force
 	}
 	return false
+}
+
+func (x *EnqueueRequest) GetLibrary() string {
+	if x != nil {
+		return x.Library
+	}
+	return ""
 }
 
 // QueuedJob is one job Enqueue created.
@@ -378,8 +387,11 @@ type ListJobsRequest struct {
 	// IncludeCompleted returns finished jobs as well as the queue.
 	IncludeCompleted bool  `protobuf:"varint,1,opt,name=include_completed,json=includeCompleted,proto3" json:"include_completed,omitempty"`
 	Limit            int64 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Library is the label of the library whose queue to list. Empty is your
+	// own.
+	Library       string `protobuf:"bytes,3,opt,name=library,proto3" json:"library,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListJobsRequest) Reset() {
@@ -424,6 +436,13 @@ func (x *ListJobsRequest) GetLimit() int64 {
 		return x.Limit
 	}
 	return 0
+}
+
+func (x *ListJobsRequest) GetLibrary() string {
+	if x != nil {
+		return x.Library
+	}
+	return ""
 }
 
 type ListJobsResponse struct {
@@ -471,8 +490,10 @@ func (x *ListJobsResponse) GetJobs() []*Job {
 }
 
 type CancelJobRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	JobId         int64                  `protobuf:"varint,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	JobId int64                  `protobuf:"varint,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	// Library is the label of the library the job fills. Empty is your own.
+	Library       string `protobuf:"bytes,2,opt,name=library,proto3" json:"library,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -512,6 +533,13 @@ func (x *CancelJobRequest) GetJobId() int64 {
 		return x.JobId
 	}
 	return 0
+}
+
+func (x *CancelJobRequest) GetLibrary() string {
+	if x != nil {
+		return x.Library
+	}
+	return ""
 }
 
 type CancelJobResponse struct {
@@ -586,24 +614,27 @@ const file_docsearch_ingest_v1_job_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\x0f \x01(\tR\tupdatedAtB\x13\n" +
 	"\x11_progress_currentB\x11\n" +
-	"\x0f_progress_total\"T\n" +
+	"\x0f_progress_total\"n\n" +
 	"\x0eEnqueueRequest\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x14\n" +
-	"\x05force\x18\x03 \x01(\bR\x05force\"a\n" +
+	"\x05force\x18\x03 \x01(\bR\x05force\x12\x18\n" +
+	"\alibrary\x18\x04 \x01(\tR\alibrary\"a\n" +
 	"\tQueuedJob\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x15\n" +
 	"\x06job_id\x18\x02 \x01(\x03R\x05jobId\x12%\n" +
 	"\x0equeue_position\x18\x03 \x01(\x03R\rqueuePosition\"Q\n" +
 	"\x0fEnqueueResponse\x122\n" +
-	"\x04jobs\x18\x03 \x03(\v2\x1e.docsearch.ingest.v1.QueuedJobR\x04jobsJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03\"T\n" +
+	"\x04jobs\x18\x03 \x03(\v2\x1e.docsearch.ingest.v1.QueuedJobR\x04jobsJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03\"n\n" +
 	"\x0fListJobsRequest\x12+\n" +
 	"\x11include_completed\x18\x01 \x01(\bR\x10includeCompleted\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x03R\x05limit\"@\n" +
+	"\x05limit\x18\x02 \x01(\x03R\x05limit\x12\x18\n" +
+	"\alibrary\x18\x03 \x01(\tR\alibrary\"@\n" +
 	"\x10ListJobsResponse\x12,\n" +
-	"\x04jobs\x18\x01 \x03(\v2\x18.docsearch.ingest.v1.JobR\x04jobs\")\n" +
+	"\x04jobs\x18\x01 \x03(\v2\x18.docsearch.ingest.v1.JobR\x04jobs\"C\n" +
 	"\x10CancelJobRequest\x12\x15\n" +
-	"\x06job_id\x18\x01 \x01(\x03R\x05jobId\"+\n" +
+	"\x06job_id\x18\x01 \x01(\x03R\x05jobId\x12\x18\n" +
+	"\alibrary\x18\x02 \x01(\tR\alibrary\"+\n" +
 	"\x11CancelJobResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status2\x9d\x02\n" +
 	"\n" +

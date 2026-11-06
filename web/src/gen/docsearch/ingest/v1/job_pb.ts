@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file docsearch/ingest/v1/job.proto.
  */
 export const file_docsearch_ingest_v1_job: GenFile = /*@__PURE__*/
-  fileDesc("Ch1kb2NzZWFyY2gvaW5nZXN0L3YxL2pvYi5wcm90bxITZG9jc2VhcmNoLmluZ2VzdC52MSLiAgoDSm9iEg4KBmpvYl9pZBgBIAEoAxIOCgZzb3VyY2UYAiABKAkSDQoFdGl0bGUYAyABKAkSDgoGZG9jX2lkGAQgASgJEg4KBnN0YXR1cxgFIAEoCRINCgVwaGFzZRgGIAEoCRIdChBwcm9ncmVzc19jdXJyZW50GAcgASgDSACIAQESGwoOcHJvZ3Jlc3NfdG90YWwYCCABKANIAYgBARIQCghhdHRlbXB0cxgJIAEoAxIRCglwZXJtYW5lbnQYCiABKAgSDQoFZXJyb3IYCyABKAkSKwoHcXVhbGl0eRgMIAEoDjIaLmRvY3NlYXJjaC50eXBlLnYxLlF1YWxpdHkSEAoId2FybmluZ3MYDSADKAkSEgoKY3JlYXRlZF9hdBgOIAEoCRISCgp1cGRhdGVkX2F0GA8gASgJQhMKEV9wcm9ncmVzc19jdXJyZW50QhEKD19wcm9ncmVzc190b3RhbCI+Cg5FbnF1ZXVlUmVxdWVzdBIOCgZzb3VyY2UYASABKAkSDQoFdGl0bGUYAiABKAkSDQoFZm9yY2UYAyABKAgiQwoJUXVldWVkSm9iEg4KBnNvdXJjZRgBIAEoCRIOCgZqb2JfaWQYAiABKAMSFgoOcXVldWVfcG9zaXRpb24YAyABKAMiSwoPRW5xdWV1ZVJlc3BvbnNlEiwKBGpvYnMYAyADKAsyHi5kb2NzZWFyY2guaW5nZXN0LnYxLlF1ZXVlZEpvYkoECAEQAkoECAIQAyI7Cg9MaXN0Sm9ic1JlcXVlc3QSGQoRaW5jbHVkZV9jb21wbGV0ZWQYASABKAgSDQoFbGltaXQYAiABKAMiOgoQTGlzdEpvYnNSZXNwb25zZRImCgRqb2JzGAEgAygLMhguZG9jc2VhcmNoLmluZ2VzdC52MS5Kb2IiIgoQQ2FuY2VsSm9iUmVxdWVzdBIOCgZqb2JfaWQYASABKAMiIwoRQ2FuY2VsSm9iUmVzcG9uc2USDgoGc3RhdHVzGAEgASgJMp0CCgpKb2JTZXJ2aWNlElYKB0VucXVldWUSIy5kb2NzZWFyY2guaW5nZXN0LnYxLkVucXVldWVSZXF1ZXN0GiQuZG9jc2VhcmNoLmluZ2VzdC52MS5FbnF1ZXVlUmVzcG9uc2UiABJZCghMaXN0Sm9icxIkLmRvY3NlYXJjaC5pbmdlc3QudjEuTGlzdEpvYnNSZXF1ZXN0GiUuZG9jc2VhcmNoLmluZ2VzdC52MS5MaXN0Sm9ic1Jlc3BvbnNlIgASXAoJQ2FuY2VsSm9iEiUuZG9jc2VhcmNoLmluZ2VzdC52MS5DYW5jZWxKb2JSZXF1ZXN0GiYuZG9jc2VhcmNoLmluZ2VzdC52MS5DYW5jZWxKb2JSZXNwb25zZSIAYgZwcm90bzM", [file_docsearch_type_v1_common]);
+  fileDesc("Ch1kb2NzZWFyY2gvaW5nZXN0L3YxL2pvYi5wcm90bxITZG9jc2VhcmNoLmluZ2VzdC52MSLiAgoDSm9iEg4KBmpvYl9pZBgBIAEoAxIOCgZzb3VyY2UYAiABKAkSDQoFdGl0bGUYAyABKAkSDgoGZG9jX2lkGAQgASgJEg4KBnN0YXR1cxgFIAEoCRINCgVwaGFzZRgGIAEoCRIdChBwcm9ncmVzc19jdXJyZW50GAcgASgDSACIAQESGwoOcHJvZ3Jlc3NfdG90YWwYCCABKANIAYgBARIQCghhdHRlbXB0cxgJIAEoAxIRCglwZXJtYW5lbnQYCiABKAgSDQoFZXJyb3IYCyABKAkSKwoHcXVhbGl0eRgMIAEoDjIaLmRvY3NlYXJjaC50eXBlLnYxLlF1YWxpdHkSEAoId2FybmluZ3MYDSADKAkSEgoKY3JlYXRlZF9hdBgOIAEoCRISCgp1cGRhdGVkX2F0GA8gASgJQhMKEV9wcm9ncmVzc19jdXJyZW50QhEKD19wcm9ncmVzc190b3RhbCJPCg5FbnF1ZXVlUmVxdWVzdBIOCgZzb3VyY2UYASABKAkSDQoFdGl0bGUYAiABKAkSDQoFZm9yY2UYAyABKAgSDwoHbGlicmFyeRgEIAEoCSJDCglRdWV1ZWRKb2ISDgoGc291cmNlGAEgASgJEg4KBmpvYl9pZBgCIAEoAxIWCg5xdWV1ZV9wb3NpdGlvbhgDIAEoAyJLCg9FbnF1ZXVlUmVzcG9uc2USLAoEam9icxgDIAMoCzIeLmRvY3NlYXJjaC5pbmdlc3QudjEuUXVldWVkSm9iSgQIARACSgQIAhADIkwKD0xpc3RKb2JzUmVxdWVzdBIZChFpbmNsdWRlX2NvbXBsZXRlZBgBIAEoCBINCgVsaW1pdBgCIAEoAxIPCgdsaWJyYXJ5GAMgASgJIjoKEExpc3RKb2JzUmVzcG9uc2USJgoEam9icxgBIAMoCzIYLmRvY3NlYXJjaC5pbmdlc3QudjEuSm9iIjMKEENhbmNlbEpvYlJlcXVlc3QSDgoGam9iX2lkGAEgASgDEg8KB2xpYnJhcnkYAiABKAkiIwoRQ2FuY2VsSm9iUmVzcG9uc2USDgoGc3RhdHVzGAEgASgJMp0CCgpKb2JTZXJ2aWNlElYKB0VucXVldWUSIy5kb2NzZWFyY2guaW5nZXN0LnYxLkVucXVldWVSZXF1ZXN0GiQuZG9jc2VhcmNoLmluZ2VzdC52MS5FbnF1ZXVlUmVzcG9uc2UiABJZCghMaXN0Sm9icxIkLmRvY3NlYXJjaC5pbmdlc3QudjEuTGlzdEpvYnNSZXF1ZXN0GiUuZG9jc2VhcmNoLmluZ2VzdC52MS5MaXN0Sm9ic1Jlc3BvbnNlIgASXAoJQ2FuY2VsSm9iEiUuZG9jc2VhcmNoLmluZ2VzdC52MS5DYW5jZWxKb2JSZXF1ZXN0GiYuZG9jc2VhcmNoLmluZ2VzdC52MS5DYW5jZWxKb2JSZXNwb25zZSIAYgZwcm90bzM", [file_docsearch_type_v1_common]);
 
 /**
  * Job is one row of the queue.
@@ -151,6 +151,13 @@ export type EnqueueRequest = Message<"docsearch.ingest.v1.EnqueueRequest"> & {
    * @generated from field: bool force = 3;
    */
   force: boolean;
+
+  /**
+   * Library is the label of a library you edit. Empty is your own.
+   *
+   * @generated from field: string library = 4;
+   */
+  library: string;
 };
 
 /**
@@ -231,6 +238,14 @@ export type ListJobsRequest = Message<"docsearch.ingest.v1.ListJobsRequest"> & {
    * @generated from field: int64 limit = 2;
    */
   limit: bigint;
+
+  /**
+   * Library is the label of the library whose queue to list. Empty is your
+   * own.
+   *
+   * @generated from field: string library = 3;
+   */
+  library: string;
 };
 
 /**
@@ -265,6 +280,13 @@ export type CancelJobRequest = Message<"docsearch.ingest.v1.CancelJobRequest"> &
    * @generated from field: int64 job_id = 1;
    */
   jobId: bigint;
+
+  /**
+   * Library is the label of the library the job fills. Empty is your own.
+   *
+   * @generated from field: string library = 2;
+   */
+  library: string;
 };
 
 /**

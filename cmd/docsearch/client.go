@@ -26,9 +26,10 @@ func serverFlags() []cli.Flag {
 	}
 }
 
-// clientFor is the client the command was configured to use.
+// clientFor is the client the command was configured to use, acting on the
+// library --library names where the command takes one.
 func clientFor(cmd *cli.Command) *connectclient.Client {
-	return connectclient.Default(cmd.String("server"), tokenFromEnv())
+	return connectclient.Default(cmd.String("server"), tokenFromEnv()).In(cmd.String(flagLibrary))
 }
 
 // The argument names and the one flag every ingesting command takes, written
@@ -38,7 +39,14 @@ const (
 	argDocID  = "<doc_id>"
 	flagTitle = "title"
 	flagForce = "force"
+	// flagLibrary names a library other than your own.
+	flagLibrary = "library"
 )
+
+// libraryFlag chooses the library a command acts on.
+func libraryFlag(usage string) *cli.StringFlag {
+	return &cli.StringFlag{Name: flagLibrary, Usage: usage}
+}
 
 // titleFlag overrides the name a document gives itself.
 func titleFlag() *cli.StringFlag {

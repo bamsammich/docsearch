@@ -28,6 +28,11 @@ type Library struct {
 	own  bool
 }
 
+// Personal is user's own library, as Libraries lists it to them.
+func Personal(user string) Library {
+	return Library{ID: user, Label: OwnLabel, Role: "admin", own: true}
+}
+
 // Own reports whether the library is the user's own.
 func (l Library) Own() bool { return l.own }
 

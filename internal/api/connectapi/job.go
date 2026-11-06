@@ -11,7 +11,8 @@ import (
 	"github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1/ingestv1connect"
 	typev1 "github.com/bamsammich/docsearch/internal/api/docsearch/type/v1"
 	"github.com/bamsammich/docsearch/internal/libroot"
-	"github.com/bamsammich/docsearch/internal/owner"
+	"github.com/bamsammich/docsearch/internal/pgsession"
+	"github.com/bamsammich/docsearch/internal/pgstore"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 	"github.com/bamsammich/docsearch/internal/service/job"
 )
@@ -24,12 +25,15 @@ type Jobs interface {
 	Cancel(ctx context.Context, id int64) (string, error)
 }
 
-// JobsFor builds the queue of the user a request acts for.
-type JobsFor func(user string) (Jobs, error)
+// JobsFor builds one library's ingest queue, as one user.
+type JobsFor func(scope pgsession.Scope) (Jobs, error)
 
 // JobServer implements the generated job handler.
 type JobServer struct {
 	jobs JobsFor
+	// readable is every library the asking user reads, which is how a
+	// library label becomes a scope.
+	readable ReadableFor
 	// notFound recognises a job the queue does not hold.
 	notFound error
 }
@@ -37,11 +41,12 @@ type JobServer struct {
 // NewJobServer returns the path to mount the handler on, and the handler.
 func NewJobServer(
 	jobs JobsFor,
+	readable ReadableFor,
 	notFound error,
 	opts ...connect.HandlerOption,
 ) (string, http.Handler) {
 	return ingestv1connect.NewJobServiceHandler(
-		&JobServer{jobs: jobs, notFound: notFound},
+		&JobServer{jobs: jobs, readable: readable, notFound: notFound},
 		opts...,
 	)
 }
@@ -60,7 +65,7 @@ func (s *JobServer) Enqueue(
 			connect.CodeInvalidArgument,
 			errors.New("source names the file, directory or site to queue"))
 	}
-	queue, err := s.forOwner(ctx)
+	queue, err := s.editing(ctx, req.Msg.GetLibrary())
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +94,11 @@ func (s *JobServer) ListJobs(
 	ctx context.Context,
 	req *connect.Request[ingestv1.ListJobsRequest],
 ) (*connect.Response[ingestv1.ListJobsResponse], error) {
-	queue, err := s.forOwner(ctx)
+	sh, err := labelled(ctx, s.readable, req.Msg.GetLibrary())
+	if err != nil {
+		return nil, err
+	}
+	queue, err := s.in(sh)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +109,7 @@ func (s *JobServer) ListJobs(
 	}
 	out := make([]*ingestv1.Job, len(jobs))
 	for i, j := range jobs {
-		out[i] = jobMessage(j)
+		out[i] = jobMessage(j, sh.library)
 	}
 	return connect.NewResponse(&ingestv1.ListJobsResponse{Jobs: out}), nil
 }
@@ -113,7 +122,7 @@ func (s *JobServer) CancelJob(
 		return nil, connect.NewError(
 			connect.CodeInvalidArgument, errors.New("job_id names the job to cancel"))
 	}
-	queue, err := s.forOwner(ctx)
+	queue, err := s.editing(ctx, req.Msg.GetLibrary())
 	if err != nil {
 		return nil, err
 	}
@@ -140,12 +149,12 @@ func (s *JobServer) asConnectError(err error) error {
 }
 
 // jobMessage is one queue row as a caller sees it.
-func jobMessage(j job.Job) *ingestv1.Job {
+func jobMessage(j job.Job, lib pgstore.Library) *ingestv1.Job {
 	return &ingestv1.Job{
 		JobId:           j.JobID,
 		Source:          j.Source,
 		Title:           j.Title,
-		DocId:           j.DocID,
+		DocId:           qualified(lib, j.DocID),
 		Status:          j.Status,
 		Phase:           j.Phase,
 		ProgressCurrent: optionalInt(j.ProgressCurrent),
@@ -160,17 +169,36 @@ func jobMessage(j job.Job) *ingestv1.Job {
 	}
 }
 
-// forOwner is the queue of the user a request acts for.
+// in is one library's queue.
 //
 //nolint:ireturn // a factory for a port returns that port; a concrete type here would defeat it.
-func (s *JobServer) forOwner(ctx context.Context) (Jobs, error) {
-	user, err := owner.From(ctx)
-	if err != nil {
-		return nil, asConnectError(err)
-	}
-	jobs, err := s.jobs(user)
+func (s *JobServer) in(sh shelf) (Jobs, error) {
+	jobs, err := s.jobs(sh.scope)
 	if err != nil {
 		return nil, asConnectError(err)
 	}
 	return jobs, nil
+}
+
+// editing is the queue of a library the user edits, named by its label.
+//
+//nolint:ireturn // a factory for a port returns that port; a concrete type here would defeat it.
+func (s *JobServer) editing(ctx context.Context, label string) (Jobs, error) {
+	sh, err := labelled(ctx, s.readable, label)
+	if err != nil {
+		return nil, err
+	}
+	if err := sh.editable(); err != nil {
+		return nil, err
+	}
+	return s.in(sh)
+}
+
+// qualified is a job's document in the form a caller names it by, and
+// nothing for a job that has not named its document yet.
+func qualified(lib pgstore.Library, docID string) string {
+	if docID == "" {
+		return ""
+	}
+	return lib.Qualify(docID)
 }

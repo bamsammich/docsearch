@@ -17,6 +17,7 @@ import (
 	typev1 "github.com/bamsammich/docsearch/internal/api/docsearch/type/v1"
 	"github.com/bamsammich/docsearch/internal/domain"
 	"github.com/bamsammich/docsearch/internal/owner"
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/service/ingest"
 	"github.com/bamsammich/docsearch/internal/service/job"
 )
@@ -29,15 +30,22 @@ type JobAPISuite struct {
 	suite.Suite
 	jobs   *mocks.MockJobs
 	client ingestv1connect.JobServiceClient
+	// scopes are the libraries the handler asked for a queue in.
+	scopes []pgsession.Scope
 }
 
 func TestJobAPI(t *testing.T) { suite.Run(t, new(JobAPISuite)) }
 
 func (s *JobAPISuite) SetupTest() {
 	s.jobs = mocks.NewMockJobs(s.T())
+	s.scopes = nil
 
 	path, handler := connectapi.NewJobServer(
-		func(string) (connectapi.Jobs, error) { return s.jobs, nil }, errNoJob)
+		func(scope pgsession.Scope) (connectapi.Jobs, error) {
+			s.scopes = append(s.scopes, scope)
+			return s.jobs, nil
+		},
+		shelves, errNoJob)
 	mux := http.NewServeMux()
 	mux.Handle(path, owner.Middleware(owner.Builtin, handler))
 	server := httptest.NewServer(mux)
@@ -185,10 +193,10 @@ func (s *JobAPISuite) TestAJobTheQueueDoesNotHoldIsNotFound() {
 // built-in queue.
 func (s *JobAPISuite) TestListingJobsWithNoOwnerIsRefused() {
 	path, handler := connectapi.NewJobServer(
-		func(string) (connectapi.Jobs, error) {
+		func(pgsession.Scope) (connectapi.Jobs, error) {
 			s.FailNow("the handler asked for a queue without a user")
 			return nil, nil
-		}, errNoJob)
+		}, shelves, errNoJob)
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
 	server := httptest.NewServer(mux)
@@ -197,4 +205,44 @@ func (s *JobAPISuite) TestListingJobsWithNoOwnerIsRefused() {
 	_, err := ingestv1connect.NewJobServiceClient(server.Client(), server.URL).
 		ListJobs(s.T().Context(), connect.NewRequest(&ingestv1.ListJobsRequest{}))
 	s.Require().ErrorContains(err, "no owner")
+}
+
+func (s *JobAPISuite) TestQueueingIntoALibraryYouEditUsesItsQueue() {
+	s.jobs.EXPECT().Enqueue(mock.Anything, "https://example.com/docs", "", false).
+		Return([]job.Queued{{Source: "https://example.com/docs", JobID: 9}}, nil)
+
+	_, err := s.client.Enqueue(s.T().Context(), connect.NewRequest(&ingestv1.EnqueueRequest{
+		Source: "https://example.com/docs", Library: "platform",
+	}))
+	s.Require().NoError(err)
+	s.Equal([]pgsession.Scope{{User: owner.Builtin, Library: platformID}}, s.scopes)
+}
+
+func (s *JobAPISuite) TestAReaderCannotQueueOrCancel() {
+	_, err := s.client.Enqueue(s.T().Context(), connect.NewRequest(&ingestv1.EnqueueRequest{
+		Source: "https://example.com/docs", Library: "runbooks",
+	}))
+	s.Require().Error(err)
+	s.Equal(connect.CodePermissionDenied, connect.CodeOf(err))
+
+	_, err = s.client.CancelJob(s.T().Context(),
+		connect.NewRequest(&ingestv1.CancelJobRequest{JobId: 9, Library: "runbooks"}))
+	s.Require().Error(err)
+	s.Equal(connect.CodePermissionDenied, connect.CodeOf(err))
+	s.Empty(s.scopes)
+}
+
+func (s *JobAPISuite) TestASharedLibrarysJobsNameTheirDocumentQualified() {
+	s.jobs.EXPECT().List(mock.Anything, false, 0).Return([]job.Job{
+		{JobID: 7, DocID: "guide", Status: "done"},
+		{JobID: 8, Status: "queued"},
+	}, nil)
+
+	res, err := s.client.ListJobs(s.T().Context(),
+		connect.NewRequest(&ingestv1.ListJobsRequest{Library: "platform"}))
+	s.Require().NoError(err)
+	s.Require().Len(res.Msg.GetJobs(), 2)
+
+	s.Equal("platform/guide", res.Msg.GetJobs()[0].GetDocId())
+	s.Empty(res.Msg.GetJobs()[1].GetDocId())
 }
