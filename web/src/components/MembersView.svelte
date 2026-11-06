@@ -3,6 +3,7 @@
   import type { Event, Member } from "../gen/docsearch/library/v1/library_pb";
   import { problem, shelves } from "../lib/api";
   import { library } from "../lib/library.svelte";
+  import { admin } from "../lib/admin.svelte";
   import { libraries } from "../lib/libraries.svelte";
   import { router } from "../lib/router.svelte";
   import { initialOf } from "../lib/names";
@@ -128,7 +129,7 @@
         inviter.delete(e.subject);
         since.delete(e.subject);
       } else if (e.action === "revoke") {
-        lines.push({ what: e.actor === e.subject ? `${subject} left` : `${actor} removed ${subject}`, when: whenOf(e) });
+        lines.push({ what: e.actor && e.actor === e.subject ? `${subject} left` : `${actor} removed ${subject}`, when: whenOf(e) });
         held.delete(e.subject);
         since.delete(e.subject);
       }
@@ -153,7 +154,9 @@
 
   function refusal(err: unknown, who: string): string {
     if (err instanceof ConnectError && err.code === Code.NotFound)
-      return `No account named ${who} yet. They need to sign in once before you can invite them.`;
+      return admin.passwords
+        ? `No account named ${who}. An administrator adds accounts on the People page.`
+        : `No account named ${who} yet. They need to sign in once before you can invite them.`;
     if (err instanceof ConnectError && err.code === Code.FailedPrecondition)
       return "That would leave the library without an admin. Make someone else an admin first.";
     return problem(err);

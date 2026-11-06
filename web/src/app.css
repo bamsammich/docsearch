@@ -672,6 +672,10 @@ details.help p { margin: 8px 0 0; color: var(--muted); }
   .account-pop { left: 12px; right: 12px; width: auto; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
   .topbar { grid-template-columns: minmax(0, 1fr) auto; row-gap: 8px; padding: 8px 12px 10px; padding-top: max(8px, env(safe-area-inset-top, 0px)); }
   .side-picker { display: none; }
+  /* Administration's tab bar: Back and its two pages, without the heading. */
+  .sections-label { display: none; }
+  .side-back { flex-direction: column; justify-content: center; gap: 3px; min-height: 50px; margin: 0; padding: 0 8px; font-size: 11px; max-width: 30%; }
+  .side-back .i { width: 22px; height: 22px; }
   .top-picker { display: block; grid-column: 1; grid-row: 1; min-width: 0; max-width: 260px; }
   .picker.at-top { min-height: 40px; }
   .picker-pop.at-top { left: 12px; right: 12px; width: auto; }

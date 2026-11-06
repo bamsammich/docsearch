@@ -50,6 +50,11 @@ class Queue {
     return this.shown.filter((j) => j.stalled).length;
   }
 
+  /** Whether work is moving in any library, which is when to poll quickly. */
+  get moving(): boolean {
+    return this.all.some((j) => busy.has(j.status));
+  }
+
   async refresh(): Promise<void> {
     try {
       const out = await callTool<{ jobs: JobView[] | null }>("ingest_status", { include_completed: true });
@@ -75,16 +80,26 @@ class Queue {
   async #tick(): Promise<void> {
     await this.refresh();
     if (this.#watchers === 0) return;
-    this.#timer = setTimeout(() => void this.#tick(), this.active > 0 ? 2000 : 15000);
+    this.#timer = setTimeout(() => void this.#tick(), this.moving ? 2000 : 15000);
   }
 
   /**
    * Queues a source. Forced, it is read again even where the index already
    * holds its bytes, which is what re-ingesting an unchanged file means.
    */
+  /** Reads the queue now and goes on polling from there, after new work is queued. */
+  nudge(): void {
+    if (this.#watchers === 0) {
+      void this.refresh();
+      return;
+    }
+    clearTimeout(this.#timer);
+    void this.#tick();
+  }
+
   async enqueue(source: string, title: string, force = false): Promise<number> {
     const { jobs: queued } = await jobs.enqueue({ source, title, force, library: libraries.named });
-    void this.refresh();
+    this.nudge();
     return Number(queued[0]?.queuePosition ?? 0n);
   }
 

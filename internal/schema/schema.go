@@ -49,7 +49,7 @@ var migrations embed.FS
 // section did when it began holding section numbers rather than page
 // numbers, is invisible to any structural check while silently changing what
 // queries return.
-const Version = 29
+const Version = 30
 
 // History is readable, so a version mismatch can be diagnosed without
 // reading the git log.
@@ -92,6 +92,7 @@ var History = map[int]string{
 	27: "a job left running by a requester who lost the grant fails once its lease runs out",
 	28: "adding someone to a library invites them, and nothing reaches them until they accept",
 	29: "removing an account always succeeds, and an administrator takes over the libraries only it administered",
+	30: "a partition answers only through chunks, an account names only itself, and the log keeps removed names",
 }
 
 // The tables this package names. Written once, so a typo cannot reach a

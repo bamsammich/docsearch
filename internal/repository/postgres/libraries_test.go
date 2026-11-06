@@ -1,6 +1,8 @@
 package postgres_test
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -282,6 +284,37 @@ func (s *LibrariesSuite) TestAnInvitationIsDeclinedOrWithdrawn() {
 	s.Equal([]string{
 		"create", "invite", "accept", "invite", "decline", "invite", "withdraw",
 	}, actions)
+}
+
+// A library's name has a limit, and so does how many one account creates.
+func (s *LibrariesSuite) TestLibrariesHaveLimits() {
+	ctx := s.T().Context()
+	_, err := s.as("cy").Create(ctx, "long", strings.Repeat("n", 121))
+	s.Require().ErrorIs(err, sharing.ErrInvalid)
+
+	for i := range 100 {
+		_, err := s.as("cy").Create(ctx, fmt.Sprintf("lib-%d", i), "Library")
+		s.Require().NoError(err)
+	}
+	_, err = s.as("cy").Create(ctx, "one-too-many", "Library")
+	s.Require().ErrorIs(err, sharing.ErrTooMany)
+	_, err = s.as("ana").Create(ctx, "another", "Library")
+	s.Require().NoError(err, "the limit is per account")
+}
+
+// The change log keeps a username once the account has lost it, as a
+// removed account does.
+func (s *LibrariesSuite) TestTheLogKeepsAUsernameTheAccountLost() {
+	s.team()
+	ctx := s.T().Context()
+	_, err := s.db.Owner.ExecContext(ctx, `UPDATE users SET username = NULL WHERE user_id = 'ben'`)
+	s.Require().NoError(err)
+
+	events, err := s.as("ana").Events(ctx, "team")
+	s.Require().NoError(err)
+	s.Require().Len(events, 3)
+	s.Equal("ben", events[1].Subject)
+	s.Equal("ben", events[2].Actor)
 }
 
 // An account reads its own username and nobody else's, and one that has not

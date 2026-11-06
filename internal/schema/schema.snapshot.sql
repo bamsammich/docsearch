@@ -56,6 +56,22 @@ $$;
 
 
 --
+-- Name: access_event_names(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.access_event_names() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+BEGIN
+  NEW.actor_name := COALESCE(NEW.actor_name, (SELECT username FROM users WHERE user_id = NEW.actor));
+  NEW.subject_name := COALESCE(NEW.subject_name, (SELECT username FROM users WHERE user_id = NEW.subject));
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: admins_left(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -117,6 +133,7 @@ BEGIN
     VALUES (new_user_id, new_user_id, 'admin');
   EXECUTE format('CREATE TABLE %I PARTITION OF chunks FOR VALUES IN (%L)',
                  partition_name, new_user_id);
+  EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', partition_name);
   EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO docsearch_app',
                  partition_name);
 END;
@@ -138,6 +155,9 @@ BEGIN
   IF actor IS NULL OR actor = '' THEN
     RAISE EXCEPTION 'no user' USING ERRCODE = 'DSL01';
   END IF;
+  IF (SELECT count(*) FROM libraries WHERE created_by = actor AND kind = 'shared') >= 100 THEN
+    RAISE EXCEPTION 'you have created 100 libraries, the most one account may' USING ERRCODE = 'DSL06';
+  END IF;
   IF EXISTS (SELECT 1 FROM libraries WHERE slug = new_slug) THEN
     RAISE EXCEPTION 'a library named % already exists', new_slug USING ERRCODE = 'DSL04';
   END IF;
@@ -145,6 +165,7 @@ BEGIN
     VALUES (new_id, 'shared', new_slug, new_name, actor);
   EXECUTE format('CREATE TABLE %I PARTITION OF chunks FOR VALUES IN (%L)',
                  'chunks_' || new_id, new_id);
+  EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', 'chunks_' || new_id);
   EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO docsearch_app',
                  'chunks_' || new_id);
   INSERT INTO library_grants (library_id, user_id, role, granted_by)
@@ -294,7 +315,8 @@ BEGIN
     RAISE EXCEPTION 'no library named % that you administer', lib_slug USING ERRCODE = 'DSL01';
   END IF;
   RETURN QUERY
-    SELECT e.at, COALESCE(a.username, ''), e.action, COALESCE(s.username, ''), COALESCE(e.role, '')
+    SELECT e.at, COALESCE(a.username, e.actor_name, ''), e.action,
+           COALESCE(s.username, e.subject_name, ''), COALESCE(e.role, '')
       FROM access_events e
       LEFT JOIN users a ON a.user_id = e.actor
       LEFT JOIN users s ON s.user_id = e.subject
@@ -592,6 +614,10 @@ CREATE FUNCTION public.set_username(target_user text, new_username text) RETURNS
     SET search_path TO 'public', 'pg_temp'
     AS $$
 BEGIN
+  IF session_user <> current_user
+     AND target_user IS DISTINCT FROM NULLIF(current_setting('app.user_id', true), '') THEN
+    RAISE EXCEPTION 'an account names only itself' USING ERRCODE = '42501';
+  END IF;
   UPDATE users SET username = new_username
    WHERE user_id = target_user
      AND username IS DISTINCT FROM new_username
@@ -646,6 +672,8 @@ CREATE TABLE public.access_events (
     action text NOT NULL,
     subject text,
     role text,
+    actor_name text,
+    subject_name text,
     CONSTRAINT access_events_action_check CHECK ((action = ANY (ARRAY['create'::text, 'grant'::text, 'revoke'::text, 'invite'::text, 'accept'::text, 'decline'::text, 'withdraw'::text])))
 );
 
@@ -1156,6 +1184,14 @@ ALTER TABLE ONLY public.ingest_jobs
 
 
 --
+-- Name: libraries libraries_name_length; Type: CHECK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE public.libraries
+    ADD CONSTRAINT libraries_name_length CHECK ((char_length(name) <= 120)) NOT VALID;
+
+
+--
 -- Name: libraries libraries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1448,6 +1484,13 @@ ALTER INDEX public.idx_chunks_doc_section ATTACH PARTITION public.chunks_default
 
 
 --
+-- Name: access_events access_event_names; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER access_event_names BEFORE INSERT ON public.access_events FOR EACH ROW EXECUTE FUNCTION public.access_event_names();
+
+
+--
 -- Name: password_accounts password_account_removed; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -1690,6 +1733,12 @@ ALTER TABLE ONLY public.uploads
 --
 
 ALTER TABLE public.chunks ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: chunks_default; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.chunks_default ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: documents; Type: ROW SECURITY; Schema: public; Owner: -

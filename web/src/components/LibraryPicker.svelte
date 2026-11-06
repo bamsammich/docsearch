@@ -63,7 +63,8 @@
 
   function toggled(event: ToggleEvent): void {
     if (event.newState === "open") {
-      if (findable) findField?.focus();
+      // On a touch screen focus opens the keyboard over the list.
+      if (findable && !matchMedia("(pointer: coarse)").matches) findField?.focus();
     } else {
       reset();
     }
@@ -170,7 +171,8 @@
   {#if findable}
     <label class="picker-find">
       <Icon name="search" /><span class="sr-only">Find a library</span>
-      <input type="search" placeholder="Find a library" autocomplete="off" bind:value={find} bind:this={findField} />
+      <input type="search" placeholder="Find a library" autocomplete="off" bind:value={find} bind:this={findField}
+        onkeydown={(e) => { if (e.key === "Escape") { e.preventDefault(); pop?.hidePopover(); trigger?.focus(); } }} />
     </label>
   {/if}
   {#if libraries.invitations.length}
@@ -194,7 +196,7 @@
   {/if}
   <ul class="picker-list" aria-label="Libraries">
     {#each ownShown as lib (lib.library)}{@render option(lib)}{/each}
-    {#if shared.length}<li class="picker-group" aria-hidden="true">Shared with you</li>{/if}
+    {#if shared.length}<li class="picker-group" aria-hidden="true">Shared</li>{/if}
     {#each shared as lib (lib.library)}{@render option(lib)}{/each}
     {#if !shown.length}<li class="picker-none">No library matches “{find.trim()}”.</li>{/if}
   </ul>
@@ -207,7 +209,7 @@
           aria-describedby={error ? `${id}-err` : undefined} />
         {#if editingSlug}
           <label class="lbl" for={`${id}-slug`}>Name agents use</label>
-          <input class="input mono" id={`${id}-slug`} type="text" maxlength="63" autocomplete="off" spellcheck="false"
+          <input class="input mono" id={`${id}-slug`} type="text" maxlength="40" autocomplete="off" spellcheck="false"
             bind:value={slug} oninput={() => (error = "")} />
         {:else if agentName}
           <p class="hint">Agents name it <span class="mono">{agentName}</span> · <button type="button" class="linkish" onclick={changeSlug}>Change</button></p>

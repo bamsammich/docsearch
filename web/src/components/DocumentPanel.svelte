@@ -80,10 +80,10 @@
     if (sheet) heading?.focus();
     void callTool<{ entries: Entry[] | null }>("outline", { doc_id: id, depth: 1 })
       .then((out) => {
-        if (doc.docId === id) entries = out.entries ?? [];
+        if (doc?.docId === id) entries = out.entries ?? [];
       })
       .catch(() => {
-        if (doc.docId === id) entries = [];
+        if (doc?.docId === id) entries = [];
       });
   });
 

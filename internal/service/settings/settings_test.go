@@ -158,3 +158,57 @@ func (s *SettingsSuite) TestAURLSettingTakesOnlyAnHTTPURL() {
 		s.Require().ErrorIs(err, settings.ErrInvalid, bad)
 	}
 }
+
+// RewriteSuite holds how a change lands in docsearch.yaml: a value changed
+// in place leaves every other byte as the operator wrote it.
+type RewriteSuite struct{ suite.Suite }
+
+func TestRewrite(t *testing.T) { suite.Run(t, new(RewriteSuite)) }
+
+const opsFile = `# Deployed from the ops repository.
+addr: 0.0.0.0:8765
+
+auth:
+  mode: oidc    # set by the platform team
+  oidc:
+    issuer: "https://id.example.com"
+    sign_up: false
+`
+
+func (s *RewriteSuite) TestAValueChangedInPlaceKeepsEveryOtherByte() {
+	out, err := settings.Rewrite([]byte(opsFile), map[string]any{
+		"auth.oidc.issuer":  "https://login.example.com",
+		"auth.oidc.sign_up": true,
+	})
+	s.Require().NoError(err)
+	s.Equal(`# Deployed from the ops repository.
+addr: 0.0.0.0:8765
+
+auth:
+  mode: oidc    # set by the platform team
+  oidc:
+    issuer: https://login.example.com
+    sign_up: true
+`, string(out))
+}
+
+func (s *RewriteSuite) TestAValueKeepsItsComment() {
+	out, err := settings.Rewrite([]byte(opsFile), map[string]any{"auth.mode": "password"})
+	s.Require().NoError(err)
+	s.Contains(string(out), "  mode: password    # set by the platform team\n")
+	s.Contains(string(out), "\n\nauth:", "the blank line stays")
+}
+
+func (s *RewriteSuite) TestAValueThatNeedsQuotesIsQuoted() {
+	out, err := settings.Rewrite([]byte(opsFile), map[string]any{"addr": "# not a comment"})
+	s.Require().NoError(err)
+	s.Contains(string(out), "addr: '# not a comment'\n")
+}
+
+func (s *RewriteSuite) TestANewKeyWritesTheDocumentOut() {
+	out, err := settings.Rewrite([]byte(opsFile),
+		map[string]any{"public_url": "https://docs.example.com"})
+	s.Require().NoError(err)
+	s.Contains(string(out), "public_url: https://docs.example.com")
+	s.Contains(string(out), "# Deployed from the ops repository.")
+}

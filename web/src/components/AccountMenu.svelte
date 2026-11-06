@@ -6,13 +6,15 @@
 
   const config = $derived(session.config);
   const issuerHost = $derived(config?.issuer ? new URL(config.issuer).host : "");
-  // One letter for the button: the account's own name, or the mode's.
-  const initial = $derived(
-    config?.auth === "token" ? "T" : initialOf(session.who),
-  );
+  // The account's username once docsearch says it: a password sign-in's
+  // token carries no name of its own.
   const who = $derived(
-    config?.auth === "token" ? "Server token" : config?.auth === "none" ? "Local server" : session.who,
+    config?.auth === "token" ? "Server token"
+      : config?.auth === "none" ? "Local server"
+      : admin.username || session.who,
   );
+  // One letter for the button: the account's own name, or the mode's.
+  const initial = $derived(config?.auth === "token" ? "T" : initialOf(who));
   const how = $derived(
     {
       none: "No sign-in. Local access only.",

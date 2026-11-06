@@ -61,14 +61,17 @@ export function headline(c: Coverage): string {
   if (all === 0) {
     return "Nothing from this document reached the index.";
   }
-  const of = c.lost > 0 ? `${number.format(reach)} of ${number.format(all)}` : `all ${number.format(all)}`;
+  // One page or chunk is "the only", never "all 1".
+  const unit = all === 1 ? c.unit.slice(0, -1) : c.unit;
+  const of = c.lost > 0 ? `${number.format(reach)} of ${number.format(all)}`
+    : all === 1 ? "the only" : `all ${number.format(all)}`;
   if (c.unreliable > 0) {
-    return `Agents reach ${of} ${c.unit}, but can't narrow a search to one chapter.`;
+    return `Agents reach ${of} ${unit}, but can't narrow a search to one chapter.`;
   }
   if (c.lost > 0) {
-    return `Agents reach ${of} ${c.unit}.`;
+    return `Agents reach ${of} ${unit}.`;
   }
-  return `Agents reach ${of} ${c.unit} by chapter.`;
+  return `Agents reach ${of} ${unit} by chapter.`;
 }
 
 /** What each grade finding costs an agent, in one line read after "Agents lose:". */

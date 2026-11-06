@@ -223,8 +223,13 @@ func typed(e Editable, value string) any {
 
 // Rewrite sets each dotted key in a YAML document to its value, creating
 // the mappings it needs and removing a key whose value is nil. Comments and
-// every key it was not asked to change are kept.
+// every key it was not asked to change are kept. When every change replaces
+// a value already on one line, only those values change and every other
+// byte stays as written; otherwise the document is written out again.
 func Rewrite(src []byte, values map[string]any) ([]byte, error) {
+	if out, ok := splice(src, values); ok {
+		return out, nil
+	}
 	doc, err := document(src)
 	if err != nil {
 		return nil, err
@@ -255,6 +260,145 @@ func document(src []byte) (*yaml.Node, error) {
 		return nil, errors.New("the config file is not a mapping of settings")
 	}
 	return &doc, nil
+}
+
+// splice replaces each value in place on its own line. It reports false
+// when a change needs more: a key to add or remove, or a value that is not
+// a scalar on one line.
+func splice(src []byte, values map[string]any) ([]byte, bool) {
+	doc, err := document(src)
+	if err != nil || len(src) == 0 {
+		return nil, false
+	}
+	lines := strings.SplitAfter(string(src), "\n")
+	for key, value := range values {
+		if !spliceOne(lines, doc.Content[0], key, value) {
+			return nil, false
+		}
+	}
+	out := []byte(strings.Join(lines, ""))
+	return out, holds(out, values)
+}
+
+// spliceOne replaces key's value on its line in lines.
+func spliceOne(lines []string, root *yaml.Node, key string, value any) bool {
+	if value == nil {
+		return false
+	}
+	node := lookup(root, strings.Split(key, "."))
+	if node == nil || node.Kind != yaml.ScalarNode || node.Line > len(lines) {
+		return false
+	}
+	line := lines[node.Line-1]
+	from := node.Column - 1
+	to, ok := scalarEnd(line, from, node.Style)
+	if !ok {
+		return false
+	}
+	text, ok := render(scalarOf(value))
+	if !ok {
+		return false
+	}
+	lines[node.Line-1] = line[:from] + text + line[to:]
+	return true
+}
+
+// lookup is the value node at path under mapping, or nil.
+func lookup(mapping *yaml.Node, path []string) *yaml.Node {
+	for i := 0; mapping.Kind == yaml.MappingNode && i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value != path[0] {
+			continue
+		}
+		if len(path) == 1 {
+			return mapping.Content[i+1]
+		}
+		return lookup(mapping.Content[i+1], path[1:])
+	}
+	return nil
+}
+
+// scalarEnd is the byte offset where a one-line scalar starting at from
+// ends, before any comment.
+func scalarEnd(line string, from int, style yaml.Style) (int, bool) {
+	switch {
+	case from < 0 || from > len(line):
+		return 0, false
+	case style&yaml.DoubleQuotedStyle != 0:
+		return doubleQuotedEnd(line, from)
+	case style&yaml.SingleQuotedStyle != 0:
+		return singleQuotedEnd(line, from)
+	case style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0:
+		return 0, false
+	default:
+		return plainEnd(line, from), true
+	}
+}
+
+// doubleQuotedEnd is past the quote that closes a "..." scalar.
+func doubleQuotedEnd(line string, from int) (int, bool) {
+	for i := from + 1; i < len(line); i++ {
+		switch line[i] {
+		case '\\':
+			i++
+		case '"':
+			return i + 1, true
+		}
+	}
+	return 0, false
+}
+
+// singleQuotedEnd is past the quote that closes a '...' scalar, where ”
+// is a quote inside it.
+func singleQuotedEnd(line string, from int) (int, bool) {
+	for i := from + 1; i < len(line); i++ {
+		if line[i] != '\'' {
+			continue
+		}
+		if i+1 < len(line) && line[i+1] == '\'' {
+			i++
+			continue
+		}
+		return i + 1, true
+	}
+	return 0, false
+}
+
+// plainEnd is where a plain scalar ends: before a comment, or the end of
+// the line, with trailing space left in place.
+func plainEnd(line string, from int) int {
+	rest := line[from:]
+	for i := 1; i < len(rest); i++ {
+		if rest[i] == '#' && (rest[i-1] == ' ' || rest[i-1] == '\t') {
+			return from + len(strings.TrimRight(rest[:i], " \t"))
+		}
+	}
+	return from + len(strings.TrimRight(rest, " \t\r\n"))
+}
+
+// render is a scalar as YAML writes it on one line.
+func render(scalar *yaml.Node) (string, bool) {
+	out, err := yaml.Marshal(scalar)
+	if err != nil {
+		return "", false
+	}
+	text := strings.TrimSuffix(string(out), "\n")
+	return text, !strings.Contains(text, "\n")
+}
+
+// holds reports whether src parses and gives each key the value asked for,
+// so a splice that went wrong falls back to writing the document out.
+func holds(src []byte, values map[string]any) bool {
+	doc, err := document(src)
+	if err != nil {
+		return false
+	}
+	for key, value := range values {
+		node := lookup(doc.Content[0], strings.Split(key, "."))
+		if node == nil || node.Value != fmt.Sprint(value) {
+			return false
+		}
+	}
+	return true
 }
 
 // scalarOf is value as a YAML scalar, tagged as a boolean or as text.

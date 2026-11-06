@@ -15,9 +15,9 @@ describe("slugOf", () => {
     expect(slugOf("—!—")).toBe("");
   });
 
-  it("ends on a letter or digit when a long name is cut", () => {
-    const slug = slugOf(`${"a".repeat(62)} b`);
-    expect(slug).toBe("a".repeat(62));
+  it("is cut to the 40 characters the server takes, ending on a letter or digit", () => {
+    expect(slugOf(`${"a".repeat(39)} b`)).toBe("a".repeat(39));
+    expect(slugOf("x".repeat(50))).toBe("x".repeat(40));
   });
 });
 

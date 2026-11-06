@@ -51,4 +51,8 @@ describe("finding copy", () => {
     expect(costOf("unaddressable")).toContain("section_filter");
     expect(costOf("a_code_from_a_newer_server")).toBe("");
   });
+  it("says a lone chunk is the only one, not all 1", () => {
+    const c = { byChapter: 1, unreliable: 0, lost: 0, unit: "chunks" as const };
+    expect(headline(c)).toBe("Agents reach the only chunk by chapter.");
+  });
 });

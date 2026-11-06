@@ -70,6 +70,8 @@ var (
 	// ErrNoInvitation is a library the caller is not invited to, whether or
 	// not it exists.
 	ErrNoInvitation = errors.New("no invitation to a library by that name")
+	// ErrTooMany is a library past the most one account may create.
+	ErrTooMany = errors.New("you have created as many libraries as one account may")
 	// ErrNameTaken is a slug another library already has.
 	ErrNameTaken = errors.New("a library by that name already exists")
 	// ErrInvalid is a slug, name or role the database refused the shape of.

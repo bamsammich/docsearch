@@ -20,6 +20,7 @@
   /** A password shown once, and whose it is. */
   let issued = $state<{ username: string; password: string } | null>(null);
   let removing = $state("");
+  let resetting = $state("");
   let rowError = $state<Record<string, string>>({});
   let busy = $state(false);
 
@@ -84,7 +85,10 @@
   async function act(p: Account, run: () => Promise<unknown>, done: string): Promise<void> {
     document.getElementById(`acct-${p.username}`)?.hidePopover();
     busy = true;
-    rowError = { ...rowError, [p.username]: "" };
+    // A new action replaces whatever the last one left on any row.
+    rowError = {};
+    removing = "";
+    resetting = "";
     try {
       await run();
       toast.show(done);
@@ -194,6 +198,9 @@
             {#if removing === p.username}
               <button class="btn danger-solid small" onclick={() => remove(p)} disabled={busy}>Remove {p.username}</button>
               <button class="btn quiet small" onclick={() => (removing = "")}>Cancel</button>
+            {:else if resetting === p.username}
+              <button class="btn primary small" onclick={() => reset(p)} disabled={busy}>Reset {p.username}'s password</button>
+              <button class="btn quiet small" onclick={() => (resetting = "")}>Cancel</button>
             {:else if p.username && (p.password || !(p.admin && admins === 1))}
               <button class="btn quiet small icon" id={`acct-btn-${p.username}`} popovertarget={`acct-${p.username}`}
                 aria-label={`Actions for ${p.username}`} disabled={busy}>
@@ -202,13 +209,13 @@
               <div id={`acct-${p.username}`} popover class="row-menu" role="menu" aria-label={`Actions for ${p.username}`}
                 onbeforetoggle={(e) => placing(e, document.getElementById(`acct-btn-${p.username}`))}>
                 {#if p.password && locked(p)}<button role="menuitem" onclick={() => unlock(p)}>Unlock</button>{/if}
-                {#if p.password}<button role="menuitem" onclick={() => reset(p)}>Reset password</button>{/if}
+                {#if p.password}<button role="menuitem" onclick={() => { document.getElementById(`acct-${p.username}`)?.hidePopover(); removing = ""; resetting = p.username; }}>Reset password</button>{/if}
                 {#if !(p.admin && admins === 1)}
                   <button role="menuitem" onclick={() => promote(p)}>{p.admin ? "Remove administrator" : "Make administrator"}</button>
                 {/if}
                 {#if p.password && !self}
                   <hr />
-                  <button role="menuitem" class="danger" onclick={() => { document.getElementById(`acct-${p.username}`)?.hidePopover(); removing = p.username; }}>Remove from docsearch</button>
+                  <button role="menuitem" class="danger" onclick={() => { document.getElementById(`acct-${p.username}`)?.hidePopover(); resetting = ""; removing = p.username; }}>Remove from docsearch</button>
                 {/if}
               </div>
             {/if}

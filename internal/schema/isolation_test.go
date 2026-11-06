@@ -310,3 +310,37 @@ func (s *IsolationSuite) TestTheRestrictedRoleCannotReadGrants() {
 	_, err := s.db.App.ExecContext(s.T().Context(), `SELECT * FROM library_grants`)
 	s.Require().Error(err)
 }
+
+// A partition named directly answers nothing, even to the library it holds:
+// the parent's policies are the only way in.
+func (s *IsolationSuite) TestAPartitionNamedDirectlyAnswersNothing() {
+	for _, partition := range []string{"chunks_default", "chunks_second"} {
+		s.in(s.db.App, "second", "second", func(tx *sql.Tx) {
+			var n int
+			query := `SELECT count(*) FROM ` + partition //nolint:gosec // a constant from this list
+			s.Require().NoError(tx.QueryRowContext(s.T().Context(), query).Scan(&n))
+			s.Zero(n, partition)
+		})
+	}
+	s.in(s.db.App, "second", "second", func(tx *sql.Tx) {
+		var n int
+		s.Require().NoError(tx.QueryRowContext(s.T().Context(),
+			`SELECT count(*) FROM chunks`).Scan(&n))
+		s.Equal(1, n, "through chunks, the library's own row is there")
+	})
+}
+
+// An account records a username for itself and for nobody else.
+func (s *IsolationSuite) TestAnAccountNamesOnlyItself() {
+	tx := s.begin(s.db.App, "second", "second")
+	_, err := tx.ExecContext(s.T().Context(), `SELECT set_username('default', 'taken')`)
+	s.Require().ErrorContains(err, "names only itself")
+	s.Require().NoError(pgsession.Rollback(tx))
+
+	s.in(s.db.App, "second", "second", func(tx *sql.Tx) {
+		var named bool
+		s.Require().NoError(tx.QueryRowContext(s.T().Context(),
+			`SELECT set_username('second', 'second-name')`).Scan(&named))
+		s.True(named)
+	})
+}
