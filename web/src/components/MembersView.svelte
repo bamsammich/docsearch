@@ -28,7 +28,10 @@
   let busy = $state(false);
 
   const label = $derived(libraries.label);
-  const admins = $derived(members.filter((m) => m.role === "admin").length);
+  // Someone invited holds no role until they accept.
+  const joined = $derived(members.filter((m) => !m.invited));
+  const invited = $derived(members.filter((m) => m.invited));
+  const admins = $derived(joined.filter((m) => m.role === "admin").length);
   const me = $derived(libraries.username);
   const onlyAdmin = $derived(libraries.isAdmin && admins <= 1);
 
@@ -81,6 +84,7 @@
     const held = new Map<string, string>();
     const lines: { what: string; when: string }[] = [];
     const since = new Map<string, string>();
+    const inviter = new Map<string, string>();
     let created = "";
     for (const e of events) {
       const actor = e.actor || "Someone";
@@ -101,6 +105,23 @@
         });
         if (!held.has(e.subject)) since.set(e.subject, `Added by ${actor} ${dayOf(e)}`);
         held.set(e.subject, e.role);
+      } else if (e.action === "invite") {
+        lines.push({ what: `${actor} invited ${subject} as ${e.role}`, when: whenOf(e) });
+        inviter.set(e.subject, actor);
+        since.set(e.subject, `Invited by ${actor} ${dayOf(e)}`);
+      } else if (e.action === "accept") {
+        lines.push({ what: `${subject} joined as ${e.role}`, when: whenOf(e) });
+        since.set(e.subject, `Added by ${inviter.get(e.subject) ?? "an admin"} ${dayOf(e)}`);
+        inviter.delete(e.subject);
+        held.set(e.subject, e.role);
+      } else if (e.action === "decline") {
+        lines.push({ what: `${subject} declined`, when: whenOf(e) });
+        inviter.delete(e.subject);
+        since.delete(e.subject);
+      } else if (e.action === "withdraw") {
+        lines.push({ what: `${actor} withdrew ${subject}'s invitation`, when: whenOf(e) });
+        inviter.delete(e.subject);
+        since.delete(e.subject);
       } else if (e.action === "revoke") {
         lines.push({ what: e.actor === e.subject ? `${subject} left` : `${actor} removed ${subject}`, when: whenOf(e) });
         held.delete(e.subject);
@@ -142,14 +163,17 @@
       inviteField?.focus();
       return;
     }
-    if (members.some((m) => m.username === who)) {
-      inviteError = `${who} is already a member. Change their role in the list.`;
+    const known = members.find((m) => m.username === who);
+    if (known) {
+      inviteError = known.invited
+        ? `${who} is already invited. Change the role in the list.`
+        : `${who} is already a member. Change their role in the list.`;
       return;
     }
     inviting = true;
     try {
-      await shelves.grant({ library: label, username: who, role: inviteRole });
-      toast.show(`Added ${who} as ${inviteRole}.`);
+      const { invited: asked } = await shelves.grant({ library: label, username: who, role: inviteRole });
+      toast.show(asked ? `Invited ${who} as ${inviteRole}. They get access once they accept.` : `${who} is now ${article(inviteRole)}.`);
       invitee = "";
       await load(label);
     } catch (err) {
@@ -169,7 +193,7 @@
     try {
       await shelves.grant({ library: label, username: m.username, role });
       if (m.username === me) await libraries.load();
-      toast.show(`${m.username} is now ${article(role)}.`);
+      toast.show(m.invited ? `${m.username}'s invitation is now for ${role}.` : `${m.username} is now ${article(role)}.`);
       await load(label);
     } catch (err) {
       m.role = before;
@@ -184,7 +208,7 @@
     busy = true;
     try {
       await shelves.revoke({ library: label, username: m.username });
-      toast.show(`Removed ${m.username}.`);
+      toast.show(m.invited ? `Withdrew ${m.username}'s invitation.` : `Removed ${m.username}.`);
       removing = "";
       await load(label);
     } catch (err) {
@@ -251,9 +275,9 @@
       {/if}
 
       <div class="mlist-wrap">
-        <h2 class="mlist-head">Members{#if loaded}<span class="muted tnum">{` · ${members.length}`}</span>{/if}</h2>
+        <h2 class="mlist-head">Members{#if loaded}<span class="muted tnum">{` · ${joined.length}`}</span>{/if}</h2>
         <ul class="mlist">
-          {#each members as m (m.username)}
+          {#each joined as m (m.username)}
             {@const self = m.username === me}
             {@const since = story.since.get(m.username)}
             <li class="mrow">
@@ -285,6 +309,32 @@
           {/each}
         </ul>
       </div>
+
+      {#if invited.length}
+        <div class="mlist-wrap">
+          <h2 class="mlist-head">Invited<span class="muted tnum">{` · ${invited.length}`}</span></h2>
+          <ul class="mlist">
+            {#each invited as m (m.username)}
+              {@const since = story.since.get(m.username)}
+              <li class="mrow invited">
+                <span class="mavatar" aria-hidden="true">{initialOf(m.username || "?")}</span>
+                <span class="mwho">
+                  <span class="mname">{m.username}</span>
+                  {#if since}<span class="msince">{since}</span>{/if}
+                  {#if rowError[m.username]}<span class="err" role="alert">{rowError[m.username]}</span>{/if}
+                </span>
+                <select class="mrole" aria-label={`Role offered to ${m.username}`} value={m.role} disabled={busy}
+                  onchange={(e) => changeRole(m, e.currentTarget.value)}>
+                  {#each roles as r (r)}<option value={r}>{roleWords[r]}</option>{/each}
+                </select>
+                <span class="mact">
+                  <button class="btn quiet small" onclick={() => remove(m)} disabled={busy}>Withdraw</button>
+                </span>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
 
       <div class="leave">
         {#if onlyAdmin}

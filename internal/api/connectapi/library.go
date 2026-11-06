@@ -22,9 +22,12 @@ type Libraries interface {
 	Username(ctx context.Context) (string, error)
 	Create(ctx context.Context, slug, name string) (sharing.Library, error)
 	Members(ctx context.Context, slug string) ([]sharing.Member, error)
-	Grant(ctx context.Context, slug, username, role string) error
+	Grant(ctx context.Context, slug, username, role string) (bool, error)
 	Revoke(ctx context.Context, slug, username string) error
 	Events(ctx context.Context, slug string) ([]sharing.Event, error)
+	Invitations(ctx context.Context) ([]sharing.Invitation, error)
+	Accept(ctx context.Context, slug string) (sharing.Library, error)
+	Decline(ctx context.Context, slug string) error
 }
 
 // LibrariesFor builds the library manager of the user a request acts for.
@@ -105,12 +108,16 @@ func (s *LibraryServer) Members(
 	}
 	out := &libraryv1.MembersResponse{Members: make([]*libraryv1.Member, 0, len(members))}
 	for _, m := range members {
-		out.Members = append(out.Members, &libraryv1.Member{Username: m.Username, Role: m.Role})
+		out.Members = append(out.Members, &libraryv1.Member{
+			Username: m.Username,
+			Role:     m.Role,
+			Invited:  m.Invited,
+		})
 	}
 	return connect.NewResponse(out), nil
 }
 
-// Grant gives someone a role on a library, or changes theirs.
+// Grant changes the role of someone who holds one, and invites anyone else.
 func (s *LibraryServer) Grant(
 	ctx context.Context,
 	req *connect.Request[libraryv1.GrantRequest],
@@ -120,10 +127,70 @@ func (s *LibraryServer) Grant(
 		return nil, err
 	}
 	msg := req.Msg
-	if err := libs.Grant(ctx, msg.GetLibrary(), msg.GetUsername(), msg.GetRole()); err != nil {
+	invited, err := libs.Grant(ctx, msg.GetLibrary(), msg.GetUsername(), msg.GetRole())
+	if err != nil {
 		return nil, sharingError(err)
 	}
-	return connect.NewResponse(&libraryv1.GrantResponse{}), nil
+	return connect.NewResponse(&libraryv1.GrantResponse{Invited: invited}), nil
+}
+
+// Invitations are the libraries the caller is asked to join.
+func (s *LibraryServer) Invitations(
+	ctx context.Context,
+	_ *connect.Request[libraryv1.InvitationsRequest],
+) (*connect.Response[libraryv1.InvitationsResponse], error) {
+	libs, err := s.forOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	invitations, err := libs.Invitations(ctx)
+	if err != nil {
+		return nil, sharingError(err)
+	}
+	out := &libraryv1.InvitationsResponse{
+		Invitations: make([]*libraryv1.Invitation, 0, len(invitations)),
+	}
+	for _, i := range invitations {
+		out.Invitations = append(out.Invitations, &libraryv1.Invitation{
+			Library:   i.Library,
+			Name:      i.Title,
+			Role:      i.Role,
+			InvitedBy: i.InvitedBy,
+			At:        timestamppb.New(i.At),
+		})
+	}
+	return connect.NewResponse(out), nil
+}
+
+// Accept joins a library the caller is invited to.
+func (s *LibraryServer) Accept(
+	ctx context.Context,
+	req *connect.Request[libraryv1.AcceptRequest],
+) (*connect.Response[libraryv1.AcceptResponse], error) {
+	libs, err := s.forOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	joined, err := libs.Accept(ctx, req.Msg.GetLibrary())
+	if err != nil {
+		return nil, sharingError(err)
+	}
+	return connect.NewResponse(&libraryv1.AcceptResponse{Library: libraryMessage(joined)}), nil
+}
+
+// Decline refuses an invitation.
+func (s *LibraryServer) Decline(
+	ctx context.Context,
+	req *connect.Request[libraryv1.DeclineRequest],
+) (*connect.Response[libraryv1.DeclineResponse], error) {
+	libs, err := s.forOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := libs.Decline(ctx, req.Msg.GetLibrary()); err != nil {
+		return nil, sharingError(err)
+	}
+	return connect.NewResponse(&libraryv1.DeclineResponse{}), nil
 }
 
 // Revoke takes someone's role on a library away.
@@ -188,11 +255,12 @@ func libraryMessage(lib sharing.Library) *libraryv1.Library {
 
 // sharingCodes are the Connect codes the database's refusals answer with.
 var sharingCodes = map[error]connect.Code{
-	sharing.ErrNoLibrary: connect.CodeNotFound,
-	sharing.ErrNoAccount: connect.CodeNotFound,
-	sharing.ErrLastAdmin: connect.CodeFailedPrecondition,
-	sharing.ErrNameTaken: connect.CodeAlreadyExists,
-	sharing.ErrInvalid:   connect.CodeInvalidArgument,
+	sharing.ErrNoLibrary:    connect.CodeNotFound,
+	sharing.ErrNoAccount:    connect.CodeNotFound,
+	sharing.ErrNoInvitation: connect.CodeNotFound,
+	sharing.ErrLastAdmin:    connect.CodeFailedPrecondition,
+	sharing.ErrNameTaken:    connect.CodeAlreadyExists,
+	sharing.ErrInvalid:      connect.CodeInvalidArgument,
 }
 
 func sharingError(err error) error {

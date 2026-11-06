@@ -10,6 +10,17 @@ import (
 	"time"
 )
 
+const acceptInvitation = `-- name: AcceptInvitation :one
+SELECT accept_invitation($1::text)::text AS role
+`
+
+func (q *Queries) AcceptInvitation(ctx context.Context, slug string) (string, error) {
+	row := q.db.QueryRowContext(ctx, acceptInvitation, slug)
+	var role string
+	err := row.Scan(&role)
+	return role, err
+}
+
 const createLibrary = `-- name: CreateLibrary :one
 
 SELECT create_library($1::text, $2::text)::text AS library_id
@@ -32,8 +43,18 @@ func (q *Queries) CreateLibrary(ctx context.Context, arg CreateLibraryParams) (s
 	return library_id, err
 }
 
-const grantLibrary = `-- name: GrantLibrary :exec
-SELECT grant_library($1::text, $2::text, $3::text)
+const declineInvitation = `-- name: DeclineInvitation :exec
+SELECT decline_invitation($1::text)
+`
+
+func (q *Queries) DeclineInvitation(ctx context.Context, slug string) error {
+	_, err := q.db.ExecContext(ctx, declineInvitation, slug)
+	return err
+}
+
+const grantLibrary = `-- name: GrantLibrary :one
+SELECT grant_library($1::text, $2::text, $3::text)::text
+  AS outcome
 `
 
 type GrantLibraryParams struct {
@@ -42,9 +63,11 @@ type GrantLibraryParams struct {
 	Role     string
 }
 
-func (q *Queries) GrantLibrary(ctx context.Context, arg GrantLibraryParams) error {
-	_, err := q.db.ExecContext(ctx, grantLibrary, arg.Slug, arg.Username, arg.Role)
-	return err
+func (q *Queries) GrantLibrary(ctx context.Context, arg GrantLibraryParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, grantLibrary, arg.Slug, arg.Username, arg.Role)
+	var outcome string
+	err := row.Scan(&outcome)
+	return outcome, err
 }
 
 const libraryEvents = `-- name: LibraryEvents :many
@@ -91,13 +114,14 @@ func (q *Queries) LibraryEvents(ctx context.Context, slug string) ([]LibraryEven
 }
 
 const libraryMembers = `-- name: LibraryMembers :many
-SELECT m.username::text AS username, m.role::text AS role
-  FROM library_members($1::text) AS m(username, role)
+SELECT m.username::text AS username, m.role::text AS role, m.invited::boolean AS invited
+  FROM library_members($1::text) AS m(username, role, invited)
 `
 
 type LibraryMembersRow struct {
 	Username string
 	Role     string
+	Invited  bool
 }
 
 func (q *Queries) LibraryMembers(ctx context.Context, slug string) ([]LibraryMembersRow, error) {
@@ -109,7 +133,50 @@ func (q *Queries) LibraryMembers(ctx context.Context, slug string) ([]LibraryMem
 	items := []LibraryMembersRow{}
 	for rows.Next() {
 		var i LibraryMembersRow
-		if err := rows.Scan(&i.Username, &i.Role); err != nil {
+		if err := rows.Scan(&i.Username, &i.Role, &i.Invited); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const myInvitations = `-- name: MyInvitations :many
+SELECT i.slug::text AS slug, i.name::text AS name, i.role::text AS role,
+       i.invited_by::text AS invited_by, i.invited_at::timestamptz AS invited_at
+  FROM my_invitations() AS i(slug, name, role, invited_by, invited_at)
+`
+
+type MyInvitationsRow struct {
+	Slug      string
+	Name      string
+	Role      string
+	InvitedBy string
+	InvitedAt time.Time
+}
+
+func (q *Queries) MyInvitations(ctx context.Context) ([]MyInvitationsRow, error) {
+	rows, err := q.db.QueryContext(ctx, myInvitations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MyInvitationsRow{}
+	for rows.Next() {
+		var i MyInvitationsRow
+		if err := rows.Scan(
+			&i.Slug,
+			&i.Name,
+			&i.Role,
+			&i.InvitedBy,
+			&i.InvitedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

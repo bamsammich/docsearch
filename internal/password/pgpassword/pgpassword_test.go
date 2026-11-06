@@ -232,6 +232,7 @@ func (s *StoreSuite) TestARemovedAccountLeavesSharedLibrariesAndKeepsItsOwn() {
 	s.Require().NoError(s.admin.Add(ctx, "bob", "user-b", "hash", false))
 	s.as("user-a", `SELECT create_library('team', 'Team docs')`,
 		`SELECT grant_library('team', 'bob', 'admin')`)
+	s.as("user-b", `SELECT accept_invitation('team')`)
 
 	s.Require().NoError(s.app.Remove(ctx, "alice"))
 
@@ -247,4 +248,26 @@ func (s *StoreSuite) TestARemovedAccountLeavesSharedLibrariesAndKeepsItsOwn() {
 	s.Equal(0, shared)
 	s.Equal(1, own)
 	s.Equal(1, revoked)
+}
+
+// Removing an account withdraws its open invitations, so none waits for an
+// account nobody can sign in as.
+func (s *StoreSuite) TestARemovedAccountsInvitationsAreWithdrawn() {
+	ctx := s.T().Context()
+	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
+	s.Require().NoError(s.admin.Add(ctx, "bob", "user-b", "hash", false))
+	s.as("user-b", `SELECT create_library('team', 'Team docs')`,
+		`SELECT grant_library('team', 'alice', 'reader')`)
+
+	s.Require().NoError(s.app.Remove(ctx, "alice"))
+
+	var open, withdrawn int
+	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx,
+		`SELECT count(*) FROM library_invitations WHERE user_id = 'user-a'`).Scan(&open))
+	s.Require().NoError(s.pg.Owner.QueryRowContext(
+		ctx,
+		`SELECT count(*) FROM access_events WHERE action = 'withdraw' AND subject = 'user-a'`,
+	).Scan(&withdrawn))
+	s.Equal(0, open)
+	s.Equal(1, withdrawn)
 }

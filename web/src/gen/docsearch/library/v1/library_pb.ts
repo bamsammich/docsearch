@@ -6,8 +6,9 @@
 //
 // A library is a set of documents people share. Each person has their own,
 // and anyone signed in can create a shared one, becoming its admin. Admins
-// grant others a role on it: a reader searches and reads it, an editor also
-// adds and removes documents, and an admin also manages who has which role.
+// invite others with a role on it: a reader searches and reads it, an editor
+// also adds and removes documents, and an admin also manages who has which
+// role. An invitation gives nothing until its invitee accepts it.
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
@@ -19,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file docsearch/library/v1/library.proto.
  */
 export const file_docsearch_library_v1_library: GenFile = /*@__PURE__*/
-  fileDesc("CiJkb2NzZWFyY2gvbGlicmFyeS92MS9saWJyYXJ5LnByb3RvEhRkb2NzZWFyY2gubGlicmFyeS52MSI2CgdMaWJyYXJ5Eg8KB2xpYnJhcnkYASABKAkSDAoEbmFtZRgCIAEoCRIMCgRyb2xlGAMgASgJIigKBk1lbWJlchIQCgh1c2VybmFtZRgBIAEoCRIMCgRyb2xlGAIgASgJIm0KBUV2ZW50EiYKAmF0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBINCgVhY3RvchgCIAEoCRIOCgZhY3Rpb24YAyABKAkSDwoHc3ViamVjdBgEIAEoCRIMCgRyb2xlGAUgASgJIg0KC0xpc3RSZXF1ZXN0IlIKDExpc3RSZXNwb25zZRIwCglsaWJyYXJpZXMYASADKAsyHS5kb2NzZWFyY2gubGlicmFyeS52MS5MaWJyYXJ5EhAKCHVzZXJuYW1lGAIgASgJIisKDUNyZWF0ZVJlcXVlc3QSDAoEc2x1ZxgBIAEoCRIMCgRuYW1lGAIgASgJIkAKDkNyZWF0ZVJlc3BvbnNlEi4KB2xpYnJhcnkYASABKAsyHS5kb2NzZWFyY2gubGlicmFyeS52MS5MaWJyYXJ5IiEKDk1lbWJlcnNSZXF1ZXN0Eg8KB2xpYnJhcnkYASABKAkiQAoPTWVtYmVyc1Jlc3BvbnNlEi0KB21lbWJlcnMYASADKAsyHC5kb2NzZWFyY2gubGlicmFyeS52MS5NZW1iZXIiPwoMR3JhbnRSZXF1ZXN0Eg8KB2xpYnJhcnkYASABKAkSEAoIdXNlcm5hbWUYAiABKAkSDAoEcm9sZRgDIAEoCSIPCg1HcmFudFJlc3BvbnNlIjIKDVJldm9rZVJlcXVlc3QSDwoHbGlicmFyeRgBIAEoCRIQCgh1c2VybmFtZRgCIAEoCSIQCg5SZXZva2VSZXNwb25zZSIgCg1FdmVudHNSZXF1ZXN0Eg8KB2xpYnJhcnkYASABKAkiPQoORXZlbnRzUmVzcG9uc2USKwoGZXZlbnRzGAEgAygLMhsuZG9jc2VhcmNoLmxpYnJhcnkudjEuRXZlbnQylAQKDkxpYnJhcnlTZXJ2aWNlEk8KBExpc3QSIS5kb2NzZWFyY2gubGlicmFyeS52MS5MaXN0UmVxdWVzdBoiLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkxpc3RSZXNwb25zZSIAElUKBkNyZWF0ZRIjLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkNyZWF0ZVJlcXVlc3QaJC5kb2NzZWFyY2gubGlicmFyeS52MS5DcmVhdGVSZXNwb25zZSIAElgKB01lbWJlcnMSJC5kb2NzZWFyY2gubGlicmFyeS52MS5NZW1iZXJzUmVxdWVzdBolLmRvY3NlYXJjaC5saWJyYXJ5LnYxLk1lbWJlcnNSZXNwb25zZSIAElIKBUdyYW50EiIuZG9jc2VhcmNoLmxpYnJhcnkudjEuR3JhbnRSZXF1ZXN0GiMuZG9jc2VhcmNoLmxpYnJhcnkudjEuR3JhbnRSZXNwb25zZSIAElUKBlJldm9rZRIjLmRvY3NlYXJjaC5saWJyYXJ5LnYxLlJldm9rZVJlcXVlc3QaJC5kb2NzZWFyY2gubGlicmFyeS52MS5SZXZva2VSZXNwb25zZSIAElUKBkV2ZW50cxIjLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkV2ZW50c1JlcXVlc3QaJC5kb2NzZWFyY2gubGlicmFyeS52MS5FdmVudHNSZXNwb25zZSIAYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("CiJkb2NzZWFyY2gvbGlicmFyeS92MS9saWJyYXJ5LnByb3RvEhRkb2NzZWFyY2gubGlicmFyeS52MSI2CgdMaWJyYXJ5Eg8KB2xpYnJhcnkYASABKAkSDAoEbmFtZRgCIAEoCRIMCgRyb2xlGAMgASgJIjkKBk1lbWJlchIQCgh1c2VybmFtZRgBIAEoCRIMCgRyb2xlGAIgASgJEg8KB2ludml0ZWQYAyABKAgidQoKSW52aXRhdGlvbhIPCgdsaWJyYXJ5GAEgASgJEgwKBG5hbWUYAiABKAkSDAoEcm9sZRgDIAEoCRISCgppbnZpdGVkX2J5GAQgASgJEiYKAmF0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJtCgVFdmVudBImCgJhdBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDQoFYWN0b3IYAiABKAkSDgoGYWN0aW9uGAMgASgJEg8KB3N1YmplY3QYBCABKAkSDAoEcm9sZRgFIAEoCSINCgtMaXN0UmVxdWVzdCJSCgxMaXN0UmVzcG9uc2USMAoJbGlicmFyaWVzGAEgAygLMh0uZG9jc2VhcmNoLmxpYnJhcnkudjEuTGlicmFyeRIQCgh1c2VybmFtZRgCIAEoCSIrCg1DcmVhdGVSZXF1ZXN0EgwKBHNsdWcYASABKAkSDAoEbmFtZRgCIAEoCSJACg5DcmVhdGVSZXNwb25zZRIuCgdsaWJyYXJ5GAEgASgLMh0uZG9jc2VhcmNoLmxpYnJhcnkudjEuTGlicmFyeSIhCg5NZW1iZXJzUmVxdWVzdBIPCgdsaWJyYXJ5GAEgASgJIkAKD01lbWJlcnNSZXNwb25zZRItCgdtZW1iZXJzGAEgAygLMhwuZG9jc2VhcmNoLmxpYnJhcnkudjEuTWVtYmVyIj8KDEdyYW50UmVxdWVzdBIPCgdsaWJyYXJ5GAEgASgJEhAKCHVzZXJuYW1lGAIgASgJEgwKBHJvbGUYAyABKAkiIAoNR3JhbnRSZXNwb25zZRIPCgdpbnZpdGVkGAEgASgIIjIKDVJldm9rZVJlcXVlc3QSDwoHbGlicmFyeRgBIAEoCRIQCgh1c2VybmFtZRgCIAEoCSIQCg5SZXZva2VSZXNwb25zZSIgCg1FdmVudHNSZXF1ZXN0Eg8KB2xpYnJhcnkYASABKAkiPQoORXZlbnRzUmVzcG9uc2USKwoGZXZlbnRzGAEgAygLMhsuZG9jc2VhcmNoLmxpYnJhcnkudjEuRXZlbnQiFAoSSW52aXRhdGlvbnNSZXF1ZXN0IkwKE0ludml0YXRpb25zUmVzcG9uc2USNQoLaW52aXRhdGlvbnMYASADKAsyIC5kb2NzZWFyY2gubGlicmFyeS52MS5JbnZpdGF0aW9uIiAKDUFjY2VwdFJlcXVlc3QSDwoHbGlicmFyeRgBIAEoCSJACg5BY2NlcHRSZXNwb25zZRIuCgdsaWJyYXJ5GAEgASgLMh0uZG9jc2VhcmNoLmxpYnJhcnkudjEuTGlicmFyeSIhCg5EZWNsaW5lUmVxdWVzdBIPCgdsaWJyYXJ5GAEgASgJIhEKD0RlY2xpbmVSZXNwb25zZTKrBgoOTGlicmFyeVNlcnZpY2USTwoETGlzdBIhLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkxpc3RSZXF1ZXN0GiIuZG9jc2VhcmNoLmxpYnJhcnkudjEuTGlzdFJlc3BvbnNlIgASVQoGQ3JlYXRlEiMuZG9jc2VhcmNoLmxpYnJhcnkudjEuQ3JlYXRlUmVxdWVzdBokLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkNyZWF0ZVJlc3BvbnNlIgASWAoHTWVtYmVycxIkLmRvY3NlYXJjaC5saWJyYXJ5LnYxLk1lbWJlcnNSZXF1ZXN0GiUuZG9jc2VhcmNoLmxpYnJhcnkudjEuTWVtYmVyc1Jlc3BvbnNlIgASUgoFR3JhbnQSIi5kb2NzZWFyY2gubGlicmFyeS52MS5HcmFudFJlcXVlc3QaIy5kb2NzZWFyY2gubGlicmFyeS52MS5HcmFudFJlc3BvbnNlIgASVQoGUmV2b2tlEiMuZG9jc2VhcmNoLmxpYnJhcnkudjEuUmV2b2tlUmVxdWVzdBokLmRvY3NlYXJjaC5saWJyYXJ5LnYxLlJldm9rZVJlc3BvbnNlIgASVQoGRXZlbnRzEiMuZG9jc2VhcmNoLmxpYnJhcnkudjEuRXZlbnRzUmVxdWVzdBokLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkV2ZW50c1Jlc3BvbnNlIgASZAoLSW52aXRhdGlvbnMSKC5kb2NzZWFyY2gubGlicmFyeS52MS5JbnZpdGF0aW9uc1JlcXVlc3QaKS5kb2NzZWFyY2gubGlicmFyeS52MS5JbnZpdGF0aW9uc1Jlc3BvbnNlIgASVQoGQWNjZXB0EiMuZG9jc2VhcmNoLmxpYnJhcnkudjEuQWNjZXB0UmVxdWVzdBokLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkFjY2VwdFJlc3BvbnNlIgASWAoHRGVjbGluZRIkLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkRlY2xpbmVSZXF1ZXN0GiUuZG9jc2VhcmNoLmxpYnJhcnkudjEuRGVjbGluZVJlc3BvbnNlIgBiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * Library is one library the caller reads.
@@ -71,6 +72,14 @@ export type Member = Message<"docsearch.library.v1.Member"> & {
    * @generated from field: string role = 2;
    */
   role: string;
+
+  /**
+   * Invited is someone asked to join with role who has not accepted. Only
+   * an admin sees them.
+   *
+   * @generated from field: bool invited = 3;
+   */
+  invited: boolean;
 };
 
 /**
@@ -79,6 +88,51 @@ export type Member = Message<"docsearch.library.v1.Member"> & {
  */
 export const MemberSchema: GenMessage<Member> = /*@__PURE__*/
   messageDesc(file_docsearch_library_v1_library, 1);
+
+/**
+ * Invitation is a library the caller is asked to join.
+ *
+ * @generated from message docsearch.library.v1.Invitation
+ */
+export type Invitation = Message<"docsearch.library.v1.Invitation"> & {
+  /**
+   * Library is the slug the library goes by once accepted.
+   *
+   * @generated from field: string library = 1;
+   */
+  library: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * Role is what accepting gives the caller.
+   *
+   * @generated from field: string role = 3;
+   */
+  role: string;
+
+  /**
+   * InvitedBy is the admin who sent it, or empty for a removed account.
+   *
+   * @generated from field: string invited_by = 4;
+   */
+  invitedBy: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp at = 5;
+   */
+  at?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message docsearch.library.v1.Invitation.
+ * Use `create(InvitationSchema)` to create a new message.
+ */
+export const InvitationSchema: GenMessage<Invitation> = /*@__PURE__*/
+  messageDesc(file_docsearch_library_v1_library, 2);
 
 /**
  * Event is one change to who may use a library.
@@ -100,7 +154,9 @@ export type Event = Message<"docsearch.library.v1.Event"> & {
   actor: string;
 
   /**
-   * Action is 'create', 'grant' or 'revoke'.
+   * Action is 'create', 'grant', 'revoke', 'invite', 'accept', 'decline'
+   * or 'withdraw'. An admin withdraws an invitation, and its invitee
+   * accepts or declines it.
    *
    * @generated from field: string action = 3;
    */
@@ -112,7 +168,7 @@ export type Event = Message<"docsearch.library.v1.Event"> & {
   subject: string;
 
   /**
-   * Role is the role granted, and empty for a revoke.
+   * Role is the role granted, offered or accepted, and empty otherwise.
    *
    * @generated from field: string role = 5;
    */
@@ -124,7 +180,7 @@ export type Event = Message<"docsearch.library.v1.Event"> & {
  * Use `create(EventSchema)` to create a new message.
  */
 export const EventSchema: GenMessage<Event> = /*@__PURE__*/
-  messageDesc(file_docsearch_library_v1_library, 2);
+  messageDesc(file_docsearch_library_v1_library, 3);
 
 /**
  * @generated from message docsearch.library.v1.ListRequest
@@ -137,7 +193,7 @@ export type ListRequest = Message<"docsearch.library.v1.ListRequest"> & {
  * Use `create(ListRequestSchema)` to create a new message.
  */
 export const ListRequestSchema: GenMessage<ListRequest> = /*@__PURE__*/
-  messageDesc(file_docsearch_library_v1_library, 3);
+  messageDesc(file_docsearch_library_v1_library, 4);
 
 /**
  * @generated from message docsearch.library.v1.ListResponse
@@ -162,7 +218,7 @@ export type ListResponse = Message<"docsearch.library.v1.ListResponse"> & {
  * Use `create(ListResponseSchema)` to create a new message.
  */
 export const ListResponseSchema: GenMessage<ListResponse> = /*@__PURE__*/
-  messageDesc(file_docsearch_library_v1_library, 4);
+  messageDesc(file_docsearch_library_v1_library, 5);
 
 /**
  * @generated from message docsearch.library.v1.CreateRequest
@@ -186,7 +242,7 @@ export type CreateRequest = Message<"docsearch.library.v1.CreateRequest"> & {
  * Use `create(CreateRequestSchema)` to create a new message.
  */
 export const CreateRequestSchema: GenMessage<CreateRequest> = /*@__PURE__*/
-  messageDesc(file_docsearch_library_v1_library, 5);
+  messageDesc(file_docsearch_library_v1_library, 6);
 
 /**
  * @generated from message docsearch.library.v1.CreateResponse
@@ -203,7 +259,7 @@ export type CreateResponse = Message<"docsearch.library.v1.CreateResponse"> & {
  * Use `create(CreateResponseSchema)` to create a new message.
  */
 export const CreateResponseSchema: GenMessage<CreateResponse> = /*@__PURE__*/
-  messageDesc(file_docsearch_library_v1_library, 6);
+  messageDesc(file_docsearch_library_v1_library, 7);
 
 /**
  * @generated from message docsearch.library.v1.MembersRequest
@@ -220,7 +276,7 @@ export type MembersRequest = Message<"docsearch.library.v1.MembersRequest"> & {
  * Use `create(MembersRequestSchema)` to create a new message.
  */
 export const MembersRequestSchema: GenMessage<MembersRequest> = /*@__PURE__*/
-  messageDesc(file_docsearch_library_v1_library, 7);
+  messageDesc(file_docsearch_library_v1_library, 8);
 
 /**
  * @generated from message docsearch.library.v1.MembersResponse
@@ -237,7 +293,7 @@ export type MembersResponse = Message<"docsearch.library.v1.MembersResponse"> & 
  * Use `create(MembersResponseSchema)` to create a new message.
  */
 export const MembersResponseSchema: GenMessage<MembersResponse> = /*@__PURE__*/
-  messageDesc(file_docsearch_library_v1_library, 8);
+  messageDesc(file_docsearch_library_v1_library, 9);
 
 /**
  * @generated from message docsearch.library.v1.GrantRequest
@@ -255,7 +311,7 @@ export type GrantRequest = Message<"docsearch.library.v1.GrantRequest"> & {
 
   /**
    * Role is reader, editor or admin. Granting someone who already has a
-   * role changes it.
+   * role changes it, and granting anyone else invites them with it.
    *
    * @generated from field: string role = 3;
    */
@@ -267,12 +323,19 @@ export type GrantRequest = Message<"docsearch.library.v1.GrantRequest"> & {
  * Use `create(GrantRequestSchema)` to create a new message.
  */
 export const GrantRequestSchema: GenMessage<GrantRequest> = /*@__PURE__*/
-  messageDesc(file_docsearch_library_v1_library, 9);
+  messageDesc(file_docsearch_library_v1_library, 10);
 
 /**
  * @generated from message docsearch.library.v1.GrantResponse
  */
 export type GrantResponse = Message<"docsearch.library.v1.GrantResponse"> & {
+  /**
+   * Invited is true when the grant invited someone, and false when it
+   * changed the role of someone who held one.
+   *
+   * @generated from field: bool invited = 1;
+   */
+  invited: boolean;
 };
 
 /**
@@ -280,7 +343,7 @@ export type GrantResponse = Message<"docsearch.library.v1.GrantResponse"> & {
  * Use `create(GrantResponseSchema)` to create a new message.
  */
 export const GrantResponseSchema: GenMessage<GrantResponse> = /*@__PURE__*/
-  messageDesc(file_docsearch_library_v1_library, 10);
+  messageDesc(file_docsearch_library_v1_library, 11);
 
 /**
  * @generated from message docsearch.library.v1.RevokeRequest
@@ -302,7 +365,7 @@ export type RevokeRequest = Message<"docsearch.library.v1.RevokeRequest"> & {
  * Use `create(RevokeRequestSchema)` to create a new message.
  */
 export const RevokeRequestSchema: GenMessage<RevokeRequest> = /*@__PURE__*/
-  messageDesc(file_docsearch_library_v1_library, 11);
+  messageDesc(file_docsearch_library_v1_library, 12);
 
 /**
  * @generated from message docsearch.library.v1.RevokeResponse
@@ -315,7 +378,7 @@ export type RevokeResponse = Message<"docsearch.library.v1.RevokeResponse"> & {
  * Use `create(RevokeResponseSchema)` to create a new message.
  */
 export const RevokeResponseSchema: GenMessage<RevokeResponse> = /*@__PURE__*/
-  messageDesc(file_docsearch_library_v1_library, 12);
+  messageDesc(file_docsearch_library_v1_library, 13);
 
 /**
  * @generated from message docsearch.library.v1.EventsRequest
@@ -332,7 +395,7 @@ export type EventsRequest = Message<"docsearch.library.v1.EventsRequest"> & {
  * Use `create(EventsRequestSchema)` to create a new message.
  */
 export const EventsRequestSchema: GenMessage<EventsRequest> = /*@__PURE__*/
-  messageDesc(file_docsearch_library_v1_library, 13);
+  messageDesc(file_docsearch_library_v1_library, 14);
 
 /**
  * @generated from message docsearch.library.v1.EventsResponse
@@ -349,7 +412,101 @@ export type EventsResponse = Message<"docsearch.library.v1.EventsResponse"> & {
  * Use `create(EventsResponseSchema)` to create a new message.
  */
 export const EventsResponseSchema: GenMessage<EventsResponse> = /*@__PURE__*/
-  messageDesc(file_docsearch_library_v1_library, 14);
+  messageDesc(file_docsearch_library_v1_library, 15);
+
+/**
+ * @generated from message docsearch.library.v1.InvitationsRequest
+ */
+export type InvitationsRequest = Message<"docsearch.library.v1.InvitationsRequest"> & {
+};
+
+/**
+ * Describes the message docsearch.library.v1.InvitationsRequest.
+ * Use `create(InvitationsRequestSchema)` to create a new message.
+ */
+export const InvitationsRequestSchema: GenMessage<InvitationsRequest> = /*@__PURE__*/
+  messageDesc(file_docsearch_library_v1_library, 16);
+
+/**
+ * @generated from message docsearch.library.v1.InvitationsResponse
+ */
+export type InvitationsResponse = Message<"docsearch.library.v1.InvitationsResponse"> & {
+  /**
+   * @generated from field: repeated docsearch.library.v1.Invitation invitations = 1;
+   */
+  invitations: Invitation[];
+};
+
+/**
+ * Describes the message docsearch.library.v1.InvitationsResponse.
+ * Use `create(InvitationsResponseSchema)` to create a new message.
+ */
+export const InvitationsResponseSchema: GenMessage<InvitationsResponse> = /*@__PURE__*/
+  messageDesc(file_docsearch_library_v1_library, 17);
+
+/**
+ * @generated from message docsearch.library.v1.AcceptRequest
+ */
+export type AcceptRequest = Message<"docsearch.library.v1.AcceptRequest"> & {
+  /**
+   * @generated from field: string library = 1;
+   */
+  library: string;
+};
+
+/**
+ * Describes the message docsearch.library.v1.AcceptRequest.
+ * Use `create(AcceptRequestSchema)` to create a new message.
+ */
+export const AcceptRequestSchema: GenMessage<AcceptRequest> = /*@__PURE__*/
+  messageDesc(file_docsearch_library_v1_library, 18);
+
+/**
+ * @generated from message docsearch.library.v1.AcceptResponse
+ */
+export type AcceptResponse = Message<"docsearch.library.v1.AcceptResponse"> & {
+  /**
+   * @generated from field: docsearch.library.v1.Library library = 1;
+   */
+  library?: Library | undefined;
+};
+
+/**
+ * Describes the message docsearch.library.v1.AcceptResponse.
+ * Use `create(AcceptResponseSchema)` to create a new message.
+ */
+export const AcceptResponseSchema: GenMessage<AcceptResponse> = /*@__PURE__*/
+  messageDesc(file_docsearch_library_v1_library, 19);
+
+/**
+ * @generated from message docsearch.library.v1.DeclineRequest
+ */
+export type DeclineRequest = Message<"docsearch.library.v1.DeclineRequest"> & {
+  /**
+   * @generated from field: string library = 1;
+   */
+  library: string;
+};
+
+/**
+ * Describes the message docsearch.library.v1.DeclineRequest.
+ * Use `create(DeclineRequestSchema)` to create a new message.
+ */
+export const DeclineRequestSchema: GenMessage<DeclineRequest> = /*@__PURE__*/
+  messageDesc(file_docsearch_library_v1_library, 20);
+
+/**
+ * @generated from message docsearch.library.v1.DeclineResponse
+ */
+export type DeclineResponse = Message<"docsearch.library.v1.DeclineResponse"> & {
+};
+
+/**
+ * Describes the message docsearch.library.v1.DeclineResponse.
+ * Use `create(DeclineResponseSchema)` to create a new message.
+ */
+export const DeclineResponseSchema: GenMessage<DeclineResponse> = /*@__PURE__*/
+  messageDesc(file_docsearch_library_v1_library, 21);
 
 /**
  * LibraryService creates libraries and shares them. The database decides
@@ -390,7 +547,8 @@ export const LibraryService: GenService<{
     output: typeof MembersResponseSchema;
   },
   /**
-   * Grant gives someone a role, or changes theirs. Admins only.
+   * Grant changes the role of someone who holds one, and invites anyone
+   * else. Admins only.
    *
    * @generated from rpc docsearch.library.v1.LibraryService.Grant
    */
@@ -400,8 +558,9 @@ export const LibraryService: GenService<{
     output: typeof GrantResponseSchema;
   },
   /**
-   * Revoke takes someone's role away. An admin may revoke anyone's, and
-   * anyone may revoke their own, which is how a member leaves.
+   * Revoke takes someone's role away, or withdraws their invitation. An
+   * admin may revoke anyone's, and anyone may revoke their own role, which
+   * is how a member leaves.
    *
    * @generated from rpc docsearch.library.v1.LibraryService.Revoke
    */
@@ -420,6 +579,37 @@ export const LibraryService: GenService<{
     methodKind: "unary";
     input: typeof EventsRequestSchema;
     output: typeof EventsResponseSchema;
+  },
+  /**
+   * Invitations are the libraries the caller is asked to join, newest
+   * first.
+   *
+   * @generated from rpc docsearch.library.v1.LibraryService.Invitations
+   */
+  invitations: {
+    methodKind: "unary";
+    input: typeof InvitationsRequestSchema;
+    output: typeof InvitationsResponseSchema;
+  },
+  /**
+   * Accept joins a library the caller is invited to, with the role offered.
+   *
+   * @generated from rpc docsearch.library.v1.LibraryService.Accept
+   */
+  accept: {
+    methodKind: "unary";
+    input: typeof AcceptRequestSchema;
+    output: typeof AcceptResponseSchema;
+  },
+  /**
+   * Decline refuses an invitation.
+   *
+   * @generated from rpc docsearch.library.v1.LibraryService.Decline
+   */
+  decline: {
+    methodKind: "unary";
+    input: typeof DeclineRequestSchema;
+    output: typeof DeclineResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_docsearch_library_v1_library, 0);

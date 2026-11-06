@@ -8,8 +8,9 @@
 //
 // A library is a set of documents people share. Each person has their own,
 // and anyone signed in can create a shared one, becoming its admin. Admins
-// grant others a role on it: a reader searches and reads it, an editor also
-// adds and removes documents, and an admin also manages who has which role.
+// invite others with a role on it: a reader searches and reads it, an editor
+// also adds and removes documents, and an admin also manages who has which
+// role. An invitation gives nothing until its invitee accepts it.
 
 package libraryv1
 
@@ -97,8 +98,11 @@ type Member struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Username is empty for an account that has not signed in since
 	// usernames were recorded.
-	Username      string `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
-	Role          string `protobuf:"bytes,2,opt,name=role,proto3" json:"role,omitempty"`
+	Username string `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	Role     string `protobuf:"bytes,2,opt,name=role,proto3" json:"role,omitempty"`
+	// Invited is someone asked to join with role who has not accepted. Only
+	// an admin sees them.
+	Invited       bool `protobuf:"varint,3,opt,name=invited,proto3" json:"invited,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -147,6 +151,93 @@ func (x *Member) GetRole() string {
 	return ""
 }
 
+func (x *Member) GetInvited() bool {
+	if x != nil {
+		return x.Invited
+	}
+	return false
+}
+
+// Invitation is a library the caller is asked to join.
+type Invitation struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Library is the slug the library goes by once accepted.
+	Library string `protobuf:"bytes,1,opt,name=library,proto3" json:"library,omitempty"`
+	Name    string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// Role is what accepting gives the caller.
+	Role string `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
+	// InvitedBy is the admin who sent it, or empty for a removed account.
+	InvitedBy     string                 `protobuf:"bytes,4,opt,name=invited_by,json=invitedBy,proto3" json:"invited_by,omitempty"`
+	At            *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=at,proto3" json:"at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Invitation) Reset() {
+	*x = Invitation{}
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Invitation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Invitation) ProtoMessage() {}
+
+func (x *Invitation) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Invitation.ProtoReflect.Descriptor instead.
+func (*Invitation) Descriptor() ([]byte, []int) {
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Invitation) GetLibrary() string {
+	if x != nil {
+		return x.Library
+	}
+	return ""
+}
+
+func (x *Invitation) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Invitation) GetRole() string {
+	if x != nil {
+		return x.Role
+	}
+	return ""
+}
+
+func (x *Invitation) GetInvitedBy() string {
+	if x != nil {
+		return x.InvitedBy
+	}
+	return ""
+}
+
+func (x *Invitation) GetAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.At
+	}
+	return nil
+}
+
 // Event is one change to who may use a library.
 type Event struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -154,10 +245,12 @@ type Event struct {
 	// Actor made the change, and subject is whose role changed. Either is
 	// empty for an account that has no username or was removed.
 	Actor string `protobuf:"bytes,2,opt,name=actor,proto3" json:"actor,omitempty"`
-	// Action is 'create', 'grant' or 'revoke'.
+	// Action is 'create', 'grant', 'revoke', 'invite', 'accept', 'decline'
+	// or 'withdraw'. An admin withdraws an invitation, and its invitee
+	// accepts or declines it.
 	Action  string `protobuf:"bytes,3,opt,name=action,proto3" json:"action,omitempty"`
 	Subject string `protobuf:"bytes,4,opt,name=subject,proto3" json:"subject,omitempty"`
-	// Role is the role granted, and empty for a revoke.
+	// Role is the role granted, offered or accepted, and empty otherwise.
 	Role          string `protobuf:"bytes,5,opt,name=role,proto3" json:"role,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -165,7 +258,7 @@ type Event struct {
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[2]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -177,7 +270,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[2]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -190,7 +283,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{2}
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Event) GetAt() *timestamppb.Timestamp {
@@ -236,7 +329,7 @@ type ListRequest struct {
 
 func (x *ListRequest) Reset() {
 	*x = ListRequest{}
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[3]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -248,7 +341,7 @@ func (x *ListRequest) String() string {
 func (*ListRequest) ProtoMessage() {}
 
 func (x *ListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[3]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -261,7 +354,7 @@ func (x *ListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRequest.ProtoReflect.Descriptor instead.
 func (*ListRequest) Descriptor() ([]byte, []int) {
-	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{3}
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{4}
 }
 
 type ListResponse struct {
@@ -276,7 +369,7 @@ type ListResponse struct {
 
 func (x *ListResponse) Reset() {
 	*x = ListResponse{}
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[4]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -288,7 +381,7 @@ func (x *ListResponse) String() string {
 func (*ListResponse) ProtoMessage() {}
 
 func (x *ListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[4]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -301,7 +394,7 @@ func (x *ListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListResponse.ProtoReflect.Descriptor instead.
 func (*ListResponse) Descriptor() ([]byte, []int) {
-	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{4}
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ListResponse) GetLibraries() []*Library {
@@ -329,7 +422,7 @@ type CreateRequest struct {
 
 func (x *CreateRequest) Reset() {
 	*x = CreateRequest{}
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[5]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -341,7 +434,7 @@ func (x *CreateRequest) String() string {
 func (*CreateRequest) ProtoMessage() {}
 
 func (x *CreateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[5]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -354,7 +447,7 @@ func (x *CreateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRequest.ProtoReflect.Descriptor instead.
 func (*CreateRequest) Descriptor() ([]byte, []int) {
-	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{5}
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CreateRequest) GetSlug() string {
@@ -380,7 +473,7 @@ type CreateResponse struct {
 
 func (x *CreateResponse) Reset() {
 	*x = CreateResponse{}
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[6]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -392,7 +485,7 @@ func (x *CreateResponse) String() string {
 func (*CreateResponse) ProtoMessage() {}
 
 func (x *CreateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[6]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -405,7 +498,7 @@ func (x *CreateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateResponse.ProtoReflect.Descriptor instead.
 func (*CreateResponse) Descriptor() ([]byte, []int) {
-	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{6}
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CreateResponse) GetLibrary() *Library {
@@ -424,7 +517,7 @@ type MembersRequest struct {
 
 func (x *MembersRequest) Reset() {
 	*x = MembersRequest{}
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[7]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -436,7 +529,7 @@ func (x *MembersRequest) String() string {
 func (*MembersRequest) ProtoMessage() {}
 
 func (x *MembersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[7]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -449,7 +542,7 @@ func (x *MembersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MembersRequest.ProtoReflect.Descriptor instead.
 func (*MembersRequest) Descriptor() ([]byte, []int) {
-	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{7}
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *MembersRequest) GetLibrary() string {
@@ -468,7 +561,7 @@ type MembersResponse struct {
 
 func (x *MembersResponse) Reset() {
 	*x = MembersResponse{}
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[8]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -480,7 +573,7 @@ func (x *MembersResponse) String() string {
 func (*MembersResponse) ProtoMessage() {}
 
 func (x *MembersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[8]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -493,7 +586,7 @@ func (x *MembersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MembersResponse.ProtoReflect.Descriptor instead.
 func (*MembersResponse) Descriptor() ([]byte, []int) {
-	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{8}
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *MembersResponse) GetMembers() []*Member {
@@ -508,7 +601,7 @@ type GrantRequest struct {
 	Library  string                 `protobuf:"bytes,1,opt,name=library,proto3" json:"library,omitempty"`
 	Username string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
 	// Role is reader, editor or admin. Granting someone who already has a
-	// role changes it.
+	// role changes it, and granting anyone else invites them with it.
 	Role          string `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -516,7 +609,7 @@ type GrantRequest struct {
 
 func (x *GrantRequest) Reset() {
 	*x = GrantRequest{}
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[9]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -528,7 +621,7 @@ func (x *GrantRequest) String() string {
 func (*GrantRequest) ProtoMessage() {}
 
 func (x *GrantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[9]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -541,7 +634,7 @@ func (x *GrantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrantRequest.ProtoReflect.Descriptor instead.
 func (*GrantRequest) Descriptor() ([]byte, []int) {
-	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{9}
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GrantRequest) GetLibrary() string {
@@ -566,14 +659,17 @@ func (x *GrantRequest) GetRole() string {
 }
 
 type GrantResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Invited is true when the grant invited someone, and false when it
+	// changed the role of someone who held one.
+	Invited       bool `protobuf:"varint,1,opt,name=invited,proto3" json:"invited,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GrantResponse) Reset() {
 	*x = GrantResponse{}
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[10]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -585,7 +681,7 @@ func (x *GrantResponse) String() string {
 func (*GrantResponse) ProtoMessage() {}
 
 func (x *GrantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[10]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -598,7 +694,14 @@ func (x *GrantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrantResponse.ProtoReflect.Descriptor instead.
 func (*GrantResponse) Descriptor() ([]byte, []int) {
-	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{10}
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *GrantResponse) GetInvited() bool {
+	if x != nil {
+		return x.Invited
+	}
+	return false
 }
 
 type RevokeRequest struct {
@@ -611,7 +714,7 @@ type RevokeRequest struct {
 
 func (x *RevokeRequest) Reset() {
 	*x = RevokeRequest{}
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[11]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -623,7 +726,7 @@ func (x *RevokeRequest) String() string {
 func (*RevokeRequest) ProtoMessage() {}
 
 func (x *RevokeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[11]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -636,7 +739,7 @@ func (x *RevokeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeRequest.ProtoReflect.Descriptor instead.
 func (*RevokeRequest) Descriptor() ([]byte, []int) {
-	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{11}
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *RevokeRequest) GetLibrary() string {
@@ -661,7 +764,7 @@ type RevokeResponse struct {
 
 func (x *RevokeResponse) Reset() {
 	*x = RevokeResponse{}
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[12]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -673,7 +776,7 @@ func (x *RevokeResponse) String() string {
 func (*RevokeResponse) ProtoMessage() {}
 
 func (x *RevokeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[12]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -686,7 +789,7 @@ func (x *RevokeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeResponse.ProtoReflect.Descriptor instead.
 func (*RevokeResponse) Descriptor() ([]byte, []int) {
-	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{12}
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{13}
 }
 
 type EventsRequest struct {
@@ -698,7 +801,7 @@ type EventsRequest struct {
 
 func (x *EventsRequest) Reset() {
 	*x = EventsRequest{}
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[13]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -710,7 +813,7 @@ func (x *EventsRequest) String() string {
 func (*EventsRequest) ProtoMessage() {}
 
 func (x *EventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[13]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -723,7 +826,7 @@ func (x *EventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventsRequest.ProtoReflect.Descriptor instead.
 func (*EventsRequest) Descriptor() ([]byte, []int) {
-	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{13}
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *EventsRequest) GetLibrary() string {
@@ -742,7 +845,7 @@ type EventsResponse struct {
 
 func (x *EventsResponse) Reset() {
 	*x = EventsResponse{}
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[14]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -754,7 +857,7 @@ func (x *EventsResponse) String() string {
 func (*EventsResponse) ProtoMessage() {}
 
 func (x *EventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[14]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -767,7 +870,7 @@ func (x *EventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventsResponse.ProtoReflect.Descriptor instead.
 func (*EventsResponse) Descriptor() ([]byte, []int) {
-	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{14}
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *EventsResponse) GetEvents() []*Event {
@@ -775,6 +878,254 @@ func (x *EventsResponse) GetEvents() []*Event {
 		return x.Events
 	}
 	return nil
+}
+
+type InvitationsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InvitationsRequest) Reset() {
+	*x = InvitationsRequest{}
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InvitationsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InvitationsRequest) ProtoMessage() {}
+
+func (x *InvitationsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InvitationsRequest.ProtoReflect.Descriptor instead.
+func (*InvitationsRequest) Descriptor() ([]byte, []int) {
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{16}
+}
+
+type InvitationsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Invitations   []*Invitation          `protobuf:"bytes,1,rep,name=invitations,proto3" json:"invitations,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InvitationsResponse) Reset() {
+	*x = InvitationsResponse{}
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InvitationsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InvitationsResponse) ProtoMessage() {}
+
+func (x *InvitationsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InvitationsResponse.ProtoReflect.Descriptor instead.
+func (*InvitationsResponse) Descriptor() ([]byte, []int) {
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *InvitationsResponse) GetInvitations() []*Invitation {
+	if x != nil {
+		return x.Invitations
+	}
+	return nil
+}
+
+type AcceptRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Library       string                 `protobuf:"bytes,1,opt,name=library,proto3" json:"library,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AcceptRequest) Reset() {
+	*x = AcceptRequest{}
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AcceptRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcceptRequest) ProtoMessage() {}
+
+func (x *AcceptRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcceptRequest.ProtoReflect.Descriptor instead.
+func (*AcceptRequest) Descriptor() ([]byte, []int) {
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *AcceptRequest) GetLibrary() string {
+	if x != nil {
+		return x.Library
+	}
+	return ""
+}
+
+type AcceptResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Library       *Library               `protobuf:"bytes,1,opt,name=library,proto3" json:"library,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AcceptResponse) Reset() {
+	*x = AcceptResponse{}
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AcceptResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcceptResponse) ProtoMessage() {}
+
+func (x *AcceptResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcceptResponse.ProtoReflect.Descriptor instead.
+func (*AcceptResponse) Descriptor() ([]byte, []int) {
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *AcceptResponse) GetLibrary() *Library {
+	if x != nil {
+		return x.Library
+	}
+	return nil
+}
+
+type DeclineRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Library       string                 `protobuf:"bytes,1,opt,name=library,proto3" json:"library,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeclineRequest) Reset() {
+	*x = DeclineRequest{}
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeclineRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeclineRequest) ProtoMessage() {}
+
+func (x *DeclineRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeclineRequest.ProtoReflect.Descriptor instead.
+func (*DeclineRequest) Descriptor() ([]byte, []int) {
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *DeclineRequest) GetLibrary() string {
+	if x != nil {
+		return x.Library
+	}
+	return ""
+}
+
+type DeclineResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeclineResponse) Reset() {
+	*x = DeclineResponse{}
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeclineResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeclineResponse) ProtoMessage() {}
+
+func (x *DeclineResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeclineResponse.ProtoReflect.Descriptor instead.
+func (*DeclineResponse) Descriptor() ([]byte, []int) {
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{21}
 }
 
 var File_docsearch_library_v1_library_proto protoreflect.FileDescriptor
@@ -785,10 +1136,19 @@ const file_docsearch_library_v1_library_proto_rawDesc = "" +
 	"\aLibrary\x12\x18\n" +
 	"\alibrary\x18\x01 \x01(\tR\alibrary\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
-	"\x04role\x18\x03 \x01(\tR\x04role\"8\n" +
+	"\x04role\x18\x03 \x01(\tR\x04role\"R\n" +
 	"\x06Member\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x12\n" +
-	"\x04role\x18\x02 \x01(\tR\x04role\"\x8f\x01\n" +
+	"\x04role\x18\x02 \x01(\tR\x04role\x12\x18\n" +
+	"\ainvited\x18\x03 \x01(\bR\ainvited\"\x99\x01\n" +
+	"\n" +
+	"Invitation\x12\x18\n" +
+	"\alibrary\x18\x01 \x01(\tR\alibrary\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04role\x18\x03 \x01(\tR\x04role\x12\x1d\n" +
+	"\n" +
+	"invited_by\x18\x04 \x01(\tR\tinvitedBy\x12*\n" +
+	"\x02at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\"\x8f\x01\n" +
 	"\x05Event\x12*\n" +
 	"\x02at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x12\x14\n" +
 	"\x05actor\x18\x02 \x01(\tR\x05actor\x12\x16\n" +
@@ -811,8 +1171,9 @@ const file_docsearch_library_v1_library_proto_rawDesc = "" +
 	"\fGrantRequest\x12\x18\n" +
 	"\alibrary\x18\x01 \x01(\tR\alibrary\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12\x12\n" +
-	"\x04role\x18\x03 \x01(\tR\x04role\"\x0f\n" +
-	"\rGrantResponse\"E\n" +
+	"\x04role\x18\x03 \x01(\tR\x04role\")\n" +
+	"\rGrantResponse\x12\x18\n" +
+	"\ainvited\x18\x01 \x01(\bR\ainvited\"E\n" +
 	"\rRevokeRequest\x12\x18\n" +
 	"\alibrary\x18\x01 \x01(\tR\alibrary\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\"\x10\n" +
@@ -820,14 +1181,27 @@ const file_docsearch_library_v1_library_proto_rawDesc = "" +
 	"\rEventsRequest\x12\x18\n" +
 	"\alibrary\x18\x01 \x01(\tR\alibrary\"E\n" +
 	"\x0eEventsResponse\x123\n" +
-	"\x06events\x18\x01 \x03(\v2\x1b.docsearch.library.v1.EventR\x06events2\x94\x04\n" +
+	"\x06events\x18\x01 \x03(\v2\x1b.docsearch.library.v1.EventR\x06events\"\x14\n" +
+	"\x12InvitationsRequest\"Y\n" +
+	"\x13InvitationsResponse\x12B\n" +
+	"\vinvitations\x18\x01 \x03(\v2 .docsearch.library.v1.InvitationR\vinvitations\")\n" +
+	"\rAcceptRequest\x12\x18\n" +
+	"\alibrary\x18\x01 \x01(\tR\alibrary\"I\n" +
+	"\x0eAcceptResponse\x127\n" +
+	"\alibrary\x18\x01 \x01(\v2\x1d.docsearch.library.v1.LibraryR\alibrary\"*\n" +
+	"\x0eDeclineRequest\x12\x18\n" +
+	"\alibrary\x18\x01 \x01(\tR\alibrary\"\x11\n" +
+	"\x0fDeclineResponse2\xab\x06\n" +
 	"\x0eLibraryService\x12O\n" +
 	"\x04List\x12!.docsearch.library.v1.ListRequest\x1a\".docsearch.library.v1.ListResponse\"\x00\x12U\n" +
 	"\x06Create\x12#.docsearch.library.v1.CreateRequest\x1a$.docsearch.library.v1.CreateResponse\"\x00\x12X\n" +
 	"\aMembers\x12$.docsearch.library.v1.MembersRequest\x1a%.docsearch.library.v1.MembersResponse\"\x00\x12R\n" +
 	"\x05Grant\x12\".docsearch.library.v1.GrantRequest\x1a#.docsearch.library.v1.GrantResponse\"\x00\x12U\n" +
 	"\x06Revoke\x12#.docsearch.library.v1.RevokeRequest\x1a$.docsearch.library.v1.RevokeResponse\"\x00\x12U\n" +
-	"\x06Events\x12#.docsearch.library.v1.EventsRequest\x1a$.docsearch.library.v1.EventsResponse\"\x00B\xe7\x01\n" +
+	"\x06Events\x12#.docsearch.library.v1.EventsRequest\x1a$.docsearch.library.v1.EventsResponse\"\x00\x12d\n" +
+	"\vInvitations\x12(.docsearch.library.v1.InvitationsRequest\x1a).docsearch.library.v1.InvitationsResponse\"\x00\x12U\n" +
+	"\x06Accept\x12#.docsearch.library.v1.AcceptRequest\x1a$.docsearch.library.v1.AcceptResponse\"\x00\x12X\n" +
+	"\aDecline\x12$.docsearch.library.v1.DeclineRequest\x1a%.docsearch.library.v1.DeclineResponse\"\x00B\xe7\x01\n" +
 	"\x18com.docsearch.library.v1B\fLibraryProtoP\x01ZKgithub.com/bamsammich/docsearch/internal/api/docsearch/library/v1;libraryv1\xa2\x02\x03DLX\xaa\x02\x14Docsearch.Library.V1\xca\x02\x14Docsearch\\Library\\V1\xe2\x02 Docsearch\\Library\\V1\\GPBMetadata\xea\x02\x16Docsearch::Library::V1b\x06proto3"
 
 var (
@@ -842,48 +1216,64 @@ func file_docsearch_library_v1_library_proto_rawDescGZIP() []byte {
 	return file_docsearch_library_v1_library_proto_rawDescData
 }
 
-var file_docsearch_library_v1_library_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_docsearch_library_v1_library_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_docsearch_library_v1_library_proto_goTypes = []any{
 	(*Library)(nil),               // 0: docsearch.library.v1.Library
 	(*Member)(nil),                // 1: docsearch.library.v1.Member
-	(*Event)(nil),                 // 2: docsearch.library.v1.Event
-	(*ListRequest)(nil),           // 3: docsearch.library.v1.ListRequest
-	(*ListResponse)(nil),          // 4: docsearch.library.v1.ListResponse
-	(*CreateRequest)(nil),         // 5: docsearch.library.v1.CreateRequest
-	(*CreateResponse)(nil),        // 6: docsearch.library.v1.CreateResponse
-	(*MembersRequest)(nil),        // 7: docsearch.library.v1.MembersRequest
-	(*MembersResponse)(nil),       // 8: docsearch.library.v1.MembersResponse
-	(*GrantRequest)(nil),          // 9: docsearch.library.v1.GrantRequest
-	(*GrantResponse)(nil),         // 10: docsearch.library.v1.GrantResponse
-	(*RevokeRequest)(nil),         // 11: docsearch.library.v1.RevokeRequest
-	(*RevokeResponse)(nil),        // 12: docsearch.library.v1.RevokeResponse
-	(*EventsRequest)(nil),         // 13: docsearch.library.v1.EventsRequest
-	(*EventsResponse)(nil),        // 14: docsearch.library.v1.EventsResponse
-	(*timestamppb.Timestamp)(nil), // 15: google.protobuf.Timestamp
+	(*Invitation)(nil),            // 2: docsearch.library.v1.Invitation
+	(*Event)(nil),                 // 3: docsearch.library.v1.Event
+	(*ListRequest)(nil),           // 4: docsearch.library.v1.ListRequest
+	(*ListResponse)(nil),          // 5: docsearch.library.v1.ListResponse
+	(*CreateRequest)(nil),         // 6: docsearch.library.v1.CreateRequest
+	(*CreateResponse)(nil),        // 7: docsearch.library.v1.CreateResponse
+	(*MembersRequest)(nil),        // 8: docsearch.library.v1.MembersRequest
+	(*MembersResponse)(nil),       // 9: docsearch.library.v1.MembersResponse
+	(*GrantRequest)(nil),          // 10: docsearch.library.v1.GrantRequest
+	(*GrantResponse)(nil),         // 11: docsearch.library.v1.GrantResponse
+	(*RevokeRequest)(nil),         // 12: docsearch.library.v1.RevokeRequest
+	(*RevokeResponse)(nil),        // 13: docsearch.library.v1.RevokeResponse
+	(*EventsRequest)(nil),         // 14: docsearch.library.v1.EventsRequest
+	(*EventsResponse)(nil),        // 15: docsearch.library.v1.EventsResponse
+	(*InvitationsRequest)(nil),    // 16: docsearch.library.v1.InvitationsRequest
+	(*InvitationsResponse)(nil),   // 17: docsearch.library.v1.InvitationsResponse
+	(*AcceptRequest)(nil),         // 18: docsearch.library.v1.AcceptRequest
+	(*AcceptResponse)(nil),        // 19: docsearch.library.v1.AcceptResponse
+	(*DeclineRequest)(nil),        // 20: docsearch.library.v1.DeclineRequest
+	(*DeclineResponse)(nil),       // 21: docsearch.library.v1.DeclineResponse
+	(*timestamppb.Timestamp)(nil), // 22: google.protobuf.Timestamp
 }
 var file_docsearch_library_v1_library_proto_depIdxs = []int32{
-	15, // 0: docsearch.library.v1.Event.at:type_name -> google.protobuf.Timestamp
-	0,  // 1: docsearch.library.v1.ListResponse.libraries:type_name -> docsearch.library.v1.Library
-	0,  // 2: docsearch.library.v1.CreateResponse.library:type_name -> docsearch.library.v1.Library
-	1,  // 3: docsearch.library.v1.MembersResponse.members:type_name -> docsearch.library.v1.Member
-	2,  // 4: docsearch.library.v1.EventsResponse.events:type_name -> docsearch.library.v1.Event
-	3,  // 5: docsearch.library.v1.LibraryService.List:input_type -> docsearch.library.v1.ListRequest
-	5,  // 6: docsearch.library.v1.LibraryService.Create:input_type -> docsearch.library.v1.CreateRequest
-	7,  // 7: docsearch.library.v1.LibraryService.Members:input_type -> docsearch.library.v1.MembersRequest
-	9,  // 8: docsearch.library.v1.LibraryService.Grant:input_type -> docsearch.library.v1.GrantRequest
-	11, // 9: docsearch.library.v1.LibraryService.Revoke:input_type -> docsearch.library.v1.RevokeRequest
-	13, // 10: docsearch.library.v1.LibraryService.Events:input_type -> docsearch.library.v1.EventsRequest
-	4,  // 11: docsearch.library.v1.LibraryService.List:output_type -> docsearch.library.v1.ListResponse
-	6,  // 12: docsearch.library.v1.LibraryService.Create:output_type -> docsearch.library.v1.CreateResponse
-	8,  // 13: docsearch.library.v1.LibraryService.Members:output_type -> docsearch.library.v1.MembersResponse
-	10, // 14: docsearch.library.v1.LibraryService.Grant:output_type -> docsearch.library.v1.GrantResponse
-	12, // 15: docsearch.library.v1.LibraryService.Revoke:output_type -> docsearch.library.v1.RevokeResponse
-	14, // 16: docsearch.library.v1.LibraryService.Events:output_type -> docsearch.library.v1.EventsResponse
-	11, // [11:17] is the sub-list for method output_type
-	5,  // [5:11] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	22, // 0: docsearch.library.v1.Invitation.at:type_name -> google.protobuf.Timestamp
+	22, // 1: docsearch.library.v1.Event.at:type_name -> google.protobuf.Timestamp
+	0,  // 2: docsearch.library.v1.ListResponse.libraries:type_name -> docsearch.library.v1.Library
+	0,  // 3: docsearch.library.v1.CreateResponse.library:type_name -> docsearch.library.v1.Library
+	1,  // 4: docsearch.library.v1.MembersResponse.members:type_name -> docsearch.library.v1.Member
+	3,  // 5: docsearch.library.v1.EventsResponse.events:type_name -> docsearch.library.v1.Event
+	2,  // 6: docsearch.library.v1.InvitationsResponse.invitations:type_name -> docsearch.library.v1.Invitation
+	0,  // 7: docsearch.library.v1.AcceptResponse.library:type_name -> docsearch.library.v1.Library
+	4,  // 8: docsearch.library.v1.LibraryService.List:input_type -> docsearch.library.v1.ListRequest
+	6,  // 9: docsearch.library.v1.LibraryService.Create:input_type -> docsearch.library.v1.CreateRequest
+	8,  // 10: docsearch.library.v1.LibraryService.Members:input_type -> docsearch.library.v1.MembersRequest
+	10, // 11: docsearch.library.v1.LibraryService.Grant:input_type -> docsearch.library.v1.GrantRequest
+	12, // 12: docsearch.library.v1.LibraryService.Revoke:input_type -> docsearch.library.v1.RevokeRequest
+	14, // 13: docsearch.library.v1.LibraryService.Events:input_type -> docsearch.library.v1.EventsRequest
+	16, // 14: docsearch.library.v1.LibraryService.Invitations:input_type -> docsearch.library.v1.InvitationsRequest
+	18, // 15: docsearch.library.v1.LibraryService.Accept:input_type -> docsearch.library.v1.AcceptRequest
+	20, // 16: docsearch.library.v1.LibraryService.Decline:input_type -> docsearch.library.v1.DeclineRequest
+	5,  // 17: docsearch.library.v1.LibraryService.List:output_type -> docsearch.library.v1.ListResponse
+	7,  // 18: docsearch.library.v1.LibraryService.Create:output_type -> docsearch.library.v1.CreateResponse
+	9,  // 19: docsearch.library.v1.LibraryService.Members:output_type -> docsearch.library.v1.MembersResponse
+	11, // 20: docsearch.library.v1.LibraryService.Grant:output_type -> docsearch.library.v1.GrantResponse
+	13, // 21: docsearch.library.v1.LibraryService.Revoke:output_type -> docsearch.library.v1.RevokeResponse
+	15, // 22: docsearch.library.v1.LibraryService.Events:output_type -> docsearch.library.v1.EventsResponse
+	17, // 23: docsearch.library.v1.LibraryService.Invitations:output_type -> docsearch.library.v1.InvitationsResponse
+	19, // 24: docsearch.library.v1.LibraryService.Accept:output_type -> docsearch.library.v1.AcceptResponse
+	21, // 25: docsearch.library.v1.LibraryService.Decline:output_type -> docsearch.library.v1.DeclineResponse
+	17, // [17:26] is the sub-list for method output_type
+	8,  // [8:17] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_docsearch_library_v1_library_proto_init() }
@@ -897,7 +1287,7 @@ func file_docsearch_library_v1_library_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_docsearch_library_v1_library_proto_rawDesc), len(file_docsearch_library_v1_library_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   15,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

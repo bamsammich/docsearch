@@ -123,6 +123,14 @@ type LibraryGrant struct {
 	GrantedAt time.Time
 }
 
+type LibraryInvitation struct {
+	LibraryID string
+	UserID    string
+	Role      string
+	InvitedBy sql.NullString
+	InvitedAt time.Time
+}
+
 type OauthAuthRequest struct {
 	ID        string
 	ClientID  string

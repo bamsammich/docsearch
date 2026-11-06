@@ -1,6 +1,6 @@
 // The libraries the signed-in account reads, and the one the pages show.
 
-import type { Library } from "../gen/docsearch/library/v1/library_pb";
+import type { Invitation, Library } from "../gen/docsearch/library/v1/library_pb";
 import { problem, shelves } from "./api";
 import { nameOf, own } from "./names";
 
@@ -18,6 +18,8 @@ function recalled(): string {
 
 class Libraries {
   all = $state<Library[]>([]);
+  /** Libraries this account is asked to join, newest first. */
+  invitations = $state<Invitation[]>([]);
   error = $state("");
   loaded = $state(false);
   /** The label of the library the pages show. */
@@ -54,8 +56,12 @@ class Libraries {
 
   async load(): Promise<void> {
     try {
-      const { libraries, username } = await shelves.list({});
+      const [{ libraries, username }, { invitations }] = await Promise.all([
+        shelves.list({}),
+        shelves.invitations({}),
+      ]);
       this.all = libraries;
+      this.invitations = invitations;
       this.username = username;
       this.error = "";
       if (!this.current) this.choose(own);
@@ -80,6 +86,20 @@ class Libraries {
     const { library } = await shelves.create({ slug, name });
     if (library) this.all = [...this.all, library];
     this.choose(slug);
+  }
+
+  /** Joins a library this account is invited to, and shows it. */
+  async accept(label: string): Promise<Library | undefined> {
+    const { library } = await shelves.accept({ library: label });
+    this.invitations = this.invitations.filter((i) => i.library !== label);
+    if (library) this.all = [...this.all.filter((l) => l.library !== label), library];
+    this.choose(label);
+    return library;
+  }
+
+  async decline(label: string): Promise<void> {
+    await shelves.decline({ library: label });
+    this.invitations = this.invitations.filter((i) => i.library !== label);
   }
 
   /** Takes this account out of the current library and goes back to its own. */

@@ -41,15 +41,56 @@ func (c *Client) Members(ctx context.Context, library string) ([]sharing.Member,
 	}
 	out := make([]sharing.Member, 0, len(resp.Msg.GetMembers()))
 	for _, m := range resp.Msg.GetMembers() {
-		out = append(out, sharing.Member{Username: m.GetUsername(), Role: m.GetRole()})
+		out = append(out, sharing.Member{
+			Username: m.GetUsername(),
+			Role:     m.GetRole(),
+			Invited:  m.GetInvited(),
+		})
 	}
 	return out, nil
 }
 
-// Grant gives username role on library, or changes theirs.
-func (c *Client) Grant(ctx context.Context, library, username, role string) error {
-	_, err := c.libraries.Grant(ctx, connect.NewRequest(
+// Grant changes username's role on library, or invites them with role when
+// they hold none. It reports whether it invited.
+func (c *Client) Grant(ctx context.Context, library, username, role string) (bool, error) {
+	resp, err := c.libraries.Grant(ctx, connect.NewRequest(
 		&libraryv1.GrantRequest{Library: library, Username: username, Role: role}))
+	if err != nil {
+		return false, err
+	}
+	return resp.Msg.GetInvited(), nil
+}
+
+// Invitations are the libraries the caller is asked to join, newest first.
+func (c *Client) Invitations(ctx context.Context) ([]sharing.Invitation, error) {
+	resp, err := c.libraries.Invitations(ctx, connect.NewRequest(&libraryv1.InvitationsRequest{}))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]sharing.Invitation, 0, len(resp.Msg.GetInvitations()))
+	for _, i := range resp.Msg.GetInvitations() {
+		out = append(out, sharing.Invitation{
+			At: i.GetAt().AsTime(), Library: i.GetLibrary(), Title: i.GetName(),
+			Role: i.GetRole(), InvitedBy: i.GetInvitedBy(),
+		})
+	}
+	return out, nil
+}
+
+// Accept joins library with the role its invitation offered.
+func (c *Client) Accept(ctx context.Context, library string) (sharing.Library, error) {
+	resp, err := c.libraries.Accept(ctx,
+		connect.NewRequest(&libraryv1.AcceptRequest{Library: library}))
+	if err != nil {
+		return sharing.Library{}, err
+	}
+	return libraryOf(resp.Msg.GetLibrary()), nil
+}
+
+// Decline refuses the invitation to library.
+func (c *Client) Decline(ctx context.Context, library string) error {
+	_, err := c.libraries.Decline(ctx,
+		connect.NewRequest(&libraryv1.DeclineRequest{Library: library}))
 	return err
 }
 

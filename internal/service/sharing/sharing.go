@@ -26,10 +26,22 @@ type Library struct {
 }
 
 // Member is one person with a role on a library. Username is empty for an
-// account that has not signed in since usernames were recorded.
+// account that has not signed in since usernames were recorded. Invited is
+// someone asked to join with Role who has not yet accepted.
 type Member struct {
 	Username string
 	Role     string
+	Invited  bool
+}
+
+// Invitation is a library someone is asked to join. Accepting it gives
+// Role; until then the library reaches none of their searches.
+type Invitation struct {
+	At        time.Time
+	Library   string
+	Title     string
+	Role      string
+	InvitedBy string
 }
 
 // Event is one change to who may use a library.
@@ -55,6 +67,9 @@ var (
 	ErrLastAdmin = errors.New(
 		"that would leave the library without an admin: make someone else admin first",
 	)
+	// ErrNoInvitation is a library the caller is not invited to, whether or
+	// not it exists.
+	ErrNoInvitation = errors.New("no invitation to a library by that name")
 	// ErrNameTaken is a slug another library already has.
 	ErrNameTaken = errors.New("a library by that name already exists")
 	// ErrInvalid is a slug, name or role the database refused the shape of.

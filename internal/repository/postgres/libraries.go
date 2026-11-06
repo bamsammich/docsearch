@@ -66,13 +66,67 @@ func (l *Libraries) Create(ctx context.Context, slug, name string) (sharing.Libr
 	return sharing.Library{Name: slug, Title: name, Role: sharing.Admin}, nil
 }
 
-// Grant gives username role on the library slug names, or changes theirs.
-func (l *Libraries) Grant(ctx context.Context, slug, username, role string) error {
-	return l.run(ctx, func(q *pgdbgen.Queries) error {
-		return q.GrantLibrary(
+// Grant changes username's role on the library slug names, or invites them
+// with role when they hold none. It reports whether it invited.
+func (l *Libraries) Grant(ctx context.Context, slug, username, role string) (bool, error) {
+	var outcome string
+	err := l.run(ctx, func(q *pgdbgen.Queries) error {
+		var err error
+		outcome, err = q.GrantLibrary(
 			ctx,
 			pgdbgen.GrantLibraryParams{Slug: slug, Username: username, Role: role},
 		)
+		return err
+	})
+	return outcome == "invited", err
+}
+
+// Invitations are the libraries the user is asked to join, newest first.
+func (l *Libraries) Invitations(ctx context.Context) ([]sharing.Invitation, error) {
+	var out []sharing.Invitation
+	err := l.run(ctx, func(q *pgdbgen.Queries) error {
+		rows, err := q.MyInvitations(ctx)
+		for _, row := range rows {
+			out = append(out, sharing.Invitation{
+				At:        row.InvitedAt,
+				Library:   row.Slug,
+				Title:     row.Name,
+				Role:      row.Role,
+				InvitedBy: row.InvitedBy,
+			})
+		}
+		return err
+	})
+	return out, err
+}
+
+// Accept joins the library slug names with the role its invitation offered.
+func (l *Libraries) Accept(ctx context.Context, slug string) (sharing.Library, error) {
+	var role string
+	err := l.run(ctx, func(q *pgdbgen.Queries) error {
+		var err error
+		role, err = q.AcceptInvitation(ctx, slug)
+		return err
+	})
+	if err != nil {
+		return sharing.Library{}, err
+	}
+	libs, err := l.List(ctx)
+	if err != nil {
+		return sharing.Library{}, err
+	}
+	for _, lib := range libs {
+		if lib.Name == slug {
+			return lib, nil
+		}
+	}
+	return sharing.Library{Name: slug, Role: role}, nil
+}
+
+// Decline refuses the invitation to the library slug names.
+func (l *Libraries) Decline(ctx context.Context, slug string) error {
+	return l.run(ctx, func(q *pgdbgen.Queries) error {
+		return q.DeclineInvitation(ctx, slug)
 	})
 }
 
@@ -89,7 +143,11 @@ func (l *Libraries) Members(ctx context.Context, slug string) ([]sharing.Member,
 	err := l.run(ctx, func(q *pgdbgen.Queries) error {
 		rows, err := q.LibraryMembers(ctx, slug)
 		for _, row := range rows {
-			out = append(out, sharing.Member{Username: row.Username, Role: row.Role})
+			out = append(out, sharing.Member{
+				Username: row.Username,
+				Role:     row.Role,
+				Invited:  row.Invited,
+			})
 		}
 		return err
 	})
@@ -133,6 +191,7 @@ var refusals = map[string]error{
 	"DSL02": sharing.ErrNoAccount,
 	"DSL03": sharing.ErrLastAdmin,
 	"DSL04": sharing.ErrNameTaken,
+	"DSL05": sharing.ErrNoInvitation,
 	"23505": sharing.ErrNameTaken,
 	"23514": sharing.ErrInvalid,
 	"22023": sharing.ErrInvalid,
