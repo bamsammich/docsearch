@@ -75,6 +75,11 @@ func command() *cli.Command {
 				Sources: cli.EnvVars(config.EnvServer),
 			},
 			&cli.StringFlag{
+				Name:    "library",
+				Usage:   "push into the `LIBRARY` named, one you edit, rather than your own",
+				Sources: cli.EnvVars("DOCSEARCH_SYNC_LIBRARY"),
+			},
+			&cli.StringFlag{
 				Name: "key-prefix", Value: "paperless",
 				Usage:   "`PREFIX` of every key this sync pushes; one per Paperless instance",
 				Sources: cli.EnvVars("DOCSEARCH_SYNC_KEY_PREFIX"),
@@ -136,11 +141,11 @@ func build(cmd *cli.Command) (*docsync.Syncer, error) {
 		return nil, errNoTokens
 	}
 	client := &http.Client{Timeout: requestTimeout}
-	server := cmd.String("server")
+	server, library := cmd.String("server"), cmd.String("library")
 	return docsync.New(
 		paperless.New(client, paperlessURL, paperlessToken),
-		connectclient.Default(server, docsearchToken),
-		upload.NewClient(client, server, docsearchToken),
+		connectclient.Default(server, docsearchToken).In(library),
+		upload.NewClient(client, server, docsearchToken).In(library),
 		docsync.Options{
 			Supports:      adapter.IsSupported,
 			Prefix:        cmd.String("key-prefix"),

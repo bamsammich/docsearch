@@ -277,6 +277,7 @@ PAPERLESS_TOKEN=... DOCSEARCH_TOKEN=... \
 |---|---|---|
 | `--paperless-url` | `PAPERLESS_URL` | none |
 | `--server` | `DOCSEARCH_SERVER` | `http://127.0.0.1:8765` |
+| `--library` | `DOCSEARCH_SYNC_LIBRARY` | your own library; name a shared one you edit to fill it instead |
 | `--key-prefix` | `DOCSEARCH_SYNC_KEY_PREFIX` | `paperless`; use one per Paperless instance |
 | `--every` | `DOCSEARCH_SYNC_EVERY` | `0`, one pass and exit |
 | `--prefer-archive` | `DOCSEARCH_SYNC_PREFER_ARCHIVE` | off |
