@@ -761,3 +761,31 @@ func (s *MigrationSuite) TestReadableLibrariesNamesOnlyTheUsersGrants() {
 	})
 	s.Equal([]string{"second:admin", "lib_team:reader"}, libs, "their own first, and nobody else's")
 }
+
+// -- 00021_link_issuer ----------------------------------------------------
+
+func (s *MigrationSuite) TestLinkIssuerNamesEachLinksOwner() {
+	s.upTo(20)
+	pgtest.WriteAs(s.T(), s.db, "default", func(tx *sql.Tx) {
+		_, err := tx.ExecContext(s.T().Context(),
+			`INSERT INTO upload_links (token_hash, library_id, expires_at)
+			 VALUES ('hash-1', 'default', now() + interval '1 hour')`)
+		s.Require().NoError(err)
+	})
+
+	s.upTo(21)
+
+	var library, issuer string
+	s.Require().NoError(s.pg.App.QueryRowContext(s.T().Context(),
+		`SELECT library_id, issued_by FROM redeem_upload_link('hash-1')`).Scan(&library, &issuer))
+	s.Equal("default", library)
+	s.Equal("default", issuer, "every earlier link was issued into its user's own library")
+}
+
+func (s *MigrationSuite) TestLinkIssuerGoesDownAndUpAgain() {
+	s.upTo(21)
+	s.down()
+	s.False(s.columnExists("upload_links", "issued_by"))
+	s.upTo(21)
+	s.True(s.columnExists("upload_links", "issued_by"))
+}

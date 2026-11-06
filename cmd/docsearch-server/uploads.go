@@ -38,13 +38,14 @@ func newUploads(
 		issuer: upload.NewIssuer(links, cfg.PublicURL, linkLifetime, time.Now),
 		doors: upload.Doors{
 			Links: links,
-			Stores: func(user string) (upload.Store, error) {
-				return pgupload.New(db, pgsession.Personal(user)), nil
+			Stores: func(dest upload.Destination) (upload.Store, error) {
+				return pgupload.New(db, scopeOf(dest)), nil
 			},
-			Enqueue:  enqueuer(libs),
-			Supports: formats.Supports,
-			Log:      log,
-			MaxBytes: cfg.UploadMaxMB << 20,
+			Enqueue:      enqueuer(libs),
+			Destinations: destinations(libs),
+			Supports:     formats.Supports,
+			Log:          log,
+			MaxBytes:     cfg.UploadMaxMB << 20,
 		},
 	}
 }
@@ -53,12 +54,33 @@ func newUploads(
 // upload target never should.
 var errNothingQueued = errors.New("the upload was stored but no job was queued")
 
-// enqueuer queues one target into a user's library and names the job.
+// scopeOf is the transaction scope an upload into dest is written in.
+func scopeOf(dest upload.Destination) pgsession.Scope {
+	return pgsession.Scope{User: dest.User, Library: dest.Library}
+}
+
+// destinations resolves the library a program named on the upload door.
+func destinations(
+	libs *library.Libraries,
+) func(context.Context, string, string) (upload.Destination, error) {
+	return func(ctx context.Context, user, label string) (upload.Destination, error) {
+		scope, err := libs.Destination(ctx, user, label)
+		if errors.Is(err, library.ErrNotWritable) {
+			return upload.Destination{}, upload.ErrNoDestination
+		}
+		if err != nil {
+			return upload.Destination{}, err
+		}
+		return upload.Destination{User: scope.User, Library: scope.Library}, nil
+	}
+}
+
+// enqueuer queues one target into a destination and names the job.
 func enqueuer(
 	libs *library.Libraries,
-) func(context.Context, string, string, string) (int64, error) {
-	return func(ctx context.Context, user, target, title string) (int64, error) {
-		jobs, err := libs.Jobs(pgsession.Personal(user))
+) func(context.Context, upload.Destination, string, string) (int64, error) {
+	return func(ctx context.Context, dest upload.Destination, target, title string) (int64, error) {
+		jobs, err := libs.Jobs(scopeOf(dest))
 		if err != nil {
 			return 0, err
 		}

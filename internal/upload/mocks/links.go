@@ -8,6 +8,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/bamsammich/docsearch/internal/upload"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -48,16 +49,16 @@ func (_m *MockLinks) EXPECT() *MockLinks_Expecter {
 }
 
 // Create provides a mock function for the type MockLinks
-func (_mock *MockLinks) Create(ctx context.Context, user string, tokenHash string, expires time.Time) error {
-	ret := _mock.Called(ctx, user, tokenHash, expires)
+func (_mock *MockLinks) Create(ctx context.Context, dest upload.Destination, tokenHash string, expires time.Time) error {
+	ret := _mock.Called(ctx, dest, tokenHash, expires)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Create")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, time.Time) error); ok {
-		r0 = returnFunc(ctx, user, tokenHash, expires)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, upload.Destination, string, time.Time) error); ok {
+		r0 = returnFunc(ctx, dest, tokenHash, expires)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -71,22 +72,22 @@ type MockLinks_Create_Call struct {
 
 // Create is a helper method to define mock.On call
 //   - ctx context.Context
-//   - user string
+//   - dest upload.Destination
 //   - tokenHash string
 //   - expires time.Time
-func (_e *MockLinks_Expecter) Create(ctx any, user any, tokenHash any, expires any) *MockLinks_Create_Call {
-	return &MockLinks_Create_Call{Call: _e.mock.On("Create", ctx, user, tokenHash, expires)}
+func (_e *MockLinks_Expecter) Create(ctx any, dest any, tokenHash any, expires any) *MockLinks_Create_Call {
+	return &MockLinks_Create_Call{Call: _e.mock.On("Create", ctx, dest, tokenHash, expires)}
 }
 
-func (_c *MockLinks_Create_Call) Run(run func(ctx context.Context, user string, tokenHash string, expires time.Time)) *MockLinks_Create_Call {
+func (_c *MockLinks_Create_Call) Run(run func(ctx context.Context, dest upload.Destination, tokenHash string, expires time.Time)) *MockLinks_Create_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 string
+		var arg1 upload.Destination
 		if args[1] != nil {
-			arg1 = args[1].(string)
+			arg1 = args[1].(upload.Destination)
 		}
 		var arg2 string
 		if args[2] != nil {
@@ -111,7 +112,7 @@ func (_c *MockLinks_Create_Call) Return(err error) *MockLinks_Create_Call {
 	return _c
 }
 
-func (_c *MockLinks_Create_Call) RunAndReturn(run func(ctx context.Context, user string, tokenHash string, expires time.Time) error) *MockLinks_Create_Call {
+func (_c *MockLinks_Create_Call) RunAndReturn(run func(ctx context.Context, dest upload.Destination, tokenHash string, expires time.Time) error) *MockLinks_Create_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -183,23 +184,23 @@ func (_c *MockLinks_Open_Call) RunAndReturn(run func(ctx context.Context, tokenH
 }
 
 // Redeem provides a mock function for the type MockLinks
-func (_mock *MockLinks) Redeem(ctx context.Context, tokenHash string) (string, bool, error) {
+func (_mock *MockLinks) Redeem(ctx context.Context, tokenHash string) (upload.Destination, bool, error) {
 	ret := _mock.Called(ctx, tokenHash)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Redeem")
 	}
 
-	var r0 string
+	var r0 upload.Destination
 	var r1 bool
 	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (string, bool, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (upload.Destination, bool, error)); ok {
 		return returnFunc(ctx, tokenHash)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) string); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) upload.Destination); ok {
 		r0 = returnFunc(ctx, tokenHash)
 	} else {
-		r0 = ret.Get(0).(string)
+		r0 = ret.Get(0).(upload.Destination)
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string) bool); ok {
 		r1 = returnFunc(ctx, tokenHash)
@@ -244,12 +245,12 @@ func (_c *MockLinks_Redeem_Call) Run(run func(ctx context.Context, tokenHash str
 	return _c
 }
 
-func (_c *MockLinks_Redeem_Call) Return(s string, b bool, err error) *MockLinks_Redeem_Call {
-	_c.Call.Return(s, b, err)
+func (_c *MockLinks_Redeem_Call) Return(destination upload.Destination, b bool, err error) *MockLinks_Redeem_Call {
+	_c.Call.Return(destination, b, err)
 	return _c
 }
 
-func (_c *MockLinks_Redeem_Call) RunAndReturn(run func(ctx context.Context, tokenHash string) (string, bool, error)) *MockLinks_Redeem_Call {
+func (_c *MockLinks_Redeem_Call) RunAndReturn(run func(ctx context.Context, tokenHash string) (upload.Destination, bool, error)) *MockLinks_Redeem_Call {
 	_c.Call.Return(run)
 	return _c
 }

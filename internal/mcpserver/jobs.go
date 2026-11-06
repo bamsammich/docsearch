@@ -14,6 +14,7 @@ type jobStatus struct {
 	SourcePath  string   `json:"source_path"`
 	Title       string   `json:"title,omitempty"`
 	DocID       string   `json:"doc_id,omitempty"`
+	Library     string   `json:"library"`
 	Status      string   `json:"status"`
 	Phase       string   `json:"phase,omitempty"`
 	Progress    string   `json:"progress,omitempty"`

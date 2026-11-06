@@ -50,14 +50,14 @@ type Deps struct {
 	Jobs JobsFor
 }
 
-// JobsFor builds one user's ingest queue.
-type JobsFor func(user string) (*job.Service, error)
+// JobsFor builds one library's ingest queue, as one user.
+type JobsFor func(scope pgsession.Scope) (*job.Service, error)
 
 // StoresFor builds the store one library is read through, as one user.
 type StoresFor func(scope pgsession.Scope) (*pgstore.Store, error)
 
-// LinksFor issues a signed upload link for user.
-type LinksFor func(ctx context.Context, user string) (upload.Link, error)
+// LinksFor issues a signed link that uploads into scope's library, as its user.
+type LinksFor func(ctx context.Context, scope pgsession.Scope) (upload.Link, error)
 
 // own is the store of the requesting user's own library.
 //
@@ -139,13 +139,63 @@ func chosen(libs []pgstore.Library, names []string) ([]pgstore.Library, error) {
 	return out, nil
 }
 
-// jobs is the ingest queue of the user a request acts for.
-func (d Deps) jobs(ctx context.Context) (*job.Service, error) {
+// writable is the library an agent named to add to, or the user's own, as
+// the scope that adds to it.
+func (d Deps) writable(
+	ctx context.Context,
+	label string,
+) (pgsession.Scope, pgstore.Library, error) {
+	user, err := owner.From(ctx)
+	if err != nil {
+		return pgsession.Scope{}, pgstore.Library{}, err
+	}
+	_, libs, err := d.readable(ctx)
+	if err != nil {
+		return pgsession.Scope{}, pgstore.Library{}, err
+	}
+	lib, ok := pgstore.Writable(libs, label)
+	if !ok {
+		return pgsession.Scope{}, pgstore.Library{}, errNotWritable(label)
+	}
+	return pgsession.Scope{User: user, Library: lib.ID}, lib, nil
+}
+
+// errNotWritable refuses a library the user cannot add to, in the same words
+// whether they read it as a reader or do not read it at all.
+func errNotWritable(label string) error {
+	return fmt.Errorf("you cannot add to a library named %q: list_documents names the "+
+		"libraries you can read and your role in each; leave library out for your own", label)
+}
+
+// queues is the ingest queue of every library the user can add to, with the
+// library each one fills.
+func (d Deps) queues(ctx context.Context) ([]libraryQueue, error) {
 	user, err := owner.From(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return d.Jobs(user)
+	_, libs, err := d.readable(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]libraryQueue, 0, len(libs))
+	for _, lib := range libs {
+		if !lib.CanAdd() {
+			continue
+		}
+		jobs, err := d.Jobs(pgsession.Scope{User: user, Library: lib.ID})
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, libraryQueue{library: lib, jobs: jobs})
+	}
+	return out, nil
+}
+
+// libraryQueue is one library's ingest queue.
+type libraryQueue struct {
+	jobs    *job.Service
+	library pgstore.Library
 }
 
 // toolMaxK is the search tool's documented result cap.
@@ -194,6 +244,9 @@ func describeAddDocument(roots []string) string {
 		"single page — https://example.com/docs, not https://example.com/docs/install — " +
 		"because the crawl is scoped from what the seed declares. Only public addresses " +
 		"are fetched; private, loopback and local-only names are refused.\n\n" +
+		"'library' names the library to add to, as list_documents reports it; leave it out " +
+		"for the user's own. You can add only to a library where your role is editor or " +
+		"admin.\n\n" +
 		describeRoots(roots)
 }
 
@@ -315,7 +368,10 @@ func New(d Deps) *mcp.Server {
 			"`curl -T <file> '<url>?name=<file name>'`. Otherwise give the link to the " +
 			"user to open in a browser and pick the file. The link expires after a few " +
 			"minutes and works once. The upload is queued like add_document; check " +
-			"ingest_status afterwards.",
+			"ingest_status afterwards.\n\n" +
+			"'library' names the library the file goes into, as list_documents reports it; " +
+			"leave it out for the user's own. The file is added as you, so your role there " +
+			"must be editor or admin.",
 	}, d.uploadLink)
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -323,7 +379,8 @@ func New(d Deps) *mcp.Server {
 		Description: "Report ingest job progress. With job_id, returns that job; without, " +
 			"returns all active jobs, plus recently finished ones when include_completed " +
 			"is set. A completed job reports its doc_id so you can search it immediately, " +
-			"and any structural warnings recorded during ingest.",
+			"and any structural warnings recorded during ingest. Jobs come from every " +
+			"library you can add to, each naming its library.",
 	}, d.ingestStatus)
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -581,8 +638,9 @@ func (d Deps) getContext(ctx context.Context, _ *mcp.CallToolRequest,
 // -- add_document ---------------------------------------------------------
 
 type addDocumentInput struct {
-	Target string `json:"target"          jsonschema:"a file or directory inside a library root, or an http(s) URL of a documentation site"`
-	Title  string `json:"title,omitempty" jsonschema:"override the derived document title"`
+	Target  string `json:"target"            jsonschema:"a file or directory inside a library root, or an http(s) URL of a documentation site"`
+	Title   string `json:"title,omitempty"   jsonschema:"override the derived document title"`
+	Library string `json:"library,omitempty" jsonschema:"the library to add to, by the name list_documents reports; default your own"`
 }
 
 // isURL reports whether a target names something to fetch rather than a path
@@ -601,6 +659,7 @@ func isURL(target string) bool {
 
 type queuedJob struct {
 	JobID           int64  `json:"job_id"`
+	Library         string `json:"library"`
 	Status          string `json:"status"`
 	PositionInQueue int    `json:"position_in_queue"`
 	SourcePath      string `json:"source_path"`
@@ -617,7 +676,11 @@ func (d Deps) addDocument(ctx context.Context, _ *mcp.CallToolRequest,
 	if err != nil {
 		return nil, addDocumentOutput{}, err
 	}
-	jobs, err := d.jobs(ctx)
+	scope, lib, err := d.writable(ctx, in.Library)
+	if err != nil {
+		return nil, addDocumentOutput{}, err
+	}
+	jobs, err := d.Jobs(scope)
 	if err != nil {
 		return nil, addDocumentOutput{}, err
 	}
@@ -628,7 +691,8 @@ func (d Deps) addDocument(ctx context.Context, _ *mcp.CallToolRequest,
 	out := addDocumentOutput{Note: note(len(queued))}
 	for _, q := range queued {
 		out.Jobs = append(out.Jobs, queuedJob{
-			JobID: q.JobID, Status: statusQueued, PositionInQueue: q.Position, SourcePath: q.Source,
+			JobID: q.JobID, Library: lib.Label, Status: statusQueued,
+			PositionInQueue: q.Position, SourcePath: q.Source,
 		})
 	}
 	return nil, out, nil
@@ -707,32 +771,68 @@ const statusLimit = 25
 
 func (d Deps) ingestStatus(ctx context.Context, _ *mcp.CallToolRequest,
 	in ingestStatusInput) (*mcp.CallToolResult, ingestStatusOutput, error) {
-	jobs, err := d.jobs(ctx)
+	queues, err := d.queues(ctx)
 	if err != nil {
 		return nil, ingestStatusOutput{}, err
 	}
 	now := time.Now()
 	if in.JobID != 0 {
-		one, err := jobs.Get(ctx, in.JobID)
+		one, lib, err := findJob(ctx, queues, in.JobID)
 		if err != nil {
 			return nil, ingestStatusOutput{}, err
 		}
-		return nil, ingestStatusOutput{Jobs: []jobStatus{statusOf(one, now)}}, nil
+		return nil, ingestStatusOutput{Jobs: []jobStatus{statusIn(one, lib, now)}}, nil
 	}
-	listed, err := jobs.List(ctx, in.IncludeCompleted, statusLimit)
-	if err != nil {
-		return nil, ingestStatusOutput{}, err
-	}
-	out := ingestStatusOutput{Jobs: make([]jobStatus, 0, len(listed))}
-	for _, j := range listed {
-		out.Jobs = append(out.Jobs, statusOf(j, now))
+	out := ingestStatusOutput{Jobs: []jobStatus{}}
+	for _, queue := range queues {
+		listed, err := queue.jobs.List(ctx, in.IncludeCompleted, statusLimit)
+		if err != nil {
+			return nil, ingestStatusOutput{}, err
+		}
+		for _, j := range listed {
+			out.Jobs = append(out.Jobs, statusIn(j, queue.library, now))
+		}
 	}
 	return nil, out, nil
 }
 
+// findJob is a job by its id, in whichever library the user can add to holds
+// it. Ids are unique across libraries, so at most one does. A job in no such
+// library answers as a job that does not exist.
+func findJob(
+	ctx context.Context,
+	queues []libraryQueue,
+	id int64,
+) (job.Job, pgstore.Library, error) {
+	var missing error
+	for _, queue := range queues {
+		found, err := queue.jobs.Get(ctx, id)
+		if err == nil {
+			return found, queue.library, nil
+		}
+		missing = err
+	}
+	if missing == nil {
+		missing = fmt.Errorf("job %d not found", id)
+	}
+	return job.Job{}, pgstore.Library{}, missing
+}
+
+// statusIn is a job's status, naming the library it fills.
+func statusIn(j job.Job, lib pgstore.Library, now time.Time) jobStatus {
+	out := statusOf(j, now)
+	out.Library = lib.Label
+	if out.DocID != "" {
+		out.DocID = lib.Qualify(out.DocID)
+	}
+	return out
+}
+
 // -- upload_link ----------------------------------------------------------
 
-type uploadLinkInput struct{}
+type uploadLinkInput struct {
+	Library string `json:"library,omitempty" jsonschema:"the library the file goes into, by the name list_documents reports; default your own"`
+}
 
 type uploadLinkOutput struct {
 	URL       string `json:"url"`
@@ -741,12 +841,12 @@ type uploadLinkOutput struct {
 }
 
 func (d Deps) uploadLink(ctx context.Context, _ *mcp.CallToolRequest,
-	_ uploadLinkInput) (*mcp.CallToolResult, uploadLinkOutput, error) {
-	user, err := owner.From(ctx)
+	in uploadLinkInput) (*mcp.CallToolResult, uploadLinkOutput, error) {
+	scope, _, err := d.writable(ctx, in.Library)
 	if err != nil {
 		return nil, uploadLinkOutput{}, err
 	}
-	link, err := d.UploadLinks(ctx, user)
+	link, err := d.UploadLinks(ctx, scope)
 	if err != nil {
 		return nil, uploadLinkOutput{}, err
 	}
@@ -775,11 +875,16 @@ func (d Deps) cancelIngest(ctx context.Context, _ *mcp.CallToolRequest,
 	if in.JobID == 0 {
 		return nil, cancelIngestOutput{}, errors.New("job_id is required")
 	}
-	jobs, err := d.jobs(ctx)
+	queues, err := d.queues(ctx)
 	if err != nil {
 		return nil, cancelIngestOutput{}, err
 	}
-	status, err := jobs.Cancel(ctx, in.JobID)
+	_, lib, err := findJob(ctx, queues, in.JobID)
+	if err != nil {
+		return nil, cancelIngestOutput{}, err
+	}
+	i := slices.IndexFunc(queues, func(q libraryQueue) bool { return q.library.ID == lib.ID })
+	status, err := queues[i].jobs.Cancel(ctx, in.JobID)
 	if err != nil {
 		return nil, cancelIngestOutput{}, err
 	}

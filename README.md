@@ -160,7 +160,9 @@ it. The authenticated `PUT /upload` also takes `?key=`: a later upload under
 the same key replaces that document instead of adding a second. Without a
 key, the file's content hash is the key, so uploading the same bytes twice
 gives one document. `?title=` names the document; without it, the document
-takes the title it gives itself.
+takes the title it gives itself. `?library=<name>` puts the file in a shared
+library where your role is editor or admin, instead of your own, and
+`upload_link` and `add_document` take the same `library`.
 
 `GET /original/<doc_id>` returns the file a document was read from, to the
 account that owns it. A PDF comes back as a PDF and a Word file as a download.

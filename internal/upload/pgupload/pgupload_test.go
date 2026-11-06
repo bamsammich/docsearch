@@ -63,16 +63,17 @@ func (s *PgUploadSuite) TestOneUsersUploadsAreInvisibleToAnother() {
 func (s *PgUploadSuite) TestALinkRedeemsOnceAndNamesItsUser() {
 	links := pgupload.NewLinks(s.pg.App)
 	ctx := s.T().Context()
-	s.Require().NoError(links.Create(ctx, "second", "hash-1", time.Now().Add(time.Minute)))
+	s.Require().
+		NoError(links.Create(ctx, upload.Own("second"), "hash-1", time.Now().Add(time.Minute)))
 
 	open, err := links.Open(ctx, "hash-1")
 	s.Require().NoError(err)
 	s.True(open, "checking does not spend it")
 
-	user, ok, err := links.Redeem(ctx, "hash-1")
+	dest, ok, err := links.Redeem(ctx, "hash-1")
 	s.Require().NoError(err)
 	s.True(ok)
-	s.Equal("second", user)
+	s.Equal(upload.Own("second"), dest)
 
 	_, ok, err = links.Redeem(ctx, "hash-1")
 	s.Require().NoError(err)
@@ -85,8 +86,45 @@ func (s *PgUploadSuite) TestALinkRedeemsOnceAndNamesItsUser() {
 func (s *PgUploadSuite) TestAnExpiredLinkDoesNotRedeem() {
 	links := pgupload.NewLinks(s.pg.App)
 	ctx := s.T().Context()
-	s.Require().NoError(links.Create(ctx, owner.Builtin, "hash-1", time.Now().Add(-time.Minute)))
+	s.Require().
+		NoError(links.Create(ctx, upload.Own(owner.Builtin), "hash-1", time.Now().Add(-time.Minute)))
 	_, ok, err := links.Redeem(ctx, "hash-1")
 	s.Require().NoError(err)
 	s.False(ok)
+}
+
+// shared makes a library default administers and second reads.
+func (s *PgUploadSuite) shared() {
+	for _, statement := range []string{
+		`INSERT INTO libraries (library_id, kind, slug, name)
+		   VALUES ('lib_team', 'shared', 'team', 'Team docs')`,
+		`INSERT INTO library_grants (library_id, user_id, role)
+		   VALUES ('lib_team', 'default', 'admin'), ('lib_team', 'second', 'reader')`,
+	} {
+		_, err := s.pg.Owner.ExecContext(s.T().Context(), statement)
+		s.Require().NoError(err)
+	}
+}
+
+func (s *PgUploadSuite) TestALinkIntoASharedLibraryRedeemsToItsLibraryAndIssuer() {
+	s.shared()
+	links := pgupload.NewLinks(s.pg.App)
+	ctx := s.T().Context()
+	team := upload.Destination{User: owner.Builtin, Library: "lib_team"}
+	s.Require().NoError(links.Create(ctx, team, "hash-team", time.Now().Add(time.Minute)))
+
+	dest, ok, err := links.Redeem(ctx, "hash-team")
+	s.Require().NoError(err)
+	s.True(ok)
+	s.Equal(team, dest, "written as whoever issued the link, into its library")
+}
+
+func (s *PgUploadSuite) TestAReaderCannotIssueALinkIntoASharedLibrary() {
+	s.shared()
+	err := pgupload.NewLinks(s.pg.App).Create(s.T().Context(),
+		upload.Destination{
+			User:    "second",
+			Library: "lib_team",
+		}, "hash-reader", time.Now().Add(time.Minute))
+	s.Require().Error(err)
 }

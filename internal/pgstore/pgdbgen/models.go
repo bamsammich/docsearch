@@ -194,6 +194,7 @@ type UploadLink struct {
 	LibraryID string
 	ExpiresAt time.Time
 	UsedAt    sql.NullTime
+	IssuedBy  sql.NullString
 }
 
 type User struct {

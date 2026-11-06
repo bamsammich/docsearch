@@ -126,13 +126,13 @@ $$;
 -- Name: redeem_upload_link(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.redeem_upload_link(link_hash text) RETURNS text
+CREATE FUNCTION public.redeem_upload_link(link_hash text) RETURNS TABLE(library_id text, issued_by text)
     LANGUAGE sql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
   UPDATE upload_links SET used_at = now()
    WHERE token_hash = link_hash AND used_at IS NULL AND expires_at > now()
-  RETURNING library_id;
+  RETURNING library_id, issued_by;
 $$;
 
 
@@ -512,7 +512,8 @@ CREATE TABLE public.upload_links (
     token_hash text NOT NULL,
     library_id text NOT NULL,
     expires_at timestamp with time zone NOT NULL,
-    used_at timestamp with time zone
+    used_at timestamp with time zone,
+    issued_by text
 );
 
 ALTER TABLE ONLY public.upload_links FORCE ROW LEVEL SECURITY;
@@ -968,6 +969,14 @@ ALTER TABLE ONLY public.responses
 
 ALTER TABLE ONLY public.robots
     ADD CONSTRAINT robots_library_fkey FOREIGN KEY (library_id) REFERENCES public.libraries(library_id);
+
+
+--
+-- Name: upload_links upload_links_issued_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.upload_links
+    ADD CONSTRAINT upload_links_issued_by_fkey FOREIGN KEY (issued_by) REFERENCES public.users(user_id) ON DELETE CASCADE;
 
 
 --

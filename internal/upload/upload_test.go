@@ -50,11 +50,17 @@ func (s *UploadSuite) SetupTest() {
 func (s *UploadSuite) doors() upload.Doors {
 	return upload.Doors{
 		Links:  s.links,
-		Stores: func(string) (upload.Store, error) { return s.store, nil },
-		Enqueue: func(_ context.Context, _, target, title string) (int64, error) {
+		Stores: func(upload.Destination) (upload.Store, error) { return s.store, nil },
+		Enqueue: func(_ context.Context, _ upload.Destination, target, title string) (int64, error) {
 			s.enqueued = append(s.enqueued, target)
 			s.titles = append(s.titles, title)
 			return 42, nil
+		},
+		Destinations: func(_ context.Context, user, library string) (upload.Destination, error) {
+			if library != "" {
+				return upload.Destination{}, upload.ErrNoDestination
+			}
+			return upload.Own(user), nil
 		},
 		Supports: func(name string) bool { return filepath.Ext(name) == ".pdf" },
 		Log:      slog.New(slog.DiscardHandler),
@@ -85,14 +91,14 @@ func (s *UploadSuite) put(name, body string) *http.Request {
 func (s *UploadSuite) TestAnIssuedLinkStoresOnlyItsHash() {
 	now := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
 	var stored string
-	s.links.EXPECT().Create(mock.Anything, user, mock.Anything, now.Add(time.Minute)).
-		RunAndReturn(func(_ context.Context, _, hash string, _ time.Time) error {
+	s.links.EXPECT().Create(mock.Anything, upload.Own(user), mock.Anything, now.Add(time.Minute)).
+		RunAndReturn(func(_ context.Context, _ upload.Destination, hash string, _ time.Time) error {
 			stored = hash
 			return nil
 		})
 
 	link, err := upload.NewIssuer(s.links, "https://docs.example.com/", time.Minute,
-		func() time.Time { return now }).Issue(s.T().Context(), user)
+		func() time.Time { return now }).Issue(s.T().Context(), upload.Own(user))
 	s.Require().NoError(err)
 
 	issued := strings.TrimPrefix(link.URL, "https://docs.example.com"+upload.LinkPrefix)
@@ -104,7 +110,7 @@ func (s *UploadSuite) TestAnIssuedLinkStoresOnlyItsHash() {
 
 func (s *UploadSuite) TestALinkUploadsOneFileIntoItsUsersLibrary() {
 	s.linkOpen()
-	s.links.EXPECT().Redeem(mock.Anything, hashOf(token)).Return(user, true, nil)
+	s.links.EXPECT().Redeem(mock.Anything, hashOf(token)).Return(upload.Own(user), true, nil)
 	s.store.EXPECT().Put(mock.Anything, upload.File{
 		Key: hashOf(pdf), Filename: "manual.pdf", SHA256: hashOf(pdf), Content: []byte(pdf),
 	}).Return(nil)
@@ -145,7 +151,7 @@ func (s *UploadSuite) TestAClosedLinkIsRefusedBeforeTheBodyIsRead() {
 // upload racing this one, is still refused.
 func (s *UploadSuite) TestALinkSpentInTheMeantimeIsRefused() {
 	s.linkOpen()
-	s.links.EXPECT().Redeem(mock.Anything, hashOf(token)).Return("", false, nil)
+	s.links.EXPECT().Redeem(mock.Anything, hashOf(token)).Return(upload.Destination{}, false, nil)
 	got := serve(s.doors().Link(), s.put("manual.pdf", pdf))
 	s.Equal(http.StatusNotFound, got.Code)
 	s.Empty(s.enqueued)
@@ -209,7 +215,7 @@ func (s *UploadSuite) TestABrowserFormEndsOnAPage() {
 	request.Header.Set("Content-Type", form.FormDataContentType())
 	request.Header.Set("Accept", "text/html")
 	s.linkOpen()
-	s.links.EXPECT().Redeem(mock.Anything, hashOf(token)).Return(user, true, nil)
+	s.links.EXPECT().Redeem(mock.Anything, hashOf(token)).Return(upload.Own(user), true, nil)
 	s.store.EXPECT().Put(mock.Anything, mock.Anything).Return(nil)
 
 	got := serve(s.doors().Link(), request)
@@ -220,7 +226,7 @@ func (s *UploadSuite) TestABrowserFormEndsOnAPage() {
 // A store that fails says so in the log, and the caller gets no detail.
 func (s *UploadSuite) TestAStoreFailureStaysOutOfTheResponse() {
 	s.linkOpen()
-	s.links.EXPECT().Redeem(mock.Anything, hashOf(token)).Return(user, true, nil)
+	s.links.EXPECT().Redeem(mock.Anything, hashOf(token)).Return(upload.Own(user), true, nil)
 	s.store.EXPECT().Put(mock.Anything, mock.Anything).
 		Return(errors.New("pq: relation uploads on 10.0.0.7"))
 	got := serve(s.doors().Link(), s.put("manual.pdf", pdf))
@@ -252,6 +258,20 @@ func (s *UploadSuite) TestTheDirectDoorQueuesTheTitleItWasGiven() {
 	got := serve(s.doors().Direct(), request)
 	s.Equal(http.StatusAccepted, got.Code)
 	s.Equal([]string{"Gateway manual"}, s.titles)
+}
+
+// A library the caller cannot add to is refused before the body is read or
+// anything is stored, in the words every such library gets.
+func (s *UploadSuite) TestTheDirectDoorRefusesALibraryTheCallerCannotAddTo() {
+	request := httptest.NewRequestWithContext(
+		owner.With(s.T().Context(), user), http.MethodPut,
+		"/upload?name=manual.pdf&library=team", strings.NewReader(pdf))
+
+	got := serve(s.doors().Direct(), request)
+	s.Equal(http.StatusForbidden, got.Code)
+	s.Contains(got.Body.String(), "you cannot add to that library")
+	s.store.AssertNotCalled(s.T(), "Put", mock.Anything, mock.Anything)
+	s.Empty(s.enqueued)
 }
 
 func (s *UploadSuite) TestAnUploadTargetNamesItsKey() {

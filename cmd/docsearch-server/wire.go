@@ -26,7 +26,6 @@ import (
 	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/repository/postgres"
-	"github.com/bamsammich/docsearch/internal/service/job"
 	"github.com/bamsammich/docsearch/internal/source/site"
 	"github.com/bamsammich/docsearch/internal/upload"
 )
@@ -220,8 +219,13 @@ func newMCPRoute(
 		Stores:       libs.Store,
 		LibraryRoots: cfg.LibraryRoots,
 		Log:          log,
-		UploadLinks:  ups.issuer.Issue,
-		Jobs:         func(user string) (*job.Service, error) { return libs.Jobs(pgsession.Personal(user)) },
+		UploadLinks: func(ctx context.Context, scope pgsession.Scope) (upload.Link, error) {
+			return ups.issuer.Issue(
+				ctx,
+				upload.Destination{User: scope.User, Library: scope.Library},
+			)
+		},
+		Jobs: libs.Jobs,
 	})
 	return route{path: "/mcp", handler: mcpHandler(srv, log)}
 }
