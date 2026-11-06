@@ -73,6 +73,7 @@ func command() *cli.Command {
 			migrateCommand(),
 			importCommand(),
 			accountCommand(),
+			libraryCommand(),
 		},
 	}
 }

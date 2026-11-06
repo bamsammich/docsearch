@@ -28,6 +28,20 @@ COMMENT ON SCHEMA public IS 'standard public schema';
 
 
 --
+-- Name: admins_left(text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.admins_left(lib text, member text, new_role text) RETURNS bigint
+    LANGUAGE sql STABLE
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT (SELECT COUNT(*) FROM library_grants
+           WHERE library_id = lib AND role = 'admin' AND user_id <> member)
+         + CASE WHEN new_role = 'admin' THEN 1 ELSE 0 END;
+$$;
+
+
+--
 -- Name: app_libraries(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -82,6 +96,39 @@ $$;
 
 
 --
+-- Name: create_library(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.create_library(new_slug text, new_name text) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor  text := current_setting('app.user_id', true);
+  new_id text := 'lib_' || substr(md5(random()::text || clock_timestamp()::text), 1, 20);
+BEGIN
+  IF actor IS NULL OR actor = '' THEN
+    RAISE EXCEPTION 'no user' USING ERRCODE = 'DSL01';
+  END IF;
+  IF EXISTS (SELECT 1 FROM libraries WHERE slug = new_slug) THEN
+    RAISE EXCEPTION 'a library named % already exists', new_slug USING ERRCODE = 'DSL04';
+  END IF;
+  INSERT INTO libraries (library_id, kind, slug, name, created_by)
+    VALUES (new_id, 'shared', new_slug, new_name, actor);
+  EXECUTE format('CREATE TABLE %I PARTITION OF chunks FOR VALUES IN (%L)',
+                 'chunks_' || new_id, new_id);
+  EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO docsearch_app',
+                 'chunks_' || new_id);
+  INSERT INTO library_grants (library_id, user_id, role, granted_by)
+    VALUES (new_id, actor, 'admin', actor);
+  INSERT INTO access_events (library_id, actor, action, subject, role)
+    VALUES (new_id, actor, 'create', actor, 'admin');
+  RETURN new_id;
+END;
+$$;
+
+
+--
 -- Name: fail_unclaimable_jobs(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -102,6 +149,107 @@ BEGIN
           AND role_rank(g.role) >= role_rank('editor'));
   GET DIAGNOSTICS failed = ROW_COUNT;
   RETURN failed;
+END;
+$$;
+
+
+--
+-- Name: grant_library(text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.grant_library(lib_slug text, member_username text, new_role text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor  text := current_setting('app.user_id', true);
+  lib    text := library_by_slug(lib_slug, 'admin');
+  member text;
+BEGIN
+  IF lib IS NULL THEN
+    RAISE EXCEPTION 'no library named % that you administer', lib_slug USING ERRCODE = 'DSL01';
+  END IF;
+  SELECT user_id INTO member FROM users WHERE username = member_username;
+  IF member IS NULL THEN
+    RAISE EXCEPTION 'no account named %', member_username USING ERRCODE = 'DSL02';
+  END IF;
+  IF role_rank(new_role) IS NULL THEN
+    RAISE EXCEPTION 'a role is reader, editor or admin' USING ERRCODE = '22023';
+  END IF;
+  IF admins_left(lib, member, new_role) = 0 THEN
+    RAISE EXCEPTION 'that would leave % without an admin', lib_slug USING ERRCODE = 'DSL03';
+  END IF;
+  INSERT INTO library_grants (library_id, user_id, role, granted_by)
+    VALUES (lib, member, new_role, actor)
+  ON CONFLICT (library_id, user_id) DO UPDATE
+    SET role = EXCLUDED.role, granted_by = EXCLUDED.granted_by, granted_at = now();
+  INSERT INTO access_events (library_id, actor, action, subject, role)
+    VALUES (lib, actor, 'grant', member, new_role);
+END;
+$$;
+
+
+--
+-- Name: library_by_slug(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.library_by_slug(lib_slug text, min_role text) RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT l.library_id
+    FROM libraries l
+    JOIN library_grants g ON g.library_id = l.library_id
+   WHERE l.slug = lib_slug
+     AND g.user_id = current_setting('app.user_id', true)
+     AND role_rank(g.role) >= role_rank(min_role);
+$$;
+
+
+--
+-- Name: library_events(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.library_events(lib_slug text) RETURNS TABLE(at timestamp with time zone, actor text, action text, subject text, role text)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  lib text := library_by_slug(lib_slug, 'admin');
+BEGIN
+  IF lib IS NULL THEN
+    RAISE EXCEPTION 'no library named % that you administer', lib_slug USING ERRCODE = 'DSL01';
+  END IF;
+  RETURN QUERY
+    SELECT e.at, COALESCE(a.username, ''), e.action, COALESCE(s.username, ''), COALESCE(e.role, '')
+      FROM access_events e
+      LEFT JOIN users a ON a.user_id = e.actor
+      LEFT JOIN users s ON s.user_id = e.subject
+     WHERE e.library_id = lib
+     ORDER BY e.at, e.id;
+END;
+$$;
+
+
+--
+-- Name: library_members(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.library_members(lib_slug text) RETURNS TABLE(username text, role text)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  lib text := library_by_slug(lib_slug, 'reader');
+BEGIN
+  IF lib IS NULL THEN
+    RAISE EXCEPTION 'no library named % that you read', lib_slug USING ERRCODE = 'DSL01';
+  END IF;
+  RETURN QUERY
+    SELECT COALESCE(u.username, ''), g.role
+      FROM library_grants g JOIN users u ON u.user_id = g.user_id
+     WHERE g.library_id = lib
+     ORDER BY role_rank(g.role) DESC, u.username;
 END;
 $$;
 
@@ -148,6 +296,46 @@ CREATE FUNCTION public.redeem_upload_link(link_hash text) RETURNS TABLE(library_
   UPDATE upload_links SET used_at = now()
    WHERE token_hash = link_hash AND used_at IS NULL AND expires_at > now()
   RETURNING library_id, issued_by;
+$$;
+
+
+--
+-- Name: revoke_library(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.revoke_library(lib_slug text, member_username text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor  text := current_setting('app.user_id', true);
+  member text;
+  lib    text;
+BEGIN
+  SELECT user_id INTO member FROM users WHERE username = member_username;
+  IF member IS NOT NULL AND member = actor THEN
+    lib := library_by_slug(lib_slug, 'reader');
+  ELSE
+    lib := library_by_slug(lib_slug, 'admin');
+  END IF;
+  IF lib IS NULL THEN
+    RAISE EXCEPTION 'no library named % that you administer', lib_slug USING ERRCODE = 'DSL01';
+  END IF;
+  IF member IS NULL THEN
+    RAISE EXCEPTION 'no account named %', member_username USING ERRCODE = 'DSL02';
+  END IF;
+  IF (SELECT kind FROM libraries WHERE library_id = lib) = 'personal' AND member = lib THEN
+    RAISE EXCEPTION 'a personal library keeps its owner' USING ERRCODE = 'DSL03';
+  END IF;
+  IF admins_left(lib, member, NULL) = 0 THEN
+    RAISE EXCEPTION 'that would leave % without an admin', lib_slug USING ERRCODE = 'DSL03';
+  END IF;
+  DELETE FROM library_grants WHERE library_id = lib AND user_id = member;
+  IF FOUND THEN
+    INSERT INTO access_events (library_id, actor, action, subject)
+      VALUES (lib, actor, 'revoke', member);
+  END IF;
+END;
 $$;
 
 
@@ -212,6 +400,37 @@ $$;
 
 
 
+
+--
+-- Name: access_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.access_events (
+    id bigint NOT NULL,
+    at timestamp with time zone DEFAULT now() NOT NULL,
+    library_id text NOT NULL,
+    actor text,
+    action text NOT NULL,
+    subject text,
+    role text,
+    CONSTRAINT access_events_action_check CHECK ((action = ANY (ARRAY['create'::text, 'grant'::text, 'revoke'::text])))
+);
+
+
+--
+-- Name: access_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.access_events ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.access_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
 --
 -- Name: chunks; Type: TABLE; Schema: public; Owner: -
 --
@@ -235,7 +454,6 @@ CREATE TABLE public.chunks (
 PARTITION BY LIST (library_id);
 
 ALTER TABLE ONLY public.chunks FORCE ROW LEVEL SECURITY;
-
 
 
 --
@@ -393,7 +611,8 @@ CREATE TABLE public.libraries (
     CONSTRAINT libraries_kind_check CHECK ((kind = ANY (ARRAY['personal'::text, 'shared'::text]))),
     CONSTRAINT libraries_library_id_check CHECK ((library_id ~ '^[a-z0-9_-]{1,40}$'::text)),
     CONSTRAINT libraries_shared_named CHECK (((kind = 'shared'::text) = ((slug IS NOT NULL) AND (name IS NOT NULL)))),
-    CONSTRAINT libraries_slug_check CHECK ((slug ~ '^[a-z0-9-]{1,40}$'::text))
+    CONSTRAINT libraries_slug_check CHECK ((slug ~ '^[a-z0-9-]{1,40}$'::text)),
+    CONSTRAINT libraries_slug_not_personal CHECK ((slug <> 'personal'::text))
 );
 
 
@@ -593,6 +812,14 @@ ALTER TABLE ONLY public.chunks ATTACH PARTITION public.chunks_default FOR VALUES
 
 
 --
+-- Name: access_events access_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.access_events
+    ADD CONSTRAINT access_events_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: chunks chunks_pkey1; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -769,6 +996,13 @@ ALTER TABLE ONLY public.users
 
 
 --
+-- Name: access_events_library; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX access_events_library ON public.access_events USING btree (library_id, at);
+
+
+--
 -- Name: chunks_bm25; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -892,6 +1126,30 @@ ALTER INDEX public.idx_chunks_doc_section ATTACH PARTITION public.chunks_default
 --
 
 CREATE TRIGGER password_account_username AFTER INSERT ON public.password_accounts FOR EACH ROW EXECUTE FUNCTION public.password_account_username();
+
+
+--
+-- Name: access_events access_events_actor_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.access_events
+    ADD CONSTRAINT access_events_actor_fkey FOREIGN KEY (actor) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+
+--
+-- Name: access_events access_events_library_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.access_events
+    ADD CONSTRAINT access_events_library_id_fkey FOREIGN KEY (library_id) REFERENCES public.libraries(library_id) ON DELETE CASCADE;
+
+
+--
+-- Name: access_events access_events_subject_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.access_events
+    ADD CONSTRAINT access_events_subject_fkey FOREIGN KEY (subject) REFERENCES public.users(user_id) ON DELETE SET NULL;
 
 
 --

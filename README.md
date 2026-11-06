@@ -175,6 +175,35 @@ server, and links are built on it. It defaults to the origin of
 otherwise. `--upload-max-mb` (`DOCSEARCH_UPLOAD_MAX_MB`) caps a file at 100
 MB unless set.
 
+## Sharing a library
+
+Every account has a personal library. A shared library is one a team
+searches and adds to together. Anyone signed in can create one and becomes
+its admin.
+
+```bash
+docsearch library create platform --name "Platform docs"
+docsearch library grant platform alice --role editor
+docsearch library members platform
+docsearch library revoke platform alice   # revoke your own to leave
+docsearch library log platform            # who changed which role, for admins
+```
+
+| role | may |
+|---|---|
+| reader | search and read the library |
+| editor | also add, re-read and remove documents |
+| admin | also grant and revoke roles, and read the log |
+
+Someone can be granted a role once they have signed in at least once, which
+is when their username is recorded. A library always keeps an admin, so the
+last admin cannot leave or step down until they make someone else admin.
+
+An agent's search covers every library its user reads. `list_documents`
+names each library, and a document outside your own is `library/doc_id`.
+`add_document`, `upload_link` and `PUT /upload?library=` add to a library you
+edit.
+
 ## The library UI
 
 `docsearch-server` serves a web page at its public URL (`--public-url`, printed

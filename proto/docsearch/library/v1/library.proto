@@ -1,0 +1,115 @@
+syntax = "proto3";
+
+// Package docsearch.library.v1 creates libraries and shares them.
+//
+// A library is a set of documents people share. Each person has their own,
+// and anyone signed in can create a shared one, becoming its admin. Admins
+// grant others a role on it: a reader searches and reads it, an editor also
+// adds and removes documents, and an admin also manages who has which role.
+package docsearch.library.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Library is one library the caller reads.
+message Library {
+  // Library is the name the caller and their agents use: "personal" for
+  // their own, and the slug of a shared one.
+  string library = 1;
+  string name = 2;
+  // Role is the caller's own: reader, editor or admin.
+  string role = 3;
+}
+
+message Member {
+  // Username is empty for an account that has not signed in since
+  // usernames were recorded.
+  string username = 1;
+  string role = 2;
+}
+
+// Event is one change to who may use a library.
+message Event {
+  google.protobuf.Timestamp at = 1;
+  // Actor made the change, and subject is whose role changed. Either is
+  // empty for an account that has no username or was removed.
+  string actor = 2;
+  // Action is 'create', 'grant' or 'revoke'.
+  string action = 3;
+  string subject = 4;
+  // Role is the role granted, and empty for a revoke.
+  string role = 5;
+}
+
+message ListRequest {}
+
+message ListResponse {
+  repeated Library libraries = 1;
+}
+
+message CreateRequest {
+  // Slug is what agents type: lower-case letters, digits and hyphens.
+  string slug = 1;
+  string name = 2;
+}
+
+message CreateResponse {
+  Library library = 1;
+}
+
+message MembersRequest {
+  string library = 1;
+}
+
+message MembersResponse {
+  repeated Member members = 1;
+}
+
+message GrantRequest {
+  string library = 1;
+  string username = 2;
+  // Role is reader, editor or admin. Granting someone who already has a
+  // role changes it.
+  string role = 3;
+}
+
+message GrantResponse {}
+
+message RevokeRequest {
+  string library = 1;
+  string username = 2;
+}
+
+message RevokeResponse {}
+
+message EventsRequest {
+  string library = 1;
+}
+
+message EventsResponse {
+  repeated Event events = 1;
+}
+
+// LibraryService creates libraries and shares them. The database decides
+// every rule: who may grant, that a library keeps an admin, and that a
+// library the caller cannot act on answers as one that does not exist.
+service LibraryService {
+  // List is every library the caller reads, their own first.
+  rpc List(ListRequest) returns (ListResponse) {}
+
+  // Create makes a shared library with the caller as its admin.
+  rpc Create(CreateRequest) returns (CreateResponse) {}
+
+  // Members is everyone with a role on a library the caller reads.
+  rpc Members(MembersRequest) returns (MembersResponse) {}
+
+  // Grant gives someone a role, or changes theirs. Admins only.
+  rpc Grant(GrantRequest) returns (GrantResponse) {}
+
+  // Revoke takes someone's role away. An admin may revoke anyone's, and
+  // anyone may revoke their own, which is how a member leaves.
+  rpc Revoke(RevokeRequest) returns (RevokeResponse) {}
+
+  // Events is the record of who changed which role, oldest first. Admins
+  // only.
+  rpc Events(EventsRequest) returns (EventsResponse) {}
+}

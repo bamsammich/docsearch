@@ -10,6 +10,16 @@ import (
 	"time"
 )
 
+type AccessEvent struct {
+	ID        int64
+	At        time.Time
+	LibraryID string
+	Actor     sql.NullString
+	Action    string
+	Subject   sql.NullString
+	Role      sql.NullString
+}
+
 type Chunk struct {
 	LibraryID        string
 	ID               int64

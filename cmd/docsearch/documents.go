@@ -17,7 +17,7 @@ const titleWidth = 40
 
 func listCommand() *cli.Command {
 	return &cli.Command{
-		Name:   "list",
+		Name:   commandList,
 		Usage:  "list ingested documents",
 		Flags:  serverFlags(),
 		Action: listDocuments,
