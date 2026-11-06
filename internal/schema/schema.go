@@ -49,7 +49,7 @@ var migrations embed.FS
 // section did when it began holding section numbers rather than page
 // numbers, is invisible to any structural check while silently changing what
 // queries return.
-const Version = 24
+const Version = 25
 
 // History is readable, so a version mismatch can be diagnosed without
 // reading the git log.
@@ -86,6 +86,7 @@ var History = map[int]string{
 	23: "libraries are created, shared and left through definer functions that record access_events",
 	24: "users.admin marks a docsearch administrator, whose changes to accounts go through definer " +
 		"functions that record account_events",
+	25: "settings keeps what an administrator changed for a docsearch started without docsearch.yaml",
 }
 
 // The tables this package names. Written once, so a typo cannot reach a

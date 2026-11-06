@@ -58,17 +58,19 @@ type Config struct {
 }
 
 // The places a setting comes from, strongest first: the command line, the
-// environment, docsearch.yaml, and the default.
+// environment, the deployment's one store of settings (docsearch.yaml, or
+// the database when it has no file), and the default.
 const (
-	FromFlag    = "flag"
-	FromEnv     = "environment"
-	FromFile    = "file"
-	FromDefault = "default"
+	FromFlag     = "flag"
+	FromEnv      = "environment"
+	FromFile     = "file"
+	FromDatabase = "database"
+	FromDefault  = "default"
 )
 
 // Origin is where one setting's value came from.
 type Origin struct {
-	// Kind is FromFlag, FromEnv, FromFile or FromDefault.
+	// Kind is FromFlag, FromEnv, FromFile, FromDatabase or FromDefault.
 	Kind string
 	// Where names the flag, the environment variable or the file.
 	Where string

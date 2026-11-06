@@ -15,16 +15,19 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli/v3"
 
 	"github.com/bamsammich/docsearch/internal/config"
 	"github.com/bamsammich/docsearch/internal/owner"
+	"github.com/bamsammich/docsearch/internal/repository/postgres"
 )
 
 func main() {
@@ -100,9 +103,9 @@ func command() *cli.Command {
 				Sources: from("shared-paths", config.EnvSharedPaths),
 			},
 			&cli.StringFlag{
-				Name:    "public-url",
+				Name:    flagPublicURL,
 				Usage:   "`URL` a browser reaches this server at, for upload links",
-				Sources: from("public-url", config.EnvPublicURL),
+				Sources: from(flagPublicURL, config.EnvPublicURL),
 			},
 			&cli.StringFlag{
 				Name:    "ui-client-id",
@@ -135,7 +138,7 @@ func oidcFlags() []cli.Flag {
 		return &cli.StringFlag{Name: name, Usage: usage, Sources: from(name, env)}
 	}
 	return []cli.Flag{
-		text("oidc-issuer", config.EnvOIDCIssuer, "the provider's issuer `URL`"),
+		text(flagOIDCIssuer, config.EnvOIDCIssuer, "the provider's issuer `URL`"),
 		text("oidc-resource", config.EnvOIDCResource,
 			"docsearch's own /mcp `URI`, as clients address it"),
 		text("oidc-audience", config.EnvOIDCAudience,
@@ -148,14 +151,14 @@ func oidcFlags() []cli.Flag {
 			"docsearch's client `ID` at the provider, to introspect opaque tokens"),
 		text("oidc-default-owner", config.EnvOIDCDefaultOwner,
 			"the `SUBJECT` who inherits the library made before accounts existed"),
-		text("oidc-required-claim-name", config.EnvOIDCRequiredClaimName,
+		text(flagClaimName, config.EnvOIDCRequiredClaimName,
 			"a `CLAIM` every token must carry, such as groups"),
-		text("oidc-required-claim-value", config.EnvOIDCRequiredClaimValue,
+		text(flagClaimValue, config.EnvOIDCRequiredClaimValue,
 			"the `VALUE` the required claim must hold"),
 		&cli.BoolFlag{
-			Name:    "oidc-sign-up",
+			Name:    flagSignUp,
 			Usage:   "create an account for an identity that has none",
-			Sources: from("oidc-sign-up", config.EnvOIDCSignUp),
+			Sources: from(flagSignUp, config.EnvOIDCSignUp),
 		},
 	}
 }
@@ -207,22 +210,22 @@ func configFrom(cmd *cli.Command, args []string) (config.Config, error) {
 		AllowedOrigins:  commaList(cmd.String("allowed-origins")),
 		AllowPublicBind: cmd.Bool("allow-public-bind"),
 		SharedPaths:     cmd.Bool("shared-paths"),
-		PublicURL:       cmd.String("public-url"),
+		PublicURL:       cmd.String(flagPublicURL),
 		UploadMaxMB:     cmd.Int64("upload-max-mb"),
 		UIClientID:      cmd.String("ui-client-id"),
 		InstanceLabel:   strings.TrimSpace(cmd.String("instance-label")),
 		OIDC: config.OIDC{
-			Issuer:             cmd.String("oidc-issuer"),
+			Issuer:             cmd.String(flagOIDCIssuer),
 			Resource:           cmd.String("oidc-resource"),
 			Audience:           cmd.String("oidc-audience"),
 			ClientID:           cmd.String("oidc-client-id"),
 			ClientSecret:       os.Getenv(config.EnvOIDCClientSecret),
 			DefaultOwner:       cmd.String("oidc-default-owner"),
-			RequiredClaimName:  cmd.String("oidc-required-claim-name"),
-			RequiredClaimValue: cmd.String("oidc-required-claim-value"),
+			RequiredClaimName:  cmd.String(flagClaimName),
+			RequiredClaimValue: cmd.String(flagClaimValue),
 			ScopesSupported:    commaList(cmd.String("oidc-scopes-supported")),
 			RequiredScopes:     commaList(cmd.String("oidc-required-scopes")),
-			SignUp:             cmd.Bool("oidc-sign-up"),
+			SignUp:             cmd.Bool(flagSignUp),
 		},
 		File:    configPath,
 		Origins: origins(cmd, args),
@@ -232,6 +235,14 @@ func configFrom(cmd *cli.Command, args []string) (config.Config, error) {
 
 func start(cfg config.Config) error {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	// Without docsearch.yaml, the database is the one store of settings an
+	// administrator changed in the library UI.
+	if cfg.File == "" && cfg.DSN != "" {
+		if err := readStored(&cfg); err != nil {
+			return err
+		}
+	}
 
 	if err := cfg.Validate(); err != nil {
 		return err
@@ -245,3 +256,25 @@ func start(cfg config.Config) error {
 
 	return serve(cfg, log)
 }
+
+// readStored applies the settings the database keeps, before the server
+// starts on them.
+func readStored(cfg *config.Config) error {
+	db, err := sql.Open("pgx", cfg.DSN)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+	ctx, cancel := context.WithTimeout(context.Background(), storedTimeout)
+	defer cancel()
+	stored, err := postgres.StoredAtStart(ctx, db)
+	if err != nil {
+		return err
+	}
+	applyStored(cfg, stored)
+	return nil
+}
+
+// storedTimeout bounds reading the stored settings at startup, so a database
+// that is not answering fails the start rather than hanging it.
+const storedTimeout = 15 * time.Second

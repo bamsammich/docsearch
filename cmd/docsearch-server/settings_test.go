@@ -145,3 +145,21 @@ func (s *SettingsSuite) TestWithNoFileEverySettingIsTheDefaultOrTheEnvironment()
 	s.Equal("127.0.0.1:8765", cfg.Addr)
 	s.Equal(config.FromDefault, cfg.Origins["addr"].Kind)
 }
+
+// Without a file, what the database keeps fills a setting nothing stronger
+// set, and leaves alone one the environment set.
+func (s *SettingsSuite) TestStoredSettingsFillOnlyWhatNothingStrongerSet() {
+	s.T().Setenv(config.EnvPublicURL, "https://env.example.com")
+
+	cfg, err := s.parse()
+	s.Require().NoError(err)
+	applyStored(&cfg, map[string]string{
+		"public_url":        "https://stored.example.com",
+		"auth.oidc.sign_up": "true",
+	})
+
+	s.Equal("https://env.example.com", cfg.PublicURL)
+	s.Equal(config.FromEnv, cfg.Origins["public-url"].Kind)
+	s.True(cfg.OIDC.SignUp)
+	s.Equal(config.FromDatabase, cfg.Origins["oidc-sign-up"].Kind)
+}

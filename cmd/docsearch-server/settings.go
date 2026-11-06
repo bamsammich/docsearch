@@ -14,6 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/bamsammich/docsearch/internal/config"
+	"github.com/bamsammich/docsearch/internal/service/settings"
 )
 
 // configPath is the file --config names, read by every flag's file source
@@ -22,34 +23,75 @@ var configPath string
 
 // Flags and keys that share a spelling.
 const (
-	flagAddr = "addr"
-	flagDSN  = "dsn"
+	flagAddr       = "addr"
+	flagDSN        = "dsn"
+	flagPublicURL  = "public-url"
+	flagOIDCIssuer = "oidc-issuer"
+	flagClaimName  = "oidc-required-claim-name"
+	flagClaimValue = "oidc-required-claim-value"
+	flagSignUp     = "oidc-sign-up"
 )
 
 // fileKeys are where each setting lives in docsearch.yaml. A flag missing
 // here has no file key: a secret, which comes from the environment alone.
 var fileKeys = map[string]string{
-	flagAddr:                    flagAddr,
-	flagDSN:                     flagDSN,
-	"auth":                      "auth.mode",
-	"root":                      "roots",
-	"allowed-origins":           "allowed_origins",
-	"allow-public-bind":         "allow_public_bind",
-	"shared-paths":              "shared_paths",
-	"public-url":                "public_url",
-	"ui-client-id":              "ui.client_id",
-	"instance-label":            "ui.instance_label",
-	"upload-max-mb":             "upload_max_mb",
-	"oidc-issuer":               "auth.oidc.issuer",
-	"oidc-resource":             "auth.oidc.resource",
-	"oidc-audience":             "auth.oidc.audience",
-	"oidc-scopes-supported":     "auth.oidc.scopes_supported",
-	"oidc-required-scopes":      "auth.oidc.required_scopes",
-	"oidc-client-id":            "auth.oidc.client_id",
-	"oidc-default-owner":        "auth.oidc.default_owner",
-	"oidc-required-claim-name":  "auth.oidc.required_claim.name",
-	"oidc-required-claim-value": "auth.oidc.required_claim.value",
-	"oidc-sign-up":              "auth.oidc.sign_up",
+	flagAddr:                flagAddr,
+	flagDSN:                 flagDSN,
+	"auth":                  "auth.mode",
+	"root":                  "roots",
+	"allowed-origins":       "allowed_origins",
+	"allow-public-bind":     "allow_public_bind",
+	"shared-paths":          "shared_paths",
+	flagPublicURL:           "public_url",
+	"ui-client-id":          "ui.client_id",
+	"instance-label":        "ui.instance_label",
+	"upload-max-mb":         "upload_max_mb",
+	flagOIDCIssuer:          "auth.oidc.issuer",
+	"oidc-resource":         "auth.oidc.resource",
+	"oidc-audience":         "auth.oidc.audience",
+	"oidc-scopes-supported": "auth.oidc.scopes_supported",
+	"oidc-required-scopes":  "auth.oidc.required_scopes",
+	"oidc-client-id":        "auth.oidc.client_id",
+	"oidc-default-owner":    "auth.oidc.default_owner",
+	flagClaimName:           "auth.oidc.required_claim.name",
+	flagClaimValue:          "auth.oidc.required_claim.value",
+	flagSignUp:              "auth.oidc.sign_up",
+}
+
+// editable are the settings an administrator changes from the library UI:
+// how people sign in, short of the sign-in mode itself, whose wrong value
+// would lock everyone out.
+var editable = map[string]settings.Editable{
+	flagPublicURL:  {Key: fileKeys[flagPublicURL]},
+	flagOIDCIssuer: {Key: fileKeys[flagOIDCIssuer]},
+	flagClaimName:  {Key: fileKeys[flagClaimName]},
+	flagClaimValue: {Key: fileKeys[flagClaimValue]},
+	flagSignUp:     {Key: fileKeys[flagSignUp], Boolean: true},
+}
+
+// applyStored takes what the database keeps for a deployment with no
+// docsearch.yaml, for every editable setting nothing stronger set.
+func applyStored(cfg *config.Config, stored map[string]string) {
+	for flag, e := range editable {
+		value, kept := stored[e.Key]
+		origin := cfg.Origins[flag]
+		if !kept || origin.Kind != config.FromDefault {
+			continue
+		}
+		switch flag {
+		case flagPublicURL:
+			cfg.PublicURL = value
+		case flagOIDCIssuer:
+			cfg.OIDC.Issuer = value
+		case flagClaimName:
+			cfg.OIDC.RequiredClaimName = value
+		case flagClaimValue:
+			cfg.OIDC.RequiredClaimValue = value
+		case flagSignUp:
+			cfg.OIDC.SignUp = value == "true"
+		}
+		cfg.Origins[flag] = config.Origin{Kind: config.FromDatabase, Where: "database", Key: e.Key}
+	}
 }
 
 // from is where a flag is read when the command line leaves it out: the

@@ -55,6 +55,9 @@ const (
 	AccountServiceSetAdminProcedure = "/docsearch.account.v1.AccountService/SetAdmin"
 	// AccountServiceSignInProcedure is the fully-qualified name of the AccountService's SignIn RPC.
 	AccountServiceSignInProcedure = "/docsearch.account.v1.AccountService/SignIn"
+	// AccountServiceUpdateSignInProcedure is the fully-qualified name of the AccountService's
+	// UpdateSignIn RPC.
+	AccountServiceUpdateSignInProcedure = "/docsearch.account.v1.AccountService/UpdateSignIn"
 )
 
 // AccountServiceClient is a client for the docsearch.account.v1.AccountService service.
@@ -77,6 +80,9 @@ type AccountServiceClient interface {
 	SetAdmin(context.Context, *connect.Request[v1.SetAdminRequest]) (*connect.Response[v1.SetAdminResponse], error)
 	// SignIn is how people sign in, as the server's configuration sets it.
 	SignIn(context.Context, *connect.Request[v1.SignInRequest]) (*connect.Response[v1.SignInResponse], error)
+	// UpdateSignIn changes sign-in settings: into an updated docsearch.yaml
+	// for a docsearch that reads one, or into the database otherwise.
+	UpdateSignIn(context.Context, *connect.Request[v1.UpdateSignInRequest]) (*connect.Response[v1.UpdateSignInResponse], error)
 }
 
 // NewAccountServiceClient constructs a client for the docsearch.account.v1.AccountService service.
@@ -138,19 +144,26 @@ func NewAccountServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(accountServiceMethods.ByName("SignIn")),
 			connect.WithClientOptions(opts...),
 		),
+		updateSignIn: connect.NewClient[v1.UpdateSignInRequest, v1.UpdateSignInResponse](
+			httpClient,
+			baseURL+AccountServiceUpdateSignInProcedure,
+			connect.WithSchema(accountServiceMethods.ByName("UpdateSignIn")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // accountServiceClient implements AccountServiceClient.
 type accountServiceClient struct {
-	me       *connect.Client[v1.MeRequest, v1.MeResponse]
-	list     *connect.Client[v1.ListRequest, v1.ListResponse]
-	add      *connect.Client[v1.AddRequest, v1.AddResponse]
-	reset    *connect.Client[v1.ResetRequest, v1.ResetResponse]
-	unlock   *connect.Client[v1.UnlockRequest, v1.UnlockResponse]
-	remove   *connect.Client[v1.RemoveRequest, v1.RemoveResponse]
-	setAdmin *connect.Client[v1.SetAdminRequest, v1.SetAdminResponse]
-	signIn   *connect.Client[v1.SignInRequest, v1.SignInResponse]
+	me           *connect.Client[v1.MeRequest, v1.MeResponse]
+	list         *connect.Client[v1.ListRequest, v1.ListResponse]
+	add          *connect.Client[v1.AddRequest, v1.AddResponse]
+	reset        *connect.Client[v1.ResetRequest, v1.ResetResponse]
+	unlock       *connect.Client[v1.UnlockRequest, v1.UnlockResponse]
+	remove       *connect.Client[v1.RemoveRequest, v1.RemoveResponse]
+	setAdmin     *connect.Client[v1.SetAdminRequest, v1.SetAdminResponse]
+	signIn       *connect.Client[v1.SignInRequest, v1.SignInResponse]
+	updateSignIn *connect.Client[v1.UpdateSignInRequest, v1.UpdateSignInResponse]
 }
 
 // Me calls docsearch.account.v1.AccountService.Me.
@@ -193,6 +206,11 @@ func (c *accountServiceClient) SignIn(ctx context.Context, req *connect.Request[
 	return c.signIn.CallUnary(ctx, req)
 }
 
+// UpdateSignIn calls docsearch.account.v1.AccountService.UpdateSignIn.
+func (c *accountServiceClient) UpdateSignIn(ctx context.Context, req *connect.Request[v1.UpdateSignInRequest]) (*connect.Response[v1.UpdateSignInResponse], error) {
+	return c.updateSignIn.CallUnary(ctx, req)
+}
+
 // AccountServiceHandler is an implementation of the docsearch.account.v1.AccountService service.
 type AccountServiceHandler interface {
 	// Me is the caller's own account, and whether it administers.
@@ -213,6 +231,9 @@ type AccountServiceHandler interface {
 	SetAdmin(context.Context, *connect.Request[v1.SetAdminRequest]) (*connect.Response[v1.SetAdminResponse], error)
 	// SignIn is how people sign in, as the server's configuration sets it.
 	SignIn(context.Context, *connect.Request[v1.SignInRequest]) (*connect.Response[v1.SignInResponse], error)
+	// UpdateSignIn changes sign-in settings: into an updated docsearch.yaml
+	// for a docsearch that reads one, or into the database otherwise.
+	UpdateSignIn(context.Context, *connect.Request[v1.UpdateSignInRequest]) (*connect.Response[v1.UpdateSignInResponse], error)
 }
 
 // NewAccountServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -270,6 +291,12 @@ func NewAccountServiceHandler(svc AccountServiceHandler, opts ...connect.Handler
 		connect.WithSchema(accountServiceMethods.ByName("SignIn")),
 		connect.WithHandlerOptions(opts...),
 	)
+	accountServiceUpdateSignInHandler := connect.NewUnaryHandler(
+		AccountServiceUpdateSignInProcedure,
+		svc.UpdateSignIn,
+		connect.WithSchema(accountServiceMethods.ByName("UpdateSignIn")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/docsearch.account.v1.AccountService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AccountServiceMeProcedure:
@@ -288,6 +315,8 @@ func NewAccountServiceHandler(svc AccountServiceHandler, opts ...connect.Handler
 			accountServiceSetAdminHandler.ServeHTTP(w, r)
 		case AccountServiceSignInProcedure:
 			accountServiceSignInHandler.ServeHTTP(w, r)
+		case AccountServiceUpdateSignInProcedure:
+			accountServiceUpdateSignInHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -327,4 +356,8 @@ func (UnimplementedAccountServiceHandler) SetAdmin(context.Context, *connect.Req
 
 func (UnimplementedAccountServiceHandler) SignIn(context.Context, *connect.Request[v1.SignInRequest]) (*connect.Response[v1.SignInResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.account.v1.AccountService.SignIn is not implemented"))
+}
+
+func (UnimplementedAccountServiceHandler) UpdateSignIn(context.Context, *connect.Request[v1.UpdateSignInRequest]) (*connect.Response[v1.UpdateSignInResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.account.v1.AccountService.UpdateSignIn is not implemented"))
 }

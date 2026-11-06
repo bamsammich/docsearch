@@ -21,6 +21,10 @@ packages:
       Documents:
       Jobs:
       Admin:
+      Settings:
+  github.com/bamsammich/docsearch/internal/service/settings:
+    interfaces:
+      Store:
   github.com/bamsammich/docsearch/internal/service/admin:
     interfaces:
       Store:

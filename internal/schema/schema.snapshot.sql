@@ -400,6 +400,30 @@ $$;
 
 
 --
+-- Name: set_setting(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_setting(setting_key text, setting_value text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+BEGIN
+  IF NOT COALESCE((SELECT admin FROM users WHERE user_id = current_setting('app.user_id', true)), false) THEN
+    RAISE EXCEPTION 'only an administrator changes settings' USING ERRCODE = 'DSA01';
+  END IF;
+  IF setting_value IS NULL THEN
+    DELETE FROM settings WHERE key = setting_key;
+    RETURN;
+  END IF;
+  INSERT INTO settings (key, value, updated_by)
+    VALUES (setting_key, setting_value, current_setting('app.user_id', true))
+    ON CONFLICT (key) DO UPDATE
+      SET value = EXCLUDED.value, updated_at = now(), updated_by = EXCLUDED.updated_by;
+END;
+$$;
+
+
+--
 -- Name: set_username(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -835,6 +859,18 @@ CREATE TABLE public.schema_version (
 
 
 --
+-- Name: settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.settings (
+    key text NOT NULL,
+    value text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by text
+);
+
+
+--
 -- Name: upload_links; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1047,6 +1083,14 @@ ALTER TABLE ONLY public.responses
 
 ALTER TABLE ONLY public.robots
     ADD CONSTRAINT robots_pkey PRIMARY KEY (library_id, host);
+
+
+--
+-- Name: settings settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settings
+    ADD CONSTRAINT settings_pkey PRIMARY KEY (key);
 
 
 --
@@ -1387,6 +1431,14 @@ ALTER TABLE ONLY public.responses
 
 ALTER TABLE ONLY public.robots
     ADD CONSTRAINT robots_library_fkey FOREIGN KEY (library_id) REFERENCES public.libraries(library_id);
+
+
+--
+-- Name: settings settings_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settings
+    ADD CONSTRAINT settings_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
 
 
 --

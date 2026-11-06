@@ -175,6 +175,29 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .setting-value { overflow-wrap: anywhere; }
 .setting-source { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
 .setting-source .i { width: 12px; height: 12px; }
+.setting dd .input { max-width: 420px; }
+.setting-check { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; font-size: 13px; }
+.setting-check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.signin-edit { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 28px; }
+.signin-main { flex: 999 1 460px; min-width: 0; max-width: 640px; display: grid; gap: 14px; }
+.signin-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.signin-main .err { margin: 0; }
+/* The updated file reads as a file: the frame's dark, line numbers, and a
+   band on each line the change touched. */
+.yaml-card { flex: 1 1 320px; max-width: 460px; min-width: 0; border: 1px solid var(--frame-line); border-radius: 12px; background: var(--code-bg); color: var(--code-fg); overflow: hidden; color-scheme: dark; }
+.yaml-head { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 6px 0 14px; border-bottom: 1px solid var(--frame-line); color: var(--on-frame-muted); }
+.yaml-head .i { width: 14px; height: 14px; }
+.yaml-head h2 { margin: 0; font-size: 12px; font-weight: 500; color: var(--on-frame); }
+.yaml-count { display: inline-flex; align-items: center; min-height: 20px; padding: 0 7px; border-radius: 5px; background: var(--frame-2); color: var(--frame-live); font-size: 12px; font-weight: 500; }
+.yaml-head .spacer { flex: 1; }
+.btn.on-dark { color: var(--on-frame-muted); }
+.btn.on-dark:hover { background: var(--frame-2); color: var(--on-frame); }
+.yaml-lines { list-style: none; margin: 0; padding: 10px 0 12px; font-size: 12px; line-height: 1.75; overflow-x: auto; }
+.yaml-lines li { display: grid; grid-template-columns: 34px minmax(0, 1fr); white-space: pre; }
+.yaml-lines li.changed { background: rgba(58, 92, 204, .28); box-shadow: inset 2px 0 0 var(--frame-live); }
+.yaml-n { padding-right: 10px; text-align: right; color: #59616b; user-select: none; }
+.yaml-lines li.changed .yaml-n { color: var(--frame-live); }
+.yaml-text { padding-right: 12px; }
 
 /* A library's members, who may invite, and what changed. */
 .members { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 28px; }

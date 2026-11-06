@@ -198,6 +198,13 @@ type SchemaVersion struct {
 	AppliedAt time.Time
 }
 
+type Setting struct {
+	Key       string
+	Value     string
+	UpdatedAt time.Time
+	UpdatedBy sql.NullString
+}
+
 type Upload struct {
 	LibraryID  string
 	Key        string

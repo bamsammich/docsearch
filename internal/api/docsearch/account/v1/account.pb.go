@@ -127,8 +127,20 @@ type Setting struct {
 	Key string `protobuf:"bytes,5,opt,name=key,proto3" json:"key,omitempty"`
 	// Flag and env are the ways to set it: its command-line flag and its
 	// environment variable.
-	Flag          string `protobuf:"bytes,6,opt,name=flag,proto3" json:"flag,omitempty"`
-	Env           string `protobuf:"bytes,7,opt,name=env,proto3" json:"env,omitempty"`
+	Flag string `protobuf:"bytes,6,opt,name=flag,proto3" json:"flag,omitempty"`
+	Env  string `protobuf:"bytes,7,opt,name=env,proto3" json:"env,omitempty"`
+	// Name identifies the setting in an UpdateSignIn change.
+	Name string `protobuf:"bytes,8,opt,name=name,proto3" json:"name,omitempty"`
+	// Editable is true for a setting the library UI changes, unless the
+	// environment or the command line sets it.
+	Editable bool `protobuf:"varint,9,opt,name=editable,proto3" json:"editable,omitempty"`
+	// Boolean settings take true or false.
+	Boolean bool `protobuf:"varint,10,opt,name=boolean,proto3" json:"boolean,omitempty"`
+	// Stored is the value the database keeps for a docsearch started without
+	// docsearch.yaml, which takes effect when the server next starts. It is
+	// set only when has_stored is.
+	Stored        string `protobuf:"bytes,11,opt,name=stored,proto3" json:"stored,omitempty"`
+	HasStored     bool   `protobuf:"varint,12,opt,name=has_stored,json=hasStored,proto3" json:"has_stored,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -212,6 +224,95 @@ func (x *Setting) GetEnv() string {
 	return ""
 }
 
+func (x *Setting) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Setting) GetEditable() bool {
+	if x != nil {
+		return x.Editable
+	}
+	return false
+}
+
+func (x *Setting) GetBoolean() bool {
+	if x != nil {
+		return x.Boolean
+	}
+	return false
+}
+
+func (x *Setting) GetStored() string {
+	if x != nil {
+		return x.Stored
+	}
+	return ""
+}
+
+func (x *Setting) GetHasStored() bool {
+	if x != nil {
+		return x.HasStored
+	}
+	return false
+}
+
+// Change is one setting's new value. An empty value takes the setting back
+// to its default.
+type Change struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Change) Reset() {
+	*x = Change{}
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Change) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Change) ProtoMessage() {}
+
+func (x *Change) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Change.ProtoReflect.Descriptor instead.
+func (*Change) Descriptor() ([]byte, []int) {
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Change) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Change) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
 type MeRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -220,7 +321,7 @@ type MeRequest struct {
 
 func (x *MeRequest) Reset() {
 	*x = MeRequest{}
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[2]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -232,7 +333,7 @@ func (x *MeRequest) String() string {
 func (*MeRequest) ProtoMessage() {}
 
 func (x *MeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[2]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -245,7 +346,7 @@ func (x *MeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MeRequest.ProtoReflect.Descriptor instead.
 func (*MeRequest) Descriptor() ([]byte, []int) {
-	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{2}
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{3}
 }
 
 type MeResponse struct {
@@ -260,7 +361,7 @@ type MeResponse struct {
 
 func (x *MeResponse) Reset() {
 	*x = MeResponse{}
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[3]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -272,7 +373,7 @@ func (x *MeResponse) String() string {
 func (*MeResponse) ProtoMessage() {}
 
 func (x *MeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[3]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -285,7 +386,7 @@ func (x *MeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MeResponse.ProtoReflect.Descriptor instead.
 func (*MeResponse) Descriptor() ([]byte, []int) {
-	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{3}
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *MeResponse) GetUsername() string {
@@ -317,7 +418,7 @@ type ListRequest struct {
 
 func (x *ListRequest) Reset() {
 	*x = ListRequest{}
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[4]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -329,7 +430,7 @@ func (x *ListRequest) String() string {
 func (*ListRequest) ProtoMessage() {}
 
 func (x *ListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[4]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -342,7 +443,7 @@ func (x *ListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRequest.ProtoReflect.Descriptor instead.
 func (*ListRequest) Descriptor() ([]byte, []int) {
-	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{4}
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{5}
 }
 
 type ListResponse struct {
@@ -354,7 +455,7 @@ type ListResponse struct {
 
 func (x *ListResponse) Reset() {
 	*x = ListResponse{}
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[5]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -366,7 +467,7 @@ func (x *ListResponse) String() string {
 func (*ListResponse) ProtoMessage() {}
 
 func (x *ListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[5]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -379,7 +480,7 @@ func (x *ListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListResponse.ProtoReflect.Descriptor instead.
 func (*ListResponse) Descriptor() ([]byte, []int) {
-	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{5}
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListResponse) GetAccounts() []*Account {
@@ -398,7 +499,7 @@ type AddRequest struct {
 
 func (x *AddRequest) Reset() {
 	*x = AddRequest{}
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[6]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -410,7 +511,7 @@ func (x *AddRequest) String() string {
 func (*AddRequest) ProtoMessage() {}
 
 func (x *AddRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[6]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -423,7 +524,7 @@ func (x *AddRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddRequest.ProtoReflect.Descriptor instead.
 func (*AddRequest) Descriptor() ([]byte, []int) {
-	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{6}
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *AddRequest) GetUsername() string {
@@ -443,7 +544,7 @@ type AddResponse struct {
 
 func (x *AddResponse) Reset() {
 	*x = AddResponse{}
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[7]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -455,7 +556,7 @@ func (x *AddResponse) String() string {
 func (*AddResponse) ProtoMessage() {}
 
 func (x *AddResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[7]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -468,7 +569,7 @@ func (x *AddResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddResponse.ProtoReflect.Descriptor instead.
 func (*AddResponse) Descriptor() ([]byte, []int) {
-	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{7}
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *AddResponse) GetPassword() string {
@@ -487,7 +588,7 @@ type ResetRequest struct {
 
 func (x *ResetRequest) Reset() {
 	*x = ResetRequest{}
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[8]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -499,7 +600,7 @@ func (x *ResetRequest) String() string {
 func (*ResetRequest) ProtoMessage() {}
 
 func (x *ResetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[8]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -512,7 +613,7 @@ func (x *ResetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetRequest.ProtoReflect.Descriptor instead.
 func (*ResetRequest) Descriptor() ([]byte, []int) {
-	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{8}
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ResetRequest) GetUsername() string {
@@ -532,7 +633,7 @@ type ResetResponse struct {
 
 func (x *ResetResponse) Reset() {
 	*x = ResetResponse{}
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[9]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -544,7 +645,7 @@ func (x *ResetResponse) String() string {
 func (*ResetResponse) ProtoMessage() {}
 
 func (x *ResetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[9]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -557,7 +658,7 @@ func (x *ResetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetResponse.ProtoReflect.Descriptor instead.
 func (*ResetResponse) Descriptor() ([]byte, []int) {
-	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{9}
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ResetResponse) GetPassword() string {
@@ -576,7 +677,7 @@ type UnlockRequest struct {
 
 func (x *UnlockRequest) Reset() {
 	*x = UnlockRequest{}
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[10]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -588,7 +689,7 @@ func (x *UnlockRequest) String() string {
 func (*UnlockRequest) ProtoMessage() {}
 
 func (x *UnlockRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[10]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -601,7 +702,7 @@ func (x *UnlockRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnlockRequest.ProtoReflect.Descriptor instead.
 func (*UnlockRequest) Descriptor() ([]byte, []int) {
-	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{10}
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *UnlockRequest) GetUsername() string {
@@ -619,7 +720,7 @@ type UnlockResponse struct {
 
 func (x *UnlockResponse) Reset() {
 	*x = UnlockResponse{}
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[11]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -631,7 +732,7 @@ func (x *UnlockResponse) String() string {
 func (*UnlockResponse) ProtoMessage() {}
 
 func (x *UnlockResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[11]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -644,7 +745,7 @@ func (x *UnlockResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnlockResponse.ProtoReflect.Descriptor instead.
 func (*UnlockResponse) Descriptor() ([]byte, []int) {
-	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{11}
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{12}
 }
 
 type RemoveRequest struct {
@@ -656,7 +757,7 @@ type RemoveRequest struct {
 
 func (x *RemoveRequest) Reset() {
 	*x = RemoveRequest{}
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[12]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -668,7 +769,7 @@ func (x *RemoveRequest) String() string {
 func (*RemoveRequest) ProtoMessage() {}
 
 func (x *RemoveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[12]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -681,7 +782,7 @@ func (x *RemoveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveRequest.ProtoReflect.Descriptor instead.
 func (*RemoveRequest) Descriptor() ([]byte, []int) {
-	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{12}
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *RemoveRequest) GetUsername() string {
@@ -699,7 +800,7 @@ type RemoveResponse struct {
 
 func (x *RemoveResponse) Reset() {
 	*x = RemoveResponse{}
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[13]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -711,7 +812,7 @@ func (x *RemoveResponse) String() string {
 func (*RemoveResponse) ProtoMessage() {}
 
 func (x *RemoveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[13]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -724,7 +825,7 @@ func (x *RemoveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveResponse.ProtoReflect.Descriptor instead.
 func (*RemoveResponse) Descriptor() ([]byte, []int) {
-	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{13}
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{14}
 }
 
 type SetAdminRequest struct {
@@ -737,7 +838,7 @@ type SetAdminRequest struct {
 
 func (x *SetAdminRequest) Reset() {
 	*x = SetAdminRequest{}
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[14]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -749,7 +850,7 @@ func (x *SetAdminRequest) String() string {
 func (*SetAdminRequest) ProtoMessage() {}
 
 func (x *SetAdminRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[14]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -762,7 +863,7 @@ func (x *SetAdminRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetAdminRequest.ProtoReflect.Descriptor instead.
 func (*SetAdminRequest) Descriptor() ([]byte, []int) {
-	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{14}
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *SetAdminRequest) GetUsername() string {
@@ -787,7 +888,7 @@ type SetAdminResponse struct {
 
 func (x *SetAdminResponse) Reset() {
 	*x = SetAdminResponse{}
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[15]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -799,7 +900,7 @@ func (x *SetAdminResponse) String() string {
 func (*SetAdminResponse) ProtoMessage() {}
 
 func (x *SetAdminResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[15]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -812,7 +913,7 @@ func (x *SetAdminResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetAdminResponse.ProtoReflect.Descriptor instead.
 func (*SetAdminResponse) Descriptor() ([]byte, []int) {
-	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{15}
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{16}
 }
 
 type SignInRequest struct {
@@ -823,7 +924,7 @@ type SignInRequest struct {
 
 func (x *SignInRequest) Reset() {
 	*x = SignInRequest{}
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[16]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -835,7 +936,7 @@ func (x *SignInRequest) String() string {
 func (*SignInRequest) ProtoMessage() {}
 
 func (x *SignInRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[16]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -848,7 +949,116 @@ func (x *SignInRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignInRequest.ProtoReflect.Descriptor instead.
 func (*SignInRequest) Descriptor() ([]byte, []int) {
-	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{16}
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{17}
+}
+
+type UpdateSignInRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Changes       []*Change              `protobuf:"bytes,1,rep,name=changes,proto3" json:"changes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateSignInRequest) Reset() {
+	*x = UpdateSignInRequest{}
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateSignInRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateSignInRequest) ProtoMessage() {}
+
+func (x *UpdateSignInRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateSignInRequest.ProtoReflect.Descriptor instead.
+func (*UpdateSignInRequest) Descriptor() ([]byte, []int) {
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *UpdateSignInRequest) GetChanges() []*Change {
+	if x != nil {
+		return x.Changes
+	}
+	return nil
+}
+
+type UpdateSignInResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// File is docsearch.yaml with the changes made, for a docsearch that reads
+	// one: nothing was stored, and the operator deploys the file.
+	File string `protobuf:"bytes,1,opt,name=file,proto3" json:"file,omitempty"`
+	// ChangedLines are the 1-based lines of file the changes touched.
+	ChangedLines []int32 `protobuf:"varint,2,rep,packed,name=changed_lines,json=changedLines,proto3" json:"changed_lines,omitempty"`
+	// Saved is true when the changes were kept in the database, to take
+	// effect when the server next starts.
+	Saved         bool `protobuf:"varint,3,opt,name=saved,proto3" json:"saved,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateSignInResponse) Reset() {
+	*x = UpdateSignInResponse{}
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateSignInResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateSignInResponse) ProtoMessage() {}
+
+func (x *UpdateSignInResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateSignInResponse.ProtoReflect.Descriptor instead.
+func (*UpdateSignInResponse) Descriptor() ([]byte, []int) {
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *UpdateSignInResponse) GetFile() string {
+	if x != nil {
+		return x.File
+	}
+	return ""
+}
+
+func (x *UpdateSignInResponse) GetChangedLines() []int32 {
+	if x != nil {
+		return x.ChangedLines
+	}
+	return nil
+}
+
+func (x *UpdateSignInResponse) GetSaved() bool {
+	if x != nil {
+		return x.Saved
+	}
+	return false
 }
 
 type SignInResponse struct {
@@ -863,7 +1073,7 @@ type SignInResponse struct {
 
 func (x *SignInResponse) Reset() {
 	*x = SignInResponse{}
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[17]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -875,7 +1085,7 @@ func (x *SignInResponse) String() string {
 func (*SignInResponse) ProtoMessage() {}
 
 func (x *SignInResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_account_v1_account_proto_msgTypes[17]
+	mi := &file_docsearch_account_v1_account_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -888,7 +1098,7 @@ func (x *SignInResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignInResponse.ProtoReflect.Descriptor instead.
 func (*SignInResponse) Descriptor() ([]byte, []int) {
-	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{17}
+	return file_docsearch_account_v1_account_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SignInResponse) GetSettings() []*Setting {
@@ -916,7 +1126,7 @@ const file_docsearch_account_v1_account_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x1a\n" +
 	"\bpassword\x18\x04 \x01(\bR\bpassword\x12=\n" +
-	"\flocked_until\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vlockedUntil\"\x9b\x01\n" +
+	"\flocked_until\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vlockedUntil\"\x9c\x02\n" +
 	"\aSetting\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\x12\x16\n" +
@@ -924,7 +1134,17 @@ const file_docsearch_account_v1_account_proto_rawDesc = "" +
 	"\x05where\x18\x04 \x01(\tR\x05where\x12\x10\n" +
 	"\x03key\x18\x05 \x01(\tR\x03key\x12\x12\n" +
 	"\x04flag\x18\x06 \x01(\tR\x04flag\x12\x10\n" +
-	"\x03env\x18\a \x01(\tR\x03env\"\v\n" +
+	"\x03env\x18\a \x01(\tR\x03env\x12\x12\n" +
+	"\x04name\x18\b \x01(\tR\x04name\x12\x1a\n" +
+	"\beditable\x18\t \x01(\bR\beditable\x12\x18\n" +
+	"\aboolean\x18\n" +
+	" \x01(\bR\aboolean\x12\x16\n" +
+	"\x06stored\x18\v \x01(\tR\x06stored\x12\x1d\n" +
+	"\n" +
+	"has_stored\x18\f \x01(\bR\thasStored\"2\n" +
+	"\x06Change\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\"\v\n" +
 	"\tMeRequest\"R\n" +
 	"\n" +
 	"MeResponse\x12\x1a\n" +
@@ -953,10 +1173,16 @@ const file_docsearch_account_v1_account_proto_rawDesc = "" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x14\n" +
 	"\x05admin\x18\x02 \x01(\bR\x05admin\"\x12\n" +
 	"\x10SetAdminResponse\"\x0f\n" +
-	"\rSignInRequest\"_\n" +
+	"\rSignInRequest\"M\n" +
+	"\x13UpdateSignInRequest\x126\n" +
+	"\achanges\x18\x01 \x03(\v2\x1c.docsearch.account.v1.ChangeR\achanges\"e\n" +
+	"\x14UpdateSignInResponse\x12\x12\n" +
+	"\x04file\x18\x01 \x01(\tR\x04file\x12#\n" +
+	"\rchanged_lines\x18\x02 \x03(\x05R\fchangedLines\x12\x14\n" +
+	"\x05saved\x18\x03 \x01(\bR\x05saved\"_\n" +
 	"\x0eSignInResponse\x129\n" +
 	"\bsettings\x18\x01 \x03(\v2\x1d.docsearch.account.v1.SettingR\bsettings\x12\x12\n" +
-	"\x04file\x18\x02 \x01(\tR\x04file2\xb0\x05\n" +
+	"\x04file\x18\x02 \x01(\tR\x04file2\x99\x06\n" +
 	"\x0eAccountService\x12I\n" +
 	"\x02Me\x12\x1f.docsearch.account.v1.MeRequest\x1a .docsearch.account.v1.MeResponse\"\x00\x12O\n" +
 	"\x04List\x12!.docsearch.account.v1.ListRequest\x1a\".docsearch.account.v1.ListResponse\"\x00\x12L\n" +
@@ -965,7 +1191,8 @@ const file_docsearch_account_v1_account_proto_rawDesc = "" +
 	"\x06Unlock\x12#.docsearch.account.v1.UnlockRequest\x1a$.docsearch.account.v1.UnlockResponse\"\x00\x12U\n" +
 	"\x06Remove\x12#.docsearch.account.v1.RemoveRequest\x1a$.docsearch.account.v1.RemoveResponse\"\x00\x12[\n" +
 	"\bSetAdmin\x12%.docsearch.account.v1.SetAdminRequest\x1a&.docsearch.account.v1.SetAdminResponse\"\x00\x12U\n" +
-	"\x06SignIn\x12#.docsearch.account.v1.SignInRequest\x1a$.docsearch.account.v1.SignInResponse\"\x00B\xe7\x01\n" +
+	"\x06SignIn\x12#.docsearch.account.v1.SignInRequest\x1a$.docsearch.account.v1.SignInResponse\"\x00\x12g\n" +
+	"\fUpdateSignIn\x12).docsearch.account.v1.UpdateSignInRequest\x1a*.docsearch.account.v1.UpdateSignInResponse\"\x00B\xe7\x01\n" +
 	"\x18com.docsearch.account.v1B\fAccountProtoP\x01ZKgithub.com/bamsammich/docsearch/internal/api/docsearch/account/v1;accountv1\xa2\x02\x03DAX\xaa\x02\x14Docsearch.Account.V1\xca\x02\x14Docsearch\\Account\\V1\xe2\x02 Docsearch\\Account\\V1\\GPBMetadata\xea\x02\x16Docsearch::Account::V1b\x06proto3"
 
 var (
@@ -980,54 +1207,60 @@ func file_docsearch_account_v1_account_proto_rawDescGZIP() []byte {
 	return file_docsearch_account_v1_account_proto_rawDescData
 }
 
-var file_docsearch_account_v1_account_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_docsearch_account_v1_account_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_docsearch_account_v1_account_proto_goTypes = []any{
 	(*Account)(nil),               // 0: docsearch.account.v1.Account
 	(*Setting)(nil),               // 1: docsearch.account.v1.Setting
-	(*MeRequest)(nil),             // 2: docsearch.account.v1.MeRequest
-	(*MeResponse)(nil),            // 3: docsearch.account.v1.MeResponse
-	(*ListRequest)(nil),           // 4: docsearch.account.v1.ListRequest
-	(*ListResponse)(nil),          // 5: docsearch.account.v1.ListResponse
-	(*AddRequest)(nil),            // 6: docsearch.account.v1.AddRequest
-	(*AddResponse)(nil),           // 7: docsearch.account.v1.AddResponse
-	(*ResetRequest)(nil),          // 8: docsearch.account.v1.ResetRequest
-	(*ResetResponse)(nil),         // 9: docsearch.account.v1.ResetResponse
-	(*UnlockRequest)(nil),         // 10: docsearch.account.v1.UnlockRequest
-	(*UnlockResponse)(nil),        // 11: docsearch.account.v1.UnlockResponse
-	(*RemoveRequest)(nil),         // 12: docsearch.account.v1.RemoveRequest
-	(*RemoveResponse)(nil),        // 13: docsearch.account.v1.RemoveResponse
-	(*SetAdminRequest)(nil),       // 14: docsearch.account.v1.SetAdminRequest
-	(*SetAdminResponse)(nil),      // 15: docsearch.account.v1.SetAdminResponse
-	(*SignInRequest)(nil),         // 16: docsearch.account.v1.SignInRequest
-	(*SignInResponse)(nil),        // 17: docsearch.account.v1.SignInResponse
-	(*timestamppb.Timestamp)(nil), // 18: google.protobuf.Timestamp
+	(*Change)(nil),                // 2: docsearch.account.v1.Change
+	(*MeRequest)(nil),             // 3: docsearch.account.v1.MeRequest
+	(*MeResponse)(nil),            // 4: docsearch.account.v1.MeResponse
+	(*ListRequest)(nil),           // 5: docsearch.account.v1.ListRequest
+	(*ListResponse)(nil),          // 6: docsearch.account.v1.ListResponse
+	(*AddRequest)(nil),            // 7: docsearch.account.v1.AddRequest
+	(*AddResponse)(nil),           // 8: docsearch.account.v1.AddResponse
+	(*ResetRequest)(nil),          // 9: docsearch.account.v1.ResetRequest
+	(*ResetResponse)(nil),         // 10: docsearch.account.v1.ResetResponse
+	(*UnlockRequest)(nil),         // 11: docsearch.account.v1.UnlockRequest
+	(*UnlockResponse)(nil),        // 12: docsearch.account.v1.UnlockResponse
+	(*RemoveRequest)(nil),         // 13: docsearch.account.v1.RemoveRequest
+	(*RemoveResponse)(nil),        // 14: docsearch.account.v1.RemoveResponse
+	(*SetAdminRequest)(nil),       // 15: docsearch.account.v1.SetAdminRequest
+	(*SetAdminResponse)(nil),      // 16: docsearch.account.v1.SetAdminResponse
+	(*SignInRequest)(nil),         // 17: docsearch.account.v1.SignInRequest
+	(*UpdateSignInRequest)(nil),   // 18: docsearch.account.v1.UpdateSignInRequest
+	(*UpdateSignInResponse)(nil),  // 19: docsearch.account.v1.UpdateSignInResponse
+	(*SignInResponse)(nil),        // 20: docsearch.account.v1.SignInResponse
+	(*timestamppb.Timestamp)(nil), // 21: google.protobuf.Timestamp
 }
 var file_docsearch_account_v1_account_proto_depIdxs = []int32{
-	18, // 0: docsearch.account.v1.Account.created_at:type_name -> google.protobuf.Timestamp
-	18, // 1: docsearch.account.v1.Account.locked_until:type_name -> google.protobuf.Timestamp
+	21, // 0: docsearch.account.v1.Account.created_at:type_name -> google.protobuf.Timestamp
+	21, // 1: docsearch.account.v1.Account.locked_until:type_name -> google.protobuf.Timestamp
 	0,  // 2: docsearch.account.v1.ListResponse.accounts:type_name -> docsearch.account.v1.Account
-	1,  // 3: docsearch.account.v1.SignInResponse.settings:type_name -> docsearch.account.v1.Setting
-	2,  // 4: docsearch.account.v1.AccountService.Me:input_type -> docsearch.account.v1.MeRequest
-	4,  // 5: docsearch.account.v1.AccountService.List:input_type -> docsearch.account.v1.ListRequest
-	6,  // 6: docsearch.account.v1.AccountService.Add:input_type -> docsearch.account.v1.AddRequest
-	8,  // 7: docsearch.account.v1.AccountService.Reset:input_type -> docsearch.account.v1.ResetRequest
-	10, // 8: docsearch.account.v1.AccountService.Unlock:input_type -> docsearch.account.v1.UnlockRequest
-	12, // 9: docsearch.account.v1.AccountService.Remove:input_type -> docsearch.account.v1.RemoveRequest
-	14, // 10: docsearch.account.v1.AccountService.SetAdmin:input_type -> docsearch.account.v1.SetAdminRequest
-	16, // 11: docsearch.account.v1.AccountService.SignIn:input_type -> docsearch.account.v1.SignInRequest
-	3,  // 12: docsearch.account.v1.AccountService.Me:output_type -> docsearch.account.v1.MeResponse
-	5,  // 13: docsearch.account.v1.AccountService.List:output_type -> docsearch.account.v1.ListResponse
-	7,  // 14: docsearch.account.v1.AccountService.Add:output_type -> docsearch.account.v1.AddResponse
-	9,  // 15: docsearch.account.v1.AccountService.Reset:output_type -> docsearch.account.v1.ResetResponse
-	11, // 16: docsearch.account.v1.AccountService.Unlock:output_type -> docsearch.account.v1.UnlockResponse
-	13, // 17: docsearch.account.v1.AccountService.Remove:output_type -> docsearch.account.v1.RemoveResponse
-	15, // 18: docsearch.account.v1.AccountService.SetAdmin:output_type -> docsearch.account.v1.SetAdminResponse
-	17, // 19: docsearch.account.v1.AccountService.SignIn:output_type -> docsearch.account.v1.SignInResponse
-	12, // [12:20] is the sub-list for method output_type
-	4,  // [4:12] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	2,  // 3: docsearch.account.v1.UpdateSignInRequest.changes:type_name -> docsearch.account.v1.Change
+	1,  // 4: docsearch.account.v1.SignInResponse.settings:type_name -> docsearch.account.v1.Setting
+	3,  // 5: docsearch.account.v1.AccountService.Me:input_type -> docsearch.account.v1.MeRequest
+	5,  // 6: docsearch.account.v1.AccountService.List:input_type -> docsearch.account.v1.ListRequest
+	7,  // 7: docsearch.account.v1.AccountService.Add:input_type -> docsearch.account.v1.AddRequest
+	9,  // 8: docsearch.account.v1.AccountService.Reset:input_type -> docsearch.account.v1.ResetRequest
+	11, // 9: docsearch.account.v1.AccountService.Unlock:input_type -> docsearch.account.v1.UnlockRequest
+	13, // 10: docsearch.account.v1.AccountService.Remove:input_type -> docsearch.account.v1.RemoveRequest
+	15, // 11: docsearch.account.v1.AccountService.SetAdmin:input_type -> docsearch.account.v1.SetAdminRequest
+	17, // 12: docsearch.account.v1.AccountService.SignIn:input_type -> docsearch.account.v1.SignInRequest
+	18, // 13: docsearch.account.v1.AccountService.UpdateSignIn:input_type -> docsearch.account.v1.UpdateSignInRequest
+	4,  // 14: docsearch.account.v1.AccountService.Me:output_type -> docsearch.account.v1.MeResponse
+	6,  // 15: docsearch.account.v1.AccountService.List:output_type -> docsearch.account.v1.ListResponse
+	8,  // 16: docsearch.account.v1.AccountService.Add:output_type -> docsearch.account.v1.AddResponse
+	10, // 17: docsearch.account.v1.AccountService.Reset:output_type -> docsearch.account.v1.ResetResponse
+	12, // 18: docsearch.account.v1.AccountService.Unlock:output_type -> docsearch.account.v1.UnlockResponse
+	14, // 19: docsearch.account.v1.AccountService.Remove:output_type -> docsearch.account.v1.RemoveResponse
+	16, // 20: docsearch.account.v1.AccountService.SetAdmin:output_type -> docsearch.account.v1.SetAdminResponse
+	20, // 21: docsearch.account.v1.AccountService.SignIn:output_type -> docsearch.account.v1.SignInResponse
+	19, // 22: docsearch.account.v1.AccountService.UpdateSignIn:output_type -> docsearch.account.v1.UpdateSignInResponse
+	14, // [14:23] is the sub-list for method output_type
+	5,  // [5:14] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_docsearch_account_v1_account_proto_init() }
@@ -1041,7 +1274,7 @@ func file_docsearch_account_v1_account_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_docsearch_account_v1_account_proto_rawDesc), len(file_docsearch_account_v1_account_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   18,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

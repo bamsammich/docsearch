@@ -115,3 +115,25 @@ func (s *AdminsSuite) TestTheOwnerCannotMakeAnAccountThatDoesNotExistAnAdministr
 	s.Require().NoError(err)
 	s.False(found)
 }
+
+// A docsearch with no docsearch.yaml keeps what an administrator changes,
+// and nobody else can change it.
+func (s *AdminsSuite) TestSettingsAreKeptByAnAdministratorOnly() {
+	value := "true"
+	s.Require().
+		NoError(postgres.NewSettings(s.db.App, "ana").Set(s.T().Context(), "auth.oidc.sign_up", &value))
+	s.Require().ErrorIs(
+		postgres.NewSettings(s.db.App, "ben").Set(s.T().Context(), "auth.oidc.sign_up", &value),
+		adminservice.ErrNotAdmin,
+	)
+
+	stored, err := postgres.StoredAtStart(s.T().Context(), s.db.App)
+	s.Require().NoError(err)
+	s.Equal(map[string]string{"auth.oidc.sign_up": "true"}, stored)
+
+	s.Require().
+		NoError(postgres.NewSettings(s.db.App, "ana").Set(s.T().Context(), "auth.oidc.sign_up", nil))
+	stored, err = postgres.NewSettings(s.db.App, "ben").Stored(s.T().Context())
+	s.Require().NoError(err)
+	s.Empty(stored)
+}
