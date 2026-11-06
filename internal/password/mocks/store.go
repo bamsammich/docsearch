@@ -395,16 +395,16 @@ func (_c *MockStore_List_Call) RunAndReturn(run func(ctx context.Context) ([]pas
 }
 
 // Remove provides a mock function for the type MockStore
-func (_mock *MockStore) Remove(ctx context.Context, username string) error {
-	ret := _mock.Called(ctx, username)
+func (_mock *MockStore) Remove(ctx context.Context, username string, handover password.Handover) error {
+	ret := _mock.Called(ctx, username, handover)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Remove")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) error); ok {
-		r0 = returnFunc(ctx, username)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, password.Handover) error); ok {
+		r0 = returnFunc(ctx, username, handover)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -419,11 +419,12 @@ type MockStore_Remove_Call struct {
 // Remove is a helper method to define mock.On call
 //   - ctx context.Context
 //   - username string
-func (_e *MockStore_Expecter) Remove(ctx any, username any) *MockStore_Remove_Call {
-	return &MockStore_Remove_Call{Call: _e.mock.On("Remove", ctx, username)}
+//   - handover password.Handover
+func (_e *MockStore_Expecter) Remove(ctx any, username any, handover any) *MockStore_Remove_Call {
+	return &MockStore_Remove_Call{Call: _e.mock.On("Remove", ctx, username, handover)}
 }
 
-func (_c *MockStore_Remove_Call) Run(run func(ctx context.Context, username string)) *MockStore_Remove_Call {
+func (_c *MockStore_Remove_Call) Run(run func(ctx context.Context, username string, handover password.Handover)) *MockStore_Remove_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -433,9 +434,14 @@ func (_c *MockStore_Remove_Call) Run(run func(ctx context.Context, username stri
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
+		var arg2 password.Handover
+		if args[2] != nil {
+			arg2 = args[2].(password.Handover)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -446,7 +452,70 @@ func (_c *MockStore_Remove_Call) Return(err error) *MockStore_Remove_Call {
 	return _c
 }
 
-func (_c *MockStore_Remove_Call) RunAndReturn(run func(ctx context.Context, username string) error) *MockStore_Remove_Call {
+func (_c *MockStore_Remove_Call) RunAndReturn(run func(ctx context.Context, username string, handover password.Handover) error) *MockStore_Remove_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Reset provides a mock function for the type MockStore
+func (_mock *MockStore) Reset(ctx context.Context, username string, hash string) error {
+	ret := _mock.Called(ctx, username, hash)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Reset")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, username, hash)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockStore_Reset_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Reset'
+type MockStore_Reset_Call struct {
+	*mock.Call
+}
+
+// Reset is a helper method to define mock.On call
+//   - ctx context.Context
+//   - username string
+//   - hash string
+func (_e *MockStore_Expecter) Reset(ctx any, username any, hash any) *MockStore_Reset_Call {
+	return &MockStore_Reset_Call{Call: _e.mock.On("Reset", ctx, username, hash)}
+}
+
+func (_c *MockStore_Reset_Call) Run(run func(ctx context.Context, username string, hash string)) *MockStore_Reset_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockStore_Reset_Call) Return(err error) *MockStore_Reset_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockStore_Reset_Call) RunAndReturn(run func(ctx context.Context, username string, hash string) error) *MockStore_Reset_Call {
 	_c.Call.Return(run)
 	return _c
 }

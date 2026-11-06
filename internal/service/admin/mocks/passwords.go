@@ -173,16 +173,16 @@ func (_c *MockPasswords_List_Call) RunAndReturn(run func(ctx context.Context) ([
 }
 
 // Remove provides a mock function for the type MockPasswords
-func (_mock *MockPasswords) Remove(ctx context.Context, username string) error {
-	ret := _mock.Called(ctx, username)
+func (_mock *MockPasswords) Remove(ctx context.Context, username string, heir string) error {
+	ret := _mock.Called(ctx, username, heir)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Remove")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) error); ok {
-		r0 = returnFunc(ctx, username)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, username, heir)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -197,11 +197,12 @@ type MockPasswords_Remove_Call struct {
 // Remove is a helper method to define mock.On call
 //   - ctx context.Context
 //   - username string
-func (_e *MockPasswords_Expecter) Remove(ctx any, username any) *MockPasswords_Remove_Call {
-	return &MockPasswords_Remove_Call{Call: _e.mock.On("Remove", ctx, username)}
+//   - heir string
+func (_e *MockPasswords_Expecter) Remove(ctx any, username any, heir any) *MockPasswords_Remove_Call {
+	return &MockPasswords_Remove_Call{Call: _e.mock.On("Remove", ctx, username, heir)}
 }
 
-func (_c *MockPasswords_Remove_Call) Run(run func(ctx context.Context, username string)) *MockPasswords_Remove_Call {
+func (_c *MockPasswords_Remove_Call) Run(run func(ctx context.Context, username string, heir string)) *MockPasswords_Remove_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -211,9 +212,14 @@ func (_c *MockPasswords_Remove_Call) Run(run func(ctx context.Context, username 
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -224,7 +230,7 @@ func (_c *MockPasswords_Remove_Call) Return(err error) *MockPasswords_Remove_Cal
 	return _c
 }
 
-func (_c *MockPasswords_Remove_Call) RunAndReturn(run func(ctx context.Context, username string) error) *MockPasswords_Remove_Call {
+func (_c *MockPasswords_Remove_Call) RunAndReturn(run func(ctx context.Context, username string, heir string) error) *MockPasswords_Remove_Call {
 	_c.Call.Return(run)
 	return _c
 }

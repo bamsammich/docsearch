@@ -20,7 +20,10 @@ import (
 )
 
 // argUsername is the argument every account subcommand but list takes.
-const argUsername = "<username>"
+const (
+	argUsername = "<username>"
+	flagTo      = "to"
+)
 
 var (
 	errNoUsername      = errors.New("name the account's username")
@@ -74,8 +77,13 @@ func accountCommand() *cli.Command {
 				Name:      "remove",
 				Usage:     "end an account's sign-ins; its library stays",
 				ArgsUsage: argUsername,
-				Flags:     []cli.Flag{dsn},
-				Action:    withAccounts(removeAccount),
+				Description: "A shared library only this account administered passes to the " +
+					"administrator --to names, or to the longest-standing other administrator.",
+				Flags: []cli.Flag{dsn, &cli.StringFlag{
+					Name:  flagTo,
+					Usage: "the administrator's `USERNAME` who takes over its shared libraries",
+				}},
+				Action: withAccounts(removeAccount),
 			},
 			{
 				Name: commandList, Usage: "show every account", Flags: []cli.Flag{dsn},
@@ -185,7 +193,7 @@ func removeAccount(ctx context.Context, cmd *cli.Command, store *pgpassword.Stor
 	if err != nil {
 		return err
 	}
-	if err := store.Remove(ctx, username); err != nil {
+	if err := store.Remove(ctx, username, password.Handover{To: cmd.String(flagTo)}); err != nil {
 		return err
 	}
 	fmt.Printf("removed %s; its library is kept\n", username)

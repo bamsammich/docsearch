@@ -99,11 +99,16 @@
           held.set(e.subject, e.role);
           continue;
         }
+        // Only removing an account grants anyone their own role: the
+        // administrator removing it takes over the library.
+        const tookOver = e.actor === e.subject && !held.has(e.subject);
         lines.push({
-          what: held.has(e.subject) ? `${actor} made ${subject} ${article(e.role)}` : `${actor} added ${subject} as ${e.role}`,
+          what: tookOver ? `${actor} took over as ${e.role}`
+            : held.has(e.subject) ? `${actor} made ${subject} ${article(e.role)}`
+            : `${actor} added ${subject} as ${e.role}`,
           when: whenOf(e),
         });
-        if (!held.has(e.subject)) since.set(e.subject, `Added by ${actor} ${dayOf(e)}`);
+        if (!held.has(e.subject)) since.set(e.subject, tookOver ? `Took over ${dayOf(e)}` : `Added by ${actor} ${dayOf(e)}`);
         held.set(e.subject, e.role);
       } else if (e.action === "invite") {
         lines.push({ what: `${actor} invited ${subject} as ${e.role}`, when: whenOf(e) });

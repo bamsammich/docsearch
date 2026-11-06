@@ -48,8 +48,10 @@ var (
 	// ErrUsername is a username password mode cannot hold.
 	ErrUsername = errors.New("use 1 to 64 lower-case letters, digits, '.', '_' or '-'")
 	// ErrStranded is removing an account that is the only admin of a shared
-	// library, which would leave the library with nobody to manage it.
-	ErrStranded = errors.New("that would leave a shared library without an admin")
+	// library when no other administrator can take the library over.
+	ErrStranded = errors.New(
+		"that would leave a shared library without an admin, and no administrator can take over",
+	)
 	// ErrTaken is a username another account already signs in under.
 	ErrTaken = errors.New("an account by that username already exists")
 	// ErrBuiltinTaken is a second account trying to take the built-in library.
@@ -66,6 +68,18 @@ func (e Stranded) Error() string { return e.Detail }
 
 // Is makes a Stranded match ErrStranded.
 func (Stranded) Is(target error) bool { return target == ErrStranded }
+
+// Handover says who takes over the shared libraries only a removed account
+// administered, and who removed it.
+type Handover struct {
+	// To is the username of the administrator who takes over. Empty, or
+	// someone who is no administrator, leaves it to the longest-standing
+	// other administrator.
+	To string
+	// By is the user ID of the account removing it, which each library's
+	// log records. Empty for an operator working from the CLI.
+	By string
+}
 
 var usernamePattern = regexp.MustCompile(`^[a-z0-9._-]{1,64}$`)
 
@@ -112,9 +126,13 @@ type Store interface {
 	Begin(ctx context.Context, username string, attempt Attempt) (bool, error)
 	Succeeded(ctx context.Context, username string) error
 	SetHash(ctx context.Context, username, hash string) error
-	// Remove ends the account's sign-ins. Its library stays, since what
-	// happens to a library when its account goes is not settled.
-	Remove(ctx context.Context, username string) error
+	// Reset is SetHash for a password someone else chose, which also ends
+	// every sign-in the account holds, so whoever knew the old password is
+	// signed out.
+	Reset(ctx context.Context, username, hash string) error
+	// Remove ends the account's sign-ins. Its own library stays, and a
+	// shared library only it administered passes on as handover says.
+	Remove(ctx context.Context, username string, handover Handover) error
 	List(ctx context.Context) ([]Account, error)
 	// Exists reports whether a user still has a password account, so a
 	// removed account's tokens stop working at once.
@@ -179,7 +197,7 @@ func (a *Accounts) SetPassword(ctx context.Context, username, secret string) err
 	if err != nil {
 		return err
 	}
-	return a.store.SetHash(ctx, username, hash)
+	return a.store.Reset(ctx, username, hash)
 }
 
 // Authenticate is the user a username and password sign in as.

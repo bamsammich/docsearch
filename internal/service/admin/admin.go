@@ -77,7 +77,9 @@ type Passwords interface {
 	Add(ctx context.Context, username, secret string) error
 	SetPassword(ctx context.Context, username, secret string) error
 	Unlock(ctx context.Context, username string) error
-	Remove(ctx context.Context, username string) error
+	// Remove ends the account's sign-ins. A shared library only it
+	// administered passes to heir, an administrator's username.
+	Remove(ctx context.Context, username, heir string) error
 	List(ctx context.Context) ([]password.Account, error)
 }
 
@@ -178,7 +180,8 @@ func (s *Service) Unlock(ctx context.Context, username string) error {
 }
 
 // Remove ends a password account's sign-in and every token it holds. Its
-// libraries stay, and so does every library it was sharing.
+// own library stays. A shared library only it administered passes to the
+// administrator removing it, so the removal never waits on anyone else.
 func (s *Service) Remove(ctx context.Context, username string) error {
 	me, err := s.admin(ctx)
 	if err != nil {
@@ -190,7 +193,7 @@ func (s *Service) Remove(ctx context.Context, username string) error {
 	if username == me.Username {
 		return ErrSelf
 	}
-	if err := s.passwords.Remove(ctx, username); err != nil {
+	if err := s.passwords.Remove(ctx, username, me.Username); err != nil {
 		return err
 	}
 	return s.store.Record(ctx, ActionRemove, username)

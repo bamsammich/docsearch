@@ -157,7 +157,7 @@ func (s *StoreSuite) TestRemovingAnAccountEndsItsSignIn() {
 	s.Require().NoError(err)
 	s.True(present)
 
-	s.Require().NoError(s.admin.Remove(ctx, "alice"))
+	s.Require().NoError(s.admin.Remove(ctx, "alice", password.Handover{}))
 	present, err = s.app.Exists(ctx, "user-a")
 	s.Require().NoError(err)
 	s.False(present)
@@ -167,7 +167,10 @@ func (s *StoreSuite) TestRemovingAnAccountEndsItsSignIn() {
 		`SELECT count(*) FROM users WHERE user_id = 'user-a'`).Scan(&libraries))
 	s.Equal(1, libraries)
 
-	s.Require().ErrorIs(s.admin.Remove(ctx, "alice"), password.ErrNoSuchAccount)
+	s.Require().ErrorIs(
+		s.admin.Remove(ctx, "alice", password.Handover{}),
+		password.ErrNoSuchAccount,
+	)
 	s.Require().ErrorIs(s.admin.SetHash(ctx, "alice", "x"), password.ErrNoSuchAccount)
 }
 
@@ -200,7 +203,7 @@ func (s *StoreSuite) as(user string, statements ...string) {
 func (s *StoreSuite) TestARemovedUsernameCanBeAddedAgain() {
 	ctx := s.T().Context()
 	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
-	s.Require().NoError(s.app.Remove(ctx, "alice"))
+	s.Require().NoError(s.app.Remove(ctx, "alice", password.Handover{}))
 
 	s.Require().NoError(s.app.Add(ctx, "alice", "user-a2", "hash", false))
 	var owner string
@@ -209,19 +212,149 @@ func (s *StoreSuite) TestARemovedUsernameCanBeAddedAgain() {
 	s.Equal("user-a2", owner, "the name goes to the new account, not back to the old one")
 }
 
-// A shared library always keeps someone who can manage it.
-func (s *StoreSuite) TestTheOnlyAdminOfASharedLibraryIsNotRemoved() {
+// admins makes each username a docsearch administrator, in the order given.
+func (s *StoreSuite) admins(usernames ...string) {
+	for _, username := range usernames {
+		_, err := s.pg.Owner.ExecContext(s.T().Context(),
+			`UPDATE users SET admin = true, created_at = clock_timestamp() WHERE username = $1`,
+			username)
+		s.Require().NoError(err)
+	}
+}
+
+// adminsOf are the usernames that administer the shared library slug.
+func (s *StoreSuite) adminsOf(slug string) []string {
+	rows, err := s.pg.Owner.QueryContext(s.T().Context(), `
+		SELECT u.username FROM library_grants g
+		  JOIN libraries l ON l.library_id = g.library_id
+		  JOIN users u ON u.user_id = g.user_id
+		 WHERE l.slug = $1 AND g.role = 'admin' ORDER BY u.username`, slug)
+	s.Require().NoError(err)
+	defer func() { s.Require().NoError(rows.Close()) }()
+	var out []string
+	for rows.Next() {
+		var name string
+		s.Require().NoError(rows.Scan(&name))
+		out = append(out, name)
+	}
+	s.Require().NoError(rows.Err())
+	return out
+}
+
+// A shared library only the removed account administered passes to the
+// administrator named as heir, and the grant is recorded.
+func (s *StoreSuite) TestASharedLibraryPassesToTheNamedAdministrator() {
 	ctx := s.T().Context()
-	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
+	for name, id := range map[string]string{"alice": "user-a", "bob": "user-b", "carol": "user-c"} {
+		s.Require().NoError(s.admin.Add(ctx, name, id, "hash", false))
+	}
+	s.admins("carol", "bob")
 	s.as("user-a", `SELECT create_library('team', 'Team docs')`)
 
-	err := s.app.Remove(ctx, "alice")
+	s.Require().NoError(s.app.Remove(ctx, "alice", password.Handover{To: "bob", By: "user-b"}))
+
+	s.Equal([]string{"bob"}, s.adminsOf("team"))
+	var granted int
+	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx, `
+		SELECT count(*) FROM access_events
+		 WHERE action = 'grant' AND actor = 'user-b' AND subject = 'user-b'
+		   AND role = 'admin'`).Scan(&granted))
+	s.Equal(1, granted, "the log names bob as the one who removed alice")
+}
+
+// With no heir named, or one who is no administrator, the longest-standing
+// other administrator takes the library over.
+func (s *StoreSuite) TestWithoutAnAdministratorNamedTheLongestStandingTakesOver() {
+	ctx := s.T().Context()
+	for name, id := range map[string]string{
+		"alice": "user-a", "bob": "user-b", "carol": "user-c", "dave": "user-d",
+	} {
+		s.Require().NoError(s.admin.Add(ctx, name, id, "hash", false))
+	}
+	s.admins("carol", "bob")
+	s.as("user-a", `SELECT create_library('team', 'Team docs')`,
+		`SELECT create_library('ops', 'Ops docs')`)
+	s.as("user-a", `SELECT grant_library('ops', 'dave', 'editor')`)
+
+	s.Require().NoError(s.app.Remove(ctx, "alice", password.Handover{To: "dave"}))
+
+	s.Equal([]string{"carol"}, s.adminsOf("team"))
+	s.Equal([]string{"carol"}, s.adminsOf("ops"))
+}
+
+// The heir takes the library over even when invited to it, and the
+// invitation is spent.
+func (s *StoreSuite) TestAnInvitedHeirBecomesAdmin() {
+	ctx := s.T().Context()
+	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
+	s.Require().NoError(s.admin.Add(ctx, "bob", "user-b", "hash", false))
+	s.admins("bob")
+	s.as("user-a", `SELECT create_library('team', 'Team docs')`,
+		`SELECT grant_library('team', 'bob', 'reader')`)
+
+	s.Require().NoError(s.app.Remove(ctx, "alice", password.Handover{To: "bob", By: "user-b"}))
+
+	s.Equal([]string{"bob"}, s.adminsOf("team"))
+	var open int
+	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx,
+		`SELECT count(*) FROM library_invitations WHERE user_id = 'user-b'`).Scan(&open))
+	s.Equal(0, open)
+}
+
+// Only when docsearch has no other administrator is the removal refused,
+// naming the libraries it would strand.
+func (s *StoreSuite) TestWithNoAdministratorToTakeOverTheRemovalIsRefused() {
+	ctx := s.T().Context()
+	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
+	s.admins("alice")
+	s.as("user-a", `SELECT create_library('team', 'Team docs')`)
+
+	err := s.app.Remove(ctx, "alice", password.Handover{})
 	s.Require().ErrorIs(err, password.ErrStranded)
 	s.Require().ErrorContains(err, "Team docs")
 
 	present, err := s.app.Exists(ctx, "user-a")
 	s.Require().NoError(err)
 	s.True(present, "a refused removal leaves the sign-in in place")
+}
+
+// A removed account stops being an administrator.
+func (s *StoreSuite) TestARemovedAccountIsNoLongerAnAdministrator() {
+	ctx := s.T().Context()
+	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
+	s.admins("alice")
+
+	s.Require().NoError(s.app.Remove(ctx, "alice", password.Handover{}))
+
+	var admin bool
+	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx,
+		`SELECT admin FROM users WHERE user_id = 'user-a'`).Scan(&admin))
+	s.False(admin)
+}
+
+// Setting someone's password ends every sign-in they hold, and a missing
+// account is refused.
+func (s *StoreSuite) TestAResetEndsTheAccountsSignIns() {
+	ctx := s.T().Context()
+	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
+	for _, statement := range []string{
+		`INSERT INTO oauth_clients (client_id, client_name, redirect_uris)
+		   VALUES ('client', 'test', '[]')`,
+		`INSERT INTO oauth_refresh_tokens
+		   (token_hash, client_id, user_id, scopes, audience, auth_time, expires_at)
+		   VALUES ('t', 'client', 'user-a', '[]', '[]', now(), now() + interval '1 day')`,
+	} {
+		_, err := s.pg.Owner.ExecContext(ctx, statement)
+		s.Require().NoError(err)
+	}
+
+	s.Require().NoError(s.app.Reset(ctx, "alice", "new-hash"))
+
+	var tokens int
+	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx,
+		`SELECT count(*) FROM oauth_refresh_tokens WHERE user_id = 'user-a'`).Scan(&tokens))
+	s.Equal(0, tokens)
+	s.Require().ErrorIs(s.app.Reset(ctx, "nobody", "x"), password.ErrNoSuchAccount)
 }
 
 // Once someone else administers the library, removing the account takes it
@@ -234,7 +367,7 @@ func (s *StoreSuite) TestARemovedAccountLeavesSharedLibrariesAndKeepsItsOwn() {
 		`SELECT grant_library('team', 'bob', 'admin')`)
 	s.as("user-b", `SELECT accept_invitation('team')`)
 
-	s.Require().NoError(s.app.Remove(ctx, "alice"))
+	s.Require().NoError(s.app.Remove(ctx, "alice", password.Handover{}))
 
 	var shared, own, revoked int
 	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx, `
@@ -259,7 +392,7 @@ func (s *StoreSuite) TestARemovedAccountsInvitationsAreWithdrawn() {
 	s.as("user-b", `SELECT create_library('team', 'Team docs')`,
 		`SELECT grant_library('team', 'alice', 'reader')`)
 
-	s.Require().NoError(s.app.Remove(ctx, "alice"))
+	s.Require().NoError(s.app.Remove(ctx, "alice", password.Handover{}))
 
 	var open, withdrawn int
 	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx,

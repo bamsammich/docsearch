@@ -97,7 +97,7 @@ func (s *AdminSuite) TestAnAdministratorCannotRemoveTheirOwnAccount() {
 
 func (s *AdminSuite) TestRemovingAnAccountEndsItsSignInAndRecordsIt() {
 	s.asAdmin()
-	s.passwords.EXPECT().Remove(mock.Anything, "ben").Return(nil)
+	s.passwords.EXPECT().Remove(mock.Anything, "ben", "ana").Return(nil)
 	s.store.EXPECT().Record(mock.Anything, admin.ActionRemove, "ben").Return(nil)
 
 	s.Require().NoError(s.service.Remove(s.T().Context(), "ben"))

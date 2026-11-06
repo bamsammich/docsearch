@@ -158,6 +158,24 @@ func (q *Queries) ListPasswordAccounts(ctx context.Context) ([]ListPasswordAccou
 	return items, nil
 }
 
+const nameHandover = `-- name: NameHandover :exec
+SELECT set_config('app.heir', $1::text, true),
+       set_config('app.user_id', $2::text, true)
+`
+
+type NameHandoverParams struct {
+	Heir  string
+	Actor string
+}
+
+// A removal names the administrator who takes over the shared libraries
+// only the removed account administered, and the account removing it, for
+// the trigger that hands them on and records it.
+func (q *Queries) NameHandover(ctx context.Context, arg NameHandoverParams) error {
+	_, err := q.db.ExecContext(ctx, nameHandover, arg.Heir, arg.Actor)
+	return err
+}
+
 const passwordAccountByUsername = `-- name: PasswordAccountByUsername :one
 SELECT username, user_id, password_hash, failed_attempts, locked_until, created_at
   FROM password_accounts WHERE username = $1
@@ -186,6 +204,26 @@ func (q *Queries) PasswordAccountExists(ctx context.Context, userID string) (boo
 	var present bool
 	err := row.Scan(&present)
 	return present, err
+}
+
+const resetPasswordHash = `-- name: ResetPasswordHash :one
+UPDATE password_accounts
+   SET password_hash = $2, failed_attempts = 0, locked_until = NULL
+ WHERE username = $1
+RETURNING user_id
+`
+
+type ResetPasswordHashParams struct {
+	Username     string
+	PasswordHash string
+}
+
+// Setting a password for someone also ends their sign-ins, by name.
+func (q *Queries) ResetPasswordHash(ctx context.Context, arg ResetPasswordHashParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, resetPasswordHash, arg.Username, arg.PasswordHash)
+	var user_id string
+	err := row.Scan(&user_id)
+	return user_id, err
 }
 
 const setPasswordHash = `-- name: SetPasswordHash :execrows

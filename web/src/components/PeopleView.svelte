@@ -218,7 +218,7 @@
       {#if loaded && !shown.length}<li class="mrow-none">{wanted ? `Nobody matches “${find.trim()}”.` : "No accounts yet."}</li>{/if}
     </ul>
     {#if admin.passwords}
-      <p class="hint">Removing someone signs them out everywhere at once. Their libraries stay.</p>
+      <p class="hint">Resetting a password or removing someone signs them out everywhere at once. A removed account's own library stays, and a shared library only they administer passes to you.</p>
     {:else}
       <p class="hint">Someone appears here the first time they sign in. To remove someone, remove them at your provider.</p>
     {/if}
