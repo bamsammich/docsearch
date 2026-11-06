@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/bamsammich/docsearch/internal/owner"
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgtest"
 	"github.com/bamsammich/docsearch/internal/schema"
 	"github.com/bamsammich/docsearch/internal/upload"
@@ -36,7 +37,7 @@ func file(key, body string) upload.File {
 }
 
 func (s *PgUploadSuite) TestAnUploadReadsBackAndIsReplacedByKey() {
-	store := pgupload.New(s.pg.App, owner.Builtin)
+	store := pgupload.New(s.pg.App, pgsession.Personal(owner.Builtin))
 	ctx := s.T().Context()
 	s.Require().NoError(store.Put(ctx, file("k", "first")))
 	s.Require().NoError(store.Put(ctx, file("k", "second")))
@@ -52,9 +53,10 @@ func (s *PgUploadSuite) TestAnUploadReadsBackAndIsReplacedByKey() {
 // One user's uploads are invisible to another, even under the same key.
 func (s *PgUploadSuite) TestOneUsersUploadsAreInvisibleToAnother() {
 	ctx := s.T().Context()
-	s.Require().NoError(pgupload.New(s.pg.App, owner.Builtin).Put(ctx, file("k", "mine")))
+	s.Require().
+		NoError(pgupload.New(s.pg.App, pgsession.Personal(owner.Builtin)).Put(ctx, file("k", "mine")))
 
-	_, err := pgupload.New(s.pg.App, "second").Get(ctx, "k")
+	_, err := pgupload.New(s.pg.App, pgsession.Personal("second")).Get(ctx, "k")
 	s.Require().ErrorIs(err, upload.ErrNotFound)
 }
 

@@ -20,21 +20,21 @@ var ErrNotFound = errors.New("no such document")
 type Documents struct {
 	db *sql.DB
 	q  *pgdbgen.Queries
-	// userID is the library every statement here reads and writes. Bound
-	// once, because a repository serves one request and a request belongs
-	// to one user.
-	userID string
+	// scope is the user and the library every statement here names. Bound
+	// once, because a repository serves one request and a request works in
+	// one library.
+	scope pgsession.Scope
 }
 
 // NewDocuments reads through db.
-func NewDocuments(db *sql.DB, userID string) *Documents {
-	return &Documents{db: db, q: pgdbgen.New(db), userID: userID}
+func NewDocuments(db *sql.DB, scope pgsession.Scope) *Documents {
+	return &Documents{db: db, q: pgdbgen.New(db), scope: scope}
 }
 
 // Get is one document whatever its status, because verification has to be
 // able to look at a document that never became ready.
 func (d *Documents) Get(ctx context.Context, docID string) (*document.Document, error) {
-	row, err := pgsession.Read(ctx, d.db, d.q, d.userID,
+	row, err := pgsession.Read(ctx, d.db, d.q, d.scope,
 		func(q *pgdbgen.Queries) (pgdbgen.DocumentByIDRow, error) {
 			return q.DocumentByID(ctx, docID)
 		})
@@ -62,7 +62,7 @@ func (d *Documents) Get(ctx context.Context, docID string) (*document.Document, 
 
 // List is every ready document.
 func (d *Documents) List(ctx context.Context) ([]document.Document, error) {
-	rows, err := pgsession.Read(ctx, d.db, d.q, d.userID,
+	rows, err := pgsession.Read(ctx, d.db, d.q, d.scope,
 		func(q *pgdbgen.Queries) ([]pgdbgen.ListReadyDocumentsRow, error) {
 			return q.ListReadyDocuments(ctx)
 		})
@@ -91,7 +91,7 @@ func (d *Documents) List(ctx context.Context) ([]document.Document, error) {
 
 // Chunks are a document's chunks in ordinal order.
 func (d *Documents) Chunks(ctx context.Context, docID string) ([]domain.Chunk, error) {
-	rows, err := pgsession.Read(ctx, d.db, d.q, d.userID,
+	rows, err := pgsession.Read(ctx, d.db, d.q, d.scope,
 		func(q *pgdbgen.Queries) ([]pgdbgen.DocumentChunksRow, error) {
 			return q.DocumentChunks(ctx, docID)
 		})
@@ -127,7 +127,7 @@ func (d *Documents) Passages(
 	docID string,
 	from, to int,
 ) ([]document.Passage, error) {
-	rows, err := pgsession.Read(ctx, d.db, d.q, d.userID,
+	rows, err := pgsession.Read(ctx, d.db, d.q, d.scope,
 		func(q *pgdbgen.Queries) ([]pgdbgen.ContextChunksRow, error) {
 			return q.ContextChunks(ctx, pgdbgen.ContextChunksParams{
 				DocID:     docID,
@@ -157,7 +157,7 @@ func (d *Documents) Passages(
 // ChunkOrdinal is where a chunk sits in its document. A chunk the document
 // does not hold is reported as not found.
 func (d *Documents) ChunkOrdinal(ctx context.Context, docID string, chunkID int64) (int, error) {
-	ordinal, err := pgsession.Read(ctx, d.db, d.q, d.userID,
+	ordinal, err := pgsession.Read(ctx, d.db, d.q, d.scope,
 		func(q *pgdbgen.Queries) (int32, error) {
 			return q.ChunkOrdinal(ctx, pgdbgen.ChunkOrdinalParams{ID: chunkID, DocID: docID})
 		})
@@ -172,7 +172,7 @@ func (d *Documents) ChunkOrdinal(ctx context.Context, docID string, chunkID int6
 
 // IndexTermSections are the distinct sections a back-of-book index points at.
 func (d *Documents) IndexTermSections(ctx context.Context, docID string) ([]string, error) {
-	sections, err := pgsession.Read(ctx, d.db, d.q, d.userID,
+	sections, err := pgsession.Read(ctx, d.db, d.q, d.scope,
 		func(q *pgdbgen.Queries) ([]string, error) {
 			return q.IndexTermSections(ctx, docID)
 		})
@@ -185,7 +185,7 @@ func (d *Documents) IndexTermSections(ctx context.Context, docID string) ([]stri
 // IndexTermCount is how many entries a back-of-book index holds, which is
 // more than the number of sections they point at.
 func (d *Documents) IndexTermCount(ctx context.Context, docID string) (int, error) {
-	count, err := pgsession.Read(ctx, d.db, d.q, d.userID,
+	count, err := pgsession.Read(ctx, d.db, d.q, d.scope,
 		func(q *pgdbgen.Queries) (int64, error) {
 			return q.IndexTermCount(ctx, docID)
 		})
@@ -201,7 +201,7 @@ func (d *Documents) SectionHasChunks(
 	ctx context.Context,
 	docID, section string,
 ) (bool, error) {
-	found, err := pgsession.Read(ctx, d.db, d.q, d.userID, func(q *pgdbgen.Queries) (bool, error) {
+	found, err := pgsession.Read(ctx, d.db, d.q, d.scope, func(q *pgdbgen.Queries) (bool, error) {
 		return q.SectionHasChunks(ctx, pgdbgen.SectionHasChunksParams{
 			DocID: docID,
 			// One placeholder, used twice in the clause: the subtree test
@@ -218,7 +218,7 @@ func (d *Documents) SectionHasChunks(
 // Delete removes every trace of a document, in one transaction, and the
 // uploaded file it was read from if it was one.
 func (d *Documents) Delete(ctx context.Context, docID string) error {
-	return pgsession.Run(ctx, d.db, d.q, d.userID, func(q *pgdbgen.Queries) error {
+	return pgsession.Run(ctx, d.db, d.q, d.scope, func(q *pgdbgen.Queries) error {
 		if err := q.DeleteDocumentUpload(ctx, docID); err != nil {
 			return fmt.Errorf("delete the upload of %s: %w", docID, err)
 		}
@@ -229,7 +229,7 @@ func (d *Documents) Delete(ctx context.Context, docID string) error {
 // Rename changes what a document is called.
 func (d *Documents) Rename(ctx context.Context, docID, title string) error {
 	var renamed int64
-	err := pgsession.Run(ctx, d.db, d.q, d.userID, func(q *pgdbgen.Queries) error {
+	err := pgsession.Run(ctx, d.db, d.q, d.scope, func(q *pgdbgen.Queries) error {
 		var err error
 		renamed, err = q.RenameDocument(
 			ctx,

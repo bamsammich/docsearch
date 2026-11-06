@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgstore"
 	"github.com/bamsammich/docsearch/internal/pgtest"
 	"github.com/bamsammich/docsearch/internal/schema"
@@ -89,7 +90,7 @@ func TestSearchCost(t *testing.T) {
 	exec(t, db.Owner, `VACUUM ANALYZE`)
 	leafStats(t, ctx, db.App, "other", queries[0])
 	var otherHits int
-	other, err := pgstore.New(db.App, "other").Search(ctx, pgstore.SearchParams{Query: queries[0], K: 8})
+	other, err := pgstore.New(db.App, pgsession.Personal("other")).Search(ctx, pgstore.SearchParams{Query: queries[0], K: 8})
 	if err != nil {
 		t.Fatalf("search other: %v", err)
 	}
@@ -115,7 +116,7 @@ func TestSearchCost(t *testing.T) {
 		parity(t, ctx, db.App, user, queries)
 		explain(t, ctx, db.App, user, queries[0], docs)
 
-		store := pgstore.New(db.App, user)
+		store := pgstore.New(db.App, pgsession.Personal(user))
 		today := measure(t, queries, func(q string) error {
 			_, err := store.Search(ctx, pgstore.SearchParams{Query: q, K: 8})
 			return err

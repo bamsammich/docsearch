@@ -27,7 +27,7 @@ import (
 // ErrNotFound is returned when a requested document or job does not exist.
 var ErrNotFound = errors.New("not found")
 
-// Store reads one user's library.
+// Store reads one library.
 //
 // q holds the queries generated from the migrations. The two
 // statements it cannot express -- Search, which composes its WHERE clause from
@@ -36,22 +36,22 @@ var ErrNotFound = errors.New("not found")
 type Store struct {
 	db *sql.DB
 	q  *pgdbgen.Queries
-	// userID is the library every statement reads. Bound once, because a
-	// store serves one request and a request belongs to one user.
-	userID string
+	// scope is the user and the library every statement names. Bound once,
+	// because a store serves one request and a request works in one library.
+	scope pgsession.Scope
 }
 
-// New reads one user's library through db, which the caller opens and
+// New reads one library through db, which the caller opens and
 // closes.
-func New(db *sql.DB, userID string) *Store {
-	return &Store{db: db, q: pgdbgen.New(db), userID: userID}
+func New(db *sql.DB, scope pgsession.Scope) *Store {
+	return &Store{db: db, q: pgdbgen.New(db), scope: scope}
 }
 
 // Open connects to a Postgres database.
 //
 // No pragmas to agree on: what SQLite needed busy_timeout and WAL for, two
 // processes reading and writing at once, Postgres does by default.
-func Open(dsn, userID string) (*Store, error) {
+func Open(dsn string, scope pgsession.Scope) (*Store, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open the index: %w", err)
@@ -59,7 +59,7 @@ func Open(dsn, userID string) (*Store, error) {
 	if err := db.Ping(); err != nil {
 		return nil, errors.Join(fmt.Errorf("open the index: %w", err), db.Close())
 	}
-	return New(db, userID), nil
+	return New(db, scope), nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -162,7 +162,7 @@ const maxTopHeadings = 15
 
 // ListDocuments returns every ready document with its top-level headings.
 func (s *Store) ListDocuments(ctx context.Context) ([]Document, error) {
-	rows, err := pgsession.Read(ctx, s.db, s.q, s.userID,
+	rows, err := pgsession.Read(ctx, s.db, s.q, s.scope,
 		func(q *pgdbgen.Queries) ([]pgdbgen.ListReadyDocumentsRow, error) {
 			return q.ListReadyDocuments(ctx)
 		})
@@ -196,7 +196,7 @@ func (s *Store) ListDocuments(ctx context.Context) ([]Document, error) {
 }
 
 func (s *Store) topLevelHeadings(ctx context.Context, docID string) ([]string, error) {
-	paths, err := pgsession.Read(ctx, s.db, s.q, s.userID,
+	paths, err := pgsession.Read(ctx, s.db, s.q, s.scope,
 		func(q *pgdbgen.Queries) ([]pgdbgen.TopLevelHeadingsRow, error) {
 			return q.TopLevelHeadings(ctx, docID)
 		})
@@ -243,7 +243,7 @@ func (s *Store) Outline(ctx context.Context, docID string, depth int) ([]Outline
 	if err := s.requireReady(ctx, docID); err != nil {
 		return nil, err
 	}
-	rows, err := pgsession.Read(ctx, s.db, s.q, s.userID,
+	rows, err := pgsession.Read(ctx, s.db, s.q, s.scope,
 		func(q *pgdbgen.Queries) ([]pgdbgen.OutlineRowsRow, error) {
 			return q.OutlineRows(ctx, docID)
 		})
@@ -292,7 +292,7 @@ func ancestry(r pgdbgen.OutlineRowsRow, depth int, seen map[string]bool) []Outli
 }
 
 func (s *Store) requireReady(ctx context.Context, docID string) error {
-	status, err := pgsession.Read(ctx, s.db, s.q, s.userID,
+	status, err := pgsession.Read(ctx, s.db, s.q, s.scope,
 		func(q *pgdbgen.Queries) (string, error) {
 			return q.DocumentStatus(ctx, docID)
 		})

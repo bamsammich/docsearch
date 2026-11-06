@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgtest"
 	"github.com/bamsammich/docsearch/internal/schema"
 )
@@ -25,13 +26,13 @@ func (s *ReadySuite) SetupTest() {
 }
 
 func (s *ReadySuite) TestReadyPassesOnAMigratedDatabase() {
-	s.NoError(New(s.pg.App, builtinUser).Ready(s.T().Context()))
+	s.NoError(New(s.pg.App, pgsession.Personal(builtinUser)).Ready(s.T().Context()))
 }
 
 func (s *ReadySuite) TestReadyNamesTheTableThatIsMissing() {
 	_, err := s.pg.Owner.ExecContext(s.T().Context(), `DROP TABLE pages`)
 	s.Require().NoError(err)
-	err = New(s.pg.App, builtinUser).Ready(s.T().Context())
+	err = New(s.pg.App, pgsession.Personal(builtinUser)).Ready(s.T().Context())
 	s.Require().Error(err, "a database missing a table reads as ready")
 	s.Equal("schema incomplete: pages is missing", err.Error())
 }

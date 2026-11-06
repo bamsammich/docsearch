@@ -24,10 +24,10 @@ import (
 type Jobs struct {
 	db *sql.DB
 	q  *pgdbgen.Queries
-	// userID is the library every statement here reads and writes. Bound
-	// once, because a repository serves one request and a request belongs
-	// to one user.
-	userID string
+	// scope is the user and the library every statement here names. Bound
+	// once, because a repository serves one request and a request works in
+	// one library.
+	scope pgsession.Scope
 	// held is the job this handle last claimed and the attempt it claimed it
 	// as. Every write a worker makes to its job is fenced by that attempt,
 	// so a worker whose job was reclaimed changes nothing. A worker runs one
@@ -68,12 +68,12 @@ func fenced(rows int64, err error) error {
 	return nil
 }
 
-// NewJobs reads and writes one user's queue through db.
+// NewJobs reads and writes one library's queue through db.
 //
-// The user is bound here rather than passed per call, because a repository
-// serves one request and a request belongs to one user.
-func NewJobs(db *sql.DB, userID string) *Jobs {
-	return &Jobs{db: db, q: pgdbgen.New(db), userID: userID}
+// The scope is bound here rather than passed per call, because a repository
+// serves one request and a request works in one library.
+func NewJobs(db *sql.DB, scope pgsession.Scope) *Jobs {
+	return &Jobs{db: db, q: pgdbgen.New(db), scope: scope}
 }
 
 // Claim takes the next job. A single statement, so two workers racing cannot
@@ -190,7 +190,7 @@ func (j *Jobs) CancelRequested(ctx context.Context, id int64) (bool, error) {
 		ctx,
 		j.db,
 		j.q,
-		j.userID,
+		j.scope,
 		func(q *pgdbgen.Queries) (bool, error) {
 			return q.JobCancelRequested(ctx, id)
 		},
@@ -288,9 +288,9 @@ func dropPartial(ctx context.Context, q *pgdbgen.Queries, id int64) error {
 	return deleteRows(ctx, q, docID.String)
 }
 
-// inTx runs write inside one transaction that names this queue's user.
+// inTx runs write inside one transaction that names this queue's scope.
 func (j *Jobs) inTx(ctx context.Context, write func(*pgdbgen.Queries) error) error {
-	return pgsession.Run(ctx, j.db, j.q, j.userID, write)
+	return pgsession.Run(ctx, j.db, j.q, j.scope, write)
 }
 
 // Add puts one source on the queue and returns its id and its position.
@@ -304,7 +304,7 @@ func (j *Jobs) Add(
 	err = j.inTx(ctx, func(q *pgdbgen.Queries) error {
 		var queueErr error
 		id, queueErr = q.EnqueueJob(ctx, pgdbgen.EnqueueJobParams{
-			LibraryID:  j.userID,
+			LibraryID:  j.scope.Library,
 			SourcePath: source,
 			Title:      nullString(title),
 			Force:      force,
@@ -343,7 +343,7 @@ func (j *Jobs) rows(
 	includeCompleted bool,
 	limit int,
 ) ([]pgdbgen.IngestJob, error) {
-	rows, err := pgsession.Read(ctx, j.db, j.q, j.userID,
+	rows, err := pgsession.Read(ctx, j.db, j.q, j.scope,
 		func(q *pgdbgen.Queries) ([]pgdbgen.IngestJob, error) {
 			if includeCompleted {
 				return q.RecentJobs(ctx, pgsession.Narrow(limit))
@@ -361,7 +361,7 @@ func (j *Jobs) rows(
 
 // Job is one job, by id.
 func (j *Jobs) Job(ctx context.Context, id int64) (job.Job, error) {
-	row, err := pgsession.Read(ctx, j.db, j.q, j.userID,
+	row, err := pgsession.Read(ctx, j.db, j.q, j.scope,
 		func(q *pgdbgen.Queries) (pgdbgen.IngestJob, error) {
 			return q.JobByID(ctx, id)
 		})
@@ -380,7 +380,7 @@ func (j *Jobs) RequestCancel(ctx context.Context, id int64) (string, error) {
 		ctx,
 		j.db,
 		j.q,
-		j.userID,
+		j.scope,
 		func(q *pgdbgen.Queries) (string, error) {
 			return q.JobStatus(ctx, id)
 		},

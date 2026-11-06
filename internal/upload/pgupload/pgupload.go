@@ -1,7 +1,7 @@
 // Package pgupload keeps uploads and their signed links in Postgres.
 //
 // Uploads are tenant rows under the same row-level security as every other
-// table, so one user's store reads only that user's files. Links are created
+// table, so one library's store reads only that library's files. Links are created
 // as their user, and redeemed before any user is known through the definer
 // functions migration 12 made.
 package pgupload
@@ -18,21 +18,21 @@ import (
 	"github.com/bamsammich/docsearch/internal/upload"
 )
 
-// Store is upload.Store over one user's rows.
+// Store is upload.Store over one library's rows.
 type Store struct {
-	db     *sql.DB
-	q      *pgdbgen.Queries
-	userID string
+	db    *sql.DB
+	q     *pgdbgen.Queries
+	scope pgsession.Scope
 }
 
-// New reads and writes userID's uploads through db.
-func New(db *sql.DB, userID string) *Store {
-	return &Store{db: db, q: pgdbgen.New(db), userID: userID}
+// New reads and writes one library's uploads through db.
+func New(db *sql.DB, scope pgsession.Scope) *Store {
+	return &Store{db: db, q: pgdbgen.New(db), scope: scope}
 }
 
 // Put stores a file, replacing whatever was under its key.
 func (s *Store) Put(ctx context.Context, file upload.File) error {
-	err := pgsession.Run(ctx, s.db, s.q, s.userID, func(q *pgdbgen.Queries) error {
+	err := pgsession.Run(ctx, s.db, s.q, s.scope, func(q *pgdbgen.Queries) error {
 		return q.PutUpload(ctx, pgdbgen.PutUploadParams{
 			Key: file.Key, Filename: file.Filename, Sha256: file.SHA256, Content: file.Content,
 		})
@@ -45,7 +45,7 @@ func (s *Store) Put(ctx context.Context, file upload.File) error {
 
 // Get is the file under key.
 func (s *Store) Get(ctx context.Context, key string) (upload.File, error) {
-	row, err := pgsession.Read(ctx, s.db, s.q, s.userID,
+	row, err := pgsession.Read(ctx, s.db, s.q, s.scope,
 		func(q *pgdbgen.Queries) (pgdbgen.GetUploadRow, error) {
 			return q.GetUpload(ctx, key)
 		})
@@ -71,10 +71,10 @@ func NewLinks(db *sql.DB) *Links {
 	return &Links{db: db, q: pgdbgen.New(db)}
 }
 
-// Create records a link as its user, so the row is written under that
-// user's policy like any other.
+// Create records a link as its user, in the user's own library, so the row
+// is written under that library's policy like any other.
 func (l *Links) Create(ctx context.Context, user, tokenHash string, expires time.Time) error {
-	err := pgsession.Run(ctx, l.db, l.q, user, func(q *pgdbgen.Queries) error {
+	err := pgsession.Run(ctx, l.db, l.q, pgsession.Personal(user), func(q *pgdbgen.Queries) error {
 		return q.CreateUploadLink(ctx, pgdbgen.CreateUploadLinkParams{
 			TokenHash: tokenHash, ExpiresAt: expires,
 		})

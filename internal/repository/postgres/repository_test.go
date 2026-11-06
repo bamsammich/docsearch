@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/bamsammich/docsearch/internal/domain"
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgtest"
 	"github.com/bamsammich/docsearch/internal/repository/postgres"
 	"github.com/bamsammich/docsearch/internal/schema"
@@ -37,7 +38,7 @@ func (s *RepositorySuite) SetupTest() {
 	s.Require().NoError(schema.Create(s.T().Context(), pg.Owner))
 
 	s.db = pg.App
-	s.repo = postgres.New(pg.App, builtinID)
+	s.repo = postgres.New(pg.App, pgsession.Personal(builtinID))
 }
 
 // document is a document with one chunk, written and published.

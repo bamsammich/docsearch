@@ -10,6 +10,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/adapter"
 	"github.com/bamsammich/docsearch/internal/config"
 	"github.com/bamsammich/docsearch/internal/library"
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/upload"
 	"github.com/bamsammich/docsearch/internal/upload/pgupload"
 )
@@ -38,7 +39,7 @@ func newUploads(
 		doors: upload.Doors{
 			Links: links,
 			Stores: func(user string) (upload.Store, error) {
-				return pgupload.New(db, user), nil
+				return pgupload.New(db, pgsession.Personal(user)), nil
 			},
 			Enqueue:  enqueuer(libs),
 			Supports: formats.Supports,
@@ -57,7 +58,7 @@ func enqueuer(
 	libs *library.Libraries,
 ) func(context.Context, string, string, string) (int64, error) {
 	return func(ctx context.Context, user, target, title string) (int64, error) {
-		jobs, err := libs.Jobs(user)
+		jobs, err := libs.Jobs(pgsession.Personal(user))
 		if err != nil {
 			return 0, err
 		}

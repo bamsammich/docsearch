@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgtest"
 	"github.com/bamsammich/docsearch/internal/schema"
 )
@@ -34,7 +35,7 @@ func (s *SearchSuite) SetupTest() {
 	s.seed("small", "Small Guide", 6)
 	// The store reads as the restricted role a request uses, not as the
 	// owner that seeded the rows.
-	s.st = New(s.pg.App, builtinUser)
+	s.st = New(s.pg.App, pgsession.Personal(builtinUser))
 }
 
 // seed writes one ready document holding chunks chunks.
@@ -280,7 +281,7 @@ func (s *SearchSuite) TestASecondAccountSearchesItsOwnLibrary() {
 	s.Require().NoError(err)
 	s.seedFor(other, "big", "Big Manual", 24)
 	s.seedFor(other, "small", "Small Guide", 6)
-	theirs := New(s.pg.App, other)
+	theirs := New(s.pg.App, pgsession.Personal(other))
 
 	for i, p := range searches {
 		got, err := theirs.Search(s.T().Context(), p)
@@ -318,7 +319,7 @@ func placements(results []SearchResult) []placement {
 // An account whose partition is gone holds no chunks, and its search finds
 // nothing rather than failing.
 func (s *SearchSuite) TestAnAccountWithNoPartitionFindsNothing() {
-	res, err := New(s.pg.App, "nobody").Search(
+	res, err := New(s.pg.App, pgsession.Personal("nobody")).Search(
 		s.T().Context(), SearchParams{Query: "planet orbit", K: 8},
 	)
 	s.Require().NoError(err)

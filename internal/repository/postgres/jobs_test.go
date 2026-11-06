@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgtest"
 	"github.com/bamsammich/docsearch/internal/repository/postgres"
 	"github.com/bamsammich/docsearch/internal/schema"
@@ -37,7 +38,7 @@ func TestJobs(t *testing.T) { suite.Run(t, new(JobsSuite)) }
 func (s *JobsSuite) SetupTest() {
 	s.db = pgtest.Start(s.T())
 	s.Require().NoError(schema.Create(s.T().Context(), s.db.Owner))
-	s.jobs = postgres.NewJobs(s.db.App, builtinID)
+	s.jobs = postgres.NewJobs(s.db.App, pgsession.Personal(builtinID))
 }
 
 // queued puts one source on the queue and returns its id.
@@ -98,7 +99,7 @@ func (s *JobsSuite) TestTwoWorkersRacingTakeTwoDifferentJobs() {
 		go func() {
 			defer wait.Done()
 			// A queue of its own per worker, as two processes would have.
-			jobs := postgres.NewJobs(s.db.App, builtinID)
+			jobs := postgres.NewJobs(s.db.App, pgsession.Personal(builtinID))
 			claims[i], errs[i] = jobs.Claim(context.Background(), lease, 3)
 		}()
 	}
@@ -218,10 +219,10 @@ func (s *JobsSuite) TestADeadWorkersCancelledJobIsCancelled() {
 func (s *JobsSuite) TestAStaleWorkerCannotTouchAReclaimedJob() {
 	ctx := s.T().Context()
 	id := s.queued("/library/guide.md")
-	stale := postgres.NewJobs(s.db.App, builtinID)
+	stale := postgres.NewJobs(s.db.App, pgsession.Personal(builtinID))
 	_, err := stale.Claim(ctx, -time.Second, 3)
 	s.Require().NoError(err)
-	owner := postgres.NewJobs(s.db.App, builtinID)
+	owner := postgres.NewJobs(s.db.App, pgsession.Personal(builtinID))
 	reclaimed, err := owner.Claim(ctx, time.Hour, 3)
 	s.Require().NoError(err)
 	s.Require().NotNil(reclaimed)
@@ -233,7 +234,7 @@ func (s *JobsSuite) TestAStaleWorkerCannotTouchAReclaimedJob() {
 		ErrorIs(stale.RecordProgress(ctx, id, "chunk", 1, 2, time.Hour), ingest.ErrLostClaim)
 	s.Require().ErrorIs(stale.Cancel(ctx, id), ingest.ErrLostClaim)
 
-	none, err := postgres.NewJobs(s.db.App, builtinID).Claim(ctx, time.Hour, 3)
+	none, err := postgres.NewJobs(s.db.App, pgsession.Personal(builtinID)).Claim(ctx, time.Hour, 3)
 	s.Require().NoError(err)
 	s.Nil(none, "the job is still the new owner's, not back on the queue")
 	s.Require().NoError(owner.RenewLease(ctx, id, time.Hour))

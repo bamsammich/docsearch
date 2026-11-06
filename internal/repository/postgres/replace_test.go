@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/bamsammich/docsearch/internal/domain"
+	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgtest"
 	"github.com/bamsammich/docsearch/internal/repository/postgres"
 	"github.com/bamsammich/docsearch/internal/schema"
@@ -31,7 +32,7 @@ func TestReplace(t *testing.T) { suite.Run(t, new(ReplaceSuite)) }
 func (s *ReplaceSuite) SetupTest() {
 	s.pg = pgtest.Start(s.T())
 	s.Require().NoError(schema.Create(s.T().Context(), s.pg.Owner))
-	s.service = ingest.New(postgres.New(s.pg.App, builtinID), time.Now)
+	s.service = ingest.New(postgres.New(s.pg.App, pgsession.Personal(builtinID)), time.Now)
 }
 
 // version is the guide at one revision, saying body in each section.
@@ -104,7 +105,7 @@ func (s *ReplaceSuite) TestAFinishedReplacementTakesTheOldPlace() {
 func (s *ReplaceSuite) TestADeadReplacementsRowsAreCleared() {
 	s.ingestFirst()
 	docID := s.one(`SELECT doc_id FROM documents`)
-	repo := postgres.New(s.pg.App, builtinID)
+	repo := postgres.New(s.pg.App, pgsession.Personal(builtinID))
 	s.Require().NoError(repo.Create(s.T().Context(), ingest.Document{
 		DocID: ingest.Staging(docID), Title: "Guide", Format: "markdown",
 		Identity: "/library/guide.md", Digest: "dead", Kind: domain.SourceKindFile,

@@ -25,7 +25,9 @@ import (
 	"github.com/bamsammich/docsearch/internal/mcpserver"
 	"github.com/bamsammich/docsearch/internal/owner"
 	"github.com/bamsammich/docsearch/internal/pgsession"
+	"github.com/bamsammich/docsearch/internal/pgstore"
 	"github.com/bamsammich/docsearch/internal/repository/postgres"
+	"github.com/bamsammich/docsearch/internal/service/job"
 	"github.com/bamsammich/docsearch/internal/source/site"
 	"github.com/bamsammich/docsearch/internal/upload"
 )
@@ -216,11 +218,11 @@ func newMCPRoute(
 	log *slog.Logger,
 ) route {
 	srv := mcpserver.New(mcpserver.Deps{
-		Stores:       libs.Store,
+		Stores:       func(user string) (*pgstore.Store, error) { return libs.Store(pgsession.Personal(user)) },
 		LibraryRoots: cfg.LibraryRoots,
 		Log:          log,
 		UploadLinks:  ups.issuer.Issue,
-		Jobs:         libs.Jobs,
+		Jobs:         func(user string) (*job.Service, error) { return libs.Jobs(pgsession.Personal(user)) },
 	})
 	return route{path: "/mcp", handler: mcpHandler(srv, log)}
 }
@@ -246,11 +248,11 @@ func mcpHandler(srv *mcp.Server, log *slog.Logger) http.Handler {
 func newIngestRoute(libs *library.Libraries) route {
 	return mount(connectapi.NewServer(
 		func(user string) (connectapi.Ingester, connectapi.Sources, error) {
-			ingester, err := libs.Ingester(user)
+			ingester, err := libs.Ingester(pgsession.Personal(user))
 			if err != nil {
 				return nil, nil, err
 			}
-			sources, err := libs.Sources(user)
+			sources, err := libs.Sources(pgsession.Personal(user))
 			if err != nil {
 				return nil, nil, err
 			}
@@ -260,13 +262,14 @@ func newIngestRoute(libs *library.Libraries) route {
 
 func newDocumentRoute(libs *library.Libraries) route {
 	return mount(connectapi.NewDocumentServer(
-		func(user string) (connectapi.Documents, error) { return libs.Documents(user) },
-		postgres.ErrNotFound))
+		func(user string) (connectapi.Documents, error) { return libs.Documents(pgsession.Personal(user)) },
+		postgres.ErrNotFound,
+	))
 }
 
 func newJobRoute(libs *library.Libraries) route {
 	return mount(connectapi.NewJobServer(
-		func(user string) (connectapi.Jobs, error) { return libs.Jobs(user) },
+		func(user string) (connectapi.Jobs, error) { return libs.Jobs(pgsession.Personal(user)) },
 		postgres.ErrNotFound))
 }
 
