@@ -412,7 +412,7 @@ an in-flight job can checkpoint or roll back instead of being killed mid-write.
 | | flag | environment | docsearch.yaml (server) |
 |---|---|---|---|
 | bind address | `--addr` | `DOCSEARCH_ADDR` | `addr` |
-| database | `--dsn` | `DOCSEARCH_DSN` | `dsn` |
+| database | `--dsn` | `DOCSEARCH_DSN` | — |
 | auth mode | `--auth` | `DOCSEARCH_AUTH` | `auth.mode` |
 | pin the worker to one library | `--user` (worker only) | `DOCSEARCH_USER` | — |
 | library roots | `--root` (repeatable) | `DOCSEARCH_ROOT` (`:`-separated) | `roots` |
@@ -443,8 +443,10 @@ roots:
 ```
 
 A key no setting reads is refused at startup rather than ignored, so a typo
-cannot leave a setting at its default. Secrets, the bearer token and the
-oidc client secret, come from the environment alone. An administrator sees
+cannot leave a setting at its default. Secrets come from the environment or
+the command line alone: the bearer token, the oidc client secret, and the
+database DSN, which carries the request role's password. A file is shown to
+administrators on the Sign-in page, so it never holds one. An administrator sees
 on the Sign-in page where each sign-in setting came from.
 
 `--auth` is `none`, `token`, `oidc` or `password`, and defaults to `token`,

@@ -36,6 +36,8 @@ type Editable struct {
 	Key string
 	// Boolean settings take true or false; every other one takes text.
 	Boolean bool
+	// URL settings take an absolute http or https URL.
+	URL bool
 }
 
 // Change is one setting's new value, named by its flag. An empty value
@@ -144,15 +146,29 @@ func (s *Service) check(change Change) (Editable, error) {
 		origin.Kind == config.FromEnv {
 		return Editable{}, fmt.Errorf("%w: %s sets it, so change it there", ErrLocked, origin.Where)
 	}
-	if e.Boolean && change.Value != "" && change.Value != "true" && change.Value != "false" {
-		return Editable{}, fmt.Errorf(
+	if change.Value == "" {
+		return e, nil
+	}
+	return e, e.takes(change)
+}
+
+// takes refuses a value the setting cannot hold, before it is kept or
+// written: one that would stop the server from starting.
+func (e Editable) takes(change Change) error {
+	switch {
+	case e.URL && !config.HTTPURL(change.Value):
+		return fmt.Errorf("%w: %s takes an absolute http or https URL, not %q",
+			ErrInvalid, change.Flag, change.Value)
+	case e.Boolean && change.Value != "true" && change.Value != "false":
+		return fmt.Errorf(
 			"%w: %s takes true or false, not %q",
 			ErrInvalid,
 			change.Flag,
 			change.Value,
 		)
+	default:
+		return nil
 	}
-	return e, nil
 }
 
 func (s *Service) rewrite(values map[string]any) (Result, error) {

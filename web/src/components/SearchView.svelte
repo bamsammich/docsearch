@@ -191,7 +191,7 @@
 <div class="results" aria-live="polite">
   {#if error}
     <div class="note warn" role="alert">{error}</div>
-  {:else if !library.docs.length && library.loaded}
+  {:else if !library.docs.length && library.loaded && libraries.loaded && libraries.all.length <= 1}
     <div class="note">The library is empty. Add a document first.</div>
   {:else if output}
     <div class="results-head">

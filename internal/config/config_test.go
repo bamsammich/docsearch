@@ -297,3 +297,19 @@ func (s *ConfigSuite) TestAccountsTakeNoPathsUnlessShared() {
 		s.NoError(c.Validate(), "%v with shared roots", mode)
 	}
 }
+
+// A public URL or an issuer a browser cannot be sent to, such as a
+// javascript: URL, is refused at startup.
+func (s *ConfigSuite) TestOnlyHTTPURLsServeAsThePublicURLOrTheIssuer() {
+	c := s.valid()
+	c.PublicURL = "javascript://x/%0aalert(1)"
+	s.Require().ErrorContains(c.Validate(), "absolute http or https URL")
+
+	c = s.oidc()
+	c.OIDC.Issuer = "file:///etc/passwd"
+	s.Require().ErrorContains(c.Validate(), "absolute http or https URL")
+
+	s.True(HTTPURL("https://docs.example.com"))
+	s.False(HTTPURL("not a url"))
+	s.False(HTTPURL("https://"))
+}
