@@ -48,10 +48,17 @@ func (s *SettingsSuite) withDatabase(origins map[string]config.Origin) *settings
 		func(string) ([]byte, error) { return nil, errors.New("no file") })
 }
 
-// With a file, nothing is stored: the change comes back as the whole file,
-// comments kept, and the changed line named.
-func (s *SettingsSuite) TestWithAFileAChangeBecomesTheUpdatedFile() {
-	result, err := s.withFile(nil).Update(s.T().Context(),
+// fromFile are the settings the deployed file holds.
+var fromFile = map[string]config.Origin{
+	"oidc-required-claim-value": {Kind: config.FromFile, Where: "/etc/docsearch.yaml",
+		Key: "auth.oidc.required_claim.value"},
+}
+
+// A setting the file holds is changed in the file: the change comes back
+// as the whole file, comments kept and the changed line named, and nothing
+// is stored.
+func (s *SettingsSuite) TestASettingTheFileHoldsBecomesTheUpdatedFile() {
+	result, err := s.withFile(fromFile).Update(s.T().Context(),
 		[]settings.Change{{Flag: "oidc-required-claim-value", Value: "docsearch-users"}})
 	s.Require().NoError(err)
 
@@ -61,21 +68,33 @@ func (s *SettingsSuite) TestWithAFileAChangeBecomesTheUpdatedFile() {
 	s.Equal([]int{8}, result.Changed)
 }
 
-func (s *SettingsSuite) TestAKeyTheFileLacksIsAddedWhereItBelongs() {
-	result, err := s.withFile(nil).Update(s.T().Context(),
-		[]settings.Change{
-			{Flag: "oidc-sign-up", Value: "true"},
-			{Flag: "public-url", Value: "https://docs.example.com"},
-		})
-	s.Require().NoError(err)
+// The database sits beneath the file, so a setting the file leaves out is
+// kept there even when there is a file.
+func (s *SettingsSuite) TestASettingTheFileLeavesOutIsKept() {
+	s.store.EXPECT().Set(mock.Anything, "auth.oidc.sign_up", mock.Anything).Return(nil)
 
-	s.Contains(result.File, "    sign_up: true\n")
-	s.Contains(result.File, "public_url: https://docs.example.com\n")
-	s.Len(result.Changed, 2)
+	result, err := s.withFile(fromFile).Update(s.T().Context(),
+		[]settings.Change{{Flag: "oidc-sign-up", Value: "true"}})
+	s.Require().NoError(err)
+	s.True(result.Saved)
+	s.Empty(result.File)
+}
+
+func (s *SettingsSuite) TestAChangeToBothIsSplitBetweenThem() {
+	s.store.EXPECT().Set(mock.Anything, "public_url", mock.Anything).Return(nil)
+
+	result, err := s.withFile(fromFile).Update(s.T().Context(), []settings.Change{
+		{Flag: "oidc-required-claim-value", Value: "docsearch-users"},
+		{Flag: "public-url", Value: "https://docs.example.com"},
+	})
+	s.Require().NoError(err)
+	s.True(result.Saved)
+	s.Contains(result.File, "docsearch-users")
+	s.NotContains(result.File, "public_url", "a kept setting is not written into the file")
 }
 
 func (s *SettingsSuite) TestAnEmptyValueTakesTheKeyOut() {
-	result, err := s.withFile(nil).Update(s.T().Context(),
+	result, err := s.withFile(fromFile).Update(s.T().Context(),
 		[]settings.Change{{Flag: "oidc-required-claim-value", Value: ""}})
 	s.Require().NoError(err)
 	s.NotContains(result.File, "staff")
@@ -118,18 +137,16 @@ func (s *SettingsSuite) TestABooleanTakesTrueOrFalse() {
 	s.Require().Error(err)
 }
 
-func (s *SettingsSuite) TestStoredIsByFlagAndEmptyWithAFile() {
+func (s *SettingsSuite) TestStoredIsByFlagWithOrWithoutAFile() {
 	s.store.EXPECT().
 		Stored(mock.Anything).
 		Return(map[string]string{"auth.oidc.sign_up": "true"}, nil)
 
-	stored, err := s.withDatabase(nil).Stored(s.T().Context())
-	s.Require().NoError(err)
-	s.Equal(map[string]string{"oidc-sign-up": "true"}, stored)
-
-	stored, err = s.withFile(nil).Stored(s.T().Context())
-	s.Require().NoError(err)
-	s.Empty(stored)
+	for _, service := range []*settings.Service{s.withDatabase(nil), s.withFile(fromFile)} {
+		stored, err := service.Stored(s.T().Context())
+		s.Require().NoError(err)
+		s.Equal(map[string]string{"oidc-sign-up": "true"}, stored)
+	}
 }
 
 // A value that would stop the server from starting is refused before it is

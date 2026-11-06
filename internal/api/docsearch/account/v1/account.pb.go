@@ -136,9 +136,9 @@ type Setting struct {
 	Editable bool `protobuf:"varint,9,opt,name=editable,proto3" json:"editable,omitempty"`
 	// Boolean settings take true or false.
 	Boolean bool `protobuf:"varint,10,opt,name=boolean,proto3" json:"boolean,omitempty"`
-	// Stored is the value the database keeps for a docsearch started without
-	// docsearch.yaml, which takes effect when the server next starts. It is
-	// set only when has_stored is.
+	// Stored is the value the database keeps, which takes effect when the
+	// server next starts for a setting nothing stronger sets. It is set only
+	// when has_stored is.
 	Stored        string `protobuf:"bytes,11,opt,name=stored,proto3" json:"stored,omitempty"`
 	HasStored     bool   `protobuf:"varint,12,opt,name=has_stored,json=hasStored,proto3" json:"has_stored,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -998,13 +998,14 @@ func (x *UpdateSignInRequest) GetChanges() []*Change {
 
 type UpdateSignInResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// File is docsearch.yaml with the changes made, for a docsearch that reads
-	// one: nothing was stored, and the operator deploys the file.
+	// File is docsearch.yaml with the changes to settings it holds made, and
+	// empty when the changes touched none. Those were not stored: the
+	// operator deploys the file.
 	File string `protobuf:"bytes,1,opt,name=file,proto3" json:"file,omitempty"`
 	// ChangedLines are the 1-based lines of file the changes touched.
 	ChangedLines []int32 `protobuf:"varint,2,rep,packed,name=changed_lines,json=changedLines,proto3" json:"changed_lines,omitempty"`
-	// Saved is true when the changes were kept in the database, to take
-	// effect when the server next starts.
+	// Saved is true when changes to settings the file does not hold were kept
+	// in the database, to take effect when the server next starts.
 	Saved         bool `protobuf:"varint,3,opt,name=saved,proto3" json:"saved,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

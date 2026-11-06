@@ -34,7 +34,7 @@ type StoredSettingsRow struct {
 	Value string
 }
 
-// Settings an administrator changed, kept for a docsearch started without
+// Settings an administrator changed in the library UI, beneath
 // docsearch.yaml. The request role reads them; set_setting writes them.
 func (q *Queries) StoredSettings(ctx context.Context) ([]StoredSettingsRow, error) {
 	rows, err := q.db.QueryContext(ctx, storedSettings)

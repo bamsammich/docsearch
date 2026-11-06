@@ -48,9 +48,9 @@ message Setting {
   bool editable = 9;
   // Boolean settings take true or false.
   bool boolean = 10;
-  // Stored is the value the database keeps for a docsearch started without
-  // docsearch.yaml, which takes effect when the server next starts. It is
-  // set only when has_stored is.
+  // Stored is the value the database keeps, which takes effect when the
+  // server next starts for a setting nothing stronger sets. It is set only
+  // when has_stored is.
   string stored = 11;
   bool has_stored = 12;
 }
@@ -121,13 +121,14 @@ message UpdateSignInRequest {
 }
 
 message UpdateSignInResponse {
-  // File is docsearch.yaml with the changes made, for a docsearch that reads
-  // one: nothing was stored, and the operator deploys the file.
+  // File is docsearch.yaml with the changes to settings it holds made, and
+  // empty when the changes touched none. Those were not stored: the
+  // operator deploys the file.
   string file = 1;
   // ChangedLines are the 1-based lines of file the changes touched.
   repeated int32 changed_lines = 2;
-  // Saved is true when the changes were kept in the database, to take
-  // effect when the server next starts.
+  // Saved is true when changes to settings the file does not hold were kept
+  // in the database, to take effect when the server next starts.
   bool saved = 3;
 }
 
@@ -167,7 +168,7 @@ service AccountService {
   // SignIn is how people sign in, as the server's configuration sets it.
   rpc SignIn(SignInRequest) returns (SignInResponse) {}
 
-  // UpdateSignIn changes sign-in settings: into an updated docsearch.yaml
-  // for a docsearch that reads one, or into the database otherwise.
+  // UpdateSignIn changes sign-in settings: one docsearch.yaml holds into an
+  // updated file, and any other into the database.
   rpc UpdateSignIn(UpdateSignInRequest) returns (UpdateSignInResponse) {}
 }

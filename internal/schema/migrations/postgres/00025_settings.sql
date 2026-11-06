@@ -1,13 +1,13 @@
--- Version 25: a docsearch started without docsearch.yaml keeps the settings
--- an administrator changes in the database.
+-- Version 25: the settings an administrator changes in the library UI are
+-- kept in the database.
 --
--- A deployment keeps its settings in one place. Started with docsearch.yaml,
--- the file holds them and a change made in the library UI is never stored:
--- it becomes the updated file, for the operator to commit and deploy.
--- Started without one, a change made in the UI is kept here and read when
--- the server next starts. Either way the environment and the command line
--- override what is kept, so an operator can always correct a setting
--- without the UI.
+-- A setting is taken from the strongest place that holds it: the command
+-- line, the environment, docsearch.yaml, this table, then the default. A
+-- change made in the UI is kept here and read when the server next starts,
+-- for a setting nothing stronger sets. A setting docsearch.yaml holds is
+-- changed in the file instead, so the operator's deployment stays the
+-- record of it, and the environment and the command line always win, so an
+-- operator can correct any setting without the UI.
 --
 -- The request role reads this table. It writes only through set_setting,
 -- which refuses anyone who is not an administrator.

@@ -80,8 +80,8 @@ type AccountServiceClient interface {
 	SetAdmin(context.Context, *connect.Request[v1.SetAdminRequest]) (*connect.Response[v1.SetAdminResponse], error)
 	// SignIn is how people sign in, as the server's configuration sets it.
 	SignIn(context.Context, *connect.Request[v1.SignInRequest]) (*connect.Response[v1.SignInResponse], error)
-	// UpdateSignIn changes sign-in settings: into an updated docsearch.yaml
-	// for a docsearch that reads one, or into the database otherwise.
+	// UpdateSignIn changes sign-in settings: one docsearch.yaml holds into an
+	// updated file, and any other into the database.
 	UpdateSignIn(context.Context, *connect.Request[v1.UpdateSignInRequest]) (*connect.Response[v1.UpdateSignInResponse], error)
 }
 
@@ -231,8 +231,8 @@ type AccountServiceHandler interface {
 	SetAdmin(context.Context, *connect.Request[v1.SetAdminRequest]) (*connect.Response[v1.SetAdminResponse], error)
 	// SignIn is how people sign in, as the server's configuration sets it.
 	SignIn(context.Context, *connect.Request[v1.SignInRequest]) (*connect.Response[v1.SignInResponse], error)
-	// UpdateSignIn changes sign-in settings: into an updated docsearch.yaml
-	// for a docsearch that reads one, or into the database otherwise.
+	// UpdateSignIn changes sign-in settings: one docsearch.yaml holds into an
+	// updated file, and any other into the database.
 	UpdateSignIn(context.Context, *connect.Request[v1.UpdateSignInRequest]) (*connect.Response[v1.UpdateSignInResponse], error)
 }
 

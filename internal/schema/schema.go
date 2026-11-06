@@ -86,7 +86,7 @@ var History = map[int]string{
 	23: "libraries are created, shared and left through definer functions that record access_events",
 	24: "users.admin marks a docsearch administrator, whose changes to accounts go through definer " +
 		"functions that record account_events",
-	25: "settings keeps what an administrator changed for a docsearch started without docsearch.yaml",
+	25: "settings keeps what an administrator changed in the library UI, beneath docsearch.yaml",
 	26: "removing a password account frees its username and takes it out of shared libraries, " +
 		"refusing when it is a library's only admin",
 }

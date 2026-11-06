@@ -190,3 +190,22 @@ func (s *SettingsSuite) TestAConfigURLIsRefusedUnfetched() {
 	s.Require().ErrorContains(err, "names a file, not a URL")
 	s.Zero(asked.Load())
 }
+
+// The file sits above the database: a value the file holds stays, and a
+// stored value fills only what the file leaves out.
+func (s *SettingsSuite) TestTheFileWinsOverTheDatabase() {
+	s.write("auth:\n  mode: oidc\n  oidc:\n    issuer: https://id.example.com\n" +
+		"    resource: https://docs.example.com/mcp\npublic_url: https://file.example.com\n")
+
+	cfg, err := s.parse("--config", s.file)
+	s.Require().NoError(err)
+	applyStored(&cfg, map[string]string{
+		"public_url":        "https://stored.example.com",
+		"auth.oidc.sign_up": "true",
+	})
+
+	s.Equal("https://file.example.com", cfg.PublicURL)
+	s.Equal(config.FromFile, cfg.Origins["public-url"].Kind)
+	s.True(cfg.OIDC.SignUp)
+	s.Equal(config.FromDatabase, cfg.Origins["oidc-sign-up"].Kind)
+}

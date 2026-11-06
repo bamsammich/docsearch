@@ -144,9 +144,9 @@ export type Setting = Message<"docsearch.account.v1.Setting"> & {
   boolean: boolean;
 
   /**
-   * Stored is the value the database keeps for a docsearch started without
-   * docsearch.yaml, which takes effect when the server next starts. It is
-   * set only when has_stored is.
+   * Stored is the value the database keeps, which takes effect when the
+   * server next starts for a setting nothing stronger sets. It is set only
+   * when has_stored is.
    *
    * @generated from field: string stored = 11;
    */
@@ -464,8 +464,9 @@ export const UpdateSignInRequestSchema: GenMessage<UpdateSignInRequest> = /*@__P
  */
 export type UpdateSignInResponse = Message<"docsearch.account.v1.UpdateSignInResponse"> & {
   /**
-   * File is docsearch.yaml with the changes made, for a docsearch that reads
-   * one: nothing was stored, and the operator deploys the file.
+   * File is docsearch.yaml with the changes to settings it holds made, and
+   * empty when the changes touched none. Those were not stored: the
+   * operator deploys the file.
    *
    * @generated from field: string file = 1;
    */
@@ -479,8 +480,8 @@ export type UpdateSignInResponse = Message<"docsearch.account.v1.UpdateSignInRes
   changedLines: number[];
 
   /**
-   * Saved is true when the changes were kept in the database, to take
-   * effect when the server next starts.
+   * Saved is true when changes to settings the file does not hold were kept
+   * in the database, to take effect when the server next starts.
    *
    * @generated from field: bool saved = 3;
    */
@@ -609,8 +610,8 @@ export const AccountService: GenService<{
     output: typeof SignInResponseSchema;
   },
   /**
-   * UpdateSignIn changes sign-in settings: into an updated docsearch.yaml
-   * for a docsearch that reads one, or into the database otherwise.
+   * UpdateSignIn changes sign-in settings: one docsearch.yaml holds into an
+   * updated file, and any other into the database.
    *
    * @generated from rpc docsearch.account.v1.AccountService.UpdateSignIn
    */
