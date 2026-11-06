@@ -7,15 +7,16 @@
 -- name: CreateLibrary :one
 SELECT create_library(sqlc.arg(slug)::text, sqlc.arg(name)::text)::text AS library_id;
 
--- name: GrantLibrary :exec
-SELECT grant_library(sqlc.arg(slug)::text, sqlc.arg(username)::text, sqlc.arg(role)::text);
+-- name: GrantLibrary :one
+SELECT grant_library(sqlc.arg(slug)::text, sqlc.arg(username)::text, sqlc.arg(role)::text)::text
+  AS outcome;
 
 -- name: RevokeLibrary :exec
 SELECT revoke_library(sqlc.arg(slug)::text, sqlc.arg(username)::text);
 
 -- name: LibraryMembers :many
-SELECT m.username::text AS username, m.role::text AS role
-  FROM library_members(sqlc.arg(slug)::text) AS m(username, role);
+SELECT m.username::text AS username, m.role::text AS role, m.invited::boolean AS invited
+  FROM library_members(sqlc.arg(slug)::text) AS m(username, role, invited);
 
 -- name: LibraryEvents :many
 SELECT e.at::timestamptz AS at, e.actor::text AS actor, e.action::text AS action,
@@ -27,3 +28,14 @@ SELECT e.at::timestamptz AS at, e.actor::text AS actor, e.action::text AS action
 -- name: OwnUsername :one
 SELECT COALESCE(username, '')::text AS username
   FROM users WHERE user_id = current_setting('app.user_id', true);
+
+-- name: MyInvitations :many
+SELECT i.slug::text AS slug, i.name::text AS name, i.role::text AS role,
+       i.invited_by::text AS invited_by, i.invited_at::timestamptz AS invited_at
+  FROM my_invitations() AS i(slug, name, role, invited_by, invited_at);
+
+-- name: AcceptInvitation :one
+SELECT accept_invitation(sqlc.arg(slug)::text)::text AS role;
+
+-- name: DeclineInvitation :exec
+SELECT decline_invitation(sqlc.arg(slug)::text);

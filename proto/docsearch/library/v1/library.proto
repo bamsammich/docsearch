@@ -4,8 +4,9 @@ syntax = "proto3";
 //
 // A library is a set of documents people share. Each person has their own,
 // and anyone signed in can create a shared one, becoming its admin. Admins
-// grant others a role on it: a reader searches and reads it, an editor also
-// adds and removes documents, and an admin also manages who has which role.
+// invite others with a role on it: a reader searches and reads it, an editor
+// also adds and removes documents, and an admin also manages who has which
+// role. An invitation gives nothing until its invitee accepts it.
 package docsearch.library.v1;
 
 import "google/protobuf/timestamp.proto";
@@ -25,6 +26,21 @@ message Member {
   // usernames were recorded.
   string username = 1;
   string role = 2;
+  // Invited is someone asked to join with role who has not accepted. Only
+  // an admin sees them.
+  bool invited = 3;
+}
+
+// Invitation is a library the caller is asked to join.
+message Invitation {
+  // Library is the slug the library goes by once accepted.
+  string library = 1;
+  string name = 2;
+  // Role is what accepting gives the caller.
+  string role = 3;
+  // InvitedBy is the admin who sent it, or empty for a removed account.
+  string invited_by = 4;
+  google.protobuf.Timestamp at = 5;
 }
 
 // Event is one change to who may use a library.
@@ -33,10 +49,12 @@ message Event {
   // Actor made the change, and subject is whose role changed. Either is
   // empty for an account that has no username or was removed.
   string actor = 2;
-  // Action is 'create', 'grant' or 'revoke'.
+  // Action is 'create', 'grant', 'revoke', 'invite', 'accept', 'decline'
+  // or 'withdraw'. An admin withdraws an invitation, and its invitee
+  // accepts or declines it.
   string action = 3;
   string subject = 4;
-  // Role is the role granted, and empty for a revoke.
+  // Role is the role granted, offered or accepted, and empty otherwise.
   string role = 5;
 }
 
@@ -71,11 +89,15 @@ message GrantRequest {
   string library = 1;
   string username = 2;
   // Role is reader, editor or admin. Granting someone who already has a
-  // role changes it.
+  // role changes it, and granting anyone else invites them with it.
   string role = 3;
 }
 
-message GrantResponse {}
+message GrantResponse {
+  // Invited is true when the grant invited someone, and false when it
+  // changed the role of someone who held one.
+  bool invited = 1;
+}
 
 message RevokeRequest {
   string library = 1;
@@ -92,6 +114,26 @@ message EventsResponse {
   repeated Event events = 1;
 }
 
+message InvitationsRequest {}
+
+message InvitationsResponse {
+  repeated Invitation invitations = 1;
+}
+
+message AcceptRequest {
+  string library = 1;
+}
+
+message AcceptResponse {
+  Library library = 1;
+}
+
+message DeclineRequest {
+  string library = 1;
+}
+
+message DeclineResponse {}
+
 // LibraryService creates libraries and shares them. The database decides
 // every rule: who may grant, that a library keeps an admin, and that a
 // library the caller cannot act on answers as one that does not exist.
@@ -105,14 +147,26 @@ service LibraryService {
   // Members is everyone with a role on a library the caller reads.
   rpc Members(MembersRequest) returns (MembersResponse) {}
 
-  // Grant gives someone a role, or changes theirs. Admins only.
+  // Grant changes the role of someone who holds one, and invites anyone
+  // else. Admins only.
   rpc Grant(GrantRequest) returns (GrantResponse) {}
 
-  // Revoke takes someone's role away. An admin may revoke anyone's, and
-  // anyone may revoke their own, which is how a member leaves.
+  // Revoke takes someone's role away, or withdraws their invitation. An
+  // admin may revoke anyone's, and anyone may revoke their own role, which
+  // is how a member leaves.
   rpc Revoke(RevokeRequest) returns (RevokeResponse) {}
 
   // Events is the record of who changed which role, oldest first. Admins
   // only.
   rpc Events(EventsRequest) returns (EventsResponse) {}
+
+  // Invitations are the libraries the caller is asked to join, newest
+  // first.
+  rpc Invitations(InvitationsRequest) returns (InvitationsResponse) {}
+
+  // Accept joins a library the caller is invited to, with the role offered.
+  rpc Accept(AcceptRequest) returns (AcceptResponse) {}
+
+  // Decline refuses an invitation.
+  rpc Decline(DeclineRequest) returns (DeclineResponse) {}
 }

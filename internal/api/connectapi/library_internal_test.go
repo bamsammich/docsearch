@@ -16,6 +16,7 @@ func TestSharingRefusalsAnswerWithTheirCodes(t *testing.T) {
 	for refusal, want := range map[error]connect.Code{
 		sharing.ErrNoLibrary:                            connect.CodeNotFound,
 		sharing.ErrNoAccount:                            connect.CodeNotFound,
+		sharing.ErrNoInvitation:                         connect.CodeNotFound,
 		sharing.ErrLastAdmin:                            connect.CodeFailedPrecondition,
 		sharing.ErrNameTaken:                            connect.CodeAlreadyExists,
 		sharing.ErrInvalid:                              connect.CodeInvalidArgument,

@@ -183,20 +183,30 @@ its admin.
 
 ```bash
 docsearch library create platform --name "Platform docs"
-docsearch library grant platform alice --role editor
+docsearch library grant platform alice --role editor   # invites alice
 docsearch library members platform
 docsearch library revoke platform alice   # revoke your own to leave
 docsearch library log platform            # who changed which role, for admins
+```
+
+Granting a role to someone who has none invites them. Until they accept,
+nothing in the library appears in their searches or their agents' searches:
+
+```bash
+docsearch library invitations
+docsearch library accept platform
+docsearch library decline platform
 ```
 
 | role | may |
 |---|---|
 | reader | search and read the library |
 | editor | also add, re-read and remove documents |
-| admin | also grant and revoke roles, and read the log |
+| admin | also invite people, change and revoke roles, and read the log |
 
-Someone can be granted a role once they have signed in at least once, which
-is when their username is recorded. A library always keeps an admin, so the
+Someone can be invited once they have signed in at least once, which is when
+their username is recorded. Granting to someone already invited changes the
+role offered, and revoking withdraws the invitation. A library always keeps an admin, so the
 last admin cannot leave or step down until they make someone else admin.
 
 An agent's search covers every library its user reads. `list_documents`
@@ -222,7 +232,8 @@ and how well, the ingest queue, and a search field that calls the same MCP
 `search` tool an agent does.
 
 The library picker at the top of the side navigation chooses which library
-the pages show, and creates a new one. Search covers every library you read
+the pages show, and creates a new one. Invitations wait at the top of the
+picker, to accept or decline. Search covers every library you read
 unless its scope picker names one library or one document.
 
 | page | what it answers |
@@ -230,7 +241,7 @@ unless its scope picker names one library or one document.
 | Documents | A table of documents with problems first, and beside it the selected document's checks: what an agent loses on each, and on which pages. A coverage bar splits every document into what agents reach by chapter, what they reach without usable chapters, and what never reached the index. Rename a document here; its `doc_id` stays the same. Re-ingest reads the file again even when it is unchanged, so a document picks up the current extraction and grading. |
 | Reader | A document's chunks in order, as agents receive them, beside its outline. Chunks without a heading and pages that never reached the index are marked. A search result opens the reader at its chunk. Original opens the file the document was read from. |
 | Ingest | Add a site or upload a file, with an optional title, and follow each job through discover, fetch, extract, chunk and index. Failures are listed first. |
-| Members | Who may use the library and in which role. An admin invites someone by username, changes a role, removes a member and reads the log of changes. Anyone but the last admin can leave. |
+| Members | Who may use the library and in which role. An admin invites someone by username, sees who has not yet accepted, changes a role, removes a member or withdraws an invitation, and reads the log of changes. Anyone but the last admin can leave. |
 | People | For administrators, from the account menu: every account, and in `password` mode adding, resetting, unlocking and removing them. |
 | Sign-in | For administrators: how people sign in, and the flag or environment variable that sets each part. |
 | Search | The field at the top of every page, focused with `/`. Search the whole library or one document, narrow by section, and see the ranked results and the raw response an agent receives. |

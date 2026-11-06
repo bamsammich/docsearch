@@ -6,8 +6,9 @@
 //
 // A library is a set of documents people share. Each person has their own,
 // and anyone signed in can create a shared one, becoming its admin. Admins
-// grant others a role on it: a reader searches and reads it, an editor also
-// adds and removes documents, and an admin also manages who has which role.
+// invite others with a role on it: a reader searches and reads it, an editor
+// also adds and removes documents, and an admin also manages who has which
+// role. An invitation gives nothing until its invitee accepts it.
 package libraryv1connect
 
 import (
@@ -51,6 +52,13 @@ const (
 	LibraryServiceRevokeProcedure = "/docsearch.library.v1.LibraryService/Revoke"
 	// LibraryServiceEventsProcedure is the fully-qualified name of the LibraryService's Events RPC.
 	LibraryServiceEventsProcedure = "/docsearch.library.v1.LibraryService/Events"
+	// LibraryServiceInvitationsProcedure is the fully-qualified name of the LibraryService's
+	// Invitations RPC.
+	LibraryServiceInvitationsProcedure = "/docsearch.library.v1.LibraryService/Invitations"
+	// LibraryServiceAcceptProcedure is the fully-qualified name of the LibraryService's Accept RPC.
+	LibraryServiceAcceptProcedure = "/docsearch.library.v1.LibraryService/Accept"
+	// LibraryServiceDeclineProcedure is the fully-qualified name of the LibraryService's Decline RPC.
+	LibraryServiceDeclineProcedure = "/docsearch.library.v1.LibraryService/Decline"
 )
 
 // LibraryServiceClient is a client for the docsearch.library.v1.LibraryService service.
@@ -61,14 +69,23 @@ type LibraryServiceClient interface {
 	Create(context.Context, *connect.Request[v1.CreateRequest]) (*connect.Response[v1.CreateResponse], error)
 	// Members is everyone with a role on a library the caller reads.
 	Members(context.Context, *connect.Request[v1.MembersRequest]) (*connect.Response[v1.MembersResponse], error)
-	// Grant gives someone a role, or changes theirs. Admins only.
+	// Grant changes the role of someone who holds one, and invites anyone
+	// else. Admins only.
 	Grant(context.Context, *connect.Request[v1.GrantRequest]) (*connect.Response[v1.GrantResponse], error)
-	// Revoke takes someone's role away. An admin may revoke anyone's, and
-	// anyone may revoke their own, which is how a member leaves.
+	// Revoke takes someone's role away, or withdraws their invitation. An
+	// admin may revoke anyone's, and anyone may revoke their own role, which
+	// is how a member leaves.
 	Revoke(context.Context, *connect.Request[v1.RevokeRequest]) (*connect.Response[v1.RevokeResponse], error)
 	// Events is the record of who changed which role, oldest first. Admins
 	// only.
 	Events(context.Context, *connect.Request[v1.EventsRequest]) (*connect.Response[v1.EventsResponse], error)
+	// Invitations are the libraries the caller is asked to join, newest
+	// first.
+	Invitations(context.Context, *connect.Request[v1.InvitationsRequest]) (*connect.Response[v1.InvitationsResponse], error)
+	// Accept joins a library the caller is invited to, with the role offered.
+	Accept(context.Context, *connect.Request[v1.AcceptRequest]) (*connect.Response[v1.AcceptResponse], error)
+	// Decline refuses an invitation.
+	Decline(context.Context, *connect.Request[v1.DeclineRequest]) (*connect.Response[v1.DeclineResponse], error)
 }
 
 // NewLibraryServiceClient constructs a client for the docsearch.library.v1.LibraryService service.
@@ -118,17 +135,38 @@ func NewLibraryServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(libraryServiceMethods.ByName("Events")),
 			connect.WithClientOptions(opts...),
 		),
+		invitations: connect.NewClient[v1.InvitationsRequest, v1.InvitationsResponse](
+			httpClient,
+			baseURL+LibraryServiceInvitationsProcedure,
+			connect.WithSchema(libraryServiceMethods.ByName("Invitations")),
+			connect.WithClientOptions(opts...),
+		),
+		accept: connect.NewClient[v1.AcceptRequest, v1.AcceptResponse](
+			httpClient,
+			baseURL+LibraryServiceAcceptProcedure,
+			connect.WithSchema(libraryServiceMethods.ByName("Accept")),
+			connect.WithClientOptions(opts...),
+		),
+		decline: connect.NewClient[v1.DeclineRequest, v1.DeclineResponse](
+			httpClient,
+			baseURL+LibraryServiceDeclineProcedure,
+			connect.WithSchema(libraryServiceMethods.ByName("Decline")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // libraryServiceClient implements LibraryServiceClient.
 type libraryServiceClient struct {
-	list    *connect.Client[v1.ListRequest, v1.ListResponse]
-	create  *connect.Client[v1.CreateRequest, v1.CreateResponse]
-	members *connect.Client[v1.MembersRequest, v1.MembersResponse]
-	grant   *connect.Client[v1.GrantRequest, v1.GrantResponse]
-	revoke  *connect.Client[v1.RevokeRequest, v1.RevokeResponse]
-	events  *connect.Client[v1.EventsRequest, v1.EventsResponse]
+	list        *connect.Client[v1.ListRequest, v1.ListResponse]
+	create      *connect.Client[v1.CreateRequest, v1.CreateResponse]
+	members     *connect.Client[v1.MembersRequest, v1.MembersResponse]
+	grant       *connect.Client[v1.GrantRequest, v1.GrantResponse]
+	revoke      *connect.Client[v1.RevokeRequest, v1.RevokeResponse]
+	events      *connect.Client[v1.EventsRequest, v1.EventsResponse]
+	invitations *connect.Client[v1.InvitationsRequest, v1.InvitationsResponse]
+	accept      *connect.Client[v1.AcceptRequest, v1.AcceptResponse]
+	decline     *connect.Client[v1.DeclineRequest, v1.DeclineResponse]
 }
 
 // List calls docsearch.library.v1.LibraryService.List.
@@ -161,6 +199,21 @@ func (c *libraryServiceClient) Events(ctx context.Context, req *connect.Request[
 	return c.events.CallUnary(ctx, req)
 }
 
+// Invitations calls docsearch.library.v1.LibraryService.Invitations.
+func (c *libraryServiceClient) Invitations(ctx context.Context, req *connect.Request[v1.InvitationsRequest]) (*connect.Response[v1.InvitationsResponse], error) {
+	return c.invitations.CallUnary(ctx, req)
+}
+
+// Accept calls docsearch.library.v1.LibraryService.Accept.
+func (c *libraryServiceClient) Accept(ctx context.Context, req *connect.Request[v1.AcceptRequest]) (*connect.Response[v1.AcceptResponse], error) {
+	return c.accept.CallUnary(ctx, req)
+}
+
+// Decline calls docsearch.library.v1.LibraryService.Decline.
+func (c *libraryServiceClient) Decline(ctx context.Context, req *connect.Request[v1.DeclineRequest]) (*connect.Response[v1.DeclineResponse], error) {
+	return c.decline.CallUnary(ctx, req)
+}
+
 // LibraryServiceHandler is an implementation of the docsearch.library.v1.LibraryService service.
 type LibraryServiceHandler interface {
 	// List is every library the caller reads, their own first.
@@ -169,14 +222,23 @@ type LibraryServiceHandler interface {
 	Create(context.Context, *connect.Request[v1.CreateRequest]) (*connect.Response[v1.CreateResponse], error)
 	// Members is everyone with a role on a library the caller reads.
 	Members(context.Context, *connect.Request[v1.MembersRequest]) (*connect.Response[v1.MembersResponse], error)
-	// Grant gives someone a role, or changes theirs. Admins only.
+	// Grant changes the role of someone who holds one, and invites anyone
+	// else. Admins only.
 	Grant(context.Context, *connect.Request[v1.GrantRequest]) (*connect.Response[v1.GrantResponse], error)
-	// Revoke takes someone's role away. An admin may revoke anyone's, and
-	// anyone may revoke their own, which is how a member leaves.
+	// Revoke takes someone's role away, or withdraws their invitation. An
+	// admin may revoke anyone's, and anyone may revoke their own role, which
+	// is how a member leaves.
 	Revoke(context.Context, *connect.Request[v1.RevokeRequest]) (*connect.Response[v1.RevokeResponse], error)
 	// Events is the record of who changed which role, oldest first. Admins
 	// only.
 	Events(context.Context, *connect.Request[v1.EventsRequest]) (*connect.Response[v1.EventsResponse], error)
+	// Invitations are the libraries the caller is asked to join, newest
+	// first.
+	Invitations(context.Context, *connect.Request[v1.InvitationsRequest]) (*connect.Response[v1.InvitationsResponse], error)
+	// Accept joins a library the caller is invited to, with the role offered.
+	Accept(context.Context, *connect.Request[v1.AcceptRequest]) (*connect.Response[v1.AcceptResponse], error)
+	// Decline refuses an invitation.
+	Decline(context.Context, *connect.Request[v1.DeclineRequest]) (*connect.Response[v1.DeclineResponse], error)
 }
 
 // NewLibraryServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -222,6 +284,24 @@ func NewLibraryServiceHandler(svc LibraryServiceHandler, opts ...connect.Handler
 		connect.WithSchema(libraryServiceMethods.ByName("Events")),
 		connect.WithHandlerOptions(opts...),
 	)
+	libraryServiceInvitationsHandler := connect.NewUnaryHandler(
+		LibraryServiceInvitationsProcedure,
+		svc.Invitations,
+		connect.WithSchema(libraryServiceMethods.ByName("Invitations")),
+		connect.WithHandlerOptions(opts...),
+	)
+	libraryServiceAcceptHandler := connect.NewUnaryHandler(
+		LibraryServiceAcceptProcedure,
+		svc.Accept,
+		connect.WithSchema(libraryServiceMethods.ByName("Accept")),
+		connect.WithHandlerOptions(opts...),
+	)
+	libraryServiceDeclineHandler := connect.NewUnaryHandler(
+		LibraryServiceDeclineProcedure,
+		svc.Decline,
+		connect.WithSchema(libraryServiceMethods.ByName("Decline")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/docsearch.library.v1.LibraryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case LibraryServiceListProcedure:
@@ -236,6 +316,12 @@ func NewLibraryServiceHandler(svc LibraryServiceHandler, opts ...connect.Handler
 			libraryServiceRevokeHandler.ServeHTTP(w, r)
 		case LibraryServiceEventsProcedure:
 			libraryServiceEventsHandler.ServeHTTP(w, r)
+		case LibraryServiceInvitationsProcedure:
+			libraryServiceInvitationsHandler.ServeHTTP(w, r)
+		case LibraryServiceAcceptProcedure:
+			libraryServiceAcceptHandler.ServeHTTP(w, r)
+		case LibraryServiceDeclineProcedure:
+			libraryServiceDeclineHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -267,4 +353,16 @@ func (UnimplementedLibraryServiceHandler) Revoke(context.Context, *connect.Reque
 
 func (UnimplementedLibraryServiceHandler) Events(context.Context, *connect.Request[v1.EventsRequest]) (*connect.Response[v1.EventsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.library.v1.LibraryService.Events is not implemented"))
+}
+
+func (UnimplementedLibraryServiceHandler) Invitations(context.Context, *connect.Request[v1.InvitationsRequest]) (*connect.Response[v1.InvitationsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.library.v1.LibraryService.Invitations is not implemented"))
+}
+
+func (UnimplementedLibraryServiceHandler) Accept(context.Context, *connect.Request[v1.AcceptRequest]) (*connect.Response[v1.AcceptResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.library.v1.LibraryService.Accept is not implemented"))
+}
+
+func (UnimplementedLibraryServiceHandler) Decline(context.Context, *connect.Request[v1.DeclineRequest]) (*connect.Response[v1.DeclineResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.library.v1.LibraryService.Decline is not implemented"))
 }

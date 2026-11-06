@@ -28,6 +28,34 @@ COMMENT ON SCHEMA public IS 'standard public schema';
 
 
 --
+-- Name: accept_invitation(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.accept_invitation(lib_slug text) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor  text := current_setting('app.user_id', true);
+  lib    text := invitation_for(lib_slug);
+  offer  library_invitations;
+BEGIN
+  IF lib IS NULL THEN
+    RAISE EXCEPTION 'no invitation to a library named %', lib_slug USING ERRCODE = 'DSL05';
+  END IF;
+  DELETE FROM library_invitations WHERE library_id = lib AND user_id = actor
+    RETURNING * INTO offer;
+  INSERT INTO library_grants (library_id, user_id, role, granted_by)
+    VALUES (lib, actor, offer.role, offer.invited_by)
+  ON CONFLICT (library_id, user_id) DO NOTHING;
+  INSERT INTO access_events (library_id, actor, action, subject, role)
+    VALUES (lib, actor, 'accept', actor, offer.role);
+  RETURN offer.role;
+END;
+$$;
+
+
+--
 -- Name: admins_left(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -129,6 +157,28 @@ $$;
 
 
 --
+-- Name: decline_invitation(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.decline_invitation(lib_slug text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor text := current_setting('app.user_id', true);
+  lib   text := invitation_for(lib_slug);
+BEGIN
+  IF lib IS NULL THEN
+    RAISE EXCEPTION 'no invitation to a library named %', lib_slug USING ERRCODE = 'DSL05';
+  END IF;
+  DELETE FROM library_invitations WHERE library_id = lib AND user_id = actor;
+  INSERT INTO access_events (library_id, actor, action, subject)
+    VALUES (lib, actor, 'decline', actor);
+END;
+$$;
+
+
+--
 -- Name: fail_unclaimable_jobs(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -158,7 +208,7 @@ $$;
 -- Name: grant_library(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.grant_library(lib_slug text, member_username text, new_role text) RETURNS void
+CREATE FUNCTION public.grant_library(lib_slug text, member_username text, new_role text) RETURNS text
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
@@ -177,16 +227,38 @@ BEGIN
   IF role_rank(new_role) IS NULL THEN
     RAISE EXCEPTION 'a role is reader, editor or admin' USING ERRCODE = '22023';
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM library_grants WHERE library_id = lib AND user_id = member) THEN
+    INSERT INTO library_invitations (library_id, user_id, role, invited_by)
+      VALUES (lib, member, new_role, actor)
+    ON CONFLICT (library_id, user_id) DO UPDATE
+      SET role = EXCLUDED.role, invited_by = EXCLUDED.invited_by, invited_at = now();
+    INSERT INTO access_events (library_id, actor, action, subject, role)
+      VALUES (lib, actor, 'invite', member, new_role);
+    RETURN 'invited';
+  END IF;
   IF admins_left(lib, member, new_role) = 0 THEN
     RAISE EXCEPTION 'that would leave % without an admin', lib_slug USING ERRCODE = 'DSL03';
   END IF;
-  INSERT INTO library_grants (library_id, user_id, role, granted_by)
-    VALUES (lib, member, new_role, actor)
-  ON CONFLICT (library_id, user_id) DO UPDATE
-    SET role = EXCLUDED.role, granted_by = EXCLUDED.granted_by, granted_at = now();
+  UPDATE library_grants SET role = new_role, granted_by = actor, granted_at = now()
+   WHERE library_id = lib AND user_id = member;
   INSERT INTO access_events (library_id, actor, action, subject, role)
     VALUES (lib, actor, 'grant', member, new_role);
+  RETURN 'granted';
 END;
+$$;
+
+
+--
+-- Name: invitation_for(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.invitation_for(lib_slug text) RETURNS text
+    LANGUAGE sql STABLE
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT i.library_id
+    FROM library_invitations i JOIN libraries l ON l.library_id = i.library_id
+   WHERE l.slug = lib_slug AND i.user_id = current_setting('app.user_id', true);
 $$;
 
 
@@ -236,7 +308,7 @@ $$;
 -- Name: library_members(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.library_members(lib_slug text) RETURNS TABLE(username text, role text)
+CREATE FUNCTION public.library_members(lib_slug text) RETURNS TABLE(username text, role text, invited boolean)
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
@@ -247,11 +319,34 @@ BEGIN
     RAISE EXCEPTION 'no library named % that you read', lib_slug USING ERRCODE = 'DSL01';
   END IF;
   RETURN QUERY
-    SELECT COALESCE(u.username, ''), g.role
-      FROM library_grants g JOIN users u ON u.user_id = g.user_id
-     WHERE g.library_id = lib
-     ORDER BY role_rank(g.role) DESC, u.username;
+    SELECT m.who, m.held, m.pending
+      FROM (SELECT COALESCE(u.username, ''), g.role, false
+              FROM library_grants g JOIN users u ON u.user_id = g.user_id
+             WHERE g.library_id = lib
+            UNION ALL
+            SELECT COALESCE(u.username, ''), i.role, true
+              FROM library_invitations i JOIN users u ON u.user_id = i.user_id
+             WHERE i.library_id = lib AND library_by_slug(lib_slug, 'admin') IS NOT NULL
+           ) AS m(who, held, pending)
+     ORDER BY m.pending, role_rank(m.held) DESC, m.who;
 END;
+$$;
+
+
+--
+-- Name: my_invitations(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_invitations() RETURNS TABLE(slug text, name text, role text, invited_by text, invited_at timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT l.slug, l.name, i.role, COALESCE(u.username, ''), i.invited_at
+    FROM library_invitations i
+    JOIN libraries l ON l.library_id = i.library_id
+    LEFT JOIN users u ON u.user_id = i.invited_by
+   WHERE i.user_id = current_setting('app.user_id', true)
+   ORDER BY i.invited_at DESC, l.slug;
 $$;
 
 
@@ -282,6 +377,10 @@ BEGIN
      WHERE g.user_id = OLD.user_id AND l.kind = 'shared';
   DELETE FROM library_grants g USING libraries l
    WHERE l.library_id = g.library_id AND g.user_id = OLD.user_id AND l.kind = 'shared';
+  INSERT INTO access_events (library_id, actor, action, subject)
+    SELECT i.library_id, NULLIF(current_setting('app.user_id', true), ''), 'withdraw', OLD.user_id
+      FROM library_invitations i WHERE i.user_id = OLD.user_id;
+  DELETE FROM library_invitations WHERE user_id = OLD.user_id;
   UPDATE users SET username = NULL WHERE user_id = OLD.user_id;
   RETURN OLD;
 END;
@@ -379,6 +478,12 @@ BEGIN
   END IF;
   IF (SELECT kind FROM libraries WHERE library_id = lib) = 'personal' AND member = lib THEN
     RAISE EXCEPTION 'a personal library keeps its owner' USING ERRCODE = 'DSL03';
+  END IF;
+  DELETE FROM library_invitations WHERE library_id = lib AND user_id = member;
+  IF FOUND THEN
+    INSERT INTO access_events (library_id, actor, action, subject)
+      VALUES (lib, actor, 'withdraw', member);
+    RETURN;
   END IF;
   IF admins_left(lib, member, NULL) = 0 THEN
     RAISE EXCEPTION 'that would leave % without an admin', lib_slug USING ERRCODE = 'DSL03';
@@ -520,7 +625,7 @@ CREATE TABLE public.access_events (
     action text NOT NULL,
     subject text,
     role text,
-    CONSTRAINT access_events_action_check CHECK ((action = ANY (ARRAY['create'::text, 'grant'::text, 'revoke'::text])))
+    CONSTRAINT access_events_action_check CHECK ((action = ANY (ARRAY['create'::text, 'grant'::text, 'revoke'::text, 'invite'::text, 'accept'::text, 'decline'::text, 'withdraw'::text])))
 );
 
 
@@ -762,6 +867,20 @@ CREATE TABLE public.library_grants (
     granted_by text,
     granted_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT library_grants_role_check CHECK ((role = ANY (ARRAY['reader'::text, 'editor'::text, 'admin'::text])))
+);
+
+
+--
+-- Name: library_invitations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.library_invitations (
+    library_id text NOT NULL,
+    user_id text NOT NULL,
+    role text NOT NULL,
+    invited_by text,
+    invited_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT library_invitations_role_check CHECK ((role = ANY (ARRAY['reader'::text, 'editor'::text, 'admin'::text])))
 );
 
 
@@ -1040,6 +1159,14 @@ ALTER TABLE ONLY public.library_grants
 
 
 --
+-- Name: library_invitations library_invitations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_invitations
+    ADD CONSTRAINT library_invitations_pkey PRIMARY KEY (library_id, user_id);
+
+
+--
 -- Name: oauth_auth_requests oauth_auth_requests_code_hash_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1258,6 +1385,13 @@ CREATE INDEX library_grants_user ON public.library_grants USING btree (user_id);
 
 
 --
+-- Name: library_invitations_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX library_invitations_user ON public.library_invitations USING btree (user_id);
+
+
+--
 -- Name: users_identity; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1408,6 +1542,30 @@ ALTER TABLE ONLY public.library_grants
 
 ALTER TABLE ONLY public.library_grants
     ADD CONSTRAINT library_grants_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+
+--
+-- Name: library_invitations library_invitations_invited_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_invitations
+    ADD CONSTRAINT library_invitations_invited_by_fkey FOREIGN KEY (invited_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+
+--
+-- Name: library_invitations library_invitations_library_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_invitations
+    ADD CONSTRAINT library_invitations_library_id_fkey FOREIGN KEY (library_id) REFERENCES public.libraries(library_id) ON DELETE CASCADE;
+
+
+--
+-- Name: library_invitations library_invitations_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_invitations
+    ADD CONSTRAINT library_invitations_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
 
 
 --

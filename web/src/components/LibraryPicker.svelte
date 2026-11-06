@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Code, ConnectError } from "@connectrpc/connect";
-  import type { Library } from "../gen/docsearch/library/v1/library_pb";
+  import type { Invitation, Library } from "../gen/docsearch/library/v1/library_pb";
   import { problem } from "../lib/api";
   import { libraries, nameOf, own, slugOf } from "../lib/libraries.svelte";
   import { initialOf } from "../lib/names";
@@ -77,6 +77,39 @@
     if (moved && (router.view === "read" || router.docId)) router.go("library");
   }
 
+  let answering = $state("");
+  let inviteError = $state("");
+
+  async function accept(i: Invitation): Promise<void> {
+    answering = i.library;
+    inviteError = "";
+    try {
+      await libraries.accept(i.library);
+      toast.show(`Joined ${i.name || i.library} as ${i.role}.`);
+      pop?.hidePopover();
+      if (router.view === "read" || router.docId) router.go("library");
+    } catch (err) {
+      inviteError = problem(err);
+      void libraries.load();
+    } finally {
+      answering = "";
+    }
+  }
+
+  async function decline(i: Invitation): Promise<void> {
+    answering = i.library;
+    inviteError = "";
+    try {
+      await libraries.decline(i.library);
+      toast.show(`Declined ${i.name || i.library}.`);
+    } catch (err) {
+      inviteError = problem(err);
+      void libraries.load();
+    } finally {
+      answering = "";
+    }
+  }
+
   function startCreating(): void {
     creating = true;
     queueMicrotask(() => nameField?.focus());
@@ -123,12 +156,14 @@
   }
 </script>
 
-<button class="picker at-{where}" popovertarget={id} bind:this={trigger} aria-label={`Library: ${libraries.name}. Switch library`}>
+<button class="picker at-{where}" popovertarget={id} bind:this={trigger}
+  aria-label={`Library: ${libraries.name}. Switch library${libraries.invitations.length ? `. ${libraries.invitations.length === 1 ? "1 invitation" : `${libraries.invitations.length} invitations`}` : ""}`}>
   <span class="tile current" aria-hidden="true">{initial(libraries.current)}</span>
   <span class="picker-text">
     <span class="picker-name">{libraries.name}</span>
     <span class="picker-role">{roleOf(libraries.current)}</span>
   </span>
+  {#if libraries.invitations.length}<span class="picker-dot" aria-hidden="true"></span>{/if}
   <Icon name="selector" />
 </button>
 <div {id} popover class="picker-pop at-{where}" bind:this={pop} onbeforetoggle={placing} ontoggle={toggled}>
@@ -137,6 +172,25 @@
       <Icon name="search" /><span class="sr-only">Find a library</span>
       <input type="search" placeholder="Find a library" autocomplete="off" bind:value={find} bind:this={findField} />
     </label>
+  {/if}
+  {#if libraries.invitations.length}
+    <ul class="picker-list" aria-label="Invitations">
+      <li class="picker-group" aria-hidden="true">Invitations</li>
+      {#each libraries.invitations as i (i.library)}
+        <li class="picker-invite">
+          <span class="tile" aria-hidden="true">{initialOf(i.name || i.library)}</span>
+          <span class="invite-text">
+            <span class="opt-name">{i.name || i.library}</span>
+            <span class="opt-role">{i.invitedBy ? `${i.invitedBy} invited you as ${i.role}` : `Invited as ${i.role}`}</span>
+          </span>
+          <span class="invite-btns">
+            <button class="btn primary small" onclick={() => accept(i)} disabled={answering !== ""}>Accept</button>
+            <button class="btn quiet small" onclick={() => decline(i)} disabled={answering !== ""}>Decline</button>
+          </span>
+        </li>
+      {/each}
+      {#if inviteError}<li class="err picker-err" role="alert">{inviteError}</li>{/if}
+    </ul>
   {/if}
   <ul class="picker-list" aria-label="Libraries">
     {#each ownShown as lib (lib.library)}{@render option(lib)}{/each}

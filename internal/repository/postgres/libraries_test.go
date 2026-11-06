@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
 
@@ -43,7 +44,22 @@ func (s *LibrariesSuite) as(user string) *postgres.Libraries {
 func (s *LibrariesSuite) team() {
 	_, err := s.as("ana").Create(s.T().Context(), "team", "Team docs")
 	s.Require().NoError(err)
-	s.Require().NoError(s.as("ana").Grant(s.T().Context(), "team", "ben", sharing.Editor))
+	s.join("team", "ben", sharing.Editor)
+}
+
+// join has ana invite who to slug with role, and who accept.
+func (s *LibrariesSuite) join(slug, who, role string) {
+	invited, err := s.as("ana").Grant(s.T().Context(), slug, who, role)
+	s.Require().NoError(err)
+	s.Require().True(invited)
+	_, err = s.as(who).Accept(s.T().Context(), slug)
+	s.Require().NoError(err)
+}
+
+// grant is by's grant of role on slug to who, for its refusal alone.
+func (s *LibrariesSuite) grant(by, slug, who, role string) error {
+	_, err := s.as(by).Grant(s.T().Context(), slug, who, role)
+	return err
 }
 
 func (s *LibrariesSuite) TestACreatedLibraryIsListedWithItsCreatorAsAdmin() {
@@ -94,11 +110,9 @@ func (s *LibrariesSuite) TestANameIsTakenOnceAndPersonalIsReserved() {
 
 func (s *LibrariesSuite) TestOnlyAnAdminGrantsAndAStrangerIsToldTheSame() {
 	s.team()
-	ctx := s.T().Context()
-
-	asEditor := s.as("ben").Grant(ctx, "team", "cy", sharing.Reader)
-	asStranger := s.as("cy").Grant(ctx, "team", "cy", sharing.Admin)
-	nowhere := s.as("ana").Grant(ctx, "nowhere", "cy", sharing.Reader)
+	asEditor := s.grant("ben", "team", "cy", sharing.Reader)
+	asStranger := s.grant("cy", "team", "cy", sharing.Admin)
+	nowhere := s.grant("ana", "nowhere", "cy", sharing.Reader)
 	s.Require().ErrorIs(asEditor, sharing.ErrNoLibrary)
 	s.Require().ErrorIs(asStranger, sharing.ErrNoLibrary)
 	s.Require().ErrorIs(nowhere, sharing.ErrNoLibrary)
@@ -106,19 +120,17 @@ func (s *LibrariesSuite) TestOnlyAnAdminGrantsAndAStrangerIsToldTheSame() {
 
 func (s *LibrariesSuite) TestAGrantNeedsAKnownAccountAndARealRole() {
 	s.team()
-	ctx := s.T().Context()
-	s.Require().
-		ErrorIs(s.as("ana").Grant(ctx, "team", "nobody", sharing.Reader), sharing.ErrNoAccount)
-	s.Require().ErrorIs(s.as("ana").Grant(ctx, "team", "cy", "owner"), sharing.ErrInvalid)
+	s.Require().ErrorIs(s.grant("ana", "team", "nobody", sharing.Reader), sharing.ErrNoAccount)
+	s.Require().ErrorIs(s.grant("ana", "team", "cy", "owner"), sharing.ErrInvalid)
 }
 
 func (s *LibrariesSuite) TestALibraryAlwaysKeepsAnAdmin() {
 	s.team()
 	ctx := s.T().Context()
-	s.Require().ErrorIs(s.as("ana").Grant(ctx, "team", "ana", sharing.Editor), sharing.ErrLastAdmin)
+	s.Require().ErrorIs(s.grant("ana", "team", "ana", sharing.Editor), sharing.ErrLastAdmin)
 	s.Require().ErrorIs(s.as("ana").Revoke(ctx, "team", "ana"), sharing.ErrLastAdmin)
 
-	s.Require().NoError(s.as("ana").Grant(ctx, "team", "ben", sharing.Admin))
+	s.Require().NoError(s.grant("ana", "team", "ben", sharing.Admin))
 	s.Require().
 		NoError(s.as("ana").Revoke(ctx, "team", "ana"), "with a second admin, the first may leave")
 }
@@ -131,7 +143,7 @@ func (s *LibrariesSuite) TestAMemberLeavesAndAnAdminRemovesThem() {
 	s.Require().
 		ErrorIs(err, sharing.ErrNoLibrary, "ben left, so team answers as if it were not there")
 
-	s.Require().NoError(s.as("ana").Grant(ctx, "team", "cy", sharing.Reader))
+	s.join("team", "cy", sharing.Reader)
 	s.Require().ErrorIs(s.as("ben").Revoke(ctx, "team", "cy"), sharing.ErrNoLibrary)
 	s.Require().NoError(s.as("ana").Revoke(ctx, "team", "cy"))
 }
@@ -157,15 +169,119 @@ func (s *LibrariesSuite) TestMembersAreSeenByMembersAndEventsByAdmins() {
 	s.Require().NoError(s.as("ana").Revoke(ctx, "team", "ben"))
 	events, err := s.as("ana").Events(ctx, "team")
 	s.Require().NoError(err)
-	s.Require().Len(events, 3)
+	s.Require().Len(events, 4)
 	for i, want := range []sharing.Event{
 		{Actor: "ana", Action: "create", Subject: "ana", Role: sharing.Admin},
-		{Actor: "ana", Action: "grant", Subject: "ben", Role: sharing.Editor},
+		{Actor: "ana", Action: "invite", Subject: "ben", Role: sharing.Editor},
+		{Actor: "ben", Action: "accept", Subject: "ben", Role: sharing.Editor},
 		{Actor: "ana", Action: "revoke", Subject: "ben"},
 	} {
 		want.At = events[i].At
 		s.Equal(want, events[i])
 	}
+}
+
+// An invitation gives nothing until it is accepted: the library is not
+// listed, its members are hidden, and nothing can be written into it.
+func (s *LibrariesSuite) TestAnInvitationGivesNothingUntilAccepted() {
+	s.team()
+	ctx := s.T().Context()
+	invited, err := s.as("ana").Grant(ctx, "team", "cy", sharing.Reader)
+	s.Require().NoError(err)
+	s.True(invited)
+
+	libs, err := s.as("cy").List(ctx)
+	s.Require().NoError(err)
+	s.Len(libs, 1, "only cy's own library")
+	_, err = s.as("cy").Members(ctx, "team")
+	s.Require().ErrorIs(err, sharing.ErrNoLibrary)
+	_, _, err = postgres.NewJobs(s.db.App, pgsession.Scope{User: "cy", Library: s.libraryID("team")}).
+		Add(ctx, "https://example.com/docs", "", false)
+	s.Require().Error(err, "an invitation is no grant")
+
+	invitations, err := s.as("cy").Invitations(ctx)
+	s.Require().NoError(err)
+	s.Require().Len(invitations, 1)
+	invitations[0].At = time.Time{}
+	s.Equal(sharing.Invitation{
+		Library: "team", Title: "Team docs", Role: sharing.Reader, InvitedBy: "ana",
+	}, invitations[0])
+
+	joined, err := s.as("cy").Accept(ctx, "team")
+	s.Require().NoError(err)
+	s.Equal(sharing.Library{Name: "team", Title: "Team docs", Role: sharing.Reader}, joined)
+	libs, err = s.as("cy").List(ctx)
+	s.Require().NoError(err)
+	s.Len(libs, 2)
+	invitations, err = s.as("cy").Invitations(ctx)
+	s.Require().NoError(err)
+	s.Empty(invitations)
+	_, err = s.as("cy").Accept(ctx, "team")
+	s.Require().ErrorIs(err, sharing.ErrNoInvitation, "an invitation is accepted once")
+}
+
+// An admin sees who is invited, and nobody else does.
+func (s *LibrariesSuite) TestOnlyAnAdminSeesWhoIsInvited() {
+	s.team()
+	ctx := s.T().Context()
+	s.Require().NoError(s.grant("ana", "team", "cy", sharing.Reader))
+
+	members, err := s.as("ana").Members(ctx, "team")
+	s.Require().NoError(err)
+	s.Equal([]sharing.Member{
+		{Username: "ana", Role: sharing.Admin},
+		{Username: "ben", Role: sharing.Editor},
+		{Username: "cy", Role: sharing.Reader, Invited: true},
+	}, members)
+
+	members, err = s.as("ben").Members(ctx, "team")
+	s.Require().NoError(err)
+	s.Len(members, 2, "an editor does not see invitations")
+}
+
+// Inviting someone again changes the role offered, and granting a member
+// changes their role without inviting them.
+func (s *LibrariesSuite) TestInvitingAgainChangesTheRoleOffered() {
+	s.team()
+	ctx := s.T().Context()
+	s.Require().NoError(s.grant("ana", "team", "cy", sharing.Reader))
+	s.Require().NoError(s.grant("ana", "team", "cy", sharing.Admin))
+	joined, err := s.as("cy").Accept(ctx, "team")
+	s.Require().NoError(err)
+	s.Equal(sharing.Admin, joined.Role)
+
+	invited, err := s.as("ana").Grant(ctx, "team", "ben", sharing.Reader)
+	s.Require().NoError(err)
+	s.False(invited, "ben is a member, so the grant changes his role")
+}
+
+// An invitee declines, an admin withdraws, and either leaves nothing to
+// accept. A library with no invitation answers alike, real or not.
+func (s *LibrariesSuite) TestAnInvitationIsDeclinedOrWithdrawn() {
+	s.team()
+	ctx := s.T().Context()
+	s.Require().NoError(s.grant("ana", "team", "cy", sharing.Reader))
+	s.Require().NoError(s.as("cy").Decline(ctx, "team"))
+	_, err := s.as("cy").Accept(ctx, "team")
+	s.Require().ErrorIs(err, sharing.ErrNoInvitation)
+
+	s.Require().NoError(s.grant("ana", "team", "cy", sharing.Reader))
+	s.Require().NoError(s.as("ana").Revoke(ctx, "team", "cy"))
+	_, err = s.as("cy").Accept(ctx, "team")
+	s.Require().ErrorIs(err, sharing.ErrNoInvitation)
+
+	s.Require().ErrorIs(s.as("cy").Decline(ctx, "nowhere"), sharing.ErrNoInvitation)
+	s.Require().ErrorIs(s.as("ben").Decline(ctx, "team"), sharing.ErrNoInvitation)
+
+	events, err := s.as("ana").Events(ctx, "team")
+	s.Require().NoError(err)
+	actions := make([]string, 0, len(events))
+	for _, e := range events {
+		actions = append(actions, e.Action)
+	}
+	s.Equal([]string{
+		"create", "invite", "accept", "invite", "decline", "invite", "withdraw",
+	}, actions)
 }
 
 // An account reads its own username and nobody else's, and one that has not
