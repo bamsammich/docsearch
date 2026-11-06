@@ -82,3 +82,23 @@ func (s *StoreSuite) TestUsersListsEveryAccount() {
 	s.Require().NoError(err)
 	s.Equal([]string{owner.Builtin, "user-a"}, users)
 }
+
+func (s *StoreSuite) TestANameIsRecordedAndKeptByWhoeverHoldsIt() {
+	ctx := s.T().Context()
+	s.Require().
+		NoError(s.store.Create(ctx, "u1", resource.Identity{Issuer: "https://one.example", Subject: "a"}))
+	s.Require().
+		NoError(s.store.Create(ctx, "u2", resource.Identity{Issuer: "https://two.example", Subject: "a"}))
+
+	named, err := s.store.Name(ctx, "u1", "alice")
+	s.Require().NoError(err)
+	s.True(named)
+
+	named, err = s.store.Name(ctx, "u2", "alice")
+	s.Require().NoError(err)
+	s.False(named, "a second provider's alice does not take the first's name")
+
+	named, err = s.store.Name(ctx, "u1", "alice")
+	s.Require().NoError(err)
+	s.True(named, "recording the same name again changes nothing")
+}

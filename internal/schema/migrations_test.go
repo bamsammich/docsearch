@@ -789,3 +789,37 @@ func (s *MigrationSuite) TestLinkIssuerGoesDownAndUpAgain() {
 	s.upTo(21)
 	s.True(s.columnExists("upload_links", "issued_by"))
 }
+
+// -- 00022_usernames ------------------------------------------------------
+
+func (s *MigrationSuite) TestUsernamesComeFromPasswordAccounts() {
+	s.upTo(21)
+	s.exec(`SELECT create_account('u-old', 'docsearch', 'u-old')`)
+	s.exec(
+		`INSERT INTO password_accounts (username, user_id, password_hash) VALUES ('old.name', 'u-old', 'x')`,
+	)
+
+	s.upTo(22)
+
+	s.Equal(
+		1,
+		s.count(`SELECT COUNT(*) FROM users WHERE user_id = 'u-old' AND username = 'old.name'`),
+	)
+	s.exec(`SELECT create_account('u-new', 'docsearch', 'u-new')`)
+	s.exec(
+		`INSERT INTO password_accounts (username, user_id, password_hash) VALUES ('new-name', 'u-new', 'x')`,
+	)
+	s.Equal(
+		1,
+		s.count(`SELECT COUNT(*) FROM users WHERE user_id = 'u-new' AND username = 'new-name'`),
+		"an account added after the migration takes its name from the same row",
+	)
+}
+
+func (s *MigrationSuite) TestUsernamesGoDownAndUpAgain() {
+	s.upTo(22)
+	s.down()
+	s.False(s.columnExists("users", "username"))
+	s.upTo(22)
+	s.True(s.columnExists("users", "username"))
+}
