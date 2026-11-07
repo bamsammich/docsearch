@@ -420,6 +420,7 @@ var sharingCodes = map[error]connect.Code{
 	sharing.ErrLastAdmin:         connect.CodeFailedPrecondition,
 	sharing.ErrNameTaken:         connect.CodeAlreadyExists,
 	sharing.ErrInvalid:           connect.CodeInvalidArgument,
+	sharing.ErrLibraryName:       connect.CodeInvalidArgument,
 }
 
 func sharingError(err error) error {

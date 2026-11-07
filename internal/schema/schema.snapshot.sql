@@ -135,12 +135,15 @@ $$;
 --
 
 CREATE FUNCTION public.admins_left(lib text, member text, new_role text) RETURNS bigint
-    LANGUAGE sql STABLE
+    LANGUAGE plpgsql
     SET search_path TO 'public', 'pg_temp'
     AS $$
-  SELECT (SELECT COUNT(*) FROM library_grants
+BEGIN
+  PERFORM 1 FROM libraries WHERE library_id = lib FOR NO KEY UPDATE;
+  RETURN (SELECT count(*) FROM library_grants
            WHERE library_id = lib AND role = 'admin' AND user_id <> member)
          + CASE WHEN new_role = 'admin' THEN 1 ELSE 0 END;
+END;
 $$;
 
 
@@ -872,6 +875,23 @@ BEGIN
              WHERE i.library_id = lib AND library_by_slug(lib_slug, 'admin') IS NOT NULL
            ) AS m(who, held, pending)
      ORDER BY m.pending, role_rank(m.held) DESC, m.who;
+END;
+$$;
+
+
+--
+-- Name: library_name_printable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.library_name_printable() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+BEGIN
+  IF NEW.name ~ '[[:cntrl:]]' THEN
+    RAISE EXCEPTION 'a library name holds no control characters' USING ERRCODE = 'DSL07';
+  END IF;
+  RETURN NEW;
 END;
 $$;
 
@@ -2184,6 +2204,14 @@ ALTER TABLE public.libraries
 
 
 --
+-- Name: libraries libraries_name_printable; Type: CHECK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE public.libraries
+    ADD CONSTRAINT libraries_name_printable CHECK ((name !~ '[[:cntrl:]]'::text)) NOT VALID;
+
+
+--
 -- Name: libraries libraries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2523,6 +2551,13 @@ CREATE TRIGGER access_event_names BEFORE INSERT ON public.access_events FOR EACH
 --
 
 CREATE TRIGGER group_event_names BEFORE INSERT ON public.group_events FOR EACH ROW EXECUTE FUNCTION public.access_event_names();
+
+
+--
+-- Name: libraries library_name_printable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER library_name_printable BEFORE INSERT OR UPDATE OF name ON public.libraries FOR EACH ROW EXECUTE FUNCTION public.library_name_printable();
 
 
 --

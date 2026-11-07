@@ -256,6 +256,7 @@ var refusals = map[string]error{
 	"DSL04": sharing.ErrNameTaken,
 	"DSL05": sharing.ErrNoInvitation,
 	"DSL06": sharing.ErrTooMany,
+	"DSL07": sharing.ErrLibraryName,
 	"DSG01": sharing.ErrNoGroup,
 	"DSG02": sharing.ErrGroupRole,
 	"DSG03": sharing.ErrLastMaintainer,

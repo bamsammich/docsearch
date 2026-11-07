@@ -1,6 +1,7 @@
 package postgres_test
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 	"testing"
@@ -465,4 +466,66 @@ func (s *LibrariesSuite) TestAnAccountReadsItsOwnUsername() {
 	name, err = s.as("dee").Username(s.T().Context())
 	s.Require().NoError(err)
 	s.Empty(name)
+}
+
+// tx is a transaction acting as user, for running two callers at once.
+func (s *LibrariesSuite) tx(user string) *sql.Tx {
+	tx, err := s.db.App.BeginTx(s.T().Context(), nil)
+	s.Require().NoError(err)
+	_, err = tx.ExecContext(s.T().Context(), `SELECT set_config('app.user_id', $1, true)`, user)
+	s.Require().NoError(err)
+	return tx
+}
+
+// Two admins demoting each other, or both leaving, at the same moment leave
+// the library one of them: the second waits for the first and is refused.
+func (s *LibrariesSuite) TestTwoAdminsCannotBothStepDownAtOnce() {
+	for name, steps := range map[string][2]string{
+		"demote each other": {
+			`SELECT grant_library('team', 'ben', 'editor')`,
+			`SELECT grant_library('team', 'ana', 'editor')`,
+		},
+		"both leave": {
+			`SELECT revoke_library('team', 'ana')`,
+			`SELECT revoke_library('team', 'ben')`,
+		},
+	} {
+		s.Run(name, func() {
+			s.SetupTest()
+			s.team()
+			s.Require().NoError(s.grant("ana", "team", "ben", sharing.Admin))
+			first, second := s.tx("ana"), s.tx("ben")
+			_, err := first.ExecContext(s.T().Context(), steps[0])
+			s.Require().NoError(err)
+			refused := make(chan error, 1)
+			go func() {
+				_, err := second.ExecContext(s.T().Context(), steps[1])
+				refused <- err
+			}()
+			s.Require().Eventually(func() bool {
+				return s.count(`SELECT count(*) FROM pg_locks WHERE NOT granted`) > 0
+			}, 10*time.Second, 20*time.Millisecond, "the second waits on the library's lock")
+			s.Require().NoError(first.Commit())
+			s.Require().ErrorContains(<-refused, "without an admin")
+			s.Require().NoError(second.Rollback())
+			s.Equal(
+				1,
+				s.count(`SELECT count(*) FROM library_grants g JOIN libraries l USING (library_id)
+				WHERE l.slug = 'team' AND g.role = 'admin'`),
+			)
+		})
+	}
+}
+
+// A library name holds no control characters, which a terminal printing
+// `docsearch library list` would obey.
+func (s *LibrariesSuite) TestALibraryNameHoldsNoControlCharacters() {
+	ctx := s.T().Context()
+	_, err := s.as("ana").Create(ctx, "ops", "Ops\x1b]8;;https://example.com\x07")
+	s.Require().ErrorIs(err, sharing.ErrLibraryName)
+	s.team()
+	_, err = s.as("ana").Rename(ctx, "team", "Team\rdocs")
+	s.Require().ErrorIs(err, sharing.ErrLibraryName)
+	_, err = s.as("ana").Rename(ctx, "team", "Team handbook")
+	s.Require().NoError(err)
 }
