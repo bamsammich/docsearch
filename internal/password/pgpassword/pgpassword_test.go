@@ -509,9 +509,10 @@ func (s *StoreSuite) TestAnAdministratorManagesAccountsAsTheRequestRole() {
 		password.ErrNoSuchAccount)
 }
 
-// Removing an account takes it out of its groups, and a group it alone
-// maintained passes to the heir.
-func (s *StoreSuite) TestARemovedAccountsGroupsPassToTheHeir() {
+// Removing an account takes it out of its groups. A group it alone
+// maintained is left to the administrators, not handed to the heir, who
+// would otherwise reach the group's libraries.
+func (s *StoreSuite) TestARemovedAccountsGroupsAreLeftToTheAdministrators() {
 	ctx := s.T().Context()
 	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
 	s.Require().NoError(s.admin.Add(ctx, "bob", "user-b", "hash", false))
@@ -521,11 +522,11 @@ func (s *StoreSuite) TestARemovedAccountsGroupsPassToTheHeir() {
 	s.Require().NoError(s.app.Remove(owner.With(ctx, "user-b"), "alice",
 		password.Handover{To: "bob"}))
 
-	var role string
+	var heirs int
 	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx, `
-		SELECT m.role FROM group_members m JOIN groups g ON g.group_id = m.group_id
-		 WHERE g.slug = 'eng' AND m.user_id = 'user-b'`).Scan(&role))
-	s.Equal("maintainer", role)
+		SELECT count(*) FROM group_members m JOIN groups g ON g.group_id = m.group_id
+		 WHERE g.slug = 'eng' AND m.user_id = 'user-b'`).Scan(&heirs))
+	s.Zero(heirs, "the heir is not made a member")
 	var left int
 	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx,
 		`SELECT count(*) FROM group_members WHERE user_id = 'user-a'`).Scan(&left))
