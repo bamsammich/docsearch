@@ -4,11 +4,13 @@
 //   #/ingest             #/search             #/search/<doc_id>
 //   #/read/<doc_id>      #/read/<doc_id>/<chunk_id>
 //   #/members            #/people             #/signin
+//   #/groups             #/groups/<slug>      #/allgroups
 
-export type View = "library" | "ingest" | "members" | "people" | "signin" | "search" | "read";
+export type View =
+  | "library" | "ingest" | "members" | "people" | "signin" | "search" | "read" | "groups" | "allgroups";
 
 /** The views that belong to docsearch as a whole rather than to one library. */
-export const adminViews: readonly View[] = ["people", "signin"];
+export const adminViews: readonly View[] = ["people", "allgroups", "signin"];
 
 interface Route {
   view: View;
@@ -16,15 +18,26 @@ interface Route {
   chunkId: number | null;
 }
 
+/** decodeURIComponent, or the text as it is when it isn't valid percent-encoding. */
+function decode(text: string): string {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+}
+
 function parse(hash: string): Route {
   const [, view = "", ...rest] = hash.replace(/^#/, "").split("/");
-  if (view === "ingest" || view === "members" || view === "people" || view === "signin")
+  if (view === "ingest" || view === "members" || view === "people" || view === "signin" || view === "allgroups")
     return { view, docId: "", chunkId: null };
+  // A group's page names the group where a document's names the document.
+  if (view === "groups") return { view, docId: decode(rest[0] ?? ""), chunkId: null };
   if (view === "read") {
     const chunk = Number(rest[1]);
-    return { view, docId: decodeURIComponent(rest[0] ?? ""), chunkId: Number.isInteger(chunk) && rest[1] ? chunk : null };
+    return { view, docId: decode(rest[0] ?? ""), chunkId: Number.isInteger(chunk) && rest[1] ? chunk : null };
   }
-  const docId = decodeURIComponent(rest.join("/"));
+  const docId = decode(rest.join("/"));
   if (view === "search") return { view, docId, chunkId: null };
   return { view: "library", docId, chunkId: null };
 }

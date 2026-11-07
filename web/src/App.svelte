@@ -6,10 +6,14 @@
   import { queue } from "./lib/queue.svelte";
   import { adminViews, router } from "./lib/router.svelte";
   import { admin } from "./lib/admin.svelte";
+  import { groupsStore as groups } from "./lib/groups.svelte";
   import { search } from "./lib/search.svelte";
   import { session } from "./lib/session.svelte";
   import { toast } from "./lib/toast.svelte";
   import AccountMenu from "./components/AccountMenu.svelte";
+  import AdminGroupsView from "./components/AdminGroupsView.svelte";
+  import GroupView from "./components/GroupView.svelte";
+  import GroupsView from "./components/GroupsView.svelte";
   import Brand from "./components/Brand.svelte";
   import Icon from "./components/Icon.svelte";
   import IngestView from "./components/IngestView.svelte";
@@ -37,6 +41,22 @@
     void libraries.load();
     void admin.load();
     return queue.watch();
+  });
+
+  // Only password and OIDC sign-in have accounts to put in groups.
+  const grouping = $derived(session.config?.auth === "password" || session.config?.auth === "oidc");
+  $effect(() => {
+    if (session.status === "signed-in" && grouping) void groups.load();
+  });
+  $effect(() => {
+    if (router.view === "groups" && session.config && !grouping) router.go("library");
+  });
+  // Joining a group adds its libraries.
+  let joined = -1;
+  $effect(() => {
+    const count = groups.mine.length;
+    if (joined >= 0 && count !== joined) void libraries.load();
+    joined = count;
   });
 
   // A refusal of what the account's role no longer allows reads its
@@ -93,14 +113,17 @@
   const ingestAlert = $derived(queue.failed + queue.stalled);
   const ingestCount = $derived(ingestAlert || queue.active);
   const config = $derived(session.config);
-  const titles = { library: "Documents", ingest: "Ingest", members: "Members", people: "People", signin: "Sign-in", search: "Search", read: "Reader" } as const;
+  const titles = { library: "Documents", ingest: "Ingest", members: "Members", people: "People", signin: "Sign-in", search: "Search", read: "Reader", groups: "Groups", allgroups: "Groups" } as const;
   const administering = $derived(adminViews.includes(router.view));
+  // The groups pages belong to the account rather than to one library.
+  const onGroups = $derived(router.view === "groups");
 
   const instance = $derived(config?.instanceLabel ?? "");
 
   $effect(() => {
     const page = session.status !== "signed-in" ? "docsearch"
       : administering ? `${titles[router.view]} · Administration · docsearch`
+      : onGroups ? (router.docId ? `${groups.byId(router.docId)?.name ?? router.docId} · Groups · docsearch` : "Groups · docsearch")
       : `${titles[router.view]} · ${libraries.name} · docsearch`;
     document.title = instance ? `${instance} · ${page}` : page;
   });
@@ -156,9 +179,25 @@
           <a class="section" href="#/people" aria-current={router.view === "people" ? "page" : undefined}>
             <Icon name="person" /><span class="section-name">People</span>
           </a>
+          <a class="section" href="#/allgroups" aria-current={router.view === "allgroups" ? "page" : undefined}>
+            <Icon name="group" /><span class="section-name">Groups</span>
+          </a>
           <a class="section" href="#/signin" aria-current={router.view === "signin" ? "page" : undefined}>
             <Icon name="lock" /><span class="section-name">Sign-in</span>
           </a>
+        </nav>
+      {:else if onGroups}
+        <a class="side-back" href="#/library"><Icon name="back" /><span>{libraries.name}</span></a>
+        <nav class="sections" aria-label="Groups">
+          <a class="section" href="#/groups" aria-current={router.docId ? undefined : "page"}>
+            <Icon name="group" /><span class="section-name">Groups</span>
+            {#if groups.invitations.length}<span class="count hot" aria-label={groups.invitations.length === 1 ? "1 invitation" : `${groups.invitations.length} invitations`}>{groups.invitations.length}</span>{/if}
+          </a>
+          {#each groups.mine as g (g.group)}
+            <a class="section section-sub" href={`#/groups/${encodeURIComponent(g.group)}`} aria-current={router.docId === g.group ? "page" : undefined}>
+              <span class="section-name">{g.name}</span>
+            </a>
+          {/each}
         </nav>
       {:else}
         <div class="side-picker"><LibraryPicker id="library-picker" where="side" /></div>
@@ -183,7 +222,7 @@
     </aside>
 
     <header class="topbar">
-      {#if !administering}<div class="top-picker"><LibraryPicker id="library-picker-top" where="top" /></div>{/if}
+      {#if !administering && !onGroups}<div class="top-picker"><LibraryPicker id="library-picker-top" where="top" /></div>{/if}
       <form class="gsearch" role="search" onsubmit={submit} novalidate>
         <Icon name="search" />
         <label class="sr-only" for="g-q">Search every library you can read</label>
@@ -206,7 +245,7 @@
         <kbd class="key" aria-hidden="true">/</kbd>
       </form>
       <div class="top-end">
-        {#if router.view !== "ingest" && !administering && libraries.canEdit}
+        {#if router.view !== "ingest" && !administering && !onGroups && libraries.canEdit}
           <a class="btn on-frame add" href="#/ingest"><Icon name="plus" /><span>Add document</span></a>
         {/if}
       </div>
@@ -220,7 +259,7 @@
         </div>
       {/if}
       {#if libraries.error}<div class="banner" role="alert"><span>{libraries.error}</span></div>{/if}
-      {#if router.view === "people"}<PeopleView />{:else if router.view === "signin"}<SignInView />{:else if router.view === "ingest"}<IngestView />{:else if router.view === "members"}<MembersView />{:else if router.view === "search"}<SearchView />{:else if router.view === "read"}<ReaderView />{:else}<LibraryView />{/if}
+      {#if router.view === "people"}<PeopleView />{:else if router.view === "allgroups"}<AdminGroupsView />{:else if router.view === "groups"}{#if router.docId}<GroupView />{:else}<GroupsView />{/if}{:else if router.view === "signin"}<SignInView />{:else if router.view === "ingest"}<IngestView />{:else if router.view === "members"}<MembersView />{:else if router.view === "search"}<SearchView />{:else if router.view === "read"}<ReaderView />{:else}<LibraryView />{/if}
     </main>
   </div>
 {/if}

@@ -11,6 +11,10 @@ describe("slugOf", () => {
     expect(slugOf("Café notes")).toBe("cafe-notes");
   });
 
+  it("keeps an accented letter as its base letter", () => {
+    expect(slugOf("Équipe Ünïcode")).toBe("equipe-unicode");
+  });
+
   it("is empty for a name with no letter or digit", () => {
     expect(slugOf("—!—")).toBe("");
   });

@@ -97,7 +97,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .section { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border-radius: 7px; color: var(--on-frame-muted); font-size: 14px; font-weight: 500; text-decoration: none; transition: background .15s, color .15s; }
 .section:hover { background: var(--frame-2); color: var(--on-frame); }
 .section[aria-current="page"] { background: var(--frame-2); color: var(--on-frame); }
-.section-name { flex: 1; }
+.section-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .count { font-size: 12px; font-weight: 600; color: var(--frame-live); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .count.hot { color: var(--frame-alert); }
 .side-foot { margin-top: auto; }
@@ -140,8 +140,8 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .picker-err { padding: 6px 10px; font-size: 13px; }
 .picker-invite.deleted { background: var(--surface-2); }
 .picker-invite.deleted .tile { background: var(--line-strong); color: var(--ink-2); }
-.rename { display: grid; gap: 6px; }
-.rename .hint { margin: 0; }
+.lib-rename { display: grid; gap: 6px; }
+.lib-rename .hint { margin: 0; }
 .picker-list + .picker-list { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--line-soft); }
 .picker { position: relative; }
 .picker-dot { position: absolute; top: 6px; left: 30px; width: 9px; height: 9px; border-radius: 50%; background: var(--frame-alert); box-shadow: 0 0 0 2px var(--frame-2); }
@@ -678,6 +678,7 @@ details.help p { margin: 8px 0 0; color: var(--muted); }
   .side-picker { display: none; }
   /* Administration's tab bar: Back and its two pages, without the heading. */
   .sections-label { display: none; }
+  .section-sub { display: none; }
   .side-back { flex-direction: column; justify-content: center; gap: 3px; min-height: 50px; margin: 0; padding: 0 8px; font-size: 11px; max-width: 30%; }
   .side-back .i { width: 22px; height: 22px; }
   .top-picker { display: block; grid-column: 1; grid-row: 1; min-width: 0; max-width: 260px; }
@@ -715,3 +716,25 @@ details.help p { margin: 8px 0 0; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Groups: the same rows as Members, with a square tile for a group. */
+.groups { max-width: 860px; display: grid; gap: 22px; }
+.gtile { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; background: var(--accent-weak); color: var(--accent); font-size: 12px; font-weight: 700; }
+.gtile .i { width: 16px; height: 16px; }
+.gtile.muted-tile { background: var(--surface-2); color: var(--muted); }
+.grow-link { color: var(--ink); text-decoration: none; }
+.grow-link:hover { background: var(--surface-2); }
+.mlist li:last-child .grow-link { border-bottom: 0; }
+.grow-invite { background: var(--accent-weak); }
+.groups .hint, .mlist-wrap .hint { margin: 0; font-size: 12px; color: var(--muted); }
+.crumb { font-size: 13px; text-decoration: none; }
+.section-sub { padding-left: 36px; }
+.share-kind { display: inline-flex; gap: 2px; justify-self: start; padding: 2px; border: 1px solid var(--line-strong); border-radius: 8px; font-size: 13px; }
+.share-kind label { display: inline-flex; align-items: center; min-height: 28px; padding: 0 12px; border-radius: 6px; color: var(--ink-2); cursor: pointer; }
+.share-kind label.on { background: var(--surface-2); color: var(--ink); font-weight: 500; }
+.share-kind input { position: absolute; opacity: 0; pointer-events: none; }
+.share-kind label:has(input:focus-visible) { box-shadow: 0 0 0 3px var(--accent-weak); }
+.mname a { color: var(--ink); }
+.choice-list { display: grid; gap: 2px; }
+.hint .i { width: 12px; height: 12px; margin-right: 4px; vertical-align: -2px; }
+.menu-count { margin-left: auto; min-width: 20px; padding: 0 6px; border-radius: 10px; background: var(--accent); color: #ffffff; font-size: 12px; font-weight: 600; text-align: center; }

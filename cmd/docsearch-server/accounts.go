@@ -93,6 +93,16 @@ func (p passwordAccounts) List(ctx context.Context) ([]password.Account, error) 
 // the flag that sets it. A rule the server keeps rather than one it is
 // configured with names no flag.
 func signInSettings(cfg config.Config) []connectapi.Setting {
+	// Who may create groups is shown on Administration › Groups, beside the
+	// groups; it travels with the sign-in settings because the same call
+	// changes it.
+	return append(signInOnly(cfg),
+		configured(cfg, "Who can create groups", cfg.GroupCreators, flagCreators,
+			config.EnvGroupCreators))
+}
+
+// signInOnly are how people sign in, for the Sign-in page.
+func signInOnly(cfg config.Config) []connectapi.Setting {
 	method := configured(cfg, "Sign-in", "", "auth", config.EnvAuth)
 	switch cfg.Auth {
 	case owner.Password:

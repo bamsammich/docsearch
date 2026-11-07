@@ -10,6 +10,7 @@ export function slugOf(name: string): string {
   return name
     .toLowerCase()
     .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+/, "")
     .slice(0, 40)
