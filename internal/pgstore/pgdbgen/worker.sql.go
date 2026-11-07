@@ -207,6 +207,18 @@ func (q *Queries) JobDocID(ctx context.Context, id int64) (sql.NullString, error
 	return doc_id, err
 }
 
+const purgeDeletedLibraries = `-- name: PurgeDeletedLibraries :one
+SELECT purge_deleted_libraries()::integer AS purged
+`
+
+// The worker purges libraries deleted longer ago than their grace period.
+func (q *Queries) PurgeDeletedLibraries(ctx context.Context) (int32, error) {
+	row := q.db.QueryRowContext(ctx, purgeDeletedLibraries)
+	var purged int32
+	err := row.Scan(&purged)
+	return purged, err
+}
+
 const recordJobDocID = `-- name: RecordJobDocID :execrows
 UPDATE ingest_jobs
    SET doc_id = $1, updated_at = now()

@@ -138,6 +138,10 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .invite-text { display: grid; flex: 1; min-width: 0; }
 .invite-btns { display: flex; gap: 4px; }
 .picker-err { padding: 6px 10px; font-size: 13px; }
+.picker-invite.deleted { background: var(--surface-2); }
+.picker-invite.deleted .tile { background: var(--line-strong); color: var(--ink-2); }
+.rename { display: grid; gap: 6px; }
+.rename .hint { margin: 0; }
 .picker-list + .picker-list { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--line-soft); }
 .picker { position: relative; }
 .picker-dot { position: absolute; top: 6px; left: 30px; width: 9px; height: 9px; border-radius: 50%; background: var(--frame-alert); box-shadow: 0 0 0 2px var(--frame-2); }

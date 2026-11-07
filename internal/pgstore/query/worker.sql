@@ -127,3 +127,7 @@ SELECT library_id::text AS library_id, requested_by::text AS requested_by
 -- rather than left to wait for a claim that cannot come.
 -- name: FailUnclaimableJobs :one
 SELECT fail_unclaimable_jobs()::integer AS failed;
+
+-- The worker purges libraries deleted longer ago than their grace period.
+-- name: PurgeDeletedLibraries :one
+SELECT purge_deleted_libraries()::integer AS purged;

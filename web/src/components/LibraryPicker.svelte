@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Code, ConnectError } from "@connectrpc/connect";
-  import type { Invitation, Library } from "../gen/docsearch/library/v1/library_pb";
+  import type { DeletedLibrary, Invitation, Library } from "../gen/docsearch/library/v1/library_pb";
   import { problem } from "../lib/api";
   import { libraries, nameOf, own, slugOf } from "../lib/libraries.svelte";
   import { initialOf } from "../lib/names";
@@ -79,6 +79,24 @@
   }
 
   let answering = $state("");
+  let restoring = $state("");
+  const restoreUntil = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" });
+
+  async function restore(d: DeletedLibrary): Promise<void> {
+    restoring = d.library;
+    inviteError = "";
+    try {
+      await libraries.restore(d.library);
+      toast.show(`Restored ${d.name || d.library}.`);
+      pop?.hidePopover();
+      if (router.view === "read" || router.docId) router.go("library");
+    } catch (err) {
+      inviteError = problem(err);
+      void libraries.load();
+    } finally {
+      restoring = "";
+    }
+  }
   let inviteError = $state("");
 
   async function accept(i: Invitation): Promise<void> {
@@ -200,6 +218,23 @@
     {#each shared as lib (lib.library)}{@render option(lib)}{/each}
     {#if !shown.length}<li class="picker-none">No library matches “{find.trim()}”.</li>{/if}
   </ul>
+  {#if libraries.deleted.length}
+    <ul class="picker-list" aria-label="Deleted libraries">
+      <li class="picker-group" aria-hidden="true">Deleted</li>
+      {#each libraries.deleted as d (d.library)}
+        <li class="picker-invite deleted">
+          <span class="tile" aria-hidden="true">{initialOf(d.name || d.library)}</span>
+          <span class="invite-text">
+            <span class="opt-name">{d.name || d.library}</span>
+            <span class="opt-role">{d.purgeAt ? `Gone for good on ${restoreUntil.format(new Date(Number(d.purgeAt.seconds) * 1000))}` : "Deleted"}</span>
+          </span>
+          <span class="invite-btns">
+            <button class="btn small" onclick={() => restore(d)} disabled={restoring !== ""}>Restore</button>
+          </span>
+        </li>
+      {/each}
+    </ul>
+  {/if}
   <div class="picker-foot">
     {#if creating}
       <form class="picker-new" onsubmit={create} novalidate>

@@ -26,6 +26,9 @@
   let rowError = $state<Record<string, string>>({});
   let removing = $state("");
   let leaving = $state(false);
+  let newName = $state("");
+  let renameError = $state("");
+  let deleting = $state(false);
   let busy = $state(false);
 
   const label = $derived(libraries.label);
@@ -62,6 +65,9 @@
     rowError = {};
     removing = "";
     leaving = false;
+    deleting = false;
+    renameError = "";
+    newName = libraries.name;
     void load(label);
   });
 
@@ -86,6 +92,8 @@
     const lines: { what: string; when: string }[] = [];
     const since = new Map<string, string>();
     const inviter = new Map<string, string>();
+    // The library is created under the name its first rename replaced.
+    const originally = events.find((e) => e.action === "rename" && e.detail)?.detail || libraries.name;
     let created = "";
     for (const e of events) {
       const actor = e.actor || "Someone";
@@ -93,7 +101,7 @@
       if (e.action === "create") {
         created = actor;
         since.set(e.actor, `Created the library ${dayOf(e)}`);
-        lines.push({ what: `${actor} created ${libraries.name}`, when: whenOf(e) });
+        lines.push({ what: `${actor} created ${originally}`, when: whenOf(e) });
       } else if (e.action === "grant") {
         // Creating a library makes its creator admin; the create line says so.
         if (e.subject === created && e.actor === created && !held.has(e.subject)) {
@@ -128,6 +136,12 @@
         lines.push({ what: `${actor} withdrew ${subject}'s invitation`, when: whenOf(e) });
         inviter.delete(e.subject);
         since.delete(e.subject);
+      } else if (e.action === "rename") {
+        lines.push({ what: e.detail ? `${actor} renamed it from ${e.detail}` : `${actor} renamed it`, when: whenOf(e) });
+      } else if (e.action === "delete") {
+        lines.push({ what: `${actor} deleted it`, when: whenOf(e) });
+      } else if (e.action === "restore") {
+        lines.push({ what: `${actor} restored it`, when: whenOf(e) });
       } else if (e.action === "revoke") {
         lines.push({ what: e.actor && e.actor === e.subject ? `${subject} left` : `${actor} removed ${subject}`, when: whenOf(e) });
         held.delete(e.subject);
@@ -222,6 +236,47 @@
     } catch (err) {
       if (lostLibrary(err)) return void (await lost());
       rowError = { ...rowError, [m.username]: refusal(err, m.username) };
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function rename(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    renameError = "";
+    const name = newName.trim();
+    if (!name) {
+      renameError = "Type a name for the library.";
+      return;
+    }
+    busy = true;
+    try {
+      await libraries.rename(name);
+      toast.show(`Renamed to ${name}. Agents still name it ${label}.`);
+      await load(label);
+    } catch (err) {
+      if (lostLibrary(err)) return void (await lost());
+      renameError = problem(err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  const until = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" });
+
+  async function deleteLibrary(): Promise<void> {
+    const name = libraries.name;
+    busy = true;
+    try {
+      const purgeAt = await libraries.remove();
+      toast.show(purgeAt
+        ? `Deleted ${name}. Restore it from the library menu until ${until.format(purgeAt)}.`
+        : `Deleted ${name}.`);
+      router.go("library");
+    } catch (err) {
+      deleting = false;
+      if (lostLibrary(err)) return void (await lost());
+      loadError = problem(err);
     } finally {
       busy = false;
     }
@@ -344,6 +399,19 @@
         </div>
       {/if}
 
+      {#if libraries.isAdmin}
+        <form class="rename" onsubmit={rename} novalidate>
+          <label class="lbl" for="library-name">Name</label>
+          <div class="invite-row">
+            <input class="input" id="library-name" type="text" maxlength="120" autocomplete="off"
+              bind:value={newName} oninput={() => (renameError = "")} aria-invalid={renameError ? "true" : undefined} />
+            <button class="btn" type="submit" disabled={busy || !newName.trim() || newName.trim() === libraries.name}>Rename</button>
+          </div>
+          {#if renameError}<p class="err" role="alert">{renameError}</p>{/if}
+          <p class="hint">Agents keep naming it <span class="mono">{label}</span>.</p>
+        </form>
+      {/if}
+
       <div class="leave">
         {#if onlyAdmin}
           <span>You are the only admin. Make someone else an admin before you leave.</span>
@@ -359,6 +427,21 @@
           <button class="btn danger small" onclick={() => (leaving = true)} disabled={busy || !me}>Leave library</button>
         {/if}
       </div>
+
+      {#if libraries.isAdmin}
+        <div class="leave">
+          {#if deleting}
+            <span><strong>Delete {libraries.name}?</strong> It leaves every member's search at once. You can restore it from the library menu for 14 days, then it and its documents are gone.</span>
+            <span class="row-btns">
+              <button class="btn danger-solid small" onclick={deleteLibrary} disabled={busy}>Delete</button>
+              <button class="btn quiet small" onclick={() => (deleting = false)}>Cancel</button>
+            </span>
+          {:else}
+            <span>Deleting removes it for every member. You can restore it for 14 days.</span>
+            <button class="btn danger small" onclick={() => (deleting = true)} disabled={busy}>Delete library</button>
+          {/if}
+        </div>
+      {/if}
     </section>
 
     {#if libraries.isAdmin}

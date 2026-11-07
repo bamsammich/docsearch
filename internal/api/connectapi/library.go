@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -28,6 +29,10 @@ type Libraries interface {
 	Invitations(ctx context.Context) ([]sharing.Invitation, error)
 	Accept(ctx context.Context, slug string) (sharing.Library, error)
 	Decline(ctx context.Context, slug string) error
+	Rename(ctx context.Context, slug, name string) (sharing.Library, error)
+	Delete(ctx context.Context, slug string) (time.Time, error)
+	Restore(ctx context.Context, slug string) (sharing.Library, error)
+	Deleted(ctx context.Context) ([]sharing.Deleted, error)
 }
 
 // LibrariesFor builds the library manager of the user a request acts for.
@@ -178,6 +183,80 @@ func (s *LibraryServer) Accept(
 	return connect.NewResponse(&libraryv1.AcceptResponse{Library: libraryMessage(joined)}), nil
 }
 
+// Rename changes the name people read a library by.
+func (s *LibraryServer) Rename(
+	ctx context.Context,
+	req *connect.Request[libraryv1.RenameRequest],
+) (*connect.Response[libraryv1.RenameResponse], error) {
+	libs, err := s.forOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	renamed, err := libs.Rename(ctx, req.Msg.GetLibrary(), req.Msg.GetName())
+	if err != nil {
+		return nil, sharingError(err)
+	}
+	return connect.NewResponse(&libraryv1.RenameResponse{Library: libraryMessage(renamed)}), nil
+}
+
+// Delete deletes a shared library, restorable until it is purged.
+func (s *LibraryServer) Delete(
+	ctx context.Context,
+	req *connect.Request[libraryv1.DeleteRequest],
+) (*connect.Response[libraryv1.DeleteResponse], error) {
+	libs, err := s.forOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	at, err := libs.Delete(ctx, req.Msg.GetLibrary())
+	if err != nil {
+		return nil, sharingError(err)
+	}
+	return connect.NewResponse(&libraryv1.DeleteResponse{PurgeAt: timestamppb.New(at)}), nil
+}
+
+// Restore brings back a deleted library.
+func (s *LibraryServer) Restore(
+	ctx context.Context,
+	req *connect.Request[libraryv1.RestoreRequest],
+) (*connect.Response[libraryv1.RestoreResponse], error) {
+	libs, err := s.forOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	restored, err := libs.Restore(ctx, req.Msg.GetLibrary())
+	if err != nil {
+		return nil, sharingError(err)
+	}
+	return connect.NewResponse(&libraryv1.RestoreResponse{Library: libraryMessage(restored)}), nil
+}
+
+// Deleted are the deleted libraries the caller can restore.
+func (s *LibraryServer) Deleted(
+	ctx context.Context,
+	_ *connect.Request[libraryv1.DeletedRequest],
+) (*connect.Response[libraryv1.DeletedResponse], error) {
+	libs, err := s.forOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	deleted, err := libs.Deleted(ctx)
+	if err != nil {
+		return nil, sharingError(err)
+	}
+	out := &libraryv1.DeletedResponse{Libraries: make([]*libraryv1.DeletedLibrary, 0, len(deleted))}
+	for _, d := range deleted {
+		out.Libraries = append(out.Libraries, &libraryv1.DeletedLibrary{
+			Library:   d.Library,
+			Name:      d.Title,
+			DeletedAt: timestamppb.New(d.DeletedAt),
+			PurgeAt:   timestamppb.New(d.PurgeAt),
+			DeletedBy: d.DeletedBy,
+		})
+	}
+	return connect.NewResponse(out), nil
+}
+
 // Decline refuses an invitation.
 func (s *LibraryServer) Decline(
 	ctx context.Context,
@@ -231,6 +310,7 @@ func (s *LibraryServer) Events(
 			Action:  e.Action,
 			Subject: e.Subject,
 			Role:    e.Role,
+			Detail:  e.Detail,
 		})
 	}
 	return connect.NewResponse(out), nil

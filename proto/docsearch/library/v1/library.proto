@@ -49,13 +49,26 @@ message Event {
   // Actor made the change, and subject is whose role changed. Either is
   // empty for an account that has no username or was removed.
   string actor = 2;
-  // Action is 'create', 'grant', 'revoke', 'invite', 'accept', 'decline'
-  // or 'withdraw'. An admin withdraws an invitation, and its invitee
-  // accepts or declines it.
+  // Action is 'create', 'grant', 'revoke', 'invite', 'accept', 'decline',
+  // 'withdraw', 'rename', 'delete' or 'restore'. An admin withdraws an
+  // invitation, and its invitee accepts or declines it.
   string action = 3;
   string subject = 4;
   // Role is the role granted, offered or accepted, and empty otherwise.
   string role = 5;
+  // Detail is a rename's old name, and empty otherwise.
+  string detail = 6;
+}
+
+// DeletedLibrary is a deleted library its admin can still restore.
+message DeletedLibrary {
+  string library = 1;
+  string name = 2;
+  google.protobuf.Timestamp deleted_at = 3;
+  // PurgeAt is when the library and everything in it are removed for good.
+  google.protobuf.Timestamp purge_at = 4;
+  // DeletedBy is the admin who deleted it, or empty for a removed account.
+  string deleted_by = 5;
 }
 
 message ListRequest {}
@@ -134,6 +147,39 @@ message DeclineRequest {
 
 message DeclineResponse {}
 
+message RenameRequest {
+  string library = 1;
+  // Name is what people read. The slug agents type stays the same.
+  string name = 2;
+}
+
+message RenameResponse {
+  Library library = 1;
+}
+
+message DeleteRequest {
+  string library = 1;
+}
+
+message DeleteResponse {
+  // PurgeAt is when the library is removed for good, unless restored.
+  google.protobuf.Timestamp purge_at = 1;
+}
+
+message RestoreRequest {
+  string library = 1;
+}
+
+message RestoreResponse {
+  Library library = 1;
+}
+
+message DeletedRequest {}
+
+message DeletedResponse {
+  repeated DeletedLibrary libraries = 1;
+}
+
 // LibraryService creates libraries and shares them. The database decides
 // every rule: who may grant, that a library keeps an admin, and that a
 // library the caller cannot act on answers as one that does not exist.
@@ -169,4 +215,19 @@ service LibraryService {
 
   // Decline refuses an invitation.
   rpc Decline(DeclineRequest) returns (DeclineResponse) {}
+
+  // Rename changes the name people read. Admins only.
+  rpc Rename(RenameRequest) returns (RenameResponse) {}
+
+  // Delete removes a shared library from every member at once, and keeps
+  // it restorable for 14 days. Admins only.
+  rpc Delete(DeleteRequest) returns (DeleteResponse) {}
+
+  // Restore brings back a deleted library within those 14 days. Admins
+  // only.
+  rpc Restore(RestoreRequest) returns (RestoreResponse) {}
+
+  // Deleted are the deleted libraries the caller administers and can
+  // still restore, newest first.
+  rpc Deleted(DeletedRequest) returns (DeletedResponse) {}
 }

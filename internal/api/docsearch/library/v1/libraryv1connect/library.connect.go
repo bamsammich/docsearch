@@ -59,6 +59,14 @@ const (
 	LibraryServiceAcceptProcedure = "/docsearch.library.v1.LibraryService/Accept"
 	// LibraryServiceDeclineProcedure is the fully-qualified name of the LibraryService's Decline RPC.
 	LibraryServiceDeclineProcedure = "/docsearch.library.v1.LibraryService/Decline"
+	// LibraryServiceRenameProcedure is the fully-qualified name of the LibraryService's Rename RPC.
+	LibraryServiceRenameProcedure = "/docsearch.library.v1.LibraryService/Rename"
+	// LibraryServiceDeleteProcedure is the fully-qualified name of the LibraryService's Delete RPC.
+	LibraryServiceDeleteProcedure = "/docsearch.library.v1.LibraryService/Delete"
+	// LibraryServiceRestoreProcedure is the fully-qualified name of the LibraryService's Restore RPC.
+	LibraryServiceRestoreProcedure = "/docsearch.library.v1.LibraryService/Restore"
+	// LibraryServiceDeletedProcedure is the fully-qualified name of the LibraryService's Deleted RPC.
+	LibraryServiceDeletedProcedure = "/docsearch.library.v1.LibraryService/Deleted"
 )
 
 // LibraryServiceClient is a client for the docsearch.library.v1.LibraryService service.
@@ -86,6 +94,17 @@ type LibraryServiceClient interface {
 	Accept(context.Context, *connect.Request[v1.AcceptRequest]) (*connect.Response[v1.AcceptResponse], error)
 	// Decline refuses an invitation.
 	Decline(context.Context, *connect.Request[v1.DeclineRequest]) (*connect.Response[v1.DeclineResponse], error)
+	// Rename changes the name people read. Admins only.
+	Rename(context.Context, *connect.Request[v1.RenameRequest]) (*connect.Response[v1.RenameResponse], error)
+	// Delete removes a shared library from every member at once, and keeps
+	// it restorable for 14 days. Admins only.
+	Delete(context.Context, *connect.Request[v1.DeleteRequest]) (*connect.Response[v1.DeleteResponse], error)
+	// Restore brings back a deleted library within those 14 days. Admins
+	// only.
+	Restore(context.Context, *connect.Request[v1.RestoreRequest]) (*connect.Response[v1.RestoreResponse], error)
+	// Deleted are the deleted libraries the caller administers and can
+	// still restore, newest first.
+	Deleted(context.Context, *connect.Request[v1.DeletedRequest]) (*connect.Response[v1.DeletedResponse], error)
 }
 
 // NewLibraryServiceClient constructs a client for the docsearch.library.v1.LibraryService service.
@@ -153,6 +172,30 @@ func NewLibraryServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(libraryServiceMethods.ByName("Decline")),
 			connect.WithClientOptions(opts...),
 		),
+		rename: connect.NewClient[v1.RenameRequest, v1.RenameResponse](
+			httpClient,
+			baseURL+LibraryServiceRenameProcedure,
+			connect.WithSchema(libraryServiceMethods.ByName("Rename")),
+			connect.WithClientOptions(opts...),
+		),
+		delete: connect.NewClient[v1.DeleteRequest, v1.DeleteResponse](
+			httpClient,
+			baseURL+LibraryServiceDeleteProcedure,
+			connect.WithSchema(libraryServiceMethods.ByName("Delete")),
+			connect.WithClientOptions(opts...),
+		),
+		restore: connect.NewClient[v1.RestoreRequest, v1.RestoreResponse](
+			httpClient,
+			baseURL+LibraryServiceRestoreProcedure,
+			connect.WithSchema(libraryServiceMethods.ByName("Restore")),
+			connect.WithClientOptions(opts...),
+		),
+		deleted: connect.NewClient[v1.DeletedRequest, v1.DeletedResponse](
+			httpClient,
+			baseURL+LibraryServiceDeletedProcedure,
+			connect.WithSchema(libraryServiceMethods.ByName("Deleted")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -167,6 +210,10 @@ type libraryServiceClient struct {
 	invitations *connect.Client[v1.InvitationsRequest, v1.InvitationsResponse]
 	accept      *connect.Client[v1.AcceptRequest, v1.AcceptResponse]
 	decline     *connect.Client[v1.DeclineRequest, v1.DeclineResponse]
+	rename      *connect.Client[v1.RenameRequest, v1.RenameResponse]
+	delete      *connect.Client[v1.DeleteRequest, v1.DeleteResponse]
+	restore     *connect.Client[v1.RestoreRequest, v1.RestoreResponse]
+	deleted     *connect.Client[v1.DeletedRequest, v1.DeletedResponse]
 }
 
 // List calls docsearch.library.v1.LibraryService.List.
@@ -214,6 +261,26 @@ func (c *libraryServiceClient) Decline(ctx context.Context, req *connect.Request
 	return c.decline.CallUnary(ctx, req)
 }
 
+// Rename calls docsearch.library.v1.LibraryService.Rename.
+func (c *libraryServiceClient) Rename(ctx context.Context, req *connect.Request[v1.RenameRequest]) (*connect.Response[v1.RenameResponse], error) {
+	return c.rename.CallUnary(ctx, req)
+}
+
+// Delete calls docsearch.library.v1.LibraryService.Delete.
+func (c *libraryServiceClient) Delete(ctx context.Context, req *connect.Request[v1.DeleteRequest]) (*connect.Response[v1.DeleteResponse], error) {
+	return c.delete.CallUnary(ctx, req)
+}
+
+// Restore calls docsearch.library.v1.LibraryService.Restore.
+func (c *libraryServiceClient) Restore(ctx context.Context, req *connect.Request[v1.RestoreRequest]) (*connect.Response[v1.RestoreResponse], error) {
+	return c.restore.CallUnary(ctx, req)
+}
+
+// Deleted calls docsearch.library.v1.LibraryService.Deleted.
+func (c *libraryServiceClient) Deleted(ctx context.Context, req *connect.Request[v1.DeletedRequest]) (*connect.Response[v1.DeletedResponse], error) {
+	return c.deleted.CallUnary(ctx, req)
+}
+
 // LibraryServiceHandler is an implementation of the docsearch.library.v1.LibraryService service.
 type LibraryServiceHandler interface {
 	// List is every library the caller reads, their own first.
@@ -239,6 +306,17 @@ type LibraryServiceHandler interface {
 	Accept(context.Context, *connect.Request[v1.AcceptRequest]) (*connect.Response[v1.AcceptResponse], error)
 	// Decline refuses an invitation.
 	Decline(context.Context, *connect.Request[v1.DeclineRequest]) (*connect.Response[v1.DeclineResponse], error)
+	// Rename changes the name people read. Admins only.
+	Rename(context.Context, *connect.Request[v1.RenameRequest]) (*connect.Response[v1.RenameResponse], error)
+	// Delete removes a shared library from every member at once, and keeps
+	// it restorable for 14 days. Admins only.
+	Delete(context.Context, *connect.Request[v1.DeleteRequest]) (*connect.Response[v1.DeleteResponse], error)
+	// Restore brings back a deleted library within those 14 days. Admins
+	// only.
+	Restore(context.Context, *connect.Request[v1.RestoreRequest]) (*connect.Response[v1.RestoreResponse], error)
+	// Deleted are the deleted libraries the caller administers and can
+	// still restore, newest first.
+	Deleted(context.Context, *connect.Request[v1.DeletedRequest]) (*connect.Response[v1.DeletedResponse], error)
 }
 
 // NewLibraryServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -302,6 +380,30 @@ func NewLibraryServiceHandler(svc LibraryServiceHandler, opts ...connect.Handler
 		connect.WithSchema(libraryServiceMethods.ByName("Decline")),
 		connect.WithHandlerOptions(opts...),
 	)
+	libraryServiceRenameHandler := connect.NewUnaryHandler(
+		LibraryServiceRenameProcedure,
+		svc.Rename,
+		connect.WithSchema(libraryServiceMethods.ByName("Rename")),
+		connect.WithHandlerOptions(opts...),
+	)
+	libraryServiceDeleteHandler := connect.NewUnaryHandler(
+		LibraryServiceDeleteProcedure,
+		svc.Delete,
+		connect.WithSchema(libraryServiceMethods.ByName("Delete")),
+		connect.WithHandlerOptions(opts...),
+	)
+	libraryServiceRestoreHandler := connect.NewUnaryHandler(
+		LibraryServiceRestoreProcedure,
+		svc.Restore,
+		connect.WithSchema(libraryServiceMethods.ByName("Restore")),
+		connect.WithHandlerOptions(opts...),
+	)
+	libraryServiceDeletedHandler := connect.NewUnaryHandler(
+		LibraryServiceDeletedProcedure,
+		svc.Deleted,
+		connect.WithSchema(libraryServiceMethods.ByName("Deleted")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/docsearch.library.v1.LibraryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case LibraryServiceListProcedure:
@@ -322,6 +424,14 @@ func NewLibraryServiceHandler(svc LibraryServiceHandler, opts ...connect.Handler
 			libraryServiceAcceptHandler.ServeHTTP(w, r)
 		case LibraryServiceDeclineProcedure:
 			libraryServiceDeclineHandler.ServeHTTP(w, r)
+		case LibraryServiceRenameProcedure:
+			libraryServiceRenameHandler.ServeHTTP(w, r)
+		case LibraryServiceDeleteProcedure:
+			libraryServiceDeleteHandler.ServeHTTP(w, r)
+		case LibraryServiceRestoreProcedure:
+			libraryServiceRestoreHandler.ServeHTTP(w, r)
+		case LibraryServiceDeletedProcedure:
+			libraryServiceDeletedHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -365,4 +475,20 @@ func (UnimplementedLibraryServiceHandler) Accept(context.Context, *connect.Reque
 
 func (UnimplementedLibraryServiceHandler) Decline(context.Context, *connect.Request[v1.DeclineRequest]) (*connect.Response[v1.DeclineResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.library.v1.LibraryService.Decline is not implemented"))
+}
+
+func (UnimplementedLibraryServiceHandler) Rename(context.Context, *connect.Request[v1.RenameRequest]) (*connect.Response[v1.RenameResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.library.v1.LibraryService.Rename is not implemented"))
+}
+
+func (UnimplementedLibraryServiceHandler) Delete(context.Context, *connect.Request[v1.DeleteRequest]) (*connect.Response[v1.DeleteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.library.v1.LibraryService.Delete is not implemented"))
+}
+
+func (UnimplementedLibraryServiceHandler) Restore(context.Context, *connect.Request[v1.RestoreRequest]) (*connect.Response[v1.RestoreResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.library.v1.LibraryService.Restore is not implemented"))
+}
+
+func (UnimplementedLibraryServiceHandler) Deleted(context.Context, *connect.Request[v1.DeletedRequest]) (*connect.Response[v1.DeletedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.library.v1.LibraryService.Deleted is not implemented"))
 }
