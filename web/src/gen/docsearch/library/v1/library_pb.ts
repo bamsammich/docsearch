@@ -718,8 +718,8 @@ export type GrantGroupRequest = Message<"docsearch.library.v1.GrantGroupRequest"
   group: string;
 
   /**
-   * Role is reader, editor or admin. Granting a group that holds a role
-   * changes it.
+   * Role is reader or editor: administering a library takes your own
+   * grant. Granting a group that holds a role changes it.
    *
    * @generated from field: string role = 3;
    */

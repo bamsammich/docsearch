@@ -191,7 +191,7 @@
         <nav class="sections" aria-label="Groups">
           <a class="section" href="#/groups" aria-current={router.docId ? undefined : "page"}>
             <Icon name="group" /><span class="section-name">Groups</span>
-            {#if groups.invitations.length}<span class="count hot" aria-label={`${groups.invitations.length} invitations`}>{groups.invitations.length}</span>{/if}
+            {#if groups.invitations.length}<span class="count hot" aria-label={groups.invitations.length === 1 ? "1 invitation" : `${groups.invitations.length} invitations`}>{groups.invitations.length}</span>{/if}
           </a>
           {#each groups.mine as g (g.group)}
             <a class="section section-sub" href={`#/groups/${encodeURIComponent(g.group)}`} aria-current={router.docId === g.group ? "page" : undefined}>

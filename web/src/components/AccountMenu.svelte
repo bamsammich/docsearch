@@ -37,7 +37,7 @@
   <p class="account-where mono">{location.host}</p>
   {#if config?.auth === "password" || config?.auth === "oidc"}
     <a class="btn block" href="#/groups" onclick={() => document.getElementById("account-menu")?.hidePopover()}><Icon name="group" /> Groups
-      {#if groups.invitations.length}<span class="menu-count" aria-label={`${groups.invitations.length} invitations`}>{groups.invitations.length}</span>{/if}
+      {#if groups.invitations.length}<span class="menu-count" aria-label={groups.invitations.length === 1 ? "1 invitation" : `${groups.invitations.length} invitations`}>{groups.invitations.length}</span>{/if}
     </a>
   {/if}
   {#if admin.available}

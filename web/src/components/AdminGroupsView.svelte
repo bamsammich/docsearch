@@ -19,6 +19,9 @@
   let settingError = $state("");
   let busy = $state(false);
   let maintainers = $state<Record<string, string[]>>({});
+  /** How many libraries each group holds, so deleting one says what its members lose. */
+  let held = $state<Record<string, number>>({});
+  const focus = (el: HTMLElement) => el.focus();
   let deleting = $state("");
   let rowError = $state<Record<string, string>>({});
 
@@ -39,19 +42,25 @@
     }
   }
 
-  // An administrator sees who maintains each group, and which have none.
+  // An administrator sees who maintains each group, which have none, and
+  // how many libraries each holds.
   async function loadMaintainers(): Promise<void> {
     const found = await Promise.all(
       groups.all.map(async (g) => {
         try {
-          const { members } = await service.members({ group: g.group });
-          return [g.group, members.filter((m: Member) => !m.invited && m.role === "maintainer").map((m) => m.username)] as const;
+          const [{ members }, { libraries }] = await Promise.all([
+            service.members({ group: g.group }),
+            service.libraries({ group: g.group }),
+          ]);
+          const kept = members.filter((m: Member) => !m.invited && m.role === "maintainer").map((m) => m.username);
+          return { group: g.group, kept, libraries: libraries.length };
         } catch {
-          return [g.group, [] as string[]] as const;
+          return { group: g.group, kept: [] as string[], libraries: 0 };
         }
       }),
     );
-    maintainers = Object.fromEntries(found);
+    maintainers = Object.fromEntries(found.map((f) => [f.group, f.kept]));
+    held = Object.fromEntries(found.map((f) => [f.group, f.libraries]));
   }
 
   $effect(() => {
@@ -79,7 +88,7 @@
     busy = true;
     try {
       await service.delete({ group: slug });
-      toast.show(`Deleted ${label}. Its libraries stay with their other members.`);
+      toast.show(held[slug] ? `Deleted ${label}. Its libraries stay with their own members.` : `Deleted ${label}.`);
       deleting = "";
       await groups.load();
       await loadMaintainers();
@@ -145,12 +154,13 @@
               <span class="mwho">
                 <span class="mname"><a href={`#/groups/${encodeURIComponent(g.group)}`}>{g.name}</a></span>
                 {#if kept}<span class="msince">{kept.length ? `Maintained by ${kept.join(", ")}` : "No maintainer · administrators manage it"}</span>{/if}
+                {#if deleting === g.group}<span class="msince">{held[g.group] ? `Its members lose ${held[g.group] === 1 ? "its library" : `its ${held[g.group]} libraries`} at once, unless they hold them themselves.` : "It holds no library."}</span>{/if}
                 {#if rowError[g.group]}<span class="err" role="alert">{rowError[g.group]}</span>{/if}
               </span>
               <span class="mrole-text tnum">{g.members === 1n ? "1 member" : `${g.members} members`}</span>
               <span class="mact">
                 {#if deleting === g.group}
-                  <button class="btn danger-solid small" onclick={() => deleteGroup(g.group, g.name)} disabled={busy}>Delete {g.name}</button>
+                  <button class="btn danger-solid small" onclick={() => deleteGroup(g.group, g.name)} disabled={busy} {@attach focus}>Delete {g.name}</button>
                   <button class="btn quiet small" onclick={() => (deleting = "")}>Cancel</button>
                 {:else}
                   <button class="btn danger small" onclick={() => (deleting = g.group)} disabled={busy}>Delete</button>

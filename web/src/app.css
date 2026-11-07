@@ -97,7 +97,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .section { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border-radius: 7px; color: var(--on-frame-muted); font-size: 14px; font-weight: 500; text-decoration: none; transition: background .15s, color .15s; }
 .section:hover { background: var(--frame-2); color: var(--on-frame); }
 .section[aria-current="page"] { background: var(--frame-2); color: var(--on-frame); }
-.section-name { flex: 1; }
+.section-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .count { font-size: 12px; font-weight: 600; color: var(--frame-live); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .count.hot { color: var(--frame-alert); }
 .side-foot { margin-top: auto; }

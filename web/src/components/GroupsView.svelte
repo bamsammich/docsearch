@@ -10,12 +10,18 @@
 
   let creating = $state(false);
   let name = $state("");
+  let slug = $state("");
+  let editingSlug = $state(false);
   let error = $state("");
   let busy = $state(false);
   let answering = $state("");
   let nameField: HTMLInputElement | undefined = $state();
 
-  const others = $derived(groups.all.filter((g) => g.role === ""));
+  // A group you're invited to is listed with the invitation, not here.
+  const others = $derived(
+    groups.all.filter((g) => g.role === "" && !groups.invitations.some((i) => i.group === g.group)),
+  );
+  const libraryName = $derived(editingSlug ? slug.trim().toLowerCase() : slugOf(name));
   const roleWords: Record<string, string> = { maintainer: "Maintainer", member: "Member" };
   const count = (n: bigint) => (n === 1n ? "1 member" : `${n} members`);
 
@@ -25,6 +31,8 @@
 
   function startCreating(): void {
     creating = true;
+    editingSlug = false;
+    slug = "";
     error = "";
     queueMicrotask(() => nameField?.focus());
   }
@@ -33,29 +41,37 @@
     event.preventDefault();
     error = "";
     const title = name.trim();
-    const slug = slugOf(title);
+    const label = libraryName;
     if (!title) {
       error = "Type a name for the group.";
       return;
     }
-    if (!slug) {
-      error = "The name needs a letter or a digit.";
+    if (!label) {
+      error = "The name libraries use needs a letter or a digit.";
+      editingSlug = true;
       return;
     }
     busy = true;
     try {
-      await groups.create(slug, title);
+      await groups.create(label, title);
       toast.show(`Created ${title}. You maintain it.`);
       creating = false;
       name = "";
-      router.go("groups", slug);
+      router.go("groups", label);
     } catch (err) {
       error = err instanceof ConnectError && err.code === Code.AlreadyExists
-        ? `Another group is already called ${slug}.`
-        : problem(err);
+        ? `Another group is already called ${label}. Change the name libraries use.`
+        : err instanceof ConnectError && err.code === Code.InvalidArgument
+          ? "The name libraries use takes lower-case letters, digits and hyphens."
+          : problem(err);
     } finally {
       busy = false;
     }
+  }
+
+  function changeSlug(): void {
+    slug = libraryName;
+    editingSlug = true;
   }
 
   async function answer(i: Invitation, accept: boolean): Promise<void> {
@@ -96,7 +112,15 @@
         <button class="btn primary" type="submit" disabled={busy}>Create group</button>
         <button class="btn quiet" type="button" onclick={() => (creating = false)}>Cancel</button>
       </div>
-      {#if name.trim() && slugOf(name)}<p class="hint">Libraries name it <span class="mono">{slugOf(name)}</span></p>{/if}
+      {#if editingSlug}
+        <label class="lbl" for="group-slug">Name libraries use</label>
+        <input class="input mono" id="group-slug" type="text" maxlength="40" autocomplete="off" spellcheck="false"
+          bind:value={slug} oninput={() => (error = "")} />
+      {:else if libraryName}
+        <p class="hint">Libraries name it <span class="mono">{libraryName}</span> · <button type="button" class="linkish" onclick={changeSlug}>Change</button></p>
+      {:else if name.trim()}
+        <p class="hint"><button type="button" class="linkish" onclick={changeSlug}>Choose the name libraries use</button></p>
+      {/if}
       {#if error}<p class="err" role="alert">{error}</p>{/if}
     </form>
   {/if}

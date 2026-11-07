@@ -12,6 +12,8 @@
   import Icon from "./Icon.svelte";
 
   const roles = ["reader", "editor", "admin"] as const;
+  // Administering a library takes your own grant, so a group gets reader or editor.
+  const groupRoles = ["reader", "editor"] as const;
   const roleWords: Record<string, string> = { reader: "Reader", editor: "Editor", admin: "Admin" };
 
   let members = $state<Member[]>([]);
@@ -44,11 +46,13 @@
   const admins = $derived(joined.filter((m) => m.role === "admin").length);
   const me = $derived(libraries.username);
   const onlyAdmin = $derived(libraries.isAdmin && admins <= 1);
+  // Someone with no grant of their own reaches the library only through groups.
+  const throughGroups = $derived(loaded && !members.some((m) => m.username === me && !m.invited));
+  const myGroups = $derived(grants.filter((g) => groups.byId(g.group)?.role));
   // An administrator shares with any group; anyone else with a group they maintain.
   const shareable = $derived(
     (admin.isAdmin ? groups.all : groups.maintained).filter((g) => !grants.some((x) => x.group === g.group)),
   );
-  const groupName = (slug: string) => grants.find((g) => g.group === slug)?.name || groups.byId(slug)?.name || slug;
 
   async function load(of: string): Promise<void> {
     loadError = "";
@@ -103,6 +107,8 @@
   // and one to someone who has a role changes it.
   const story = $derived.by(() => {
     const held = new Map<string, string>();
+    // The groups the library is shared with so far, by the name the log keeps.
+    const sharedWith = new Set<string>();
     const lines: { what: string; when: string }[] = [];
     const since = new Map<string, string>();
     const inviter = new Map<string, string>();
@@ -157,9 +163,20 @@
       } else if (e.action === "restore") {
         lines.push({ what: `${actor} restored it`, when: whenOf(e) });
       } else if (e.action === "group_grant") {
-        lines.push({ what: `${actor} shared it with ${groupName(e.detail)} as ${e.role}`, when: whenOf(e) });
+        lines.push({
+          what: sharedWith.has(e.detail) ? `${actor} changed ${e.detail} to ${e.role}`
+            : `${actor} shared it with ${e.detail} as ${e.role}`,
+          when: whenOf(e),
+        });
+        sharedWith.add(e.detail);
       } else if (e.action === "group_revoke") {
-        lines.push({ what: e.actor ? `${actor} stopped sharing it with ${groupName(e.detail)}` : `${groupName(e.detail)} was deleted`, when: whenOf(e) });
+        lines.push({ what: `${actor} stopped sharing it with ${e.detail}`, when: whenOf(e) });
+        sharedWith.delete(e.detail);
+      } else if (e.action === "group_delete") {
+        lines.push({ what: `${actor} deleted the group ${e.detail}, which held it as ${e.role}`, when: whenOf(e) });
+        sharedWith.delete(e.detail);
+      } else if (e.action === "group_force") {
+        lines.push({ what: `${actor} added ${e.subject === e.actor ? "themselves" : subject} to ${e.detail} without an invitation, so ${e.subject === e.actor ? "they reach" : `${subject} reaches`} it as ${e.role}`, when: whenOf(e) });
       } else if (e.action === "revoke") {
         lines.push({ what: e.actor && e.actor === e.subject ? `${subject} left` : `${actor} removed ${subject}`, when: whenOf(e) });
         held.delete(e.subject);
@@ -250,6 +267,8 @@
   function groupRefusal(err: unknown): string {
     if (err instanceof ConnectError && err.code === Code.NotFound && /group/.test(err.rawMessage))
       return "Only that group's maintainers share libraries with it.";
+    if (err instanceof ConnectError && err.code === Code.InvalidArgument)
+      return "A group gets reader or editor. Administering a library takes your own admin role.";
     return problem(err);
   }
 
@@ -402,7 +421,7 @@
           {#if groups.all.length}
             <div class="share-kind" role="radiogroup" aria-label="Share with">
               <label class:on={shareWith === "person"}><input type="radio" name="share-with" value="person" bind:group={shareWith} onchange={() => (inviteError = "")} />A person</label>
-              <label class:on={shareWith === "group"}><input type="radio" name="share-with" value="group" bind:group={shareWith} onchange={() => (inviteError = "")} />A group</label>
+              <label class:on={shareWith === "group"}><input type="radio" name="share-with" value="group" bind:group={shareWith} onchange={() => { inviteError = ""; if (inviteRole === "admin") inviteRole = "editor"; }} />A group</label>
             </div>
           {/if}
           {#if shareWith === "group"}
@@ -414,13 +433,13 @@
             </select>
             <label class="role-pick"><span>as</span>
               <select aria-label="Role" bind:value={inviteRole}>
-                {#each roles as r (r)}<option value={r}>{roleWords[r]}</option>{/each}
+                {#each groupRoles as r (r)}<option value={r}>{roleWords[r]}</option>{/each}
               </select>
             </label>
             <button class="btn primary" type="submit" disabled={inviting || !shareable.length}>Share</button>
           </div>
           {#if inviteError}<p class="err" role="alert">{inviteError}</p>{/if}
-          <p class="hint">Every member gets the role at once.{#if !admin.isAdmin} Only groups you maintain are listed.{/if}</p>
+          <p class="hint">Every member gets the role at once.{#if !admin.isAdmin}{" Only groups you maintain are listed."}{/if}</p>
           {:else}
           <label class="lbl" for="invite-user">Invite someone</label>
           <div class="invite-row">
@@ -457,7 +476,7 @@
                 {#if libraries.isAdmin && mine}
                   <select class="mrole" aria-label={`Role for ${g.name}`} value={g.role} disabled={busy}
                     onchange={(e) => changeGroupRole(g, e.currentTarget.value)}>
-                    {#each roles as r (r)}<option value={r}>{roleWords[r]}</option>{/each}
+                    {#each groupRoles as r (r)}<option value={r}>{roleWords[r]}</option>{/each}
                   </select>
                 {:else}
                   <span class="mrole-text">{roleWords[g.role] ?? g.role}</span>
@@ -554,7 +573,9 @@
       {/if}
 
       <div class="leave">
-        {#if onlyAdmin}
+        {#if throughGroups}
+          <span>You reach it through {#each myGroups as g, i (g.group)}{i ? ", " : ""}<a href={`#/groups/${encodeURIComponent(g.group)}`}>{g.name}</a>{/each}. Leave {myGroups.length === 1 ? "that group" : "those groups"} to leave it.</span>
+        {:else if onlyAdmin}
           <span>You are the only admin. Make someone else an admin before you leave.</span>
           <button class="btn danger small" disabled>Leave library</button>
         {:else if leaving}
