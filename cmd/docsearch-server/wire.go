@@ -65,6 +65,7 @@ func serve(cfg config.Config, log *slog.Logger) error {
 			grouped(newDocumentRoute),
 			grouped(newJobRoute),
 			grouped(newLibraryRoute),
+			grouped(newGroupRoute),
 			grouped(newAccountRoute),
 			grouped(newUploadRoute),
 			grouped(newOriginalRoute),
@@ -285,7 +286,33 @@ func newJobRoute(libs *library.Libraries) route {
 func newLibraryRoute(db *sql.DB) route {
 	return mount(connectapi.NewLibraryServer(
 		func(user string) (connectapi.Libraries, error) { return postgres.NewLibraries(db, user), nil },
+		groupsFor(db),
 	))
+}
+
+// newGroupRoute creates and runs groups, as the asking user. The database
+// checks every rule but one: who may create a group is the deployment's
+// setting, which it holds and the database does not.
+func newGroupRoute(cfg config.Config, db *sql.DB) route {
+	return mount(connectapi.NewGroupServer(groupsFor(db), mayCreateGroups(cfg, db)))
+}
+
+func groupsFor(db *sql.DB) connectapi.GroupsFor {
+	return func(user string) (connectapi.Groups, error) { return postgres.NewGroups(db, user), nil }
+}
+
+// mayCreateGroups lets everyone create groups, or only administrators.
+func mayCreateGroups(cfg config.Config, db *sql.DB) connectapi.MayCreate {
+	return func(ctx context.Context, user string) (bool, error) {
+		if cfg.GroupCreators != config.GroupsByAdministrators {
+			return true, nil
+		}
+		me, err := postgres.NewAdmins(db, user).Me(ctx)
+		if err != nil {
+			return false, err
+		}
+		return me.Admin, nil
+	}
 }
 
 // mount names what a handler constructor returns as a pair, so that a list of

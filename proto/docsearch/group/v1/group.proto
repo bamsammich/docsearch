@@ -1,0 +1,208 @@
+syntax = "proto3";
+
+// Package docsearch.group.v1 creates groups and runs them.
+//
+// A group is a set of people a library can be granted to at once. Whoever
+// creates one is its first maintainer. A maintainer invites people by
+// username, and each accepts or declines; a maintainer who administers a
+// library may grant it to the group, and every member then reaches it.
+package docsearch.group.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Group is one group, as the caller sees it.
+message Group {
+  // Group is the slug the CLI and grants name it by.
+  string group = 1;
+  string name = 2;
+  // Role is the caller's own: member or maintainer, and empty for a group
+  // they are not in.
+  string role = 3;
+  int64 members = 4;
+}
+
+message Member {
+  string username = 1;
+  // Role is member or maintainer.
+  string role = 2;
+  // FromProvider is a membership the provider group gives, which only the
+  // provider takes away.
+  bool from_provider = 3;
+  // Invited is someone asked to join who has not yet accepted. Only a
+  // maintainer sees them.
+  bool invited = 4;
+}
+
+// Invitation is a group the caller is asked to join.
+message Invitation {
+  string group = 1;
+  string name = 2;
+  // Role is what accepting gives the caller.
+  string role = 3;
+  // InvitedBy is the maintainer who sent it, or empty for a removed account.
+  string invited_by = 4;
+  google.protobuf.Timestamp at = 5;
+}
+
+// Library is one library granted to a group.
+message Library {
+  string library = 1;
+  string name = 2;
+  // Role is the group's role on it: reader, editor or admin.
+  string role = 3;
+}
+
+// Event is one change to a group.
+message Event {
+  google.protobuf.Timestamp at = 1;
+  string actor = 2;
+  // Action is 'create', 'rename', 'invite', 'accept', 'decline',
+  // 'withdraw', 'role' or 'remove'.
+  string action = 3;
+  string subject = 4;
+  string role = 5;
+  // Detail is a rename's old name, and empty otherwise.
+  string detail = 6;
+}
+
+message ListRequest {}
+
+message ListResponse {
+  // Groups is every group, so a library admin can find one to grant.
+  repeated Group groups = 1;
+  // CanCreate is whether the caller may create a group here.
+  bool can_create = 2;
+}
+
+message CreateRequest {
+  // Group is the slug: lower-case letters, digits and hyphens.
+  string group = 1;
+  string name = 2;
+}
+
+message CreateResponse {
+  Group group = 1;
+}
+
+message RenameRequest {
+  string group = 1;
+  string name = 2;
+}
+
+message RenameResponse {}
+
+message DeleteRequest {
+  string group = 1;
+}
+
+message DeleteResponse {}
+
+message InviteRequest {
+  string group = 1;
+  string username = 2;
+  // Role is member or maintainer. Inviting a member changes their role.
+  string role = 3;
+}
+
+message InviteResponse {
+  // Invited is true when someone was invited, and false when a member's
+  // role changed.
+  bool invited = 1;
+}
+
+message AcceptRequest {
+  string group = 1;
+}
+
+message AcceptResponse {
+  string role = 1;
+}
+
+message DeclineRequest {
+  string group = 1;
+}
+
+message DeclineResponse {}
+
+message RemoveRequest {
+  string group = 1;
+  string username = 2;
+}
+
+message RemoveResponse {}
+
+message InvitationsRequest {}
+
+message InvitationsResponse {
+  repeated Invitation invitations = 1;
+}
+
+message MembersRequest {
+  string group = 1;
+}
+
+message MembersResponse {
+  repeated Member members = 1;
+}
+
+message LibrariesRequest {
+  string group = 1;
+}
+
+message LibrariesResponse {
+  repeated Library libraries = 1;
+}
+
+message EventsRequest {
+  string group = 1;
+}
+
+message EventsResponse {
+  repeated Event events = 1;
+}
+
+// GroupService creates groups and runs them. The database decides every
+// rule: that a group keeps a maintainer, and that a group the caller cannot
+// act on answers as one that does not exist.
+service GroupService {
+  // List is every group, with the caller's role in each.
+  rpc List(ListRequest) returns (ListResponse) {}
+
+  // Create makes a group with the caller as its maintainer, when the
+  // deployment lets the caller create groups.
+  rpc Create(CreateRequest) returns (CreateResponse) {}
+
+  // Rename changes the name people read. Maintainers only.
+  rpc Rename(RenameRequest) returns (RenameResponse) {}
+
+  // Delete removes a group and its grants; its libraries stay. Maintainers
+  // only.
+  rpc Delete(DeleteRequest) returns (DeleteResponse) {}
+
+  // Invite asks someone to join, or changes a member's role. Maintainers
+  // only.
+  rpc Invite(InviteRequest) returns (InviteResponse) {}
+
+  // Accept joins a group the caller is invited to.
+  rpc Accept(AcceptRequest) returns (AcceptResponse) {}
+
+  // Decline refuses an invitation.
+  rpc Decline(DeclineRequest) returns (DeclineResponse) {}
+
+  // Remove takes someone out of a group or withdraws their invitation. A
+  // maintainer may remove anyone, and anyone may remove themselves.
+  rpc Remove(RemoveRequest) returns (RemoveResponse) {}
+
+  // Invitations are the groups the caller is asked to join, newest first.
+  rpc Invitations(InvitationsRequest) returns (InvitationsResponse) {}
+
+  // Members are who is in a group, for its members.
+  rpc Members(MembersRequest) returns (MembersResponse) {}
+
+  // Libraries are the libraries granted to a group, for its members.
+  rpc Libraries(LibrariesRequest) returns (LibrariesResponse) {}
+
+  // Events is the record of changes to a group, oldest first. Maintainers
+  // only.
+  rpc Events(EventsRequest) returns (EventsResponse) {}
+}

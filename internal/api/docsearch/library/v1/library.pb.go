@@ -1490,6 +1490,349 @@ func (x *RestoreResponse) GetLibrary() *Library {
 	return nil
 }
 
+// GroupGrant is a group's role on a library.
+type GroupGrant struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Group         string                 `protobuf:"bytes,1,opt,name=group,proto3" json:"group,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Role          string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
+	Members       int64                  `protobuf:"varint,4,opt,name=members,proto3" json:"members,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GroupGrant) Reset() {
+	*x = GroupGrant{}
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GroupGrant) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GroupGrant) ProtoMessage() {}
+
+func (x *GroupGrant) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GroupGrant.ProtoReflect.Descriptor instead.
+func (*GroupGrant) Descriptor() ([]byte, []int) {
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *GroupGrant) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+func (x *GroupGrant) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GroupGrant) GetRole() string {
+	if x != nil {
+		return x.Role
+	}
+	return ""
+}
+
+func (x *GroupGrant) GetMembers() int64 {
+	if x != nil {
+		return x.Members
+	}
+	return 0
+}
+
+type GrantGroupRequest struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Library string                 `protobuf:"bytes,1,opt,name=library,proto3" json:"library,omitempty"`
+	Group   string                 `protobuf:"bytes,2,opt,name=group,proto3" json:"group,omitempty"`
+	// Role is reader, editor or admin. Granting a group that holds a role
+	// changes it.
+	Role          string `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GrantGroupRequest) Reset() {
+	*x = GrantGroupRequest{}
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GrantGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GrantGroupRequest) ProtoMessage() {}
+
+func (x *GrantGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GrantGroupRequest.ProtoReflect.Descriptor instead.
+func (*GrantGroupRequest) Descriptor() ([]byte, []int) {
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *GrantGroupRequest) GetLibrary() string {
+	if x != nil {
+		return x.Library
+	}
+	return ""
+}
+
+func (x *GrantGroupRequest) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+func (x *GrantGroupRequest) GetRole() string {
+	if x != nil {
+		return x.Role
+	}
+	return ""
+}
+
+type GrantGroupResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GrantGroupResponse) Reset() {
+	*x = GrantGroupResponse{}
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GrantGroupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GrantGroupResponse) ProtoMessage() {}
+
+func (x *GrantGroupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GrantGroupResponse.ProtoReflect.Descriptor instead.
+func (*GrantGroupResponse) Descriptor() ([]byte, []int) {
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{31}
+}
+
+type RevokeGroupRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Library       string                 `protobuf:"bytes,1,opt,name=library,proto3" json:"library,omitempty"`
+	Group         string                 `protobuf:"bytes,2,opt,name=group,proto3" json:"group,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeGroupRequest) Reset() {
+	*x = RevokeGroupRequest{}
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeGroupRequest) ProtoMessage() {}
+
+func (x *RevokeGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeGroupRequest.ProtoReflect.Descriptor instead.
+func (*RevokeGroupRequest) Descriptor() ([]byte, []int) {
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *RevokeGroupRequest) GetLibrary() string {
+	if x != nil {
+		return x.Library
+	}
+	return ""
+}
+
+func (x *RevokeGroupRequest) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+type RevokeGroupResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeGroupResponse) Reset() {
+	*x = RevokeGroupResponse{}
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeGroupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeGroupResponse) ProtoMessage() {}
+
+func (x *RevokeGroupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeGroupResponse.ProtoReflect.Descriptor instead.
+func (*RevokeGroupResponse) Descriptor() ([]byte, []int) {
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{33}
+}
+
+type GroupsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Library       string                 `protobuf:"bytes,1,opt,name=library,proto3" json:"library,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GroupsRequest) Reset() {
+	*x = GroupsRequest{}
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GroupsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GroupsRequest) ProtoMessage() {}
+
+func (x *GroupsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GroupsRequest.ProtoReflect.Descriptor instead.
+func (*GroupsRequest) Descriptor() ([]byte, []int) {
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *GroupsRequest) GetLibrary() string {
+	if x != nil {
+		return x.Library
+	}
+	return ""
+}
+
+type GroupsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Groups        []*GroupGrant          `protobuf:"bytes,1,rep,name=groups,proto3" json:"groups,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GroupsResponse) Reset() {
+	*x = GroupsResponse{}
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GroupsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GroupsResponse) ProtoMessage() {}
+
+func (x *GroupsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GroupsResponse.ProtoReflect.Descriptor instead.
+func (*GroupsResponse) Descriptor() ([]byte, []int) {
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *GroupsResponse) GetGroups() []*GroupGrant {
+	if x != nil {
+		return x.Groups
+	}
+	return nil
+}
+
 type DeletedRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1498,7 +1841,7 @@ type DeletedRequest struct {
 
 func (x *DeletedRequest) Reset() {
 	*x = DeletedRequest{}
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[29]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1510,7 +1853,7 @@ func (x *DeletedRequest) String() string {
 func (*DeletedRequest) ProtoMessage() {}
 
 func (x *DeletedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[29]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1523,7 +1866,7 @@ func (x *DeletedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeletedRequest.ProtoReflect.Descriptor instead.
 func (*DeletedRequest) Descriptor() ([]byte, []int) {
-	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{29}
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{36}
 }
 
 type DeletedResponse struct {
@@ -1535,7 +1878,7 @@ type DeletedResponse struct {
 
 func (x *DeletedResponse) Reset() {
 	*x = DeletedResponse{}
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[30]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1547,7 +1890,7 @@ func (x *DeletedResponse) String() string {
 func (*DeletedResponse) ProtoMessage() {}
 
 func (x *DeletedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_docsearch_library_v1_library_proto_msgTypes[30]
+	mi := &file_docsearch_library_v1_library_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1560,7 +1903,7 @@ func (x *DeletedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeletedResponse.ProtoReflect.Descriptor instead.
 func (*DeletedResponse) Descriptor() ([]byte, []int) {
-	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{30}
+	return file_docsearch_library_v1_library_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *DeletedResponse) GetLibraries() []*DeletedLibrary {
@@ -1655,10 +1998,29 @@ const file_docsearch_library_v1_library_proto_rawDesc = "" +
 	"\x0eRestoreRequest\x12\x18\n" +
 	"\alibrary\x18\x01 \x01(\tR\alibrary\"J\n" +
 	"\x0fRestoreResponse\x127\n" +
-	"\alibrary\x18\x01 \x01(\v2\x1d.docsearch.library.v1.LibraryR\alibrary\"\x10\n" +
+	"\alibrary\x18\x01 \x01(\v2\x1d.docsearch.library.v1.LibraryR\alibrary\"d\n" +
+	"\n" +
+	"GroupGrant\x12\x14\n" +
+	"\x05group\x18\x01 \x01(\tR\x05group\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04role\x18\x03 \x01(\tR\x04role\x12\x18\n" +
+	"\amembers\x18\x04 \x01(\x03R\amembers\"W\n" +
+	"\x11GrantGroupRequest\x12\x18\n" +
+	"\alibrary\x18\x01 \x01(\tR\alibrary\x12\x14\n" +
+	"\x05group\x18\x02 \x01(\tR\x05group\x12\x12\n" +
+	"\x04role\x18\x03 \x01(\tR\x04role\"\x14\n" +
+	"\x12GrantGroupResponse\"D\n" +
+	"\x12RevokeGroupRequest\x12\x18\n" +
+	"\alibrary\x18\x01 \x01(\tR\alibrary\x12\x14\n" +
+	"\x05group\x18\x02 \x01(\tR\x05group\"\x15\n" +
+	"\x13RevokeGroupResponse\")\n" +
+	"\rGroupsRequest\x12\x18\n" +
+	"\alibrary\x18\x01 \x01(\tR\alibrary\"J\n" +
+	"\x0eGroupsResponse\x128\n" +
+	"\x06groups\x18\x01 \x03(\v2 .docsearch.library.v1.GroupGrantR\x06groups\"\x10\n" +
 	"\x0eDeletedRequest\"U\n" +
 	"\x0fDeletedResponse\x12B\n" +
-	"\tlibraries\x18\x01 \x03(\v2$.docsearch.library.v1.DeletedLibraryR\tlibraries2\x8d\t\n" +
+	"\tlibraries\x18\x01 \x03(\v2$.docsearch.library.v1.DeletedLibraryR\tlibraries2\xad\v\n" +
 	"\x0eLibraryService\x12O\n" +
 	"\x04List\x12!.docsearch.library.v1.ListRequest\x1a\".docsearch.library.v1.ListResponse\"\x00\x12U\n" +
 	"\x06Create\x12#.docsearch.library.v1.CreateRequest\x1a$.docsearch.library.v1.CreateResponse\"\x00\x12X\n" +
@@ -1672,7 +2034,11 @@ const file_docsearch_library_v1_library_proto_rawDesc = "" +
 	"\x06Rename\x12#.docsearch.library.v1.RenameRequest\x1a$.docsearch.library.v1.RenameResponse\"\x00\x12U\n" +
 	"\x06Delete\x12#.docsearch.library.v1.DeleteRequest\x1a$.docsearch.library.v1.DeleteResponse\"\x00\x12X\n" +
 	"\aRestore\x12$.docsearch.library.v1.RestoreRequest\x1a%.docsearch.library.v1.RestoreResponse\"\x00\x12X\n" +
-	"\aDeleted\x12$.docsearch.library.v1.DeletedRequest\x1a%.docsearch.library.v1.DeletedResponse\"\x00B\xe7\x01\n" +
+	"\aDeleted\x12$.docsearch.library.v1.DeletedRequest\x1a%.docsearch.library.v1.DeletedResponse\"\x00\x12a\n" +
+	"\n" +
+	"GrantGroup\x12'.docsearch.library.v1.GrantGroupRequest\x1a(.docsearch.library.v1.GrantGroupResponse\"\x00\x12d\n" +
+	"\vRevokeGroup\x12(.docsearch.library.v1.RevokeGroupRequest\x1a).docsearch.library.v1.RevokeGroupResponse\"\x00\x12U\n" +
+	"\x06Groups\x12#.docsearch.library.v1.GroupsRequest\x1a$.docsearch.library.v1.GroupsResponse\"\x00B\xe7\x01\n" +
 	"\x18com.docsearch.library.v1B\fLibraryProtoP\x01ZKgithub.com/bamsammich/docsearch/internal/api/docsearch/library/v1;libraryv1\xa2\x02\x03DLX\xaa\x02\x14Docsearch.Library.V1\xca\x02\x14Docsearch\\Library\\V1\xe2\x02 Docsearch\\Library\\V1\\GPBMetadata\xea\x02\x16Docsearch::Library::V1b\x06proto3"
 
 var (
@@ -1687,7 +2053,7 @@ func file_docsearch_library_v1_library_proto_rawDescGZIP() []byte {
 	return file_docsearch_library_v1_library_proto_rawDescData
 }
 
-var file_docsearch_library_v1_library_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_docsearch_library_v1_library_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
 var file_docsearch_library_v1_library_proto_goTypes = []any{
 	(*Library)(nil),               // 0: docsearch.library.v1.Library
 	(*Member)(nil),                // 1: docsearch.library.v1.Member
@@ -1718,15 +2084,22 @@ var file_docsearch_library_v1_library_proto_goTypes = []any{
 	(*DeleteResponse)(nil),        // 26: docsearch.library.v1.DeleteResponse
 	(*RestoreRequest)(nil),        // 27: docsearch.library.v1.RestoreRequest
 	(*RestoreResponse)(nil),       // 28: docsearch.library.v1.RestoreResponse
-	(*DeletedRequest)(nil),        // 29: docsearch.library.v1.DeletedRequest
-	(*DeletedResponse)(nil),       // 30: docsearch.library.v1.DeletedResponse
-	(*timestamppb.Timestamp)(nil), // 31: google.protobuf.Timestamp
+	(*GroupGrant)(nil),            // 29: docsearch.library.v1.GroupGrant
+	(*GrantGroupRequest)(nil),     // 30: docsearch.library.v1.GrantGroupRequest
+	(*GrantGroupResponse)(nil),    // 31: docsearch.library.v1.GrantGroupResponse
+	(*RevokeGroupRequest)(nil),    // 32: docsearch.library.v1.RevokeGroupRequest
+	(*RevokeGroupResponse)(nil),   // 33: docsearch.library.v1.RevokeGroupResponse
+	(*GroupsRequest)(nil),         // 34: docsearch.library.v1.GroupsRequest
+	(*GroupsResponse)(nil),        // 35: docsearch.library.v1.GroupsResponse
+	(*DeletedRequest)(nil),        // 36: docsearch.library.v1.DeletedRequest
+	(*DeletedResponse)(nil),       // 37: docsearch.library.v1.DeletedResponse
+	(*timestamppb.Timestamp)(nil), // 38: google.protobuf.Timestamp
 }
 var file_docsearch_library_v1_library_proto_depIdxs = []int32{
-	31, // 0: docsearch.library.v1.Invitation.at:type_name -> google.protobuf.Timestamp
-	31, // 1: docsearch.library.v1.Event.at:type_name -> google.protobuf.Timestamp
-	31, // 2: docsearch.library.v1.DeletedLibrary.deleted_at:type_name -> google.protobuf.Timestamp
-	31, // 3: docsearch.library.v1.DeletedLibrary.purge_at:type_name -> google.protobuf.Timestamp
+	38, // 0: docsearch.library.v1.Invitation.at:type_name -> google.protobuf.Timestamp
+	38, // 1: docsearch.library.v1.Event.at:type_name -> google.protobuf.Timestamp
+	38, // 2: docsearch.library.v1.DeletedLibrary.deleted_at:type_name -> google.protobuf.Timestamp
+	38, // 3: docsearch.library.v1.DeletedLibrary.purge_at:type_name -> google.protobuf.Timestamp
 	0,  // 4: docsearch.library.v1.ListResponse.libraries:type_name -> docsearch.library.v1.Library
 	0,  // 5: docsearch.library.v1.CreateResponse.library:type_name -> docsearch.library.v1.Library
 	1,  // 6: docsearch.library.v1.MembersResponse.members:type_name -> docsearch.library.v1.Member
@@ -1734,40 +2107,47 @@ var file_docsearch_library_v1_library_proto_depIdxs = []int32{
 	2,  // 8: docsearch.library.v1.InvitationsResponse.invitations:type_name -> docsearch.library.v1.Invitation
 	0,  // 9: docsearch.library.v1.AcceptResponse.library:type_name -> docsearch.library.v1.Library
 	0,  // 10: docsearch.library.v1.RenameResponse.library:type_name -> docsearch.library.v1.Library
-	31, // 11: docsearch.library.v1.DeleteResponse.purge_at:type_name -> google.protobuf.Timestamp
+	38, // 11: docsearch.library.v1.DeleteResponse.purge_at:type_name -> google.protobuf.Timestamp
 	0,  // 12: docsearch.library.v1.RestoreResponse.library:type_name -> docsearch.library.v1.Library
-	4,  // 13: docsearch.library.v1.DeletedResponse.libraries:type_name -> docsearch.library.v1.DeletedLibrary
-	5,  // 14: docsearch.library.v1.LibraryService.List:input_type -> docsearch.library.v1.ListRequest
-	7,  // 15: docsearch.library.v1.LibraryService.Create:input_type -> docsearch.library.v1.CreateRequest
-	9,  // 16: docsearch.library.v1.LibraryService.Members:input_type -> docsearch.library.v1.MembersRequest
-	11, // 17: docsearch.library.v1.LibraryService.Grant:input_type -> docsearch.library.v1.GrantRequest
-	13, // 18: docsearch.library.v1.LibraryService.Revoke:input_type -> docsearch.library.v1.RevokeRequest
-	15, // 19: docsearch.library.v1.LibraryService.Events:input_type -> docsearch.library.v1.EventsRequest
-	17, // 20: docsearch.library.v1.LibraryService.Invitations:input_type -> docsearch.library.v1.InvitationsRequest
-	19, // 21: docsearch.library.v1.LibraryService.Accept:input_type -> docsearch.library.v1.AcceptRequest
-	21, // 22: docsearch.library.v1.LibraryService.Decline:input_type -> docsearch.library.v1.DeclineRequest
-	23, // 23: docsearch.library.v1.LibraryService.Rename:input_type -> docsearch.library.v1.RenameRequest
-	25, // 24: docsearch.library.v1.LibraryService.Delete:input_type -> docsearch.library.v1.DeleteRequest
-	27, // 25: docsearch.library.v1.LibraryService.Restore:input_type -> docsearch.library.v1.RestoreRequest
-	29, // 26: docsearch.library.v1.LibraryService.Deleted:input_type -> docsearch.library.v1.DeletedRequest
-	6,  // 27: docsearch.library.v1.LibraryService.List:output_type -> docsearch.library.v1.ListResponse
-	8,  // 28: docsearch.library.v1.LibraryService.Create:output_type -> docsearch.library.v1.CreateResponse
-	10, // 29: docsearch.library.v1.LibraryService.Members:output_type -> docsearch.library.v1.MembersResponse
-	12, // 30: docsearch.library.v1.LibraryService.Grant:output_type -> docsearch.library.v1.GrantResponse
-	14, // 31: docsearch.library.v1.LibraryService.Revoke:output_type -> docsearch.library.v1.RevokeResponse
-	16, // 32: docsearch.library.v1.LibraryService.Events:output_type -> docsearch.library.v1.EventsResponse
-	18, // 33: docsearch.library.v1.LibraryService.Invitations:output_type -> docsearch.library.v1.InvitationsResponse
-	20, // 34: docsearch.library.v1.LibraryService.Accept:output_type -> docsearch.library.v1.AcceptResponse
-	22, // 35: docsearch.library.v1.LibraryService.Decline:output_type -> docsearch.library.v1.DeclineResponse
-	24, // 36: docsearch.library.v1.LibraryService.Rename:output_type -> docsearch.library.v1.RenameResponse
-	26, // 37: docsearch.library.v1.LibraryService.Delete:output_type -> docsearch.library.v1.DeleteResponse
-	28, // 38: docsearch.library.v1.LibraryService.Restore:output_type -> docsearch.library.v1.RestoreResponse
-	30, // 39: docsearch.library.v1.LibraryService.Deleted:output_type -> docsearch.library.v1.DeletedResponse
-	27, // [27:40] is the sub-list for method output_type
-	14, // [14:27] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	29, // 13: docsearch.library.v1.GroupsResponse.groups:type_name -> docsearch.library.v1.GroupGrant
+	4,  // 14: docsearch.library.v1.DeletedResponse.libraries:type_name -> docsearch.library.v1.DeletedLibrary
+	5,  // 15: docsearch.library.v1.LibraryService.List:input_type -> docsearch.library.v1.ListRequest
+	7,  // 16: docsearch.library.v1.LibraryService.Create:input_type -> docsearch.library.v1.CreateRequest
+	9,  // 17: docsearch.library.v1.LibraryService.Members:input_type -> docsearch.library.v1.MembersRequest
+	11, // 18: docsearch.library.v1.LibraryService.Grant:input_type -> docsearch.library.v1.GrantRequest
+	13, // 19: docsearch.library.v1.LibraryService.Revoke:input_type -> docsearch.library.v1.RevokeRequest
+	15, // 20: docsearch.library.v1.LibraryService.Events:input_type -> docsearch.library.v1.EventsRequest
+	17, // 21: docsearch.library.v1.LibraryService.Invitations:input_type -> docsearch.library.v1.InvitationsRequest
+	19, // 22: docsearch.library.v1.LibraryService.Accept:input_type -> docsearch.library.v1.AcceptRequest
+	21, // 23: docsearch.library.v1.LibraryService.Decline:input_type -> docsearch.library.v1.DeclineRequest
+	23, // 24: docsearch.library.v1.LibraryService.Rename:input_type -> docsearch.library.v1.RenameRequest
+	25, // 25: docsearch.library.v1.LibraryService.Delete:input_type -> docsearch.library.v1.DeleteRequest
+	27, // 26: docsearch.library.v1.LibraryService.Restore:input_type -> docsearch.library.v1.RestoreRequest
+	36, // 27: docsearch.library.v1.LibraryService.Deleted:input_type -> docsearch.library.v1.DeletedRequest
+	30, // 28: docsearch.library.v1.LibraryService.GrantGroup:input_type -> docsearch.library.v1.GrantGroupRequest
+	32, // 29: docsearch.library.v1.LibraryService.RevokeGroup:input_type -> docsearch.library.v1.RevokeGroupRequest
+	34, // 30: docsearch.library.v1.LibraryService.Groups:input_type -> docsearch.library.v1.GroupsRequest
+	6,  // 31: docsearch.library.v1.LibraryService.List:output_type -> docsearch.library.v1.ListResponse
+	8,  // 32: docsearch.library.v1.LibraryService.Create:output_type -> docsearch.library.v1.CreateResponse
+	10, // 33: docsearch.library.v1.LibraryService.Members:output_type -> docsearch.library.v1.MembersResponse
+	12, // 34: docsearch.library.v1.LibraryService.Grant:output_type -> docsearch.library.v1.GrantResponse
+	14, // 35: docsearch.library.v1.LibraryService.Revoke:output_type -> docsearch.library.v1.RevokeResponse
+	16, // 36: docsearch.library.v1.LibraryService.Events:output_type -> docsearch.library.v1.EventsResponse
+	18, // 37: docsearch.library.v1.LibraryService.Invitations:output_type -> docsearch.library.v1.InvitationsResponse
+	20, // 38: docsearch.library.v1.LibraryService.Accept:output_type -> docsearch.library.v1.AcceptResponse
+	22, // 39: docsearch.library.v1.LibraryService.Decline:output_type -> docsearch.library.v1.DeclineResponse
+	24, // 40: docsearch.library.v1.LibraryService.Rename:output_type -> docsearch.library.v1.RenameResponse
+	26, // 41: docsearch.library.v1.LibraryService.Delete:output_type -> docsearch.library.v1.DeleteResponse
+	28, // 42: docsearch.library.v1.LibraryService.Restore:output_type -> docsearch.library.v1.RestoreResponse
+	37, // 43: docsearch.library.v1.LibraryService.Deleted:output_type -> docsearch.library.v1.DeletedResponse
+	31, // 44: docsearch.library.v1.LibraryService.GrantGroup:output_type -> docsearch.library.v1.GrantGroupResponse
+	33, // 45: docsearch.library.v1.LibraryService.RevokeGroup:output_type -> docsearch.library.v1.RevokeGroupResponse
+	35, // 46: docsearch.library.v1.LibraryService.Groups:output_type -> docsearch.library.v1.GroupsResponse
+	31, // [31:47] is the sub-list for method output_type
+	15, // [15:31] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_docsearch_library_v1_library_proto_init() }
@@ -1781,7 +2161,7 @@ func file_docsearch_library_v1_library_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_docsearch_library_v1_library_proto_rawDesc), len(file_docsearch_library_v1_library_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   31,
+			NumMessages:   38,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

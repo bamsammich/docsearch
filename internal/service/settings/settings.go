@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -36,6 +37,8 @@ type Editable struct {
 	// Key is the setting's key in docsearch.yaml, and its key in the
 	// database.
 	Key string
+	// Choices, when set, are the only values the setting takes.
+	Choices []string
 	// Boolean settings take true or false; every other one takes text.
 	Boolean bool
 	// URL settings take an absolute http or https URL.
@@ -184,6 +187,9 @@ func (e Editable) takes(change Change) error {
 	case e.URL && !config.HTTPURL(change.Value):
 		return fmt.Errorf("%w: %s takes an absolute http or https URL, not %q",
 			ErrInvalid, change.Flag, change.Value)
+	case len(e.Choices) > 0 && !slices.Contains(e.Choices, change.Value):
+		return fmt.Errorf("%w: %s takes %s, not %q", ErrInvalid, change.Flag,
+			strings.Join(e.Choices, " or "), change.Value)
 	case e.Boolean && change.Value != "true" && change.Value != "false":
 		return fmt.Errorf(
 			"%w: %s takes true or false, not %q",

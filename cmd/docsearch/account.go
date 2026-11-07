@@ -74,7 +74,7 @@ func accountCommand() *cli.Command {
 				Action:    withAccounts(unlockAccount),
 			},
 			{
-				Name:      "remove",
+				Name:      commandRemove,
 				Usage:     "end an account's sign-ins; its library stays",
 				ArgsUsage: argUsername,
 				Description: "A shared library only this account administered passes to the " +

@@ -67,6 +67,14 @@ const (
 	LibraryServiceRestoreProcedure = "/docsearch.library.v1.LibraryService/Restore"
 	// LibraryServiceDeletedProcedure is the fully-qualified name of the LibraryService's Deleted RPC.
 	LibraryServiceDeletedProcedure = "/docsearch.library.v1.LibraryService/Deleted"
+	// LibraryServiceGrantGroupProcedure is the fully-qualified name of the LibraryService's GrantGroup
+	// RPC.
+	LibraryServiceGrantGroupProcedure = "/docsearch.library.v1.LibraryService/GrantGroup"
+	// LibraryServiceRevokeGroupProcedure is the fully-qualified name of the LibraryService's
+	// RevokeGroup RPC.
+	LibraryServiceRevokeGroupProcedure = "/docsearch.library.v1.LibraryService/RevokeGroup"
+	// LibraryServiceGroupsProcedure is the fully-qualified name of the LibraryService's Groups RPC.
+	LibraryServiceGroupsProcedure = "/docsearch.library.v1.LibraryService/Groups"
 )
 
 // LibraryServiceClient is a client for the docsearch.library.v1.LibraryService service.
@@ -105,6 +113,15 @@ type LibraryServiceClient interface {
 	// Deleted are the deleted libraries the caller administers and can
 	// still restore, newest first.
 	Deleted(context.Context, *connect.Request[v1.DeletedRequest]) (*connect.Response[v1.DeletedResponse], error)
+	// GrantGroup gives a group a role on a library, or changes it. The caller
+	// administers the library, and maintains the group or is a docsearch
+	// administrator. Every member then reaches the library.
+	GrantGroup(context.Context, *connect.Request[v1.GrantGroupRequest]) (*connect.Response[v1.GrantGroupResponse], error)
+	// RevokeGroup takes a group's role on a library away. The library's
+	// admins may, and so may the group's maintainers.
+	RevokeGroup(context.Context, *connect.Request[v1.RevokeGroupRequest]) (*connect.Response[v1.RevokeGroupResponse], error)
+	// Groups are the groups a library is granted to, for anyone who reads it.
+	Groups(context.Context, *connect.Request[v1.GroupsRequest]) (*connect.Response[v1.GroupsResponse], error)
 }
 
 // NewLibraryServiceClient constructs a client for the docsearch.library.v1.LibraryService service.
@@ -196,6 +213,24 @@ func NewLibraryServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(libraryServiceMethods.ByName("Deleted")),
 			connect.WithClientOptions(opts...),
 		),
+		grantGroup: connect.NewClient[v1.GrantGroupRequest, v1.GrantGroupResponse](
+			httpClient,
+			baseURL+LibraryServiceGrantGroupProcedure,
+			connect.WithSchema(libraryServiceMethods.ByName("GrantGroup")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeGroup: connect.NewClient[v1.RevokeGroupRequest, v1.RevokeGroupResponse](
+			httpClient,
+			baseURL+LibraryServiceRevokeGroupProcedure,
+			connect.WithSchema(libraryServiceMethods.ByName("RevokeGroup")),
+			connect.WithClientOptions(opts...),
+		),
+		groups: connect.NewClient[v1.GroupsRequest, v1.GroupsResponse](
+			httpClient,
+			baseURL+LibraryServiceGroupsProcedure,
+			connect.WithSchema(libraryServiceMethods.ByName("Groups")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -214,6 +249,9 @@ type libraryServiceClient struct {
 	delete      *connect.Client[v1.DeleteRequest, v1.DeleteResponse]
 	restore     *connect.Client[v1.RestoreRequest, v1.RestoreResponse]
 	deleted     *connect.Client[v1.DeletedRequest, v1.DeletedResponse]
+	grantGroup  *connect.Client[v1.GrantGroupRequest, v1.GrantGroupResponse]
+	revokeGroup *connect.Client[v1.RevokeGroupRequest, v1.RevokeGroupResponse]
+	groups      *connect.Client[v1.GroupsRequest, v1.GroupsResponse]
 }
 
 // List calls docsearch.library.v1.LibraryService.List.
@@ -281,6 +319,21 @@ func (c *libraryServiceClient) Deleted(ctx context.Context, req *connect.Request
 	return c.deleted.CallUnary(ctx, req)
 }
 
+// GrantGroup calls docsearch.library.v1.LibraryService.GrantGroup.
+func (c *libraryServiceClient) GrantGroup(ctx context.Context, req *connect.Request[v1.GrantGroupRequest]) (*connect.Response[v1.GrantGroupResponse], error) {
+	return c.grantGroup.CallUnary(ctx, req)
+}
+
+// RevokeGroup calls docsearch.library.v1.LibraryService.RevokeGroup.
+func (c *libraryServiceClient) RevokeGroup(ctx context.Context, req *connect.Request[v1.RevokeGroupRequest]) (*connect.Response[v1.RevokeGroupResponse], error) {
+	return c.revokeGroup.CallUnary(ctx, req)
+}
+
+// Groups calls docsearch.library.v1.LibraryService.Groups.
+func (c *libraryServiceClient) Groups(ctx context.Context, req *connect.Request[v1.GroupsRequest]) (*connect.Response[v1.GroupsResponse], error) {
+	return c.groups.CallUnary(ctx, req)
+}
+
 // LibraryServiceHandler is an implementation of the docsearch.library.v1.LibraryService service.
 type LibraryServiceHandler interface {
 	// List is every library the caller reads, their own first.
@@ -317,6 +370,15 @@ type LibraryServiceHandler interface {
 	// Deleted are the deleted libraries the caller administers and can
 	// still restore, newest first.
 	Deleted(context.Context, *connect.Request[v1.DeletedRequest]) (*connect.Response[v1.DeletedResponse], error)
+	// GrantGroup gives a group a role on a library, or changes it. The caller
+	// administers the library, and maintains the group or is a docsearch
+	// administrator. Every member then reaches the library.
+	GrantGroup(context.Context, *connect.Request[v1.GrantGroupRequest]) (*connect.Response[v1.GrantGroupResponse], error)
+	// RevokeGroup takes a group's role on a library away. The library's
+	// admins may, and so may the group's maintainers.
+	RevokeGroup(context.Context, *connect.Request[v1.RevokeGroupRequest]) (*connect.Response[v1.RevokeGroupResponse], error)
+	// Groups are the groups a library is granted to, for anyone who reads it.
+	Groups(context.Context, *connect.Request[v1.GroupsRequest]) (*connect.Response[v1.GroupsResponse], error)
 }
 
 // NewLibraryServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -404,6 +466,24 @@ func NewLibraryServiceHandler(svc LibraryServiceHandler, opts ...connect.Handler
 		connect.WithSchema(libraryServiceMethods.ByName("Deleted")),
 		connect.WithHandlerOptions(opts...),
 	)
+	libraryServiceGrantGroupHandler := connect.NewUnaryHandler(
+		LibraryServiceGrantGroupProcedure,
+		svc.GrantGroup,
+		connect.WithSchema(libraryServiceMethods.ByName("GrantGroup")),
+		connect.WithHandlerOptions(opts...),
+	)
+	libraryServiceRevokeGroupHandler := connect.NewUnaryHandler(
+		LibraryServiceRevokeGroupProcedure,
+		svc.RevokeGroup,
+		connect.WithSchema(libraryServiceMethods.ByName("RevokeGroup")),
+		connect.WithHandlerOptions(opts...),
+	)
+	libraryServiceGroupsHandler := connect.NewUnaryHandler(
+		LibraryServiceGroupsProcedure,
+		svc.Groups,
+		connect.WithSchema(libraryServiceMethods.ByName("Groups")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/docsearch.library.v1.LibraryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case LibraryServiceListProcedure:
@@ -432,6 +512,12 @@ func NewLibraryServiceHandler(svc LibraryServiceHandler, opts ...connect.Handler
 			libraryServiceRestoreHandler.ServeHTTP(w, r)
 		case LibraryServiceDeletedProcedure:
 			libraryServiceDeletedHandler.ServeHTTP(w, r)
+		case LibraryServiceGrantGroupProcedure:
+			libraryServiceGrantGroupHandler.ServeHTTP(w, r)
+		case LibraryServiceRevokeGroupProcedure:
+			libraryServiceRevokeGroupHandler.ServeHTTP(w, r)
+		case LibraryServiceGroupsProcedure:
+			libraryServiceGroupsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -491,4 +577,16 @@ func (UnimplementedLibraryServiceHandler) Restore(context.Context, *connect.Requ
 
 func (UnimplementedLibraryServiceHandler) Deleted(context.Context, *connect.Request[v1.DeletedRequest]) (*connect.Response[v1.DeletedResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.library.v1.LibraryService.Deleted is not implemented"))
+}
+
+func (UnimplementedLibraryServiceHandler) GrantGroup(context.Context, *connect.Request[v1.GrantGroupRequest]) (*connect.Response[v1.GrantGroupResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.library.v1.LibraryService.GrantGroup is not implemented"))
+}
+
+func (UnimplementedLibraryServiceHandler) RevokeGroup(context.Context, *connect.Request[v1.RevokeGroupRequest]) (*connect.Response[v1.RevokeGroupResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.library.v1.LibraryService.RevokeGroup is not implemented"))
+}
+
+func (UnimplementedLibraryServiceHandler) Groups(context.Context, *connect.Request[v1.GroupsRequest]) (*connect.Response[v1.GroupsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.library.v1.LibraryService.Groups is not implemented"))
 }

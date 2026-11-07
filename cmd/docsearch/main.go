@@ -74,6 +74,7 @@ func command() *cli.Command {
 			importCommand(),
 			accountCommand(),
 			libraryCommand(),
+			groupCommand(),
 		},
 	}
 }

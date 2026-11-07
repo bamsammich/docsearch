@@ -219,6 +219,32 @@ worker removes it and everything in it, and its slug is free again. A
 personal library cannot be deleted. A library always keeps an admin, so the
 last admin cannot leave or step down until they make someone else admin.
 
+### Groups
+
+A group shares a library with several people at once. Whoever creates a
+group maintains it and invites people by username; each accepts or declines,
+as with a library. A maintainer who administers a library grants it to the
+group, and every member then reaches it. A person's role on a library is the
+highest of their own and each group's.
+
+```bash
+docsearch group create platform-team --name "Platform team"
+docsearch group invite platform-team alice              # --role maintainer
+docsearch group accept platform-team                    # as alice
+docsearch library grant platform --group platform-team --role editor
+docsearch library members platform                      # people and groups
+docsearch library revoke platform --group platform-team
+```
+
+Anyone signed in sees every group's name; only its members see who is in it.
+A group always keeps a maintainer, and an admin grant to a group never counts
+as a library's last admin. Deleting a group takes its grants away and leaves
+its libraries.
+
+Everyone may create groups unless `--group-creators administrators`
+(`DOCSEARCH_GROUP_CREATORS`, `groups.creators` in `docsearch.yaml`) leaves it
+to docsearch administrators.
+
 An agent's search covers every library its user reads. `list_documents`
 names each library, and a document outside your own is `library/doc_id`.
 `add_document`, `upload_link` and `PUT /upload?library=` add to a library you

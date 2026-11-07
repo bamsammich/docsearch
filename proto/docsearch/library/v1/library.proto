@@ -174,6 +174,39 @@ message RestoreResponse {
   Library library = 1;
 }
 
+// GroupGrant is a group's role on a library.
+message GroupGrant {
+  string group = 1;
+  string name = 2;
+  string role = 3;
+  int64 members = 4;
+}
+
+message GrantGroupRequest {
+  string library = 1;
+  string group = 2;
+  // Role is reader, editor or admin. Granting a group that holds a role
+  // changes it.
+  string role = 3;
+}
+
+message GrantGroupResponse {}
+
+message RevokeGroupRequest {
+  string library = 1;
+  string group = 2;
+}
+
+message RevokeGroupResponse {}
+
+message GroupsRequest {
+  string library = 1;
+}
+
+message GroupsResponse {
+  repeated GroupGrant groups = 1;
+}
+
 message DeletedRequest {}
 
 message DeletedResponse {
@@ -230,4 +263,16 @@ service LibraryService {
   // Deleted are the deleted libraries the caller administers and can
   // still restore, newest first.
   rpc Deleted(DeletedRequest) returns (DeletedResponse) {}
+
+  // GrantGroup gives a group a role on a library, or changes it. The caller
+  // administers the library, and maintains the group or is a docsearch
+  // administrator. Every member then reaches the library.
+  rpc GrantGroup(GrantGroupRequest) returns (GrantGroupResponse) {}
+
+  // RevokeGroup takes a group's role on a library away. The library's
+  // admins may, and so may the group's maintainers.
+  rpc RevokeGroup(RevokeGroupRequest) returns (RevokeGroupResponse) {}
+
+  // Groups are the groups a library is granted to, for anyone who reads it.
+  rpc Groups(GroupsRequest) returns (GroupsResponse) {}
 }

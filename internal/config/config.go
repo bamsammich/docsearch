@@ -49,6 +49,9 @@ type Config struct {
 	// test or staging instance can't be taken for the one agents search.
 	// Empty shows nothing.
 	InstanceLabel string
+	// GroupCreators says who may create groups: GroupsByEveryone, the
+	// default, or GroupsByAdministrators.
+	GroupCreators string
 	// File is the docsearch.yaml the server read, and empty when it read
 	// none.
 	File string
@@ -151,6 +154,8 @@ const (
 	EnvOIDCRequiredClaimName  = "DOCSEARCH_OIDC_REQUIRED_CLAIM_NAME"
 	EnvOIDCRequiredClaimValue = "DOCSEARCH_OIDC_REQUIRED_CLAIM_VALUE"
 
+	// EnvGroupCreators says who may create groups.
+	EnvGroupCreators = "DOCSEARCH_GROUP_CREATORS"
 	// EnvPublicURL is where a browser reaches the server.
 	EnvPublicURL = "DOCSEARCH_PUBLIC_URL"
 	// EnvUploadMaxMB caps an upload's size.
@@ -201,8 +206,25 @@ var ErrOpenToTheNetwork = errors.New(
 	"refusing auth mode none on an address that is not loopback: the mode asks for no " +
 		"credential, so every request would be served. Bind loopback, or run mode token")
 
+// Who may create groups.
+const (
+	GroupsByEveryone       = "everyone"
+	GroupsByAdministrators = "administrators"
+)
+
+// ErrGroupCreators is a group-creators setting that names neither choice.
+var ErrGroupCreators = errors.New(
+	"who may create groups is " + GroupsByEveryone + " or " + GroupsByAdministrators)
+
 // Validate resolves derived values and rejects unsafe combinations.
 func (c *Config) Validate() error {
+	switch c.GroupCreators {
+	case "":
+		c.GroupCreators = GroupsByEveryone
+	case GroupsByEveryone, GroupsByAdministrators:
+	default:
+		return fmt.Errorf("%w, not %q", ErrGroupCreators, c.GroupCreators)
+	}
 	if c.Auth == 0 {
 		c.Auth = owner.Token
 	}

@@ -113,6 +113,13 @@ func command() *cli.Command {
 				Sources: from("ui-client-id", config.EnvUIClientID),
 			},
 			&cli.StringFlag{
+				Name: flagCreators,
+				Usage: "who may create groups: `" + config.GroupsByEveryone + "` or " +
+					config.GroupsByAdministrators,
+				Value:   config.GroupsByEveryone,
+				Sources: from(flagCreators, config.EnvGroupCreators),
+			},
+			&cli.StringFlag{
 				Name:    "instance-label",
 				Usage:   "a `LABEL` the library UI shows on every page, such as \"Test instance\"",
 				Sources: from("instance-label", config.EnvInstanceLabel),
@@ -217,6 +224,7 @@ func configFrom(cmd *cli.Command, args []string) (config.Config, error) {
 		UploadMaxMB:     cmd.Int64("upload-max-mb"),
 		UIClientID:      cmd.String("ui-client-id"),
 		InstanceLabel:   strings.TrimSpace(cmd.String("instance-label")),
+		GroupCreators:   strings.TrimSpace(cmd.String(flagCreators)),
 		OIDC: config.OIDC{
 			Issuer:             cmd.String(flagOIDCIssuer),
 			Resource:           cmd.String("oidc-resource"),

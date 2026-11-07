@@ -105,7 +105,7 @@ func inspectTarget(ctx context.Context, cmd *cli.Command) error {
 
 func removeCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "remove",
+		Name:      commandRemove,
 		Usage:     "delete a document and all of its rows",
 		ArgsUsage: argDocID,
 		Flags:     serverFlags(),

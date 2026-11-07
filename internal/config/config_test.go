@@ -88,6 +88,22 @@ func (s *ConfigSuite) TestLoopbackBindNeedsNoFlag() {
 	s.NoError(s.valid().Validate())
 }
 
+// Who may create groups defaults to everyone, and takes only the two
+// choices.
+func (s *ConfigSuite) TestGroupCreatorsTakesTwoChoices() {
+	c := s.valid()
+	s.Require().NoError(c.Validate())
+	s.Equal(GroupsByEveryone, c.GroupCreators)
+
+	c = s.valid()
+	c.GroupCreators = GroupsByAdministrators
+	s.Require().NoError(c.Validate())
+
+	c = s.valid()
+	c.GroupCreators = "admins"
+	s.Require().ErrorIs(c.Validate(), ErrGroupCreators)
+}
+
 func (s *ConfigSuite) TestMissingTokenIsRejected() {
 	c := s.valid()
 	c.BearerToken = ""

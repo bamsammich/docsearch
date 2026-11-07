@@ -31,6 +31,7 @@ const (
 	flagClaimValue = "oidc-required-claim-value"
 	flagSignUp     = "oidc-sign-up"
 	flagUsername   = "oidc-username-claim"
+	flagCreators   = "group-creators"
 )
 
 // fileKeys are where each setting lives in docsearch.yaml. A flag missing
@@ -47,6 +48,7 @@ var fileKeys = map[string]string{
 	flagPublicURL:           "public_url",
 	"ui-client-id":          "ui.client_id",
 	"instance-label":        "ui.instance_label",
+	flagCreators:            "groups.creators",
 	"upload-max-mb":         "upload_max_mb",
 	flagOIDCIssuer:          "auth.oidc.issuer",
 	"oidc-resource":         "auth.oidc.resource",
@@ -70,6 +72,10 @@ var editable = map[string]settings.Editable{
 	flagClaimName:  {Key: fileKeys[flagClaimName]},
 	flagClaimValue: {Key: fileKeys[flagClaimValue]},
 	flagSignUp:     {Key: fileKeys[flagSignUp], Boolean: true},
+	flagCreators: {
+		Key:     fileKeys[flagCreators],
+		Choices: []string{config.GroupsByEveryone, config.GroupsByAdministrators},
+	},
 }
 
 // applyStored takes what the database keeps for every editable setting
@@ -93,6 +99,8 @@ func applyStored(cfg *config.Config, stored map[string]string) {
 			cfg.OIDC.RequiredClaimValue = value
 		case flagSignUp:
 			cfg.OIDC.SignUp = value == "true"
+		case flagCreators:
+			cfg.GroupCreators = value
 		}
 		cfg.Origins[flag] = config.Origin{Kind: config.FromDatabase, Where: "database", Key: e.Key}
 	}
