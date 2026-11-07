@@ -102,6 +102,11 @@ message InviteRequest {
   string username = 2;
   // Role is member or maintainer. Inviting a member changes their role.
   string role = 3;
+  // Force, for an administrator only, makes them a member at once with no
+  // invitation to accept: breakglass. The group's log and the log of each
+  // library it holds record it. An administrator who is not in a group
+  // joins it only this way.
+  bool force = 4;
 }
 
 message InviteResponse {

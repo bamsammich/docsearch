@@ -135,6 +135,17 @@ var (
 	ErrLastMaintainer = errors.New(
 		"that would leave the group without a maintainer: make someone else a maintainer first",
 	)
+	// ErrGroupRole is a library role a group may not hold: a group gets
+	// reader or editor, and administering a library takes your own grant.
+	ErrGroupRole = errors.New("a group gets reader or editor: " +
+		"administering a library takes your own grant")
+	// ErrJoinByForce is an administrator inviting themselves to a group they
+	// are not in, which only an addition by force does.
+	ErrJoinByForce = errors.New("you are not in that group: " +
+		"an administrator joins a group only by force, which its libraries record")
+	// ErrGroupName is a group name that is empty, too long, or holds
+	// control characters.
+	ErrGroupName = errors.New("a group name is 1 to 120 characters with no control characters")
 	// ErrGroupTaken is a slug another group already has.
 	ErrGroupTaken = errors.New("a group by that name already exists")
 	// ErrNoGroupInvitation is a group the caller is not invited to.

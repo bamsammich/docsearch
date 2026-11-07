@@ -83,8 +83,8 @@ func libraryCommand() *cli.Command {
 				Description: "Someone can be invited once they have signed in at least " +
 					"once, which is when their username is recorded. The library reaches " +
 					"them once they accept with `docsearch library accept`. With --group, " +
-					"the library goes to every member of a group you maintain, and no " +
-					"username is given.",
+					"the library goes to every member of a group you maintain, as reader " +
+					"or editor, and no username is given.",
 				Flags: append(serverFlags(), &cli.StringFlag{
 					Name: flagRole, Value: sharing.Reader, Usage: "reader, editor or admin",
 				}, groupFlag()),

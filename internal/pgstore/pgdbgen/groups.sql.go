@@ -101,6 +101,21 @@ func (q *Queries) DeleteGroup(ctx context.Context, slug string) error {
 	return err
 }
 
+const forceIntoGroup = `-- name: ForceIntoGroup :exec
+SELECT force_into_group($1::text, $2::text, $3::text)
+`
+
+type ForceIntoGroupParams struct {
+	Slug     string
+	Username string
+	Role     string
+}
+
+func (q *Queries) ForceIntoGroup(ctx context.Context, arg ForceIntoGroupParams) error {
+	_, err := q.db.ExecContext(ctx, forceIntoGroup, arg.Slug, arg.Username, arg.Role)
+	return err
+}
+
 const grantLibraryGroup = `-- name: GrantLibraryGroup :exec
 SELECT grant_library_group($1::text, $2::text, $3::text)
 `

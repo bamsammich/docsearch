@@ -70,8 +70,15 @@ func groupCommand() *cli.Command {
 				Name:      "invite",
 				Usage:     "invite someone to a group you maintain, or change a member's role",
 				ArgsUsage: argGroup + " " + argUsername,
+				Description: "An administrator who must add someone at once, with no " +
+					"invitation to accept, passes --force. The group's log and the log of " +
+					"each library it holds record it. An administrator joins a group they " +
+					"are not in only this way.",
 				Flags: append(serverFlags(), &cli.StringFlag{
 					Name: flagRole, Value: sharing.RoleMember, Usage: "member or maintainer",
+				}, &cli.BoolFlag{
+					Name:  flagForce,
+					Usage: "administrators only: add them now, with no invitation, and log it",
 				}),
 				Action: inviteToGroup,
 			},
@@ -214,6 +221,14 @@ func inviteToGroup(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 	role := cmd.String(flagRole)
+	if cmd.Bool(flagForce) {
+		if err := clientFor(cmd).ForceIntoGroup(ctx, slug, username, role); err != nil {
+			return err
+		}
+		fmt.Printf("added %s to %s as %s by force; the group and its libraries log it\n",
+			username, slug, role)
+		return nil
+	}
 	invited, err := clientFor(cmd).InviteToGroup(ctx, slug, username, role)
 	if err != nil {
 		return err

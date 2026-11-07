@@ -17,6 +17,9 @@ SELECT delete_group(sqlc.arg(slug)::text);
 SELECT invite_to_group(sqlc.arg(slug)::text, sqlc.arg(username)::text, sqlc.arg(role)::text)::text
   AS outcome;
 
+-- name: ForceIntoGroup :exec
+SELECT force_into_group(sqlc.arg(slug)::text, sqlc.arg(username)::text, sqlc.arg(role)::text);
+
 -- name: AcceptGroupInvitation :one
 SELECT accept_group_invitation(sqlc.arg(slug)::text)::text AS role;
 

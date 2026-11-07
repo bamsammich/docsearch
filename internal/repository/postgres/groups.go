@@ -64,6 +64,17 @@ func (g *Groups) Invite(ctx context.Context, slug, username, role string) (bool,
 	return outcome == "invited", err
 }
 
+// Force makes username a member of the group slug names at once, with no
+// invitation to accept, or changes their role. Only an administrator may,
+// and the group and each of its libraries record it.
+func (g *Groups) Force(ctx context.Context, slug, username, role string) error {
+	return g.run(ctx, func(q *pgdbgen.Queries) error {
+		return q.ForceIntoGroup(ctx, pgdbgen.ForceIntoGroupParams{
+			Slug: slug, Username: username, Role: role,
+		})
+	})
+}
+
 // Accept joins the group the user is invited to, and answers the role.
 func (g *Groups) Accept(ctx context.Context, slug string) (string, error) {
 	var role string

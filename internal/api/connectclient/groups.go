@@ -58,6 +58,14 @@ func (c *Client) InviteToGroup(ctx context.Context, slug, username, role string)
 	return resp.Msg.GetInvited(), nil
 }
 
+// ForceIntoGroup makes someone a member at once, with no invitation:
+// an administrator's breakglass, which the group and its libraries log.
+func (c *Client) ForceIntoGroup(ctx context.Context, slug, username, role string) error {
+	_, err := c.groups.Invite(ctx, connect.NewRequest(
+		&groupv1.InviteRequest{Group: slug, Username: username, Role: role, Force: true}))
+	return err
+}
+
 // AcceptGroup joins a group the caller is invited to, and answers the role.
 func (c *Client) AcceptGroup(ctx context.Context, slug string) (string, error) {
 	resp, err := c.groups.Accept(ctx, connect.NewRequest(&groupv1.AcceptRequest{Group: slug}))

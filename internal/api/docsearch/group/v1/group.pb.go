@@ -763,7 +763,12 @@ type InviteRequest struct {
 	Group    string                 `protobuf:"bytes,1,opt,name=group,proto3" json:"group,omitempty"`
 	Username string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
 	// Role is member or maintainer. Inviting a member changes their role.
-	Role          string `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
+	Role string `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
+	// Force, for an administrator only, makes them a member at once with no
+	// invitation to accept: breakglass. The group's log and the log of each
+	// library it holds record it. An administrator who is not in a group
+	// joins it only this way.
+	Force         bool `protobuf:"varint,4,opt,name=force,proto3" json:"force,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -817,6 +822,13 @@ func (x *InviteRequest) GetRole() string {
 		return x.Role
 	}
 	return ""
+}
+
+func (x *InviteRequest) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
 }
 
 type InviteResponse struct {
@@ -1515,11 +1527,12 @@ const file_docsearch_group_v1_group_proto_rawDesc = "" +
 	"\x0eRenameResponse\"%\n" +
 	"\rDeleteRequest\x12\x14\n" +
 	"\x05group\x18\x01 \x01(\tR\x05group\"\x10\n" +
-	"\x0eDeleteResponse\"U\n" +
+	"\x0eDeleteResponse\"k\n" +
 	"\rInviteRequest\x12\x14\n" +
 	"\x05group\x18\x01 \x01(\tR\x05group\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12\x12\n" +
-	"\x04role\x18\x03 \x01(\tR\x04role\"*\n" +
+	"\x04role\x18\x03 \x01(\tR\x04role\x12\x14\n" +
+	"\x05force\x18\x04 \x01(\bR\x05force\"*\n" +
 	"\x0eInviteResponse\x12\x18\n" +
 	"\ainvited\x18\x01 \x01(\bR\ainvited\"%\n" +
 	"\rAcceptRequest\x12\x14\n" +

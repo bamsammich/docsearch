@@ -1,6 +1,7 @@
 package postgres_test
 
 import (
+	"database/sql"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -160,13 +161,24 @@ func (s *GroupsSuite) TestAGroupKeepsAMaintainer() {
 		"with a second maintainer, ana leaves")
 }
 
-// An admin grant to a group never counts as a library's last admin.
-func (s *GroupsSuite) TestALibraryKeepsADirectAdmin() {
+// A group gets reader or editor, never admin: administering a library
+// takes your own grant, so a group member can't make themselves its admin
+// and push out the admins it has.
+func (s *GroupsSuite) TestAGroupNeverAdministersALibrary() {
 	ctx := s.T().Context()
-	s.Require().NoError(s.groups("ana").GrantLibrary(ctx, "team", "eng", sharing.Admin))
-	s.Equal(sharing.Admin, s.roleOn("ben", "team"))
-	s.Require().ErrorIs(postgres.NewLibraries(s.db.App, "ana").Revoke(ctx, "team", "ana"),
-		sharing.ErrLastAdmin)
+	s.Require().ErrorIs(s.groups("ana").GrantLibrary(ctx, "team", "eng", sharing.Admin),
+		sharing.ErrGroupRole)
+	s.Require().NoError(s.groups("ana").GrantLibrary(ctx, "team", "eng", sharing.Editor))
+
+	ben := postgres.NewLibraries(s.db.App, "ben")
+	_, err := ben.Grant(ctx, "team", "ben", sharing.Admin)
+	s.Require().ErrorIs(err, sharing.ErrNoLibrary, "an editor through a group grants nothing")
+	s.Require().ErrorIs(ben.Revoke(ctx, "team", "ana"), sharing.ErrNoLibrary)
+	_, err = ben.Rename(ctx, "team", "Ben's now")
+	s.Require().ErrorIs(err, sharing.ErrNoLibrary)
+	_, err = ben.Delete(ctx, "team")
+	s.Require().ErrorIs(err, sharing.ErrNoLibrary)
+	s.Equal(sharing.Admin, s.roleOn("ana", "team"))
 }
 
 // Deleting a group takes its grants away and leaves its libraries.
@@ -181,8 +193,8 @@ func (s *GroupsSuite) TestDeletingAGroupLeavesItsLibraries() {
 	events, err := postgres.NewLibraries(s.db.App, "ana").Events(ctx, "team")
 	s.Require().NoError(err)
 	last := events[len(events)-1]
-	s.Equal("group_revoke", last.Action)
-	s.Equal("eng", last.Detail)
+	s.Equal("group_delete", last.Action)
+	s.Equal("Engineering", last.Detail, "the log keeps the name the group had")
 }
 
 // A membership the provider gives is taken away only at the provider.
@@ -193,6 +205,12 @@ func (s *GroupsSuite) TestAProviderMembershipIsNotRemovedByHand() {
 		SELECT group_id, 'dee', 'member', 'provider' FROM groups WHERE slug = 'eng'`)
 	s.Require().NoError(err)
 	s.Require().ErrorIs(s.groups("ana").Remove(ctx, "eng", "dee"), sharing.ErrFromProvider)
+
+	invited, err := s.groups("ana").Invite(ctx, "eng", "dee", sharing.RoleMaintainer)
+	s.Require().NoError(err)
+	s.False(invited)
+	s.Require().ErrorIs(s.groups("ana").Remove(ctx, "eng", "dee"), sharing.ErrFromProvider,
+		"a role change keeps the membership the provider's")
 }
 
 // A group's maintainers see its invitations and its log; the invitee
@@ -251,4 +269,75 @@ func (s *GroupsSuite) TestAJobQueuedThroughAGroupFailsWhenItsRequesterLeaves() {
 	s.Require().NoError(s.db.Owner.QueryRowContext(ctx,
 		`SELECT status FROM ingest_jobs WHERE id = $1`, id).Scan(&status))
 	s.Equal("failed", status)
+}
+
+// An administrator manages any group, but joins one only by force, and the
+// group and each of its libraries record the forced addition.
+func (s *GroupsSuite) TestAnAdministratorJoinsOnlyByForce() {
+	ctx := s.T().Context()
+	_, err := s.db.Owner.ExecContext(ctx, `UPDATE users SET admin = true WHERE user_id = 'dee'`)
+	s.Require().NoError(err)
+	s.Require().NoError(s.groups("ana").GrantLibrary(ctx, "team", "eng", sharing.Reader))
+
+	_, err = s.groups("dee").Invite(ctx, "eng", "dee", sharing.RoleMaintainer)
+	s.Require().ErrorIs(err, sharing.ErrJoinByForce)
+	invited, err := s.groups("dee").Invite(ctx, "eng", "cy", sharing.RoleMember)
+	s.Require().NoError(err)
+	s.True(invited, "an administrator invites others through the usual invitation")
+	s.Empty(s.roleOn("cy", "team"))
+
+	s.Require().ErrorIs(s.groups("ana").Force(ctx, "eng", "cy", sharing.RoleMember),
+		sharing.ErrNoGroup, "only an administrator adds by force")
+	s.Require().NoError(s.groups("dee").Force(ctx, "eng", "dee", sharing.RoleMember))
+	s.Equal(sharing.Reader, s.roleOn("dee", "team"))
+
+	groupLog, err := s.groups("ana").Events(ctx, "eng")
+	s.Require().NoError(err)
+	forced := groupLog[len(groupLog)-1]
+	s.Equal("force", forced.Action)
+	s.Equal("dee", forced.Actor)
+	s.Equal("dee", forced.Subject)
+	libraryLog, err := postgres.NewLibraries(s.db.App, "ana").Events(ctx, "team")
+	s.Require().NoError(err)
+	reached := libraryLog[len(libraryLog)-1]
+	s.Equal("group_force", reached.Action)
+	s.Equal("dee", reached.Subject)
+	s.Equal("Engineering", reached.Detail)
+}
+
+// Two maintainers stepping down at once leave the group one of them: the
+// second waits for the first and is refused.
+func (s *GroupsSuite) TestTwoMaintainersCannotBothStepDown() {
+	ctx := s.T().Context()
+	_, err := s.groups("ana").Invite(ctx, "eng", "ben", sharing.RoleMaintainer)
+	s.Require().NoError(err)
+	as := func(user string) *sql.Tx {
+		tx, err := s.db.App.BeginTx(ctx, nil)
+		s.Require().NoError(err)
+		_, err = tx.ExecContext(ctx, `SELECT set_config('app.user_id', $1, true)`, user)
+		s.Require().NoError(err)
+		return tx
+	}
+	first, second := as("ana"), as("ben")
+	_, err = first.ExecContext(ctx, `SELECT remove_from_group('eng', 'ana')`)
+	s.Require().NoError(err)
+	refused := make(chan error, 1)
+	go func() {
+		_, err := second.ExecContext(ctx, `SELECT remove_from_group('eng', 'ben')`)
+		refused <- err
+	}()
+	s.Require().NoError(first.Commit())
+	s.Require().ErrorContains(<-refused, "without a maintainer")
+	s.Require().NoError(second.Rollback())
+	members, err := s.groups("ben").Members(ctx, "eng")
+	s.Require().NoError(err)
+	s.Equal([]sharing.GroupMember{{Username: "ben", Role: sharing.RoleMaintainer}}, members)
+}
+
+// A group name holds no control characters, which a terminal would obey.
+func (s *GroupsSuite) TestAGroupNameHoldsNoControlCharacters() {
+	ctx := s.T().Context()
+	_, err := s.groups("cy").Create(ctx, "ops", "Ops\x1b]8;;https://example.com\x07")
+	s.Require().ErrorIs(err, sharing.ErrGroupName)
+	s.Require().ErrorIs(s.groups("ana").Rename(ctx, "eng", "Eng\nineering"), sharing.ErrGroupName)
 }

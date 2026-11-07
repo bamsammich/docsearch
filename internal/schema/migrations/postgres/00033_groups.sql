@@ -3,9 +3,10 @@
 -- A group is a set of accounts made in docsearch. Whoever creates one is
 -- its first maintainer. A maintainer invites people by username, and each
 -- accepts or declines, as with a library since version 28. A maintainer
--- may grant a library they administer to their group, and from then on
--- every member reaches the library with the group's role. A person's role
--- on a library is the highest of their own grant and each group's grant.
+-- may grant a library they administer to their group, as reader or
+-- editor, and from then on every member reaches the library with the
+-- group's role. A person's role on a library is the highest of their own
+-- grant and each group's grant.
 --
 -- Every function that decides access now reads both paths through
 -- user_library_roles: app_libraries, library_by_slug, readable_libraries,
@@ -16,21 +17,29 @@
 --
 --   a group keeps a maintainer      the change that would leave none is
 --                                   refused with DSG03
---   a library keeps a direct admin  admins_left still counts only
---                                   library_grants, so an admin grant to
---                                   a group never counts as the last one
+--   administering takes your own    a group gets reader or editor, never
+--   grant                           admin, so managing a library's
+--                                   members, renaming it and deleting it
+--                                   always take the caller's own admin
+--                                   grant
 --   who grants to a group           a library admin who maintains the
 --                                   group, or a docsearch administrator
+--   who joins a group               only someone who accepts an
+--                                   invitation, unless an administrator
+--                                   adds them by force, which the group
+--                                   and each of its libraries record
 --   who sees a group                anyone signed in sees its name; its
 --                                   members and administrators see who is
 --                                   in it
 --
--- Administrators may manage any group. A group holds no documents, so
+-- Administrators may manage any group: rename it, delete it, invite
+-- people, change roles and remove people. An administrator who does not
+-- maintain a group joins it only by force. A group holds no documents, so
 -- deleting one removes its grants and leaves its libraries.
 --
 -- Removing a password account takes its memberships and invitations with
--- it. A group it alone maintained passes to the same heir as its libraries
--- do, or is left to the administrators when there is none.
+-- it. A group it alone maintained is left to the administrators, never
+-- handed to the heir, since a group's libraries have admins of their own.
 --
 -- provider_group is set by the provider link of a later version; nothing
 -- here reads it.
@@ -38,17 +47,21 @@
 -- New refusals, each with its own SQLSTATE:
 --
 --   DSG01  no group by that name that you may act on
+--   DSG02  a group gets reader or editor on a library, never admin
 --   DSG03  that would leave the group without a maintainer
 --   DSG04  a group by that name already exists
 --   DSG05  no invitation to a group by that name
+--   DSG06  an administrator joins a group they do not maintain only by force
 --   DSG07  the membership comes from the provider group
+--   DSG08  a group name is 1 to 120 characters with no control characters
 --
 -- +goose Up
 -- +goose StatementBegin
 CREATE TABLE groups (
   group_id       text PRIMARY KEY CHECK (group_id ~ '^grp_[a-z0-9]{1,36}$'),
   slug           text NOT NULL UNIQUE CHECK (slug ~ '^[a-z0-9-]{1,40}$'),
-  name           text NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 120),
+  name           text NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 120
+                                      AND name !~ '[[:cntrl:]]'),
   provider_group text UNIQUE,
   created_by     text REFERENCES users(user_id) ON DELETE SET NULL,
   created_at     timestamptz NOT NULL DEFAULT now()
@@ -77,7 +90,7 @@ CREATE INDEX group_invitations_user ON group_invitations(user_id);
 CREATE TABLE library_group_grants (
   library_id text NOT NULL REFERENCES libraries(library_id) ON DELETE CASCADE,
   group_id   text NOT NULL REFERENCES groups(group_id) ON DELETE CASCADE,
-  role       text NOT NULL CHECK (role IN ('reader', 'editor', 'admin')),
+  role       text NOT NULL CHECK (role IN ('reader', 'editor')),
   granted_by text REFERENCES users(user_id) ON DELETE SET NULL,
   granted_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (library_id, group_id)
@@ -91,7 +104,7 @@ CREATE TABLE group_events (
   actor        text REFERENCES users(user_id) ON DELETE SET NULL,
   actor_name   text,
   action       text NOT NULL CHECK (action IN ('create', 'rename', 'invite', 'accept', 'decline',
-                                               'withdraw', 'role', 'remove')),
+                                               'withdraw', 'role', 'remove', 'force')),
   subject      text REFERENCES users(user_id) ON DELETE SET NULL,
   subject_name text,
   role         text,
@@ -104,7 +117,8 @@ CREATE TRIGGER group_event_names BEFORE INSERT ON group_events
 ALTER TABLE access_events DROP CONSTRAINT access_events_action_check;
 ALTER TABLE access_events ADD CONSTRAINT access_events_action_check
   CHECK (action IN ('create', 'grant', 'revoke', 'invite', 'accept', 'decline', 'withdraw',
-                    'rename', 'delete', 'restore', 'group_grant', 'group_revoke'));
+                    'rename', 'delete', 'restore', 'group_grant', 'group_revoke',
+                    'group_delete', 'group_force'));
 -- +goose StatementEnd
 
 -- +goose StatementBegin
@@ -120,6 +134,22 @@ AS $function$
   SELECT lg.library_id, lg.role
     FROM library_group_grants lg JOIN group_members m ON m.group_id = lg.group_id
    WHERE m.user_id = uid;
+$function$;
+
+-- holds_library_role reports whether uid holds at least min_role on one
+-- library, by either path. The queue scans call it once per job, so it
+-- looks the pair up by both keys rather than listing every role uid holds.
+CREATE FUNCTION holds_library_role(uid text, lib text, min_role text)
+RETURNS boolean
+LANGUAGE sql STABLE
+SET search_path = public, pg_temp
+AS $function$
+  SELECT EXISTS (SELECT 1 FROM library_grants g
+                  WHERE g.library_id = lib AND g.user_id = uid
+                    AND role_rank(g.role) >= role_rank(min_role))
+      OR EXISTS (SELECT 1 FROM library_group_grants lg
+                   JOIN group_members m ON m.group_id = lg.group_id AND m.user_id = uid
+                  WHERE lg.library_id = lib AND role_rank(lg.role) >= role_rank(min_role));
 $function$;
 
 CREATE OR REPLACE FUNCTION app_libraries(min_role text)
@@ -170,8 +200,7 @@ AS $function$
     JOIN libraries l ON l.library_id = j.library_id
    WHERE l.deleted_at IS NULL
      AND (j.status = 'queued' OR (j.status = 'running' AND j.lease_until < now()))
-     AND EXISTS (SELECT 1 FROM user_library_roles(j.requested_by) r
-                  WHERE r.library_id = j.library_id AND role_rank(r.role) >= role_rank('editor'))
+     AND holds_library_role(j.requested_by, j.library_id, 'editor')
    ORDER BY j.library_id, j.requested_by;
 $function$;
 
@@ -188,9 +217,7 @@ BEGIN
          error = 'the account that queued it can no longer add to this library'
    WHERE (j.status = 'queued'
           OR (j.status IN ('running', 'cancelling') AND j.lease_until < now()))
-     AND NOT EXISTS (SELECT 1 FROM user_library_roles(j.requested_by) r
-                      WHERE r.library_id = j.library_id
-                        AND role_rank(r.role) >= role_rank('editor'));
+     AND NOT holds_library_role(j.requested_by, j.library_id, 'editor');
   GET DIAGNOSTICS failed = ROW_COUNT;
   RETURN failed;
 END;
@@ -225,6 +252,17 @@ AS $function$
                         AND (need = 'member' OR m.role = 'maintainer')));
 $function$;
 
+-- group_name_ok reports whether a name fits a group: 1 to 120 characters
+-- once trimmed, and no control characters, which a terminal would obey.
+CREATE FUNCTION group_name_ok(new_name text)
+RETURNS boolean
+LANGUAGE sql IMMUTABLE
+SET search_path = public, pg_temp
+AS $function$
+  SELECT char_length(btrim(coalesce(new_name, ''))) BETWEEN 1 AND 120
+     AND coalesce(new_name, '') !~ '[[:cntrl:]]';
+$function$;
+
 -- maintainers_left is how many maintainers a group keeps if member's role
 -- became new_role. A NULL role is the membership taken away.
 CREATE FUNCTION maintainers_left(grp text, member text, new_role text)
@@ -254,10 +292,18 @@ BEGIN
   IF (SELECT count(*) FROM groups WHERE created_by = actor) >= 100 THEN
     RAISE EXCEPTION 'you have created 100 groups, the most one account may' USING ERRCODE = 'DSL06';
   END IF;
+  IF NOT group_name_ok(new_name) THEN
+    RAISE EXCEPTION 'a group name is 1 to 120 characters with no control characters'
+      USING ERRCODE = 'DSG08';
+  END IF;
   IF EXISTS (SELECT 1 FROM groups WHERE slug = new_slug) THEN
     RAISE EXCEPTION 'a group named % already exists', new_slug USING ERRCODE = 'DSG04';
   END IF;
-  INSERT INTO groups (group_id, slug, name, created_by) VALUES (new_id, new_slug, btrim(new_name), actor);
+  BEGIN
+    INSERT INTO groups (group_id, slug, name, created_by) VALUES (new_id, new_slug, btrim(new_name), actor);
+  EXCEPTION WHEN unique_violation THEN
+    RAISE EXCEPTION 'a group named % already exists', new_slug USING ERRCODE = 'DSG04';
+  END;
   INSERT INTO group_members (group_id, user_id, role, source) VALUES (new_id, actor, 'maintainer', 'invited');
   INSERT INTO group_events (group_id, actor, action, subject, role)
     VALUES (new_id, actor, 'create', actor, 'maintainer');
@@ -278,8 +324,9 @@ BEGIN
   IF grp IS NULL THEN
     RAISE EXCEPTION 'no group named % that you maintain', grp_slug USING ERRCODE = 'DSG01';
   END IF;
-  IF btrim(coalesce(new_name, '')) = '' THEN
-    RAISE EXCEPTION 'a group needs a name' USING ERRCODE = '22023';
+  IF NOT group_name_ok(new_name) THEN
+    RAISE EXCEPTION 'a group name is 1 to 120 characters with no control characters'
+      USING ERRCODE = 'DSG08';
   END IF;
   SELECT name INTO old FROM groups WHERE group_id = grp;
   IF old = btrim(new_name) THEN
@@ -306,8 +353,9 @@ BEGIN
     RAISE EXCEPTION 'no group named % that you maintain', grp_slug USING ERRCODE = 'DSG01';
   END IF;
   INSERT INTO access_events (library_id, actor, action, role, detail)
-    SELECT library_id, actor, 'group_revoke', role, grp_slug
-      FROM library_group_grants WHERE group_id = grp;
+    SELECT lg.library_id, actor, 'group_delete', lg.role, g.name
+      FROM library_group_grants lg JOIN groups g ON g.group_id = lg.group_id
+     WHERE lg.group_id = grp;
   DELETE FROM groups WHERE group_id = grp;
 END;
 $function$;
@@ -334,16 +382,25 @@ BEGIN
   IF new_role IS NULL OR new_role NOT IN ('member', 'maintainer') THEN
     RAISE EXCEPTION 'a group role is member or maintainer' USING ERRCODE = '22023';
   END IF;
+  -- Two maintainers changing roles at once could each leave the other as
+  -- the last maintainer; locking the group's row orders them.
+  PERFORM 1 FROM groups WHERE group_id = grp FOR UPDATE;
   IF EXISTS (SELECT 1 FROM group_members WHERE group_id = grp AND user_id = member) THEN
     IF maintainers_left(grp, member, new_role) = 0 THEN
       RAISE EXCEPTION 'that would leave % without a maintainer', grp_slug USING ERRCODE = 'DSG03';
     END IF;
-    -- A role set by hand stays when the provider's list later drops the person.
-    UPDATE group_members SET role = new_role, source = 'invited'
+    -- A provider membership keeps its source: only the provider takes it away.
+    UPDATE group_members SET role = new_role
      WHERE group_id = grp AND user_id = member;
     INSERT INTO group_events (group_id, actor, action, subject, role)
       VALUES (grp, actor, 'role', member, new_role);
     RETURN 'changed';
+  END IF;
+  -- Only an administrator gets here without being a member. Inviting
+  -- themselves and accepting would reach the group's libraries unseen.
+  IF member = actor THEN
+    RAISE EXCEPTION 'you are not in %: an administrator joins a group only by force', grp_slug
+      USING ERRCODE = 'DSG06';
   END IF;
   INSERT INTO group_invitations (group_id, user_id, role, invited_by)
     VALUES (grp, member, new_role, actor)
@@ -448,12 +505,60 @@ BEGIN
     RAISE EXCEPTION '% is in % through the provider group', member_username, grp_slug
       USING ERRCODE = 'DSG07';
   END IF;
+  PERFORM 1 FROM groups WHERE group_id = grp FOR UPDATE;
   IF maintainers_left(grp, member, NULL) = 0 THEN
     RAISE EXCEPTION 'that would leave % without a maintainer', grp_slug USING ERRCODE = 'DSG03';
   END IF;
   DELETE FROM group_members WHERE group_id = grp AND user_id = member;
   INSERT INTO group_events (group_id, actor, action, subject)
     VALUES (grp, actor, 'remove', member);
+END;
+$function$;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+-- force_into_group is an administrator's breakglass: it makes someone a
+-- member at once, with no invitation to accept, or changes their role.
+-- The group records it, and so does each library the group holds, since
+-- the person reaches those libraries from now on.
+CREATE FUNCTION force_into_group(grp_slug text, member_username text, new_role text)
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $function$
+DECLARE
+  actor  text := current_setting('app.user_id', true);
+  grp    text;
+  member text;
+BEGIN
+  IF NOT caller_is_administrator() THEN
+    RAISE EXCEPTION 'only an administrator adds someone by force' USING ERRCODE = 'DSG01';
+  END IF;
+  SELECT group_id INTO grp FROM groups WHERE slug = grp_slug FOR UPDATE;
+  IF grp IS NULL THEN
+    RAISE EXCEPTION 'no group named %', grp_slug USING ERRCODE = 'DSG01';
+  END IF;
+  SELECT user_id INTO member FROM users WHERE username = member_username;
+  IF member IS NULL THEN
+    RAISE EXCEPTION 'no account named %', member_username USING ERRCODE = 'DSL02';
+  END IF;
+  IF new_role IS NULL OR new_role NOT IN ('member', 'maintainer') THEN
+    RAISE EXCEPTION 'a group role is member or maintainer' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (SELECT 1 FROM group_members WHERE group_id = grp AND user_id = member)
+     AND maintainers_left(grp, member, new_role) = 0 THEN
+    RAISE EXCEPTION 'that would leave % without a maintainer', grp_slug USING ERRCODE = 'DSG03';
+  END IF;
+  DELETE FROM group_invitations WHERE group_id = grp AND user_id = member;
+  INSERT INTO group_members (group_id, user_id, role, source)
+    VALUES (grp, member, new_role, 'invited')
+  ON CONFLICT (group_id, user_id) DO UPDATE SET role = EXCLUDED.role;
+  INSERT INTO group_events (group_id, actor, action, subject, role)
+    VALUES (grp, actor, 'force', member, new_role);
+  INSERT INTO access_events (library_id, actor, action, subject, role, detail)
+    SELECT lg.library_id, actor, 'group_force', member, lg.role, g.name
+      FROM library_group_grants lg JOIN groups g ON g.group_id = lg.group_id
+     WHERE lg.group_id = grp;
 END;
 $function$;
 -- +goose StatementEnd
@@ -579,15 +684,16 @@ BEGIN
   IF grp IS NULL THEN
     RAISE EXCEPTION 'no group named % that you maintain', grp_slug USING ERRCODE = 'DSG01';
   END IF;
-  IF role_rank(new_role) IS NULL THEN
-    RAISE EXCEPTION 'a role is reader, editor or admin' USING ERRCODE = '22023';
+  IF new_role IS NULL OR new_role NOT IN ('reader', 'editor') THEN
+    RAISE EXCEPTION 'a group gets reader or editor: administering a library takes your own grant'
+      USING ERRCODE = 'DSG02';
   END IF;
   INSERT INTO library_group_grants (library_id, group_id, role, granted_by)
     VALUES (lib, grp, new_role, actor)
   ON CONFLICT (library_id, group_id) DO UPDATE
     SET role = EXCLUDED.role, granted_by = EXCLUDED.granted_by, granted_at = now();
   INSERT INTO access_events (library_id, actor, action, role, detail)
-    VALUES (lib, actor, 'group_grant', new_role, grp_slug);
+    SELECT lib, actor, 'group_grant', new_role, name FROM groups WHERE group_id = grp;
 END;
 $function$;
 
@@ -618,7 +724,7 @@ BEGIN
   DELETE FROM library_group_grants WHERE library_id = lib AND group_id = grp;
   IF FOUND THEN
     INSERT INTO access_events (library_id, actor, action, detail)
-      VALUES (lib, actor, 'group_revoke', grp_slug);
+      SELECT lib, actor, 'group_revoke', name FROM groups WHERE group_id = grp;
   END IF;
 END;
 $function$;
@@ -646,8 +752,9 @@ $function$;
 -- +goose StatementEnd
 
 -- +goose StatementBegin
--- Removing a password account also takes its memberships and invitations,
--- and hands a group it alone maintained to the heir its libraries go to.
+-- Removing a password account also takes its memberships and invitations.
+-- A group it alone maintained is left to the administrators: handing it to
+-- the heir would give the heir the group's libraries.
 CREATE OR REPLACE FUNCTION password_account_removed()
 RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER
@@ -657,7 +764,6 @@ DECLARE
   actor    text := NULLIF(current_setting('app.user_id', true), '');
   heir     text;
   stranded text[];
-  orphans  text[];
 BEGIN
   SELECT array_agg(g.library_id ORDER BY l.name) INTO stranded
     FROM library_grants g JOIN libraries l ON l.library_id = g.library_id
@@ -665,13 +771,7 @@ BEGIN
      AND NOT EXISTS (SELECT 1 FROM library_grants other
                       WHERE other.library_id = g.library_id AND other.role = 'admin'
                         AND other.user_id <> OLD.user_id);
-  SELECT array_agg(m.group_id) INTO orphans
-    FROM group_members m
-   WHERE m.user_id = OLD.user_id AND m.role = 'maintainer'
-     AND NOT EXISTS (SELECT 1 FROM group_members other
-                      WHERE other.group_id = m.group_id AND other.role = 'maintainer'
-                        AND other.user_id <> OLD.user_id);
-  IF stranded IS NOT NULL OR orphans IS NOT NULL THEN
+  IF stranded IS NOT NULL THEN
     SELECT user_id INTO heir FROM users
      WHERE username = NULLIF(current_setting('app.heir', true), '')
        AND admin AND user_id <> OLD.user_id;
@@ -695,15 +795,6 @@ BEGIN
       SET role = 'admin', granted_by = EXCLUDED.granted_by, granted_at = now();
     INSERT INTO access_events (library_id, actor, action, subject, role)
       SELECT unnest(stranded), actor, 'grant', heir, 'admin';
-  END IF;
-  -- A group with no maintainer left is managed by the administrators.
-  IF orphans IS NOT NULL AND heir IS NOT NULL THEN
-    DELETE FROM group_invitations WHERE user_id = heir AND group_id = ANY (orphans);
-    INSERT INTO group_members (group_id, user_id, role, source)
-      SELECT unnest(orphans), heir, 'maintainer', 'invited'
-    ON CONFLICT (group_id, user_id) DO UPDATE SET role = 'maintainer', source = 'invited';
-    INSERT INTO group_events (group_id, actor, action, subject, role)
-      SELECT unnest(orphans), actor, 'role', heir, 'maintainer';
   END IF;
   INSERT INTO access_events (library_id, actor, action, subject)
     SELECT g.library_id, actor, 'revoke', OLD.user_id
@@ -735,7 +826,8 @@ BEGIN
   FOREACH fn IN ARRAY ARRAY[
     'create_group(text, text)', 'rename_group(text, text)', 'delete_group(text)',
     'invite_to_group(text, text, text)', 'accept_group_invitation(text)',
-    'decline_group_invitation(text)', 'remove_from_group(text, text)', 'all_groups()',
+    'decline_group_invitation(text)', 'remove_from_group(text, text)',
+    'force_into_group(text, text, text)', 'all_groups()',
     'my_group_invitations()', 'group_members_of(text)', 'group_libraries(text)',
     'group_events_of(text)', 'grant_library_group(text, text, text)',
     'revoke_library_group(text, text)', 'library_groups(text)'
@@ -744,7 +836,8 @@ BEGIN
     EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO docsearch_app', fn);
   END LOOP;
   FOREACH fn IN ARRAY ARRAY[
-    'user_library_roles(text)', 'caller_is_administrator()', 'group_for(text, text)',
+    'user_library_roles(text)', 'holds_library_role(text, text, text)',
+    'caller_is_administrator()', 'group_for(text, text)', 'group_name_ok(text)',
     'maintainers_left(text, text, text)', 'group_invitation_for(text)'
   ] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', fn);
@@ -817,6 +910,7 @@ DROP FUNCTION group_libraries(text);
 DROP FUNCTION group_members_of(text);
 DROP FUNCTION my_group_invitations();
 DROP FUNCTION all_groups();
+DROP FUNCTION force_into_group(text, text, text);
 DROP FUNCTION remove_from_group(text, text);
 DROP FUNCTION decline_group_invitation(text);
 DROP FUNCTION accept_group_invitation(text);
@@ -826,6 +920,7 @@ DROP FUNCTION delete_group(text);
 DROP FUNCTION rename_group(text, text);
 DROP FUNCTION create_group(text, text);
 DROP FUNCTION maintainers_left(text, text, text);
+DROP FUNCTION group_name_ok(text);
 DROP FUNCTION group_for(text, text);
 DROP FUNCTION caller_is_administrator();
 
@@ -905,9 +1000,10 @@ AS $function$
      AND l.deleted_at IS NULL;
 $function$;
 
+DROP FUNCTION holds_library_role(text, text, text);
 DROP FUNCTION user_library_roles(text);
 
-DELETE FROM access_events WHERE action IN ('group_grant', 'group_revoke');
+DELETE FROM access_events WHERE action IN ('group_grant', 'group_revoke', 'group_delete', 'group_force');
 ALTER TABLE access_events DROP CONSTRAINT access_events_action_check;
 ALTER TABLE access_events ADD CONSTRAINT access_events_action_check
   CHECK (action IN ('create', 'grant', 'revoke', 'invite', 'accept', 'decline', 'withdraw',
