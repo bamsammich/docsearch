@@ -80,6 +80,44 @@ type Document struct {
 	LibraryID  string
 }
 
+type Group struct {
+	GroupID       string
+	Slug          string
+	Name          string
+	ProviderGroup sql.NullString
+	CreatedBy     sql.NullString
+	CreatedAt     time.Time
+}
+
+type GroupEvent struct {
+	ID          int64
+	At          time.Time
+	GroupID     string
+	Actor       sql.NullString
+	ActorName   sql.NullString
+	Action      string
+	Subject     sql.NullString
+	SubjectName sql.NullString
+	Role        sql.NullString
+	Detail      sql.NullString
+}
+
+type GroupInvitation struct {
+	GroupID   string
+	UserID    string
+	Role      string
+	InvitedBy sql.NullString
+	InvitedAt time.Time
+}
+
+type GroupMember struct {
+	GroupID string
+	UserID  string
+	Role    string
+	Source  string
+	SeenAt  time.Time
+}
+
 type IndexTerm struct {
 	DocID     string
 	Term      string
@@ -123,6 +161,14 @@ type Library struct {
 type LibraryGrant struct {
 	LibraryID string
 	UserID    string
+	Role      string
+	GrantedBy sql.NullString
+	GrantedAt time.Time
+}
+
+type LibraryGroupGrant struct {
+	LibraryID string
+	GroupID   string
 	Role      string
 	GrantedBy sql.NullString
 	GrantedAt time.Time

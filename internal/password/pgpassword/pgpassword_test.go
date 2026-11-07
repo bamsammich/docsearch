@@ -508,3 +508,26 @@ func (s *StoreSuite) TestAnAdministratorManagesAccountsAsTheRequestRole() {
 	s.Require().ErrorIs(s.app.Remove(asAlice, "bob", password.Handover{}),
 		password.ErrNoSuchAccount)
 }
+
+// Removing an account takes it out of its groups, and a group it alone
+// maintained passes to the heir.
+func (s *StoreSuite) TestARemovedAccountsGroupsPassToTheHeir() {
+	ctx := s.T().Context()
+	s.Require().NoError(s.admin.Add(ctx, "alice", "user-a", "hash", false))
+	s.Require().NoError(s.admin.Add(ctx, "bob", "user-b", "hash", false))
+	s.admins("bob")
+	s.as("user-a", `SELECT create_group('eng', 'Engineering')`)
+
+	s.Require().NoError(s.app.Remove(owner.With(ctx, "user-b"), "alice",
+		password.Handover{To: "bob"}))
+
+	var role string
+	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx, `
+		SELECT m.role FROM group_members m JOIN groups g ON g.group_id = m.group_id
+		 WHERE g.slug = 'eng' AND m.user_id = 'user-b'`).Scan(&role))
+	s.Equal("maintainer", role)
+	var left int
+	s.Require().NoError(s.pg.Owner.QueryRowContext(ctx,
+		`SELECT count(*) FROM group_members WHERE user_id = 'user-a'`).Scan(&left))
+	s.Zero(left)
+}
