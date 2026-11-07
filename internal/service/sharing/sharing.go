@@ -154,6 +154,9 @@ var (
 	// the provider can take away.
 	ErrFromProvider = errors.New("that membership comes from the provider group: " +
 		"remove them from the group at the provider")
+	// ErrLibraryName is a library name holding a control character, which a
+	// terminal would obey when the CLI prints it.
+	ErrLibraryName = errors.New("a library name holds no control characters")
 	// ErrNameTaken is a slug another library already has.
 	ErrNameTaken = errors.New("a library by that name already exists")
 	// ErrInvalid is a slug, name or role the database refused the shape of.

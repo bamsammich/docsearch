@@ -49,7 +49,7 @@ var migrations embed.FS
 // section did when it began holding section numbers rather than page
 // numbers, is invisible to any structural check while silently changing what
 // queries return.
-const Version = 33
+const Version = 34
 
 // History is readable, so a version mismatch can be diagnosed without
 // reading the git log.
@@ -96,6 +96,7 @@ var History = map[int]string{
 	31: "only an administrator, or the owner role, adds, resets and removes password accounts",
 	32: "an admin renames a shared library, or deletes it and can restore it for 14 days",
 	33: "groups: a library granted to a group reaches every member who accepted the group",
+	34: "two library admins can't both step down at once, and library names refuse control characters",
 }
 
 // The tables this package names. Written once, so a typo cannot reach a
