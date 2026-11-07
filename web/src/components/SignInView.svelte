@@ -37,9 +37,10 @@
   async function load(): Promise<void> {
     try {
       const out = await accounts.signIn({});
-      settings = out.settings;
+      // Who creates groups is set on the Groups page.
+      settings = out.settings.filter((s) => s.name !== "group-creators");
       file = out.file;
-      draft = Object.fromEntries(out.settings.filter((s) => s.editable).map((s) => [s.name, baseline(s)]));
+      draft = Object.fromEntries(settings.filter((s) => s.editable).map((s) => [s.name, baseline(s)]));
       error = "";
     } catch (err) {
       error = problem(err);

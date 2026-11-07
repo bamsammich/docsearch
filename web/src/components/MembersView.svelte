@@ -1,18 +1,21 @@
 <script lang="ts">
   import { Code, ConnectError } from "@connectrpc/connect";
-  import type { Event, Member } from "../gen/docsearch/library/v1/library_pb";
+  import type { Event, GroupGrant, Member } from "../gen/docsearch/library/v1/library_pb";
   import { problem, shelves } from "../lib/api";
   import { library } from "../lib/library.svelte";
   import { admin } from "../lib/admin.svelte";
+  import { groupsStore as groups } from "../lib/groups.svelte";
   import { libraries } from "../lib/libraries.svelte";
   import { router } from "../lib/router.svelte";
   import { initialOf } from "../lib/names";
   import { toast } from "../lib/toast.svelte";
+  import Icon from "./Icon.svelte";
 
   const roles = ["reader", "editor", "admin"] as const;
   const roleWords: Record<string, string> = { reader: "Reader", editor: "Editor", admin: "Admin" };
 
   let members = $state<Member[]>([]);
+  let grants = $state<GroupGrant[]>([]);
   let events = $state<Event[]>([]);
   let loadError = $state("");
   let loaded = $state(false);
@@ -21,6 +24,9 @@
   let inviteRole = $state<string>("editor");
   let inviteError = $state("");
   let inviting = $state(false);
+  /** Whether the form shares with a person or with a group. */
+  let shareWith = $state<"person" | "group">("person");
+  let shareGroup = $state("");
   let inviteField: HTMLInputElement | undefined = $state();
 
   let rowError = $state<Record<string, string>>({});
@@ -38,16 +44,23 @@
   const admins = $derived(joined.filter((m) => m.role === "admin").length);
   const me = $derived(libraries.username);
   const onlyAdmin = $derived(libraries.isAdmin && admins <= 1);
+  // An administrator shares with any group; anyone else with a group they maintain.
+  const shareable = $derived(
+    (admin.isAdmin ? groups.all : groups.maintained).filter((g) => !grants.some((x) => x.group === g.group)),
+  );
+  const groupName = (slug: string) => grants.find((g) => g.group === slug)?.name || groups.byId(slug)?.name || slug;
 
   async function load(of: string): Promise<void> {
     loadError = "";
     try {
-      const [listed, logged] = await Promise.all([
+      const [listed, shared, logged] = await Promise.all([
         shelves.members({ library: of }),
+        shelves.groups({ library: of }),
         libraries.isAdmin ? shelves.events({ library: of }) : Promise.resolve({ events: [] as Event[] }),
       ]);
       if (of !== libraries.label) return;
       members = listed.members;
+      grants = shared.groups;
       events = logged.events;
     } catch (err) {
       if (lostLibrary(err)) return void (await lost());
@@ -61,6 +74,7 @@
     if (libraries.isOwn || !libraries.current) return;
     loaded = false;
     members = [];
+    grants = [];
     events = [];
     rowError = {};
     removing = "";
@@ -142,6 +156,10 @@
         lines.push({ what: `${actor} deleted it`, when: whenOf(e) });
       } else if (e.action === "restore") {
         lines.push({ what: `${actor} restored it`, when: whenOf(e) });
+      } else if (e.action === "group_grant") {
+        lines.push({ what: `${actor} shared it with ${groupName(e.detail)} as ${e.role}`, when: whenOf(e) });
+      } else if (e.action === "group_revoke") {
+        lines.push({ what: e.actor ? `${actor} stopped sharing it with ${groupName(e.detail)}` : `${groupName(e.detail)} was deleted`, when: whenOf(e) });
       } else if (e.action === "revoke") {
         lines.push({ what: e.actor && e.actor === e.subject ? `${subject} left` : `${actor} removed ${subject}`, when: whenOf(e) });
         held.delete(e.subject);
@@ -204,6 +222,67 @@
       inviteField?.focus();
     } finally {
       inviting = false;
+    }
+  }
+
+  async function share(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    inviteError = "";
+    if (!shareGroup) {
+      inviteError = "Choose a group.";
+      return;
+    }
+    const name = groups.byId(shareGroup)?.name ?? shareGroup;
+    inviting = true;
+    try {
+      await shelves.grantGroup({ library: label, group: shareGroup, role: inviteRole });
+      toast.show(`Shared with ${name} as ${inviteRole}.`);
+      shareGroup = "";
+      await load(label);
+    } catch (err) {
+      if (lostLibrary(err)) return void (await lost());
+      inviteError = groupRefusal(err);
+    } finally {
+      inviting = false;
+    }
+  }
+
+  function groupRefusal(err: unknown): string {
+    if (err instanceof ConnectError && err.code === Code.NotFound && /group/.test(err.rawMessage))
+      return "Only that group's maintainers share libraries with it.";
+    return problem(err);
+  }
+
+  async function changeGroupRole(g: GroupGrant, role: string): Promise<void> {
+    const before = g.role;
+    rowError = { ...rowError, [`group:${g.group}`]: "" };
+    g.role = role;
+    busy = true;
+    try {
+      await shelves.grantGroup({ library: label, group: g.group, role });
+      toast.show(`${g.name} is now ${role}.`);
+      await load(label);
+    } catch (err) {
+      g.role = before;
+      if (lostLibrary(err)) return void (await lost());
+      rowError = { ...rowError, [`group:${g.group}`]: groupRefusal(err) };
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function unshare(g: GroupGrant): Promise<void> {
+    busy = true;
+    try {
+      await shelves.revokeGroup({ library: label, group: g.group });
+      toast.show(`Stopped sharing with ${g.name}.`);
+      removing = "";
+      await load(label);
+    } catch (err) {
+      if (lostLibrary(err)) return void (await lost());
+      rowError = { ...rowError, [`group:${g.group}`]: groupRefusal(err) };
+    } finally {
+      busy = false;
     }
   }
 
@@ -319,7 +398,30 @@
       {#if loadError}<div class="banner" role="alert"><span>{loadError}</span></div>{/if}
 
       {#if libraries.isAdmin}
-        <form class="invite" onsubmit={invite} novalidate>
+        <form class="invite" onsubmit={shareWith === "group" ? share : invite} novalidate>
+          {#if groups.all.length}
+            <div class="share-kind" role="radiogroup" aria-label="Share with">
+              <label class:on={shareWith === "person"}><input type="radio" name="share-with" value="person" bind:group={shareWith} onchange={() => (inviteError = "")} />A person</label>
+              <label class:on={shareWith === "group"}><input type="radio" name="share-with" value="group" bind:group={shareWith} onchange={() => (inviteError = "")} />A group</label>
+            </div>
+          {/if}
+          {#if shareWith === "group"}
+          <label class="lbl" for="share-group">Group</label>
+          <div class="invite-row">
+            <select class="input" id="share-group" bind:value={shareGroup} aria-invalid={inviteError ? "true" : undefined}>
+              <option value="" disabled>{shareable.length ? "Choose a group" : "No group to share with"}</option>
+              {#each shareable as g (g.group)}<option value={g.group}>{g.name} · {g.members === 1n ? "1 member" : `${g.members} members`}</option>{/each}
+            </select>
+            <label class="role-pick"><span>as</span>
+              <select aria-label="Role" bind:value={inviteRole}>
+                {#each roles as r (r)}<option value={r}>{roleWords[r]}</option>{/each}
+              </select>
+            </label>
+            <button class="btn primary" type="submit" disabled={inviting || !shareable.length}>Share</button>
+          </div>
+          {#if inviteError}<p class="err" role="alert">{inviteError}</p>{/if}
+          <p class="hint">Every member gets the role at once.{#if !admin.isAdmin} Only groups you maintain are listed.{/if}</p>
+          {:else}
           <label class="lbl" for="invite-user">Invite someone</label>
           <div class="invite-row">
             <input class="input" id="invite-user" type="text" placeholder="Username" autocomplete="off" spellcheck="false"
@@ -334,11 +436,50 @@
           </div>
           {#if inviteError}<p class="err" id="invite-err" role="alert">{inviteError}</p>{/if}
           <p class="hint" id="invite-hint">Readers search and read. Editors also add and remove documents. Admins also manage members.</p>
+          {/if}
         </form>
       {/if}
 
+      {#if grants.length}
+        <div class="mlist-wrap">
+          <h2 class="mlist-head">Groups<span class="muted tnum">{` · ${grants.length}`}</span></h2>
+          <ul class="mlist">
+            {#each grants as g (g.group)}
+              {@const key = `group:${g.group}`}
+              {@const mine = admin.isAdmin || groups.byId(g.group)?.role === "maintainer"}
+              <li class="mrow">
+                <span class="gtile" aria-hidden="true"><Icon name="group" /></span>
+                <span class="mwho">
+                  <span class="mname"><a href={`#/groups/${encodeURIComponent(g.group)}`}>{g.name || g.group}</a></span>
+                  <span class="msince">{g.members === 1n ? "1 member" : `${g.members} members`}</span>
+                  {#if rowError[key]}<span class="err" role="alert">{rowError[key]}</span>{/if}
+                </span>
+                {#if libraries.isAdmin && mine}
+                  <select class="mrole" aria-label={`Role for ${g.name}`} value={g.role} disabled={busy}
+                    onchange={(e) => changeGroupRole(g, e.currentTarget.value)}>
+                    {#each roles as r (r)}<option value={r}>{roleWords[r]}</option>{/each}
+                  </select>
+                {:else}
+                  <span class="mrole-text">{roleWords[g.role] ?? g.role}</span>
+                {/if}
+                <span class="mact">
+                  {#if libraries.isAdmin}
+                    {#if removing === key}
+                      <button class="btn danger-solid small" onclick={() => unshare(g)} disabled={busy}>Remove {g.name}</button>
+                      <button class="btn quiet small" onclick={() => (removing = "")}>Cancel</button>
+                    {:else}
+                      <button class="btn danger small" onclick={() => (removing = key)} disabled={busy}>Remove</button>
+                    {/if}
+                  {/if}
+                </span>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
+
       <div class="mlist-wrap">
-        <h2 class="mlist-head">Members{#if loaded}<span class="muted tnum">{` · ${joined.length}`}</span>{/if}</h2>
+        <h2 class="mlist-head">{grants.length ? "People" : "Members"}{#if loaded}<span class="muted tnum">{` · ${joined.length}`}</span>{/if}</h2>
         <ul class="mlist">
           {#each joined as m (m.username)}
             {@const self = m.username === me}
@@ -400,7 +541,7 @@
       {/if}
 
       {#if libraries.isAdmin}
-        <form class="rename" onsubmit={rename} novalidate>
+        <form class="lib-rename" onsubmit={rename} novalidate>
           <label class="lbl" for="library-name">Name</label>
           <div class="invite-row">
             <input class="input" id="library-name" type="text" maxlength="120" autocomplete="off"

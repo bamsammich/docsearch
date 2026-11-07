@@ -4,6 +4,7 @@ import { Code, ConnectError, createClient, type Interceptor } from "@connectrpc/
 import { createConnectTransport } from "@connectrpc/connect-web";
 import { AccountService } from "../gen/docsearch/account/v1/account_pb";
 import { DocumentService } from "../gen/docsearch/document/v1/document_pb";
+import { GroupService } from "../gen/docsearch/group/v1/group_pb";
 import { JobService } from "../gen/docsearch/ingest/v1/job_pb";
 import { LibraryService } from "../gen/docsearch/library/v1/library_pb";
 import { session } from "./session.svelte";
@@ -47,6 +48,7 @@ export const documents = createClient(DocumentService, transport);
 export const jobs = createClient(JobService, transport);
 export const shelves = createClient(LibraryService, transport);
 export const accounts = createClient(AccountService, transport);
+export const groups = createClient(GroupService, transport);
 
 /** The server refuses requests from a page opened at an address it does not accept. */
 export function forbiddenOrigin(): string {
