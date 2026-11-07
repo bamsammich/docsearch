@@ -237,9 +237,16 @@ docsearch library revoke platform --group platform-team
 ```
 
 Anyone signed in sees every group's name; only its members see who is in it.
-A group always keeps a maintainer, and an admin grant to a group never counts
-as a library's last admin. Deleting a group takes its grants away and leaves
-its libraries.
+A group gets reader or editor on a library, never admin, so managing a
+library's members, renaming it and deleting it take your own admin grant. A
+group always keeps a maintainer. Deleting a group takes its grants away and
+leaves its libraries.
+
+Administrators manage any group, and invite through the same invitation.
+To add someone at once, with no invitation to accept, an administrator runs
+`docsearch group invite <group> <username> --force`. The group's log and the
+log of each library it holds record it, and it is the only way an
+administrator joins a group they are not in.
 
 Everyone may create groups unless `--group-creators administrators`
 (`DOCSEARCH_GROUP_CREATORS`, `groups.creators` in `docsearch.yaml`) leaves it

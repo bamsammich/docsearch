@@ -23,6 +23,7 @@ type Groups interface {
 	Rename(ctx context.Context, slug, name string) error
 	Delete(ctx context.Context, slug string) error
 	Invite(ctx context.Context, slug, username, role string) (bool, error)
+	Force(ctx context.Context, slug, username, role string) error
 	Accept(ctx context.Context, slug string) (string, error)
 	Decline(ctx context.Context, slug string) error
 	Remove(ctx context.Context, slug, username string) error
@@ -151,6 +152,13 @@ func (s *GroupServer) Invite(
 		return nil, err
 	}
 	msg := req.Msg
+	if msg.GetForce() {
+		err = groups.Force(ctx, msg.GetGroup(), msg.GetUsername(), msg.GetRole())
+		if err != nil {
+			return nil, sharingError(err)
+		}
+		return connect.NewResponse(&groupv1.InviteResponse{}), nil
+	}
 	invited, err := groups.Invite(ctx, msg.GetGroup(), msg.GetUsername(), msg.GetRole())
 	if err != nil {
 		return nil, sharingError(err)

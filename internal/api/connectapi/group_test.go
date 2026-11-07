@@ -86,6 +86,9 @@ func (s *GroupAPISuite) TestEachRefusalAnswersWithItsCode() {
 		sharing.ErrLastMaintainer:    connect.CodeFailedPrecondition,
 		sharing.ErrFromProvider:      connect.CodeFailedPrecondition,
 		sharing.ErrNoGroupInvitation: connect.CodeNotFound,
+		sharing.ErrJoinByForce:       connect.CodeFailedPrecondition,
+		sharing.ErrGroupName:         connect.CodeInvalidArgument,
+		sharing.ErrGroupRole:         connect.CodeInvalidArgument,
 	} {
 		s.SetupTest()
 		s.groups.EXPECT().Remove(mock.Anything, "eng", "ben").Return(refusal)
@@ -108,4 +111,24 @@ func (s *GroupAPISuite) TestALibraryIsGrantedToAGroup() {
 	s.Require().NoError(err)
 	s.Require().Len(res.Msg.GetGroups(), 1)
 	s.Equal("eng", res.Msg.GetGroups()[0].GetGroup())
+}
+
+// Invite with force adds the person at once through Force, never through an
+// invitation.
+func (s *GroupAPISuite) TestForceAddsWithNoInvitation() {
+	s.groups.EXPECT().Force(mock.Anything, "eng", "dee", sharing.RoleMember).Return(nil)
+
+	res, err := s.client.Invite(s.T().Context(), connect.NewRequest(&groupv1.InviteRequest{
+		Group: "eng", Username: "dee", Role: sharing.RoleMember, Force: true,
+	}))
+	s.Require().NoError(err)
+	s.False(res.Msg.GetInvited())
+	s.groups.AssertNotCalled(
+		s.T(),
+		"Invite",
+		mock.Anything,
+		mock.Anything,
+		mock.Anything,
+		mock.Anything,
+	)
 }

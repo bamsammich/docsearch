@@ -1563,8 +1563,8 @@ type GrantGroupRequest struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Library string                 `protobuf:"bytes,1,opt,name=library,proto3" json:"library,omitempty"`
 	Group   string                 `protobuf:"bytes,2,opt,name=group,proto3" json:"group,omitempty"`
-	// Role is reader, editor or admin. Granting a group that holds a role
-	// changes it.
+	// Role is reader or editor: administering a library takes your own
+	// grant. Granting a group that holds a role changes it.
 	Role          string `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

@@ -429,6 +429,75 @@ func (_c *MockGroups_Events_Call) RunAndReturn(run func(ctx context.Context, slu
 	return _c
 }
 
+// Force provides a mock function for the type MockGroups
+func (_mock *MockGroups) Force(ctx context.Context, slug string, username string, role string) error {
+	ret := _mock.Called(ctx, slug, username, role)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Force")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) error); ok {
+		r0 = returnFunc(ctx, slug, username, role)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockGroups_Force_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Force'
+type MockGroups_Force_Call struct {
+	*mock.Call
+}
+
+// Force is a helper method to define mock.On call
+//   - ctx context.Context
+//   - slug string
+//   - username string
+//   - role string
+func (_e *MockGroups_Expecter) Force(ctx any, slug any, username any, role any) *MockGroups_Force_Call {
+	return &MockGroups_Force_Call{Call: _e.mock.On("Force", ctx, slug, username, role)}
+}
+
+func (_c *MockGroups_Force_Call) Run(run func(ctx context.Context, slug string, username string, role string)) *MockGroups_Force_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockGroups_Force_Call) Return(err error) *MockGroups_Force_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockGroups_Force_Call) RunAndReturn(run func(ctx context.Context, slug string, username string, role string) error) *MockGroups_Force_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GrantLibrary provides a mock function for the type MockGroups
 func (_mock *MockGroups) GrantLibrary(ctx context.Context, library string, slug string, role string) error {
 	ret := _mock.Called(ctx, library, slug, role)
