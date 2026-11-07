@@ -20,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file docsearch/library/v1/library.proto.
  */
 export const file_docsearch_library_v1_library: GenFile = /*@__PURE__*/
-  fileDesc("CiJkb2NzZWFyY2gvbGlicmFyeS92MS9saWJyYXJ5LnByb3RvEhRkb2NzZWFyY2gubGlicmFyeS52MSI2CgdMaWJyYXJ5Eg8KB2xpYnJhcnkYASABKAkSDAoEbmFtZRgCIAEoCRIMCgRyb2xlGAMgASgJIjkKBk1lbWJlchIQCgh1c2VybmFtZRgBIAEoCRIMCgRyb2xlGAIgASgJEg8KB2ludml0ZWQYAyABKAgidQoKSW52aXRhdGlvbhIPCgdsaWJyYXJ5GAEgASgJEgwKBG5hbWUYAiABKAkSDAoEcm9sZRgDIAEoCRISCgppbnZpdGVkX2J5GAQgASgJEiYKAmF0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJ9CgVFdmVudBImCgJhdBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDQoFYWN0b3IYAiABKAkSDgoGYWN0aW9uGAMgASgJEg8KB3N1YmplY3QYBCABKAkSDAoEcm9sZRgFIAEoCRIOCgZkZXRhaWwYBiABKAkioQEKDkRlbGV0ZWRMaWJyYXJ5Eg8KB2xpYnJhcnkYASABKAkSDAoEbmFtZRgCIAEoCRIuCgpkZWxldGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIsCghwdXJnZV9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKZGVsZXRlZF9ieRgFIAEoCSINCgtMaXN0UmVxdWVzdCJSCgxMaXN0UmVzcG9uc2USMAoJbGlicmFyaWVzGAEgAygLMh0uZG9jc2VhcmNoLmxpYnJhcnkudjEuTGlicmFyeRIQCgh1c2VybmFtZRgCIAEoCSIrCg1DcmVhdGVSZXF1ZXN0EgwKBHNsdWcYASABKAkSDAoEbmFtZRgCIAEoCSJACg5DcmVhdGVSZXNwb25zZRIuCgdsaWJyYXJ5GAEgASgLMh0uZG9jc2VhcmNoLmxpYnJhcnkudjEuTGlicmFyeSIhCg5NZW1iZXJzUmVxdWVzdBIPCgdsaWJyYXJ5GAEgASgJIkAKD01lbWJlcnNSZXNwb25zZRItCgdtZW1iZXJzGAEgAygLMhwuZG9jc2VhcmNoLmxpYnJhcnkudjEuTWVtYmVyIj8KDEdyYW50UmVxdWVzdBIPCgdsaWJyYXJ5GAEgASgJEhAKCHVzZXJuYW1lGAIgASgJEgwKBHJvbGUYAyABKAkiIAoNR3JhbnRSZXNwb25zZRIPCgdpbnZpdGVkGAEgASgIIjIKDVJldm9rZVJlcXVlc3QSDwoHbGlicmFyeRgBIAEoCRIQCgh1c2VybmFtZRgCIAEoCSIQCg5SZXZva2VSZXNwb25zZSIgCg1FdmVudHNSZXF1ZXN0Eg8KB2xpYnJhcnkYASABKAkiPQoORXZlbnRzUmVzcG9uc2USKwoGZXZlbnRzGAEgAygLMhsuZG9jc2VhcmNoLmxpYnJhcnkudjEuRXZlbnQiFAoSSW52aXRhdGlvbnNSZXF1ZXN0IkwKE0ludml0YXRpb25zUmVzcG9uc2USNQoLaW52aXRhdGlvbnMYASADKAsyIC5kb2NzZWFyY2gubGlicmFyeS52MS5JbnZpdGF0aW9uIiAKDUFjY2VwdFJlcXVlc3QSDwoHbGlicmFyeRgBIAEoCSJACg5BY2NlcHRSZXNwb25zZRIuCgdsaWJyYXJ5GAEgASgLMh0uZG9jc2VhcmNoLmxpYnJhcnkudjEuTGlicmFyeSIhCg5EZWNsaW5lUmVxdWVzdBIPCgdsaWJyYXJ5GAEgASgJIhEKD0RlY2xpbmVSZXNwb25zZSIuCg1SZW5hbWVSZXF1ZXN0Eg8KB2xpYnJhcnkYASABKAkSDAoEbmFtZRgCIAEoCSJACg5SZW5hbWVSZXNwb25zZRIuCgdsaWJyYXJ5GAEgASgLMh0uZG9jc2VhcmNoLmxpYnJhcnkudjEuTGlicmFyeSIgCg1EZWxldGVSZXF1ZXN0Eg8KB2xpYnJhcnkYASABKAkiPgoORGVsZXRlUmVzcG9uc2USLAoIcHVyZ2VfYXQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIiEKDlJlc3RvcmVSZXF1ZXN0Eg8KB2xpYnJhcnkYASABKAkiQQoPUmVzdG9yZVJlc3BvbnNlEi4KB2xpYnJhcnkYASABKAsyHS5kb2NzZWFyY2gubGlicmFyeS52MS5MaWJyYXJ5IhAKDkRlbGV0ZWRSZXF1ZXN0IkoKD0RlbGV0ZWRSZXNwb25zZRI3CglsaWJyYXJpZXMYASADKAsyJC5kb2NzZWFyY2gubGlicmFyeS52MS5EZWxldGVkTGlicmFyeTKNCQoOTGlicmFyeVNlcnZpY2USTwoETGlzdBIhLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkxpc3RSZXF1ZXN0GiIuZG9jc2VhcmNoLmxpYnJhcnkudjEuTGlzdFJlc3BvbnNlIgASVQoGQ3JlYXRlEiMuZG9jc2VhcmNoLmxpYnJhcnkudjEuQ3JlYXRlUmVxdWVzdBokLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkNyZWF0ZVJlc3BvbnNlIgASWAoHTWVtYmVycxIkLmRvY3NlYXJjaC5saWJyYXJ5LnYxLk1lbWJlcnNSZXF1ZXN0GiUuZG9jc2VhcmNoLmxpYnJhcnkudjEuTWVtYmVyc1Jlc3BvbnNlIgASUgoFR3JhbnQSIi5kb2NzZWFyY2gubGlicmFyeS52MS5HcmFudFJlcXVlc3QaIy5kb2NzZWFyY2gubGlicmFyeS52MS5HcmFudFJlc3BvbnNlIgASVQoGUmV2b2tlEiMuZG9jc2VhcmNoLmxpYnJhcnkudjEuUmV2b2tlUmVxdWVzdBokLmRvY3NlYXJjaC5saWJyYXJ5LnYxLlJldm9rZVJlc3BvbnNlIgASVQoGRXZlbnRzEiMuZG9jc2VhcmNoLmxpYnJhcnkudjEuRXZlbnRzUmVxdWVzdBokLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkV2ZW50c1Jlc3BvbnNlIgASZAoLSW52aXRhdGlvbnMSKC5kb2NzZWFyY2gubGlicmFyeS52MS5JbnZpdGF0aW9uc1JlcXVlc3QaKS5kb2NzZWFyY2gubGlicmFyeS52MS5JbnZpdGF0aW9uc1Jlc3BvbnNlIgASVQoGQWNjZXB0EiMuZG9jc2VhcmNoLmxpYnJhcnkudjEuQWNjZXB0UmVxdWVzdBokLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkFjY2VwdFJlc3BvbnNlIgASWAoHRGVjbGluZRIkLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkRlY2xpbmVSZXF1ZXN0GiUuZG9jc2VhcmNoLmxpYnJhcnkudjEuRGVjbGluZVJlc3BvbnNlIgASVQoGUmVuYW1lEiMuZG9jc2VhcmNoLmxpYnJhcnkudjEuUmVuYW1lUmVxdWVzdBokLmRvY3NlYXJjaC5saWJyYXJ5LnYxLlJlbmFtZVJlc3BvbnNlIgASVQoGRGVsZXRlEiMuZG9jc2VhcmNoLmxpYnJhcnkudjEuRGVsZXRlUmVxdWVzdBokLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkRlbGV0ZVJlc3BvbnNlIgASWAoHUmVzdG9yZRIkLmRvY3NlYXJjaC5saWJyYXJ5LnYxLlJlc3RvcmVSZXF1ZXN0GiUuZG9jc2VhcmNoLmxpYnJhcnkudjEuUmVzdG9yZVJlc3BvbnNlIgASWAoHRGVsZXRlZBIkLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkRlbGV0ZWRSZXF1ZXN0GiUuZG9jc2VhcmNoLmxpYnJhcnkudjEuRGVsZXRlZFJlc3BvbnNlIgBiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("CiJkb2NzZWFyY2gvbGlicmFyeS92MS9saWJyYXJ5LnByb3RvEhRkb2NzZWFyY2gubGlicmFyeS52MSI2CgdMaWJyYXJ5Eg8KB2xpYnJhcnkYASABKAkSDAoEbmFtZRgCIAEoCRIMCgRyb2xlGAMgASgJIjkKBk1lbWJlchIQCgh1c2VybmFtZRgBIAEoCRIMCgRyb2xlGAIgASgJEg8KB2ludml0ZWQYAyABKAgidQoKSW52aXRhdGlvbhIPCgdsaWJyYXJ5GAEgASgJEgwKBG5hbWUYAiABKAkSDAoEcm9sZRgDIAEoCRISCgppbnZpdGVkX2J5GAQgASgJEiYKAmF0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJ9CgVFdmVudBImCgJhdBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDQoFYWN0b3IYAiABKAkSDgoGYWN0aW9uGAMgASgJEg8KB3N1YmplY3QYBCABKAkSDAoEcm9sZRgFIAEoCRIOCgZkZXRhaWwYBiABKAkioQEKDkRlbGV0ZWRMaWJyYXJ5Eg8KB2xpYnJhcnkYASABKAkSDAoEbmFtZRgCIAEoCRIuCgpkZWxldGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIsCghwdXJnZV9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKZGVsZXRlZF9ieRgFIAEoCSINCgtMaXN0UmVxdWVzdCJSCgxMaXN0UmVzcG9uc2USMAoJbGlicmFyaWVzGAEgAygLMh0uZG9jc2VhcmNoLmxpYnJhcnkudjEuTGlicmFyeRIQCgh1c2VybmFtZRgCIAEoCSIrCg1DcmVhdGVSZXF1ZXN0EgwKBHNsdWcYASABKAkSDAoEbmFtZRgCIAEoCSJACg5DcmVhdGVSZXNwb25zZRIuCgdsaWJyYXJ5GAEgASgLMh0uZG9jc2VhcmNoLmxpYnJhcnkudjEuTGlicmFyeSIhCg5NZW1iZXJzUmVxdWVzdBIPCgdsaWJyYXJ5GAEgASgJIkAKD01lbWJlcnNSZXNwb25zZRItCgdtZW1iZXJzGAEgAygLMhwuZG9jc2VhcmNoLmxpYnJhcnkudjEuTWVtYmVyIj8KDEdyYW50UmVxdWVzdBIPCgdsaWJyYXJ5GAEgASgJEhAKCHVzZXJuYW1lGAIgASgJEgwKBHJvbGUYAyABKAkiIAoNR3JhbnRSZXNwb25zZRIPCgdpbnZpdGVkGAEgASgIIjIKDVJldm9rZVJlcXVlc3QSDwoHbGlicmFyeRgBIAEoCRIQCgh1c2VybmFtZRgCIAEoCSIQCg5SZXZva2VSZXNwb25zZSIgCg1FdmVudHNSZXF1ZXN0Eg8KB2xpYnJhcnkYASABKAkiPQoORXZlbnRzUmVzcG9uc2USKwoGZXZlbnRzGAEgAygLMhsuZG9jc2VhcmNoLmxpYnJhcnkudjEuRXZlbnQiFAoSSW52aXRhdGlvbnNSZXF1ZXN0IkwKE0ludml0YXRpb25zUmVzcG9uc2USNQoLaW52aXRhdGlvbnMYASADKAsyIC5kb2NzZWFyY2gubGlicmFyeS52MS5JbnZpdGF0aW9uIiAKDUFjY2VwdFJlcXVlc3QSDwoHbGlicmFyeRgBIAEoCSJACg5BY2NlcHRSZXNwb25zZRIuCgdsaWJyYXJ5GAEgASgLMh0uZG9jc2VhcmNoLmxpYnJhcnkudjEuTGlicmFyeSIhCg5EZWNsaW5lUmVxdWVzdBIPCgdsaWJyYXJ5GAEgASgJIhEKD0RlY2xpbmVSZXNwb25zZSIuCg1SZW5hbWVSZXF1ZXN0Eg8KB2xpYnJhcnkYASABKAkSDAoEbmFtZRgCIAEoCSJACg5SZW5hbWVSZXNwb25zZRIuCgdsaWJyYXJ5GAEgASgLMh0uZG9jc2VhcmNoLmxpYnJhcnkudjEuTGlicmFyeSIgCg1EZWxldGVSZXF1ZXN0Eg8KB2xpYnJhcnkYASABKAkiPgoORGVsZXRlUmVzcG9uc2USLAoIcHVyZ2VfYXQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIiEKDlJlc3RvcmVSZXF1ZXN0Eg8KB2xpYnJhcnkYASABKAkiQQoPUmVzdG9yZVJlc3BvbnNlEi4KB2xpYnJhcnkYASABKAsyHS5kb2NzZWFyY2gubGlicmFyeS52MS5MaWJyYXJ5IkgKCkdyb3VwR3JhbnQSDQoFZ3JvdXAYASABKAkSDAoEbmFtZRgCIAEoCRIMCgRyb2xlGAMgASgJEg8KB21lbWJlcnMYBCABKAMiQQoRR3JhbnRHcm91cFJlcXVlc3QSDwoHbGlicmFyeRgBIAEoCRINCgVncm91cBgCIAEoCRIMCgRyb2xlGAMgASgJIhQKEkdyYW50R3JvdXBSZXNwb25zZSI0ChJSZXZva2VHcm91cFJlcXVlc3QSDwoHbGlicmFyeRgBIAEoCRINCgVncm91cBgCIAEoCSIVChNSZXZva2VHcm91cFJlc3BvbnNlIiAKDUdyb3Vwc1JlcXVlc3QSDwoHbGlicmFyeRgBIAEoCSJCCg5Hcm91cHNSZXNwb25zZRIwCgZncm91cHMYASADKAsyIC5kb2NzZWFyY2gubGlicmFyeS52MS5Hcm91cEdyYW50IhAKDkRlbGV0ZWRSZXF1ZXN0IkoKD0RlbGV0ZWRSZXNwb25zZRI3CglsaWJyYXJpZXMYASADKAsyJC5kb2NzZWFyY2gubGlicmFyeS52MS5EZWxldGVkTGlicmFyeTKtCwoOTGlicmFyeVNlcnZpY2USTwoETGlzdBIhLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkxpc3RSZXF1ZXN0GiIuZG9jc2VhcmNoLmxpYnJhcnkudjEuTGlzdFJlc3BvbnNlIgASVQoGQ3JlYXRlEiMuZG9jc2VhcmNoLmxpYnJhcnkudjEuQ3JlYXRlUmVxdWVzdBokLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkNyZWF0ZVJlc3BvbnNlIgASWAoHTWVtYmVycxIkLmRvY3NlYXJjaC5saWJyYXJ5LnYxLk1lbWJlcnNSZXF1ZXN0GiUuZG9jc2VhcmNoLmxpYnJhcnkudjEuTWVtYmVyc1Jlc3BvbnNlIgASUgoFR3JhbnQSIi5kb2NzZWFyY2gubGlicmFyeS52MS5HcmFudFJlcXVlc3QaIy5kb2NzZWFyY2gubGlicmFyeS52MS5HcmFudFJlc3BvbnNlIgASVQoGUmV2b2tlEiMuZG9jc2VhcmNoLmxpYnJhcnkudjEuUmV2b2tlUmVxdWVzdBokLmRvY3NlYXJjaC5saWJyYXJ5LnYxLlJldm9rZVJlc3BvbnNlIgASVQoGRXZlbnRzEiMuZG9jc2VhcmNoLmxpYnJhcnkudjEuRXZlbnRzUmVxdWVzdBokLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkV2ZW50c1Jlc3BvbnNlIgASZAoLSW52aXRhdGlvbnMSKC5kb2NzZWFyY2gubGlicmFyeS52MS5JbnZpdGF0aW9uc1JlcXVlc3QaKS5kb2NzZWFyY2gubGlicmFyeS52MS5JbnZpdGF0aW9uc1Jlc3BvbnNlIgASVQoGQWNjZXB0EiMuZG9jc2VhcmNoLmxpYnJhcnkudjEuQWNjZXB0UmVxdWVzdBokLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkFjY2VwdFJlc3BvbnNlIgASWAoHRGVjbGluZRIkLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkRlY2xpbmVSZXF1ZXN0GiUuZG9jc2VhcmNoLmxpYnJhcnkudjEuRGVjbGluZVJlc3BvbnNlIgASVQoGUmVuYW1lEiMuZG9jc2VhcmNoLmxpYnJhcnkudjEuUmVuYW1lUmVxdWVzdBokLmRvY3NlYXJjaC5saWJyYXJ5LnYxLlJlbmFtZVJlc3BvbnNlIgASVQoGRGVsZXRlEiMuZG9jc2VhcmNoLmxpYnJhcnkudjEuRGVsZXRlUmVxdWVzdBokLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkRlbGV0ZVJlc3BvbnNlIgASWAoHUmVzdG9yZRIkLmRvY3NlYXJjaC5saWJyYXJ5LnYxLlJlc3RvcmVSZXF1ZXN0GiUuZG9jc2VhcmNoLmxpYnJhcnkudjEuUmVzdG9yZVJlc3BvbnNlIgASWAoHRGVsZXRlZBIkLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkRlbGV0ZWRSZXF1ZXN0GiUuZG9jc2VhcmNoLmxpYnJhcnkudjEuRGVsZXRlZFJlc3BvbnNlIgASYQoKR3JhbnRHcm91cBInLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkdyYW50R3JvdXBSZXF1ZXN0GiguZG9jc2VhcmNoLmxpYnJhcnkudjEuR3JhbnRHcm91cFJlc3BvbnNlIgASZAoLUmV2b2tlR3JvdXASKC5kb2NzZWFyY2gubGlicmFyeS52MS5SZXZva2VHcm91cFJlcXVlc3QaKS5kb2NzZWFyY2gubGlicmFyeS52MS5SZXZva2VHcm91cFJlc3BvbnNlIgASVQoGR3JvdXBzEiMuZG9jc2VhcmNoLmxpYnJhcnkudjEuR3JvdXBzUmVxdWVzdBokLmRvY3NlYXJjaC5saWJyYXJ5LnYxLkdyb3Vwc1Jlc3BvbnNlIgBiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * Library is one library the caller reads.
@@ -670,6 +670,152 @@ export const RestoreResponseSchema: GenMessage<RestoreResponse> = /*@__PURE__*/
   messageDesc(file_docsearch_library_v1_library, 28);
 
 /**
+ * GroupGrant is a group's role on a library.
+ *
+ * @generated from message docsearch.library.v1.GroupGrant
+ */
+export type GroupGrant = Message<"docsearch.library.v1.GroupGrant"> & {
+  /**
+   * @generated from field: string group = 1;
+   */
+  group: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string role = 3;
+   */
+  role: string;
+
+  /**
+   * @generated from field: int64 members = 4;
+   */
+  members: bigint;
+};
+
+/**
+ * Describes the message docsearch.library.v1.GroupGrant.
+ * Use `create(GroupGrantSchema)` to create a new message.
+ */
+export const GroupGrantSchema: GenMessage<GroupGrant> = /*@__PURE__*/
+  messageDesc(file_docsearch_library_v1_library, 29);
+
+/**
+ * @generated from message docsearch.library.v1.GrantGroupRequest
+ */
+export type GrantGroupRequest = Message<"docsearch.library.v1.GrantGroupRequest"> & {
+  /**
+   * @generated from field: string library = 1;
+   */
+  library: string;
+
+  /**
+   * @generated from field: string group = 2;
+   */
+  group: string;
+
+  /**
+   * Role is reader or editor: administering a library takes your own
+   * grant. Granting a group that holds a role changes it.
+   *
+   * @generated from field: string role = 3;
+   */
+  role: string;
+};
+
+/**
+ * Describes the message docsearch.library.v1.GrantGroupRequest.
+ * Use `create(GrantGroupRequestSchema)` to create a new message.
+ */
+export const GrantGroupRequestSchema: GenMessage<GrantGroupRequest> = /*@__PURE__*/
+  messageDesc(file_docsearch_library_v1_library, 30);
+
+/**
+ * @generated from message docsearch.library.v1.GrantGroupResponse
+ */
+export type GrantGroupResponse = Message<"docsearch.library.v1.GrantGroupResponse"> & {
+};
+
+/**
+ * Describes the message docsearch.library.v1.GrantGroupResponse.
+ * Use `create(GrantGroupResponseSchema)` to create a new message.
+ */
+export const GrantGroupResponseSchema: GenMessage<GrantGroupResponse> = /*@__PURE__*/
+  messageDesc(file_docsearch_library_v1_library, 31);
+
+/**
+ * @generated from message docsearch.library.v1.RevokeGroupRequest
+ */
+export type RevokeGroupRequest = Message<"docsearch.library.v1.RevokeGroupRequest"> & {
+  /**
+   * @generated from field: string library = 1;
+   */
+  library: string;
+
+  /**
+   * @generated from field: string group = 2;
+   */
+  group: string;
+};
+
+/**
+ * Describes the message docsearch.library.v1.RevokeGroupRequest.
+ * Use `create(RevokeGroupRequestSchema)` to create a new message.
+ */
+export const RevokeGroupRequestSchema: GenMessage<RevokeGroupRequest> = /*@__PURE__*/
+  messageDesc(file_docsearch_library_v1_library, 32);
+
+/**
+ * @generated from message docsearch.library.v1.RevokeGroupResponse
+ */
+export type RevokeGroupResponse = Message<"docsearch.library.v1.RevokeGroupResponse"> & {
+};
+
+/**
+ * Describes the message docsearch.library.v1.RevokeGroupResponse.
+ * Use `create(RevokeGroupResponseSchema)` to create a new message.
+ */
+export const RevokeGroupResponseSchema: GenMessage<RevokeGroupResponse> = /*@__PURE__*/
+  messageDesc(file_docsearch_library_v1_library, 33);
+
+/**
+ * @generated from message docsearch.library.v1.GroupsRequest
+ */
+export type GroupsRequest = Message<"docsearch.library.v1.GroupsRequest"> & {
+  /**
+   * @generated from field: string library = 1;
+   */
+  library: string;
+};
+
+/**
+ * Describes the message docsearch.library.v1.GroupsRequest.
+ * Use `create(GroupsRequestSchema)` to create a new message.
+ */
+export const GroupsRequestSchema: GenMessage<GroupsRequest> = /*@__PURE__*/
+  messageDesc(file_docsearch_library_v1_library, 34);
+
+/**
+ * @generated from message docsearch.library.v1.GroupsResponse
+ */
+export type GroupsResponse = Message<"docsearch.library.v1.GroupsResponse"> & {
+  /**
+   * @generated from field: repeated docsearch.library.v1.GroupGrant groups = 1;
+   */
+  groups: GroupGrant[];
+};
+
+/**
+ * Describes the message docsearch.library.v1.GroupsResponse.
+ * Use `create(GroupsResponseSchema)` to create a new message.
+ */
+export const GroupsResponseSchema: GenMessage<GroupsResponse> = /*@__PURE__*/
+  messageDesc(file_docsearch_library_v1_library, 35);
+
+/**
  * @generated from message docsearch.library.v1.DeletedRequest
  */
 export type DeletedRequest = Message<"docsearch.library.v1.DeletedRequest"> & {
@@ -680,7 +826,7 @@ export type DeletedRequest = Message<"docsearch.library.v1.DeletedRequest"> & {
  * Use `create(DeletedRequestSchema)` to create a new message.
  */
 export const DeletedRequestSchema: GenMessage<DeletedRequest> = /*@__PURE__*/
-  messageDesc(file_docsearch_library_v1_library, 29);
+  messageDesc(file_docsearch_library_v1_library, 36);
 
 /**
  * @generated from message docsearch.library.v1.DeletedResponse
@@ -697,7 +843,7 @@ export type DeletedResponse = Message<"docsearch.library.v1.DeletedResponse"> & 
  * Use `create(DeletedResponseSchema)` to create a new message.
  */
 export const DeletedResponseSchema: GenMessage<DeletedResponse> = /*@__PURE__*/
-  messageDesc(file_docsearch_library_v1_library, 30);
+  messageDesc(file_docsearch_library_v1_library, 37);
 
 /**
  * LibraryService creates libraries and shares them. The database decides
@@ -844,6 +990,39 @@ export const LibraryService: GenService<{
     methodKind: "unary";
     input: typeof DeletedRequestSchema;
     output: typeof DeletedResponseSchema;
+  },
+  /**
+   * GrantGroup gives a group a role on a library, or changes it. The caller
+   * administers the library, and maintains the group or is a docsearch
+   * administrator. Every member then reaches the library.
+   *
+   * @generated from rpc docsearch.library.v1.LibraryService.GrantGroup
+   */
+  grantGroup: {
+    methodKind: "unary";
+    input: typeof GrantGroupRequestSchema;
+    output: typeof GrantGroupResponseSchema;
+  },
+  /**
+   * RevokeGroup takes a group's role on a library away. The library's
+   * admins may, and so may the group's maintainers.
+   *
+   * @generated from rpc docsearch.library.v1.LibraryService.RevokeGroup
+   */
+  revokeGroup: {
+    methodKind: "unary";
+    input: typeof RevokeGroupRequestSchema;
+    output: typeof RevokeGroupResponseSchema;
+  },
+  /**
+   * Groups are the groups a library is granted to, for anyone who reads it.
+   *
+   * @generated from rpc docsearch.library.v1.LibraryService.Groups
+   */
+  groups: {
+    methodKind: "unary";
+    input: typeof GroupsRequestSchema;
+    output: typeof GroupsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_docsearch_library_v1_library, 0);

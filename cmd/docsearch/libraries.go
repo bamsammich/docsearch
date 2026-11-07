@@ -13,8 +13,12 @@ import (
 	"github.com/bamsammich/docsearch/internal/service/sharing"
 )
 
-// commandList is the subcommand every group names its listing by.
-const commandList = "list"
+// commandList is the subcommand every group names its listing by, and
+// commandRemove the one several name a removal by.
+const (
+	commandList   = "list"
+	commandRemove = "remove"
+)
 
 const (
 	argLibrary = "<library>"
@@ -78,18 +82,22 @@ func libraryCommand() *cli.Command {
 				ArgsUsage: argLibrary + " " + argUsername,
 				Description: "Someone can be invited once they have signed in at least " +
 					"once, which is when their username is recorded. The library reaches " +
-					"them once they accept with `docsearch library accept`.",
+					"them once they accept with `docsearch library accept`. With --group, " +
+					"the library goes to every member of a group you maintain, as reader " +
+					"or editor, and no username is given.",
 				Flags: append(serverFlags(), &cli.StringFlag{
 					Name: flagRole, Value: sharing.Reader, Usage: "reader, editor or admin",
-				}),
+				}, groupFlag()),
 				Action: grantRole,
 			},
 			{
 				Name:      "revoke",
 				Usage:     "take someone's role away or withdraw their invitation; revoke your own to leave",
 				ArgsUsage: argLibrary + " " + argUsername,
-				Flags:     serverFlags(),
-				Action:    revokeRole,
+				Description: "With --group, takes a group's role away instead, and no " +
+					"username is given.",
+				Flags:  append(serverFlags(), groupFlag()),
+				Action: revokeRole,
 			},
 			{
 				Name:   "invitations",
@@ -186,14 +194,21 @@ func listMembers(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
+	groups, err := clientFor(cmd).LibraryGroups(ctx, slug)
+	if err != nil {
+		return err
+	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "USERNAME\tROLE")
+	fmt.Fprintln(w, "MEMBER\tROLE")
 	for _, m := range members {
 		role := m.Role
 		if m.Invited {
 			role += " (invited)"
 		}
 		fmt.Fprintf(w, "%s\t%s\n", dash(m.Username), role)
+	}
+	for _, g := range groups {
+		fmt.Fprintf(w, "group:%s\t%s (%d members)\n", g.Group, g.Role, g.Members)
 	}
 	return w.Flush()
 }
@@ -211,6 +226,9 @@ func libraryAndUser(cmd *cli.Command) (string, string, error) {
 }
 
 func grantRole(ctx context.Context, cmd *cli.Command) error {
+	if group := cmd.String(flagGroup); group != "" {
+		return grantGroup(ctx, cmd, group)
+	}
 	slug, username, err := libraryAndUser(cmd)
 	if err != nil {
 		return err
@@ -324,6 +342,9 @@ func declineInvitation(ctx context.Context, cmd *cli.Command) error {
 }
 
 func revokeRole(ctx context.Context, cmd *cli.Command) error {
+	if group := cmd.String(flagGroup); group != "" {
+		return revokeGroup(ctx, cmd, group)
+	}
 	slug, username, err := libraryAndUser(cmd)
 	if err != nil {
 		return err

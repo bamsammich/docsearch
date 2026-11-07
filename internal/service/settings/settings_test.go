@@ -17,6 +17,9 @@ var editable = map[string]settings.Editable{
 	"oidc-required-claim-value": {Key: "auth.oidc.required_claim.value"},
 	"oidc-sign-up":              {Key: "auth.oidc.sign_up", Boolean: true},
 	"public-url":                {Key: "public_url", URL: true},
+	"group-creators": {
+		Key: "groups.creators", Choices: []string{"everyone", "administrators"},
+	},
 }
 
 const deployed = `# Deployed by the platform team.
@@ -135,6 +138,18 @@ func (s *SettingsSuite) TestABooleanTakesTrueOrFalse() {
 	_, err := s.withDatabase(nil).
 		Update(s.T().Context(), []settings.Change{{Flag: "oidc-sign-up", Value: "yes"}})
 	s.Require().Error(err)
+}
+
+// A setting with choices takes one of them and nothing else.
+func (s *SettingsSuite) TestASettingWithChoicesTakesOnlyThose() {
+	_, err := s.withDatabase(nil).
+		Update(s.T().Context(), []settings.Change{{Flag: "group-creators", Value: "anyone"}})
+	s.Require().ErrorIs(err, settings.ErrInvalid)
+
+	s.store.EXPECT().Set(mock.Anything, "groups.creators", mock.Anything).Return(nil)
+	_, err = s.withDatabase(nil).
+		Update(s.T().Context(), []settings.Change{{Flag: "group-creators", Value: "administrators"}})
+	s.Require().NoError(err)
 }
 
 func (s *SettingsSuite) TestStoredIsByFlagWithOrWithoutAFile() {

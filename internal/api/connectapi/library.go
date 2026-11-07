@@ -41,14 +41,84 @@ type LibrariesFor func(user string) (Libraries, error)
 // LibraryServer implements the generated library handler.
 type LibraryServer struct {
 	libraries LibrariesFor
+	groups    GroupsFor
 }
 
 // NewLibraryServer returns the path to mount the handler on, and the handler.
 func NewLibraryServer(
 	libraries LibrariesFor,
+	groups GroupsFor,
 	opts ...connect.HandlerOption,
 ) (string, http.Handler) {
-	return libraryv1connect.NewLibraryServiceHandler(&LibraryServer{libraries: libraries}, opts...)
+	return libraryv1connect.NewLibraryServiceHandler(
+		&LibraryServer{libraries: libraries, groups: groups}, opts...)
+}
+
+// GrantGroup gives a group a role on a library.
+func (s *LibraryServer) GrantGroup(
+	ctx context.Context,
+	req *connect.Request[libraryv1.GrantGroupRequest],
+) (*connect.Response[libraryv1.GrantGroupResponse], error) {
+	groups, err := s.groupsForOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	msg := req.Msg
+	err = groups.GrantLibrary(ctx, msg.GetLibrary(), msg.GetGroup(), msg.GetRole())
+	if err != nil {
+		return nil, sharingError(err)
+	}
+	return connect.NewResponse(&libraryv1.GrantGroupResponse{}), nil
+}
+
+// RevokeGroup takes a group's role on a library away.
+func (s *LibraryServer) RevokeGroup(
+	ctx context.Context,
+	req *connect.Request[libraryv1.RevokeGroupRequest],
+) (*connect.Response[libraryv1.RevokeGroupResponse], error) {
+	groups, err := s.groupsForOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := groups.RevokeLibrary(ctx, req.Msg.GetLibrary(), req.Msg.GetGroup()); err != nil {
+		return nil, sharingError(err)
+	}
+	return connect.NewResponse(&libraryv1.RevokeGroupResponse{}), nil
+}
+
+// Groups are the groups a library is granted to.
+func (s *LibraryServer) Groups(
+	ctx context.Context,
+	req *connect.Request[libraryv1.GroupsRequest],
+) (*connect.Response[libraryv1.GroupsResponse], error) {
+	groups, err := s.groupsForOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	grants, err := groups.OnLibrary(ctx, req.Msg.GetLibrary())
+	if err != nil {
+		return nil, sharingError(err)
+	}
+	out := &libraryv1.GroupsResponse{Groups: make([]*libraryv1.GroupGrant, 0, len(grants))}
+	for _, g := range grants {
+		out.Groups = append(out.Groups, &libraryv1.GroupGrant{
+			Group: g.Group, Name: g.Name, Role: g.Role, Members: g.Members,
+		})
+	}
+	return connect.NewResponse(out), nil
+}
+
+//nolint:ireturn // a factory for a port returns that port; a concrete type here would defeat it.
+func (s *LibraryServer) groupsForOwner(ctx context.Context) (Groups, error) {
+	user, err := owner.From(ctx)
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	groups, err := s.groups(user)
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	return groups, nil
 }
 
 // List is every library the caller reads.
@@ -335,13 +405,21 @@ func libraryMessage(lib sharing.Library) *libraryv1.Library {
 
 // sharingCodes are the Connect codes the database's refusals answer with.
 var sharingCodes = map[error]connect.Code{
-	sharing.ErrNoLibrary:    connect.CodeNotFound,
-	sharing.ErrNoAccount:    connect.CodeNotFound,
-	sharing.ErrNoInvitation: connect.CodeNotFound,
-	sharing.ErrTooMany:      connect.CodeResourceExhausted,
-	sharing.ErrLastAdmin:    connect.CodeFailedPrecondition,
-	sharing.ErrNameTaken:    connect.CodeAlreadyExists,
-	sharing.ErrInvalid:      connect.CodeInvalidArgument,
+	sharing.ErrNoLibrary:         connect.CodeNotFound,
+	sharing.ErrNoAccount:         connect.CodeNotFound,
+	sharing.ErrNoInvitation:      connect.CodeNotFound,
+	sharing.ErrTooMany:           connect.CodeResourceExhausted,
+	sharing.ErrNoGroup:           connect.CodeNotFound,
+	sharing.ErrNoGroupInvitation: connect.CodeNotFound,
+	sharing.ErrLastMaintainer:    connect.CodeFailedPrecondition,
+	sharing.ErrFromProvider:      connect.CodeFailedPrecondition,
+	sharing.ErrGroupTaken:        connect.CodeAlreadyExists,
+	sharing.ErrGroupRole:         connect.CodeInvalidArgument,
+	sharing.ErrGroupName:         connect.CodeInvalidArgument,
+	sharing.ErrJoinByForce:       connect.CodeFailedPrecondition,
+	sharing.ErrLastAdmin:         connect.CodeFailedPrecondition,
+	sharing.ErrNameTaken:         connect.CodeAlreadyExists,
+	sharing.ErrInvalid:           connect.CodeInvalidArgument,
 }
 
 func sharingError(err error) error {

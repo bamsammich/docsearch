@@ -15,6 +15,7 @@ import (
 
 	documentv1 "github.com/bamsammich/docsearch/internal/api/docsearch/document/v1"
 	"github.com/bamsammich/docsearch/internal/api/docsearch/document/v1/documentv1connect"
+	"github.com/bamsammich/docsearch/internal/api/docsearch/group/v1/groupv1connect"
 	ingestv1 "github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1"
 	"github.com/bamsammich/docsearch/internal/api/docsearch/ingest/v1/ingestv1connect"
 	"github.com/bamsammich/docsearch/internal/api/docsearch/library/v1/libraryv1connect"
@@ -29,6 +30,7 @@ type Client struct {
 	ingest    ingestv1connect.IngestServiceClient
 	jobs      ingestv1connect.JobServiceClient
 	libraries libraryv1connect.LibraryServiceClient
+	groups    groupv1connect.GroupServiceClient
 	// library is the label of the library the document and job calls act
 	// on. Empty is the caller's own.
 	library string
@@ -55,6 +57,7 @@ func New(
 		ingest:    ingestv1connect.NewIngestServiceClient(httpClient, baseURL, opts...),
 		jobs:      ingestv1connect.NewJobServiceClient(httpClient, baseURL, opts...),
 		libraries: libraryv1connect.NewLibraryServiceClient(httpClient, baseURL, opts...),
+		groups:    groupv1connect.NewGroupServiceClient(httpClient, baseURL, opts...),
 	}
 }
 
