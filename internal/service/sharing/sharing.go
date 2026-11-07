@@ -64,6 +64,49 @@ type Deleted struct {
 	DeletedBy string
 }
 
+// Roles a user can hold in a group. A maintainer also invites and removes
+// members, renames the group and deletes it.
+const (
+	RoleMember     = "member"
+	RoleMaintainer = "maintainer"
+)
+
+// Group is one group as the caller sees it. Role is the caller's own, and
+// empty for a group they are not in.
+type Group struct {
+	Slug    string
+	Name    string
+	Role    string
+	Members int64
+}
+
+// GroupMember is one person in a group. FromProvider is a membership the
+// provider group gives, and Invited someone asked to join who has not yet
+// accepted.
+type GroupMember struct {
+	Username     string
+	Role         string
+	FromProvider bool
+	Invited      bool
+}
+
+// GroupInvitation is a group someone is asked to join.
+type GroupInvitation struct {
+	At        time.Time
+	Group     string
+	Name      string
+	Role      string
+	InvitedBy string
+}
+
+// GroupGrant is a group's role on a library.
+type GroupGrant struct {
+	Group   string
+	Name    string
+	Role    string
+	Members int64
+}
+
 var (
 	// ErrNoLibrary is a library the caller cannot do this to: one they do
 	// not hold the role for, or one that does not exist. Both answer alike.
@@ -83,6 +126,34 @@ var (
 	ErrNoInvitation = errors.New("no invitation to a library by that name")
 	// ErrTooMany is a library past the most one account may create.
 	ErrTooMany = errors.New("you have created as many libraries as one account may")
+	// ErrNoGroup is a group the caller cannot do this to: one they are not
+	// in or do not maintain, or one that does not exist. Both answer alike.
+	ErrNoGroup = errors.New("no group by that name that you can change: " +
+		"check the name, and that you maintain it")
+	// ErrLastMaintainer is a change that would leave a group without a
+	// maintainer.
+	ErrLastMaintainer = errors.New(
+		"that would leave the group without a maintainer: make someone else a maintainer first",
+	)
+	// ErrGroupRole is a library role a group may not hold: a group gets
+	// reader or editor, and administering a library takes your own grant.
+	ErrGroupRole = errors.New("a group gets reader or editor: " +
+		"administering a library takes your own grant")
+	// ErrJoinByForce is an administrator inviting themselves to a group they
+	// are not in, which only an addition by force does.
+	ErrJoinByForce = errors.New("you are not in that group: " +
+		"an administrator joins a group only by force, which its libraries record")
+	// ErrGroupName is a group name that is empty, too long, or holds
+	// control characters.
+	ErrGroupName = errors.New("a group name is 1 to 120 characters with no control characters")
+	// ErrGroupTaken is a slug another group already has.
+	ErrGroupTaken = errors.New("a group by that name already exists")
+	// ErrNoGroupInvitation is a group the caller is not invited to.
+	ErrNoGroupInvitation = errors.New("no invitation to a group by that name")
+	// ErrFromProvider is a membership the provider group gives, which only
+	// the provider can take away.
+	ErrFromProvider = errors.New("that membership comes from the provider group: " +
+		"remove them from the group at the provider")
 	// ErrNameTaken is a slug another library already has.
 	ErrNameTaken = errors.New("a library by that name already exists")
 	// ErrInvalid is a slug, name or role the database refused the shape of.

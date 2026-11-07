@@ -28,6 +28,33 @@ COMMENT ON SCHEMA public IS 'standard public schema';
 
 
 --
+-- Name: accept_group_invitation(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.accept_group_invitation(grp_slug text) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor text := current_setting('app.user_id', true);
+  grp   text := group_invitation_for(grp_slug);
+  offer group_invitations;
+BEGIN
+  IF grp IS NULL THEN
+    RAISE EXCEPTION 'no invitation to a group named %', grp_slug USING ERRCODE = 'DSG05';
+  END IF;
+  DELETE FROM group_invitations WHERE group_id = grp AND user_id = actor RETURNING * INTO offer;
+  INSERT INTO group_members (group_id, user_id, role, source)
+    VALUES (grp, actor, offer.role, 'invited')
+  ON CONFLICT (group_id, user_id) DO UPDATE SET role = EXCLUDED.role, source = 'invited';
+  INSERT INTO group_events (group_id, actor, action, subject, role)
+    VALUES (grp, actor, 'accept', actor, offer.role);
+  RETURN offer.role;
+END;
+$$;
+
+
+--
 -- Name: accept_invitation(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -118,6 +145,25 @@ $$;
 
 
 --
+-- Name: all_groups(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.all_groups() RETURNS TABLE(slug text, name text, members bigint, role text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT g.slug, g.name,
+         (SELECT count(*) FROM group_members m WHERE m.group_id = g.group_id),
+         COALESCE((SELECT m.role FROM group_members m
+                    WHERE m.group_id = g.group_id
+                      AND m.user_id = current_setting('app.user_id', true)), '')
+    FROM groups g
+   WHERE NULLIF(current_setting('app.user_id', true), '') IS NOT NULL
+   ORDER BY g.slug;
+$$;
+
+
+--
 -- Name: app_libraries(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -125,11 +171,22 @@ CREATE FUNCTION public.app_libraries(min_role text) RETURNS text[]
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
-  SELECT COALESCE(array_agg(g.library_id), '{}')
-    FROM library_grants g JOIN libraries l ON l.library_id = g.library_id
-   WHERE g.user_id = current_setting('app.user_id', true)
-     AND role_rank(g.role) >= role_rank(min_role)
-     AND l.deleted_at IS NULL;
+  SELECT COALESCE(array_agg(DISTINCT r.library_id), '{}')
+    FROM user_library_roles(current_setting('app.user_id', true)) r
+    JOIN libraries l ON l.library_id = r.library_id
+   WHERE role_rank(r.role) >= role_rank(min_role) AND l.deleted_at IS NULL;
+$$;
+
+
+--
+-- Name: caller_is_administrator(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.caller_is_administrator() RETURNS boolean
+    LANGUAGE sql STABLE
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT COALESCE((SELECT admin FROM users WHERE user_id = current_setting('app.user_id', true)), false);
 $$;
 
 
@@ -174,6 +231,44 @@ $$;
 
 
 --
+-- Name: create_group(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.create_group(new_slug text, new_name text) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor  text := NULLIF(current_setting('app.user_id', true), '');
+  new_id text := 'grp_' || substr(md5(random()::text || clock_timestamp()::text), 1, 20);
+BEGIN
+  IF actor IS NULL THEN
+    RAISE EXCEPTION 'no user' USING ERRCODE = 'DSG01';
+  END IF;
+  IF (SELECT count(*) FROM groups WHERE created_by = actor) >= 100 THEN
+    RAISE EXCEPTION 'you have created 100 groups, the most one account may' USING ERRCODE = 'DSL06';
+  END IF;
+  IF NOT group_name_ok(new_name) THEN
+    RAISE EXCEPTION 'a group name is 1 to 120 characters with no control characters'
+      USING ERRCODE = 'DSG08';
+  END IF;
+  IF EXISTS (SELECT 1 FROM groups WHERE slug = new_slug) THEN
+    RAISE EXCEPTION 'a group named % already exists', new_slug USING ERRCODE = 'DSG04';
+  END IF;
+  BEGIN
+    INSERT INTO groups (group_id, slug, name, created_by) VALUES (new_id, new_slug, btrim(new_name), actor);
+  EXCEPTION WHEN unique_violation THEN
+    RAISE EXCEPTION 'a group named % already exists', new_slug USING ERRCODE = 'DSG04';
+  END;
+  INSERT INTO group_members (group_id, user_id, role, source) VALUES (new_id, actor, 'maintainer', 'invited');
+  INSERT INTO group_events (group_id, actor, action, subject, role)
+    VALUES (new_id, actor, 'create', actor, 'maintainer');
+  RETURN new_id;
+END;
+$$;
+
+
+--
 -- Name: create_library(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -211,6 +306,28 @@ $$;
 
 
 --
+-- Name: decline_group_invitation(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.decline_group_invitation(grp_slug text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor text := current_setting('app.user_id', true);
+  grp   text := group_invitation_for(grp_slug);
+BEGIN
+  IF grp IS NULL THEN
+    RAISE EXCEPTION 'no invitation to a group named %', grp_slug USING ERRCODE = 'DSG05';
+  END IF;
+  DELETE FROM group_invitations WHERE group_id = grp AND user_id = actor;
+  INSERT INTO group_events (group_id, actor, action, subject)
+    VALUES (grp, actor, 'decline', actor);
+END;
+$$;
+
+
+--
 -- Name: decline_invitation(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -228,6 +345,30 @@ BEGIN
   DELETE FROM library_invitations WHERE library_id = lib AND user_id = actor;
   INSERT INTO access_events (library_id, actor, action, subject)
     VALUES (lib, actor, 'decline', actor);
+END;
+$$;
+
+
+--
+-- Name: delete_group(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.delete_group(grp_slug text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor text := current_setting('app.user_id', true);
+  grp   text := group_for(grp_slug, 'maintainer');
+BEGIN
+  IF grp IS NULL THEN
+    RAISE EXCEPTION 'no group named % that you maintain', grp_slug USING ERRCODE = 'DSG01';
+  END IF;
+  INSERT INTO access_events (library_id, actor, action, role, detail)
+    SELECT lg.library_id, actor, 'group_delete', lg.role, g.name
+      FROM library_group_grants lg JOIN groups g ON g.group_id = lg.group_id
+     WHERE lg.group_id = grp;
+  DELETE FROM groups WHERE group_id = grp;
 END;
 $$;
 
@@ -294,12 +435,54 @@ BEGIN
          error = 'the account that queued it can no longer add to this library'
    WHERE (j.status = 'queued'
           OR (j.status IN ('running', 'cancelling') AND j.lease_until < now()))
-     AND NOT EXISTS (
-       SELECT 1 FROM library_grants g
-        WHERE g.library_id = j.library_id AND g.user_id = j.requested_by
-          AND role_rank(g.role) >= role_rank('editor'));
+     AND NOT holds_library_role(j.requested_by, j.library_id, 'editor');
   GET DIAGNOSTICS failed = ROW_COUNT;
   RETURN failed;
+END;
+$$;
+
+
+--
+-- Name: force_into_group(text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.force_into_group(grp_slug text, member_username text, new_role text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor  text := current_setting('app.user_id', true);
+  grp    text;
+  member text;
+BEGIN
+  IF NOT caller_is_administrator() THEN
+    RAISE EXCEPTION 'only an administrator adds someone by force' USING ERRCODE = 'DSG01';
+  END IF;
+  SELECT group_id INTO grp FROM groups WHERE slug = grp_slug FOR UPDATE;
+  IF grp IS NULL THEN
+    RAISE EXCEPTION 'no group named %', grp_slug USING ERRCODE = 'DSG01';
+  END IF;
+  SELECT user_id INTO member FROM users WHERE username = member_username;
+  IF member IS NULL THEN
+    RAISE EXCEPTION 'no account named %', member_username USING ERRCODE = 'DSL02';
+  END IF;
+  IF new_role IS NULL OR new_role NOT IN ('member', 'maintainer') THEN
+    RAISE EXCEPTION 'a group role is member or maintainer' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (SELECT 1 FROM group_members WHERE group_id = grp AND user_id = member)
+     AND maintainers_left(grp, member, new_role) = 0 THEN
+    RAISE EXCEPTION 'that would leave % without a maintainer', grp_slug USING ERRCODE = 'DSG03';
+  END IF;
+  DELETE FROM group_invitations WHERE group_id = grp AND user_id = member;
+  INSERT INTO group_members (group_id, user_id, role, source)
+    VALUES (grp, member, new_role, 'invited')
+  ON CONFLICT (group_id, user_id) DO UPDATE SET role = EXCLUDED.role;
+  INSERT INTO group_events (group_id, actor, action, subject, role)
+    VALUES (grp, actor, 'force', member, new_role);
+  INSERT INTO access_events (library_id, actor, action, subject, role, detail)
+    SELECT lg.library_id, actor, 'group_force', member, lg.role, g.name
+      FROM library_group_grants lg JOIN groups g ON g.group_id = lg.group_id
+     WHERE lg.group_id = grp;
 END;
 $$;
 
@@ -349,6 +532,178 @@ $$;
 
 
 --
+-- Name: grant_library_group(text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.grant_library_group(lib_slug text, grp_slug text, new_role text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor text := current_setting('app.user_id', true);
+  lib   text := library_by_slug(lib_slug, 'admin');
+  grp   text := group_for(grp_slug, 'maintainer');
+BEGIN
+  IF lib IS NULL THEN
+    RAISE EXCEPTION 'no library named % that you administer', lib_slug USING ERRCODE = 'DSL01';
+  END IF;
+  IF grp IS NULL THEN
+    RAISE EXCEPTION 'no group named % that you maintain', grp_slug USING ERRCODE = 'DSG01';
+  END IF;
+  IF new_role IS NULL OR new_role NOT IN ('reader', 'editor') THEN
+    RAISE EXCEPTION 'a group gets reader or editor: administering a library takes your own grant'
+      USING ERRCODE = 'DSG02';
+  END IF;
+  INSERT INTO library_group_grants (library_id, group_id, role, granted_by)
+    VALUES (lib, grp, new_role, actor)
+  ON CONFLICT (library_id, group_id) DO UPDATE
+    SET role = EXCLUDED.role, granted_by = EXCLUDED.granted_by, granted_at = now();
+  INSERT INTO access_events (library_id, actor, action, role, detail)
+    SELECT lib, actor, 'group_grant', new_role, name FROM groups WHERE group_id = grp;
+END;
+$$;
+
+
+--
+-- Name: group_events_of(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.group_events_of(grp_slug text) RETURNS TABLE(at timestamp with time zone, actor text, action text, subject text, role text, detail text)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  grp text := group_for(grp_slug, 'maintainer');
+BEGIN
+  IF grp IS NULL THEN
+    RAISE EXCEPTION 'no group named % that you maintain', grp_slug USING ERRCODE = 'DSG01';
+  END IF;
+  RETURN QUERY
+    SELECT e.at, COALESCE(a.username, e.actor_name, ''), e.action,
+           COALESCE(s.username, e.subject_name, ''), COALESCE(e.role, ''), COALESCE(e.detail, '')
+      FROM group_events e
+      LEFT JOIN users a ON a.user_id = e.actor
+      LEFT JOIN users s ON s.user_id = e.subject
+     WHERE e.group_id = grp
+     ORDER BY e.at, e.id;
+END;
+$$;
+
+
+--
+-- Name: group_for(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.group_for(grp_slug text, need text) RETURNS text
+    LANGUAGE sql STABLE
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT g.group_id FROM groups g
+   WHERE g.slug = grp_slug
+     AND (need = 'see' OR caller_is_administrator()
+          OR EXISTS (SELECT 1 FROM group_members m
+                      WHERE m.group_id = g.group_id
+                        AND m.user_id = current_setting('app.user_id', true)
+                        AND (need = 'member' OR m.role = 'maintainer')));
+$$;
+
+
+--
+-- Name: group_invitation_for(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.group_invitation_for(grp_slug text) RETURNS text
+    LANGUAGE sql STABLE
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT i.group_id FROM group_invitations i JOIN groups g ON g.group_id = i.group_id
+   WHERE g.slug = grp_slug AND i.user_id = current_setting('app.user_id', true);
+$$;
+
+
+--
+-- Name: group_libraries(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.group_libraries(grp_slug text) RETURNS TABLE(slug text, name text, role text)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  grp text := group_for(grp_slug, 'member');
+BEGIN
+  IF grp IS NULL THEN
+    RAISE EXCEPTION 'no group named % that you belong to', grp_slug USING ERRCODE = 'DSG01';
+  END IF;
+  RETURN QUERY
+    SELECT l.slug, l.name, lg.role
+      FROM library_group_grants lg JOIN libraries l ON l.library_id = lg.library_id
+     WHERE lg.group_id = grp AND l.deleted_at IS NULL
+     ORDER BY l.slug;
+END;
+$$;
+
+
+--
+-- Name: group_members_of(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.group_members_of(grp_slug text) RETURNS TABLE(username text, role text, source text, invited boolean)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  grp text := group_for(grp_slug, 'member');
+BEGIN
+  IF grp IS NULL THEN
+    RAISE EXCEPTION 'no group named % that you belong to', grp_slug USING ERRCODE = 'DSG01';
+  END IF;
+  RETURN QUERY
+    SELECT x.who, x.held, x.came, x.pending
+      FROM (SELECT COALESCE(u.username, ''), m.role, m.source, false
+              FROM group_members m JOIN users u ON u.user_id = m.user_id
+             WHERE m.group_id = grp
+            UNION ALL
+            SELECT COALESCE(u.username, ''), i.role, 'invited', true
+              FROM group_invitations i JOIN users u ON u.user_id = i.user_id
+             WHERE i.group_id = grp AND group_for(grp_slug, 'maintainer') IS NOT NULL
+           ) AS x(who, held, came, pending)
+     ORDER BY x.pending, (x.held = 'maintainer') DESC, x.who;
+END;
+$$;
+
+
+--
+-- Name: group_name_ok(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.group_name_ok(new_name text) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT char_length(btrim(coalesce(new_name, ''))) BETWEEN 1 AND 120
+     AND coalesce(new_name, '') !~ '[[:cntrl:]]';
+$$;
+
+
+--
+-- Name: holds_library_role(text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.holds_library_role(uid text, lib text, min_role text) RETURNS boolean
+    LANGUAGE sql STABLE
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT EXISTS (SELECT 1 FROM library_grants g
+                  WHERE g.library_id = lib AND g.user_id = uid
+                    AND role_rank(g.role) >= role_rank(min_role))
+      OR EXISTS (SELECT 1 FROM library_group_grants lg
+                   JOIN group_members m ON m.group_id = lg.group_id AND m.user_id = uid
+                  WHERE lg.library_id = lib AND role_rank(lg.role) >= role_rank(min_role));
+$$;
+
+
+--
 -- Name: invitation_for(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -364,6 +719,60 @@ $$;
 
 
 --
+-- Name: invite_to_group(text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.invite_to_group(grp_slug text, member_username text, new_role text) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor  text := current_setting('app.user_id', true);
+  grp    text := group_for(grp_slug, 'maintainer');
+  member text;
+BEGIN
+  IF grp IS NULL THEN
+    RAISE EXCEPTION 'no group named % that you maintain', grp_slug USING ERRCODE = 'DSG01';
+  END IF;
+  SELECT user_id INTO member FROM users WHERE username = member_username;
+  IF member IS NULL THEN
+    RAISE EXCEPTION 'no account named %', member_username USING ERRCODE = 'DSL02';
+  END IF;
+  IF new_role IS NULL OR new_role NOT IN ('member', 'maintainer') THEN
+    RAISE EXCEPTION 'a group role is member or maintainer' USING ERRCODE = '22023';
+  END IF;
+  -- Two maintainers changing roles at once could each leave the other as
+  -- the last maintainer; locking the group's row orders them.
+  PERFORM 1 FROM groups WHERE group_id = grp FOR UPDATE;
+  IF EXISTS (SELECT 1 FROM group_members WHERE group_id = grp AND user_id = member) THEN
+    IF maintainers_left(grp, member, new_role) = 0 THEN
+      RAISE EXCEPTION 'that would leave % without a maintainer', grp_slug USING ERRCODE = 'DSG03';
+    END IF;
+    -- A provider membership keeps its source: only the provider takes it away.
+    UPDATE group_members SET role = new_role
+     WHERE group_id = grp AND user_id = member;
+    INSERT INTO group_events (group_id, actor, action, subject, role)
+      VALUES (grp, actor, 'role', member, new_role);
+    RETURN 'changed';
+  END IF;
+  -- Only an administrator gets here without being a member. Inviting
+  -- themselves and accepting would reach the group's libraries unseen.
+  IF member = actor THEN
+    RAISE EXCEPTION 'you are not in %: an administrator joins a group only by force', grp_slug
+      USING ERRCODE = 'DSG06';
+  END IF;
+  INSERT INTO group_invitations (group_id, user_id, role, invited_by)
+    VALUES (grp, member, new_role, actor)
+  ON CONFLICT (group_id, user_id) DO UPDATE
+    SET role = EXCLUDED.role, invited_by = EXCLUDED.invited_by, invited_at = now();
+  INSERT INTO group_events (group_id, actor, action, subject, role)
+    VALUES (grp, actor, 'invite', member, new_role);
+  RETURN 'invited';
+END;
+$$;
+
+
+--
 -- Name: library_by_slug(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -373,11 +782,10 @@ CREATE FUNCTION public.library_by_slug(lib_slug text, min_role text) RETURNS tex
     AS $$
   SELECT l.library_id
     FROM libraries l
-    JOIN library_grants g ON g.library_id = l.library_id
-   WHERE l.slug = lib_slug
-     AND l.deleted_at IS NULL
-     AND g.user_id = current_setting('app.user_id', true)
-     AND role_rank(g.role) >= role_rank(min_role);
+    JOIN user_library_roles(current_setting('app.user_id', true)) r ON r.library_id = l.library_id
+   WHERE l.slug = lib_slug AND l.deleted_at IS NULL
+     AND role_rank(r.role) >= role_rank(min_role)
+   LIMIT 1;
 $$;
 
 
@@ -414,6 +822,29 @@ $$;
 CREATE FUNCTION public.library_grace() RETURNS interval
     LANGUAGE sql IMMUTABLE
     AS $$ SELECT interval '14 days' $$;
+
+
+--
+-- Name: library_groups(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.library_groups(lib_slug text) RETURNS TABLE(slug text, name text, role text, members bigint)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  lib text := library_by_slug(lib_slug, 'reader');
+BEGIN
+  IF lib IS NULL THEN
+    RAISE EXCEPTION 'no library named % that you read', lib_slug USING ERRCODE = 'DSL01';
+  END IF;
+  RETURN QUERY
+    SELECT g.slug, g.name, lg.role, (SELECT count(*) FROM group_members m WHERE m.group_id = g.group_id)
+      FROM library_group_grants lg JOIN groups g ON g.group_id = lg.group_id
+     WHERE lg.library_id = lib
+     ORDER BY role_rank(lg.role) DESC, g.slug;
+END;
+$$;
 
 
 --
@@ -455,6 +886,37 @@ CREATE FUNCTION public.library_purgeable(lib text) RETURNS boolean
     AS $$
   SELECT EXISTS (SELECT 1 FROM libraries
                   WHERE library_id = lib AND deleted_at < now() - library_grace());
+$$;
+
+
+--
+-- Name: maintainers_left(text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.maintainers_left(grp text, member text, new_role text) RETURNS bigint
+    LANGUAGE sql STABLE
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT (SELECT count(*) FROM group_members
+           WHERE group_id = grp AND role = 'maintainer' AND user_id <> member)
+         + CASE WHEN new_role = 'maintainer' THEN 1 ELSE 0 END;
+$$;
+
+
+--
+-- Name: my_group_invitations(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_group_invitations() RETURNS TABLE(slug text, name text, role text, invited_by text, invited_at timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT g.slug, g.name, i.role, COALESCE(u.username, ''), i.invited_at
+    FROM group_invitations i
+    JOIN groups g ON g.group_id = i.group_id
+    LEFT JOIN users u ON u.user_id = i.invited_by
+   WHERE i.user_id = current_setting('app.user_id', true)
+   ORDER BY i.invited_at DESC, g.slug;
 $$;
 
 
@@ -504,6 +966,8 @@ BEGIN
        WHERE admin AND user_id <> OLD.user_id AND username IS NOT NULL
        ORDER BY created_at, user_id LIMIT 1;
     END IF;
+  END IF;
+  IF stranded IS NOT NULL THEN
     IF heir IS NULL THEN
       RAISE EXCEPTION 'removing % would leave % without an admin, and no other administrator can take over: make someone an administrator first',
         OLD.username,
@@ -528,6 +992,12 @@ BEGIN
     SELECT i.library_id, actor, 'withdraw', OLD.user_id
       FROM library_invitations i WHERE i.user_id = OLD.user_id;
   DELETE FROM library_invitations WHERE user_id = OLD.user_id;
+  INSERT INTO group_events (group_id, actor, action, subject)
+    SELECT m.group_id, actor, 'remove', OLD.user_id FROM group_members m WHERE m.user_id = OLD.user_id;
+  DELETE FROM group_members WHERE user_id = OLD.user_id;
+  INSERT INTO group_events (group_id, actor, action, subject)
+    SELECT i.group_id, actor, 'withdraw', OLD.user_id FROM group_invitations i WHERE i.user_id = OLD.user_id;
+  DELETE FROM group_invitations WHERE user_id = OLD.user_id;
   UPDATE users SET username = NULL, admin = false WHERE user_id = OLD.user_id;
   RETURN OLD;
 END;
@@ -588,12 +1058,13 @@ CREATE FUNCTION public.readable_libraries() RETURNS TABLE(library_id text, kind 
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
-  SELECT l.library_id, l.kind, l.slug, l.name, g.role
-    FROM library_grants g
-    JOIN libraries l ON l.library_id = g.library_id
-   WHERE g.user_id = current_setting('app.user_id', true)
-     AND l.deleted_at IS NULL
-   ORDER BY (l.library_id = g.user_id) DESC, l.slug NULLS LAST, l.library_id;
+  SELECT l.library_id, l.kind, l.slug, l.name,
+         (array_agg(r.role ORDER BY role_rank(r.role) DESC))[1]
+    FROM user_library_roles(current_setting('app.user_id', true)) r
+    JOIN libraries l ON l.library_id = r.library_id
+   WHERE l.deleted_at IS NULL
+   GROUP BY l.library_id, l.kind, l.slug, l.name
+   ORDER BY (l.library_id = current_setting('app.user_id', true)) DESC, l.slug NULLS LAST, l.library_id;
 $$;
 
 
@@ -631,6 +1102,57 @@ $$;
 
 
 --
+-- Name: remove_from_group(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.remove_from_group(grp_slug text, member_username text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor  text := current_setting('app.user_id', true);
+  member text;
+  grp    text;
+  held   group_members;
+BEGIN
+  SELECT user_id INTO member FROM users WHERE username = member_username;
+  IF member IS NOT NULL AND member = actor THEN
+    grp := group_for(grp_slug, 'member');
+  ELSE
+    grp := group_for(grp_slug, 'maintainer');
+  END IF;
+  IF grp IS NULL THEN
+    RAISE EXCEPTION 'no group named % that you maintain', grp_slug USING ERRCODE = 'DSG01';
+  END IF;
+  IF member IS NULL THEN
+    RAISE EXCEPTION 'no account named %', member_username USING ERRCODE = 'DSL02';
+  END IF;
+  DELETE FROM group_invitations WHERE group_id = grp AND user_id = member;
+  IF FOUND THEN
+    INSERT INTO group_events (group_id, actor, action, subject)
+      VALUES (grp, actor, 'withdraw', member);
+    RETURN;
+  END IF;
+  SELECT * INTO held FROM group_members WHERE group_id = grp AND user_id = member;
+  IF held.user_id IS NULL THEN
+    RETURN;
+  END IF;
+  IF held.source = 'provider' THEN
+    RAISE EXCEPTION '% is in % through the provider group', member_username, grp_slug
+      USING ERRCODE = 'DSG07';
+  END IF;
+  PERFORM 1 FROM groups WHERE group_id = grp FOR UPDATE;
+  IF maintainers_left(grp, member, NULL) = 0 THEN
+    RAISE EXCEPTION 'that would leave % without a maintainer', grp_slug USING ERRCODE = 'DSG03';
+  END IF;
+  DELETE FROM group_members WHERE group_id = grp AND user_id = member;
+  INSERT INTO group_events (group_id, actor, action, subject)
+    VALUES (grp, actor, 'remove', member);
+END;
+$$;
+
+
+--
 -- Name: remove_password_account(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -651,6 +1173,37 @@ BEGIN
   END IF;
   DELETE FROM oauth_refresh_tokens WHERE user_id = member;
   RETURN true;
+END;
+$$;
+
+
+--
+-- Name: rename_group(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rename_group(grp_slug text, new_name text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor text := current_setting('app.user_id', true);
+  grp   text := group_for(grp_slug, 'maintainer');
+  old   text;
+BEGIN
+  IF grp IS NULL THEN
+    RAISE EXCEPTION 'no group named % that you maintain', grp_slug USING ERRCODE = 'DSG01';
+  END IF;
+  IF NOT group_name_ok(new_name) THEN
+    RAISE EXCEPTION 'a group name is 1 to 120 characters with no control characters'
+      USING ERRCODE = 'DSG08';
+  END IF;
+  SELECT name INTO old FROM groups WHERE group_id = grp;
+  IF old = btrim(new_name) THEN
+    RETURN;
+  END IF;
+  UPDATE groups SET name = btrim(new_name) WHERE group_id = grp;
+  INSERT INTO group_events (group_id, actor, action, subject, detail)
+    VALUES (grp, actor, 'rename', actor, old);
 END;
 $$;
 
@@ -785,6 +1338,40 @@ $$;
 
 
 --
+-- Name: revoke_library_group(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.revoke_library_group(lib_slug text, grp_slug text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor text := current_setting('app.user_id', true);
+  lib   text := library_by_slug(lib_slug, 'admin');
+  grp   text;
+BEGIN
+  IF lib IS NULL THEN
+    grp := group_for(grp_slug, 'maintainer');
+    SELECT l.library_id INTO lib
+      FROM libraries l JOIN library_group_grants lg ON lg.library_id = l.library_id
+     WHERE l.slug = lib_slug AND lg.group_id = grp;
+  ELSE
+    grp := group_for(grp_slug, 'see');
+  END IF;
+  IF lib IS NULL OR grp IS NULL THEN
+    RAISE EXCEPTION 'no library named % granted to a group you may change', lib_slug
+      USING ERRCODE = 'DSL01';
+  END IF;
+  DELETE FROM library_group_grants WHERE library_id = lib AND group_id = grp;
+  IF FOUND THEN
+    INSERT INTO access_events (library_id, actor, action, detail)
+      SELECT lib, actor, 'group_revoke', name FROM groups WHERE group_id = grp;
+  END IF;
+END;
+$$;
+
+
+--
 -- Name: role_rank(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -886,6 +1473,22 @@ $$;
 
 
 --
+-- Name: user_library_roles(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.user_library_roles(uid text) RETURNS TABLE(library_id text, role text)
+    LANGUAGE sql STABLE
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT g.library_id, g.role FROM library_grants g WHERE g.user_id = uid
+  UNION ALL
+  SELECT lg.library_id, lg.role
+    FROM library_group_grants lg JOIN group_members m ON m.group_id = lg.group_id
+   WHERE m.user_id = uid;
+$$;
+
+
+--
 -- Name: waiting_queues(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -895,11 +1498,10 @@ CREATE FUNCTION public.waiting_queues() RETURNS TABLE(library_id text, requested
     AS $$
   SELECT DISTINCT j.library_id, j.requested_by
     FROM ingest_jobs j
-    JOIN library_grants g ON g.library_id = j.library_id AND g.user_id = j.requested_by
     JOIN libraries l ON l.library_id = j.library_id
-   WHERE role_rank(g.role) >= role_rank('editor')
-     AND l.deleted_at IS NULL
+   WHERE l.deleted_at IS NULL
      AND (j.status = 'queued' OR (j.status = 'running' AND j.lease_until < now()))
+     AND holds_library_role(j.requested_by, j.library_id, 'editor')
    ORDER BY j.library_id, j.requested_by;
 $$;
 
@@ -921,7 +1523,7 @@ CREATE TABLE public.access_events (
     actor_name text,
     subject_name text,
     detail text,
-    CONSTRAINT access_events_action_check CHECK ((action = ANY (ARRAY['create'::text, 'grant'::text, 'revoke'::text, 'invite'::text, 'accept'::text, 'decline'::text, 'withdraw'::text, 'rename'::text, 'delete'::text, 'restore'::text])))
+    CONSTRAINT access_events_action_check CHECK ((action = ANY (ARRAY['create'::text, 'grant'::text, 'revoke'::text, 'invite'::text, 'accept'::text, 'decline'::text, 'withdraw'::text, 'rename'::text, 'delete'::text, 'restore'::text, 'group_grant'::text, 'group_revoke'::text, 'group_delete'::text, 'group_force'::text])))
 );
 
 
@@ -1077,6 +1679,85 @@ ALTER TABLE public.goose_db_version ALTER COLUMN id ADD GENERATED BY DEFAULT AS 
 
 
 --
+-- Name: group_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.group_events (
+    id bigint NOT NULL,
+    at timestamp with time zone DEFAULT now() NOT NULL,
+    group_id text NOT NULL,
+    actor text,
+    actor_name text,
+    action text NOT NULL,
+    subject text,
+    subject_name text,
+    role text,
+    detail text,
+    CONSTRAINT group_events_action_check CHECK ((action = ANY (ARRAY['create'::text, 'rename'::text, 'invite'::text, 'accept'::text, 'decline'::text, 'withdraw'::text, 'role'::text, 'remove'::text, 'force'::text])))
+);
+
+
+--
+-- Name: group_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.group_events ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.group_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: group_invitations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.group_invitations (
+    group_id text NOT NULL,
+    user_id text NOT NULL,
+    role text NOT NULL,
+    invited_by text,
+    invited_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT group_invitations_role_check CHECK ((role = ANY (ARRAY['member'::text, 'maintainer'::text])))
+);
+
+
+--
+-- Name: group_members; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.group_members (
+    group_id text NOT NULL,
+    user_id text NOT NULL,
+    role text NOT NULL,
+    source text NOT NULL,
+    seen_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT group_members_role_check CHECK ((role = ANY (ARRAY['member'::text, 'maintainer'::text]))),
+    CONSTRAINT group_members_source_check CHECK ((source = ANY (ARRAY['invited'::text, 'provider'::text])))
+);
+
+
+--
+-- Name: groups; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.groups (
+    group_id text NOT NULL,
+    slug text NOT NULL,
+    name text NOT NULL,
+    provider_group text,
+    created_by text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT groups_group_id_check CHECK ((group_id ~ '^grp_[a-z0-9]{1,36}$'::text)),
+    CONSTRAINT groups_name_check CHECK ((((char_length(btrim(name)) >= 1) AND (char_length(btrim(name)) <= 120)) AND (name !~ '[[:cntrl:]]'::text))),
+    CONSTRAINT groups_slug_check CHECK ((slug ~ '^[a-z0-9-]{1,40}$'::text))
+);
+
+
+--
 -- Name: index_terms; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1165,6 +1846,20 @@ CREATE TABLE public.library_grants (
     granted_by text,
     granted_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT library_grants_role_check CHECK ((role = ANY (ARRAY['reader'::text, 'editor'::text, 'admin'::text])))
+);
+
+
+--
+-- Name: library_group_grants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.library_group_grants (
+    library_id text NOT NULL,
+    group_id text NOT NULL,
+    role text NOT NULL,
+    granted_by text,
+    granted_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT library_group_grants_role_check CHECK ((role = ANY (ARRAY['reader'::text, 'editor'::text])))
 );
 
 
@@ -1425,6 +2120,54 @@ ALTER TABLE ONLY public.goose_db_version
 
 
 --
+-- Name: group_events group_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.group_events
+    ADD CONSTRAINT group_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: group_invitations group_invitations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.group_invitations
+    ADD CONSTRAINT group_invitations_pkey PRIMARY KEY (group_id, user_id);
+
+
+--
+-- Name: group_members group_members_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.group_members
+    ADD CONSTRAINT group_members_pkey PRIMARY KEY (group_id, user_id);
+
+
+--
+-- Name: groups groups_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.groups
+    ADD CONSTRAINT groups_pkey PRIMARY KEY (group_id);
+
+
+--
+-- Name: groups groups_provider_group_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.groups
+    ADD CONSTRAINT groups_provider_group_key UNIQUE (provider_group);
+
+
+--
+-- Name: groups groups_slug_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.groups
+    ADD CONSTRAINT groups_slug_key UNIQUE (slug);
+
+
+--
 -- Name: ingest_jobs ingest_jobs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1462,6 +2205,14 @@ ALTER TABLE ONLY public.libraries
 
 ALTER TABLE ONLY public.library_grants
     ADD CONSTRAINT library_grants_pkey PRIMARY KEY (library_id, user_id);
+
+
+--
+-- Name: library_group_grants library_group_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_group_grants
+    ADD CONSTRAINT library_group_grants_pkey PRIMARY KEY (library_id, group_id);
 
 
 --
@@ -1649,6 +2400,27 @@ CREATE INDEX chunks_default_user_id_doc_id_section_idx ON public.chunks_default 
 
 
 --
+-- Name: group_events_group; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX group_events_group ON public.group_events USING btree (group_id, at);
+
+
+--
+-- Name: group_invitations_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX group_invitations_user ON public.group_invitations USING btree (user_id);
+
+
+--
+-- Name: group_members_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX group_members_user ON public.group_members USING btree (user_id);
+
+
+--
 -- Name: idx_documents_sha; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1688,6 +2460,13 @@ CREATE INDEX ingest_jobs_waiting ON public.ingest_jobs USING btree (library_id, 
 --
 
 CREATE INDEX library_grants_user ON public.library_grants USING btree (user_id);
+
+
+--
+-- Name: library_group_grants_group; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX library_group_grants_group ON public.library_group_grants USING btree (group_id);
 
 
 --
@@ -1737,6 +2516,13 @@ ALTER INDEX public.idx_chunks_doc_section ATTACH PARTITION public.chunks_default
 --
 
 CREATE TRIGGER access_event_names BEFORE INSERT ON public.access_events FOR EACH ROW EXECUTE FUNCTION public.access_event_names();
+
+
+--
+-- Name: group_events group_event_names; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER group_event_names BEFORE INSERT ON public.group_events FOR EACH ROW EXECUTE FUNCTION public.access_event_names();
 
 
 --
@@ -1810,6 +2596,78 @@ ALTER TABLE ONLY public.documents
 
 
 --
+-- Name: group_events group_events_actor_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.group_events
+    ADD CONSTRAINT group_events_actor_fkey FOREIGN KEY (actor) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+
+--
+-- Name: group_events group_events_group_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.group_events
+    ADD CONSTRAINT group_events_group_id_fkey FOREIGN KEY (group_id) REFERENCES public.groups(group_id) ON DELETE CASCADE;
+
+
+--
+-- Name: group_events group_events_subject_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.group_events
+    ADD CONSTRAINT group_events_subject_fkey FOREIGN KEY (subject) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+
+--
+-- Name: group_invitations group_invitations_group_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.group_invitations
+    ADD CONSTRAINT group_invitations_group_id_fkey FOREIGN KEY (group_id) REFERENCES public.groups(group_id) ON DELETE CASCADE;
+
+
+--
+-- Name: group_invitations group_invitations_invited_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.group_invitations
+    ADD CONSTRAINT group_invitations_invited_by_fkey FOREIGN KEY (invited_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+
+--
+-- Name: group_invitations group_invitations_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.group_invitations
+    ADD CONSTRAINT group_invitations_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+
+--
+-- Name: group_members group_members_group_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.group_members
+    ADD CONSTRAINT group_members_group_id_fkey FOREIGN KEY (group_id) REFERENCES public.groups(group_id) ON DELETE CASCADE;
+
+
+--
+-- Name: group_members group_members_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.group_members
+    ADD CONSTRAINT group_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+
+--
+-- Name: groups groups_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.groups
+    ADD CONSTRAINT groups_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+
+--
 -- Name: index_terms index_terms_doc_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1863,6 +2721,30 @@ ALTER TABLE ONLY public.library_grants
 
 ALTER TABLE ONLY public.library_grants
     ADD CONSTRAINT library_grants_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+
+--
+-- Name: library_group_grants library_group_grants_granted_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_group_grants
+    ADD CONSTRAINT library_group_grants_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+
+--
+-- Name: library_group_grants library_group_grants_group_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_group_grants
+    ADD CONSTRAINT library_group_grants_group_id_fkey FOREIGN KEY (group_id) REFERENCES public.groups(group_id) ON DELETE CASCADE;
+
+
+--
+-- Name: library_group_grants library_group_grants_library_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_group_grants
+    ADD CONSTRAINT library_group_grants_library_id_fkey FOREIGN KEY (library_id) REFERENCES public.libraries(library_id) ON DELETE CASCADE;
 
 
 --
