@@ -120,6 +120,10 @@ const (
 	// read ahead of EnvDSN, so one environment file can hold both and the
 	// server is never handed the owner's credential by accident.
 	EnvOwnerDSN = "DOCSEARCH_OWNER_DSN"
+	// EnvAdminUsername and EnvAdminPassword name the first administrator,
+	// whom migrate creates when no account holds the username yet.
+	EnvAdminUsername = "DOCSEARCH_ADMIN_USERNAME"
+	EnvAdminPassword = "DOCSEARCH_ADMIN_PASSWORD" //nolint:gosec // name of a variable, not a credential
 	// EnvSharedPaths lets a deployment with accounts take paths.
 	EnvSharedPaths = "DOCSEARCH_SHARED_PATHS"
 	// EnvDB is the SQLite file the migrate command still takes, which step

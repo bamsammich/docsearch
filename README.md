@@ -546,6 +546,17 @@ docsearch account admin alice               # works in oidc mode too, once alice
 docsearch account admin alice --revoke
 ```
 
+In `password` mode a deployment can instead name its first administrator in
+the environment of `docsearch migrate`, which runs before the server on every
+start. When no account holds the username, migrate creates it with that
+password and makes it an administrator. An account that already exists is
+left as it is, so a password changed since, or a role taken away, stays
+changed.
+
+```bash
+DOCSEARCH_ADMIN_USERNAME=alice DOCSEARCH_ADMIN_PASSWORD='…' docsearch migrate
+```
+
 An administrator sees every account, and in `password` mode adds one with a
 generated password shown once, resets or unlocks a password, and removes an
 account. Each change is recorded in `account_events`. The role covers

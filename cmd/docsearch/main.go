@@ -96,6 +96,16 @@ func migrateCommand() *cli.Command {
 				Name:  "check",
 				Usage: "report the version, change nothing, and exit 1 if it is not current",
 			},
+			&cli.StringFlag{
+				Name:    flagAdminUsername,
+				Usage:   "create this `USERNAME` as the first administrator, if no account holds it",
+				Sources: cli.EnvVars(config.EnvAdminUsername),
+			},
+			&cli.StringFlag{
+				Name:    flagAdminPassword,
+				Usage:   "the first administrator's `PASSWORD`",
+				Sources: cli.EnvVars(config.EnvAdminPassword),
+			},
 		},
 		Action: migrate,
 	}
@@ -125,7 +135,14 @@ func migrate(ctx context.Context, cmd *cli.Command) error {
 	if cmd.Bool("check") {
 		return report(schema.Version, found, recorded)
 	}
-	return upgrade(ctx, db, schema.Version, found, recorded)
+	first, err := firstAdminOf(cmd)
+	if err != nil {
+		return err
+	}
+	if err := upgrade(ctx, db, schema.Version, found, recorded); err != nil {
+		return err
+	}
+	return first.Report(ctx, db)
 }
 
 // report says where the index stands and refuses where it is not current.
