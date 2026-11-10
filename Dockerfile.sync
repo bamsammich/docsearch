@@ -1,12 +1,15 @@
 # docsearch-sync, for running beside a Paperless-ngx instance. Pure Go with no
 # cgo, so the binary is static and the runtime image needs no libc.
-FROM golang:1.26-alpine AS build
+# Go cross-compiles, so the build stage runs on the build host's platform and
+# targets TARGETARCH. A multi-arch build then needs no emulation.
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
-RUN CGO_ENABLED=0 GOOS=linux go build \
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
       -trimpath -ldflags="-s -w" \
       -o /out/docsearch-sync ./cmd/docsearch-sync
 
