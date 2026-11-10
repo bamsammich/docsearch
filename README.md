@@ -12,59 +12,147 @@ On five documentation sites, one cold `search` call put the expected page in its
 
 ## Run docsearch with Docker
 
-You need Docker with Compose, `openssl` and `curl`. Skip `go install`, because the module path has no `/v2` suffix and `@latest` still fetches v1.
+You need Docker with Compose 2.23 or later and `openssl`. Nothing gets cloned or built, because the compose file pulls published images from GHCR.
 
 ```bash
-# 1. Clone, then write a bearer token to the 0600 file the compose stack reads
-git clone https://github.com/bamsammich/docsearch && cd docsearch
-mkdir -p ~/.config/docsearch ~/Documents/docsearch-library
-(umask 077; printf 'DOCSEARCH_TOKEN=%s\n' "$(openssl rand -base64 48)" > ~/.config/docsearch/token.env)
-
-# 2. Build every image from this checkout, then start Postgres, schema migration, server and ingest worker
-scripts/docsearch-up
-
-# 3. Prints "ready" once the server is up; if curl cannot connect, wait a few seconds and run curl again
-curl http://127.0.0.1:8765/readyz
-
-# 4. Load the token into this shell and upload a first document; the worker indexes the file in the background
-. ~/.config/docsearch/token.env
-curl -T docs/configuration.md -H "Authorization: Bearer $DOCSEARCH_TOKEN" \
-  'http://127.0.0.1:8765/upload?name=configuration.md'
-
-# 5. Print the MCP client entry for this server, with your token filled in
-printf '{"mcpServers":{"docsearch":{"type":"http","url":"http://127.0.0.1:8765/mcp","headers":{"Authorization":"Bearer %s"}}}}\n' "$DOCSEARCH_TOKEN"
+mkdir docsearch && cd docsearch
+curl -fsSLO https://raw.githubusercontent.com/bamsammich/docsearch/main/compose.yaml
+echo "DOCSEARCH_TOKEN=$(openssl rand -hex 32)" > .env
+docker compose up -d
 ```
 
-The stack serves the library at `~/Documents/docsearch-library`, and `DOCSEARCH_LIBRARY` points the stack at a different folder. Port 8765 is published on loopback only. Run `scripts/docsearch-up` again after every pull, and Compose recreates only the containers whose image changed.
+Open <http://127.0.0.1:8765/> and sign in with the token from `.env`. Under Ingest, drop in a PDF, `.docx` or Markdown file, and the worker indexes it in the background. The server listens on loopback only.
 
-The library UI is at `http://127.0.0.1:8765/`. Sign in with the token from `~/.config/docsearch/token.env`.
+To update, run `docker compose pull && docker compose up -d` in the same folder. The images track the newest 2.x release, and `DOCSEARCH_VERSION` in `.env` pins an exact one. The header of [`compose.yaml`](compose.yaml) lists the other settings, and [Deployment](docs/deployment.md) covers building from a checkout instead.
 
-## Connect an MCP client
+## Connect your agent
 
-Paste the entry from step 5 into any client with native HTTP support. To test the connection, ask the agent to use docsearch to find how to sign in through an OIDC provider. The answer comes from `docs/configuration.md`, the file uploaded in step 4.
+Each client needs the token from `.env`. Run `. ./.env` in the docsearch folder first, and the commands that read `$DOCSEARCH_TOKEN` pick it up. To test the connection, ask the agent to list the documents in docsearch.
 
-Claude Desktop (tested on 1.24012.9) accepts only stdio servers in `claude_desktop_config.json`, so connect Claude Desktop through the bridge in `deploy/client/`. The bridge runs `mcp-remote` with `npx` and needs Node.
+### Claude Code
 
 ```bash
-mkdir -p ~/.local/bin && install -m 755 deploy/client/docsearch-mcp-bridge ~/.local/bin/
+claude mcp add --transport http --scope user docsearch http://127.0.0.1:8765/mcp \
+  --header "Authorization: Bearer $DOCSEARCH_TOKEN"
 ```
+
+`--scope user` makes docsearch available in every project. `claude mcp list` shows whether it connected.
+
+### Claude Desktop
+
+Claude Desktop reads only stdio servers from its config file, so `mcp-remote` bridges to the HTTP endpoint. The bridge needs Node. Open Settings, then Developer, then Edit Config, and add:
 
 ```json
-{"mcpServers":{"docsearch":{"command":"/Users/YOU/.local/bin/docsearch-mcp-bridge","args":[]}}}
+{
+  "mcpServers": {
+    "docsearch": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote@0.14.3", "http://127.0.0.1:8765/mcp",
+               "--header", "Authorization:${AUTH_HEADER}", "--transport", "http-only"],
+      "env": { "AUTH_HEADER": "Bearer YOUR_TOKEN" }
+    }
+  }
+}
 ```
 
-Write the full path to your home directory in place of `/Users/YOU`. The bridge reads the token from `~/.config/docsearch/token.env` each time Claude Desktop starts the bridge, so the token never goes in `claude_desktop_config.json`.
+Replace `YOUR_TOKEN` and restart Claude Desktop. To keep the token out of `claude_desktop_config.json`, use the bridge script in [Configuration](docs/configuration.md#claude-desktop).
+
+<details>
+<summary><b>Cursor</b></summary>
+
+Add to `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "docsearch": {
+      "url": "http://127.0.0.1:8765/mcp",
+      "headers": { "Authorization": "Bearer YOUR_TOKEN" }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>VS Code</b></summary>
+
+Run **MCP: Open User Configuration** and add this entry. VS Code asks for the token the first time the server starts and keeps it in its secret storage.
+
+```json
+{
+  "inputs": [
+    { "type": "promptString", "id": "docsearch-token", "description": "docsearch token", "password": true }
+  ],
+  "servers": {
+    "docsearch": {
+      "type": "http",
+      "url": "http://127.0.0.1:8765/mcp",
+      "headers": { "Authorization": "Bearer ${input:docsearch-token}" }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Codex</b></summary>
+
+```bash
+codex mcp add docsearch --url http://127.0.0.1:8765/mcp --bearer-token-env-var DOCSEARCH_TOKEN
+```
+
+The config stores only the variable's name, so export `DOCSEARCH_TOKEN` in the shell that starts Codex.
+
+</details>
+
+<details>
+<summary><b>Gemini CLI</b></summary>
+
+```bash
+gemini mcp add --scope user --transport http docsearch http://127.0.0.1:8765/mcp \
+  --header "Authorization: Bearer $DOCSEARCH_TOKEN"
+```
+
+</details>
+
+<details>
+<summary><b>Windsurf</b></summary>
+
+Add to `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "docsearch": {
+      "serverUrl": "http://127.0.0.1:8765/mcp",
+      "headers": { "Authorization": "Bearer YOUR_TOKEN" }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Any other client</b></summary>
+
+docsearch speaks streamable HTTP at `http://127.0.0.1:8765/mcp`, with the header `Authorization: Bearer YOUR_TOKEN`. A client that supports only stdio can reach it through `mcp-remote`, as in the Claude Desktop entry.
+
+</details>
+
+claude.ai, ChatGPT and other hosted apps connect from the provider's servers, so they cannot reach a loopback address. They need docsearch at a public HTTPS URL with accounts turned on, which [Deployment](docs/deployment.md) and [Configuration](docs/configuration.md) cover.
 
 ## Add documents from a shell
 
-The `curl` upload in step 4 needs nothing else installed. For files already in the library folder, and for documentation sites, build the `docsearch` CLI. You need Go 1.26 on your path, and [Contributing](CONTRIBUTING.md) has the mise setup for the pinned toolchain.
+The library UI and your agent's `add_document` tool both add documents with nothing else installed. The `docsearch` CLI ships in the worker image, so it can queue a documentation site or a file from the library folder through `docker compose exec`:
 
 ```bash
-go build -o bin/docsearch ./cmd/docsearch
-. ~/.config/docsearch/token.env
-bin/docsearch enqueue ~/Documents/docsearch-library/manual.pdf
-bin/docsearch enqueue https://docs.pytest.org/en/stable/
-bin/docsearch jobs --all
+. ./.env
+docker compose exec -e DOCSEARCH_TOKEN worker docsearch enqueue https://docs.pytest.org/en/stable/
+docker compose exec -e DOCSEARCH_TOKEN worker docsearch jobs --all
 ```
 
 A file path has to sit under the library folder. For a URL, docsearch crawls the whole site into one document and takes the outline from the site navigation. The crawler honors `robots.txt` and follows links for at most 500 pages by default, and `docsearch refresh` downloads only the pages that changed.

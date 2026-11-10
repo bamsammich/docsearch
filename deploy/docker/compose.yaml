@@ -68,6 +68,10 @@ services:
     command: ["migrate"]
     environment:
       DOCSEARCH_DSN: postgres://docsearch_owner:docsearch@db:5432/docsearch?sslmode=disable
+      # The first administrator for password mode. Empty means none, so a
+      # token-mode stack passes nothing.
+      DOCSEARCH_ADMIN_USERNAME: ${DOCSEARCH_ADMIN_USERNAME:-}
+      DOCSEARCH_ADMIN_PASSWORD: ${DOCSEARCH_ADMIN_PASSWORD:-}
     depends_on:
       db:
         condition: service_healthy
