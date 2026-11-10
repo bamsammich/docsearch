@@ -94,6 +94,31 @@ docsearch jobs --library platform
 docsearch verify platform/install-guide
 ```
 
+### Copying and moving documents
+
+A copy puts a document into another library by reading its original again,
+so the two libraries share no rows. It keeps its `doc_id` unless `--as`
+names another. A move is a copy that removes the document from where it was
+once the copy is ready.
+
+```bash
+docsearch copy runbooks/pager --to platform              # reader of runbooks, editor of platform
+docsearch move platform/pager --to ops --as ops-pager    # editor in both
+docsearch jobs --library ops                             # the copy is a job
+```
+
+| original | what the copy reads |
+|---|---|
+| an upload | the stored file, copied into the new library |
+| a crawled site | the site's cached pages, copied when you edit the library it is in, so no request goes to the site; otherwise the new library crawls it |
+| a file under a root | the same path |
+
+A copy is refused when the target library already holds the same file,
+already reads the same source, or files another document under the
+`doc_id`. A moved document's old identifier finds nothing afterwards. If you
+stop editing the library a document is leaving before its copy is ready,
+the copy still lands and the original stays, and the job says so.
+
 ## The library UI
 
 `docsearch-server` serves a web page at its public URL (`--public-url`, printed

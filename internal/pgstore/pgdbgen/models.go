@@ -145,6 +145,10 @@ type IngestJob struct {
 	LibraryID   string
 	Force       bool
 	RequestedBy sql.NullString
+	CopyFrom    sql.NullString
+	CopyDocID   sql.NullString
+	CopyAs      sql.NullString
+	Move        bool
 }
 
 type Library struct {

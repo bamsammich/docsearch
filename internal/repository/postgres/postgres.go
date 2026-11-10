@@ -248,12 +248,16 @@ func (r *Repository) MarkReady(ctx context.Context, ready ingest.Ready) error {
 		}
 		// A worker that lost its job publishes nothing: the rollback takes
 		// the swap with it, and the worker now holding the job finishes it.
-		return fenced(q.CompleteJob(ctx, pgdbgen.CompleteJobParams{
+		err = fenced(q.CompleteJob(ctx, pgdbgen.CompleteJobParams{
 			DocID:    nullString(published),
 			Warnings: warnings,
 			ID:       *ready.JobID,
 			Attempt:  pgsession.Narrow(ready.JobAttempt),
 		}))
+		if err != nil {
+			return err
+		}
+		return finishMove(ctx, q, r.scope.Library, *ready.JobID)
 	})
 }
 

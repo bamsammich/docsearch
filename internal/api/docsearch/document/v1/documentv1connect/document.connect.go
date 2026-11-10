@@ -45,6 +45,10 @@ const (
 	DocumentServiceRemoveProcedure = "/docsearch.document.v1.DocumentService/Remove"
 	// DocumentServiceRenameProcedure is the fully-qualified name of the DocumentService's Rename RPC.
 	DocumentServiceRenameProcedure = "/docsearch.document.v1.DocumentService/Rename"
+	// DocumentServiceCopyProcedure is the fully-qualified name of the DocumentService's Copy RPC.
+	DocumentServiceCopyProcedure = "/docsearch.document.v1.DocumentService/Copy"
+	// DocumentServiceMoveProcedure is the fully-qualified name of the DocumentService's Move RPC.
+	DocumentServiceMoveProcedure = "/docsearch.document.v1.DocumentService/Move"
 	// DocumentServiceReadProcedure is the fully-qualified name of the DocumentService's Read RPC.
 	DocumentServiceReadProcedure = "/docsearch.document.v1.DocumentService/Read"
 )
@@ -64,6 +68,13 @@ type DocumentServiceClient interface {
 	Remove(context.Context, *connect.Request[v1.RemoveRequest]) (*connect.Response[v1.RemoveResponse], error)
 	// Rename changes what a document is called. Its doc_id stays as it was.
 	Rename(context.Context, *connect.Request[v1.RenameRequest]) (*connect.Response[v1.RenameResponse], error)
+	// Copy queues a copy of a document into another library, read again
+	// from its original. It needs reader where the document is and editor
+	// where the copy goes.
+	Copy(context.Context, *connect.Request[v1.CopyRequest]) (*connect.Response[v1.CopyResponse], error)
+	// Move is Copy followed by removing the document once its copy is ready.
+	// It needs editor in both libraries.
+	Move(context.Context, *connect.Request[v1.MoveRequest]) (*connect.Response[v1.MoveResponse], error)
 	// Read is a run of a document's chunks in order, as agents receive them.
 	Read(context.Context, *connect.Request[v1.ReadRequest]) (*connect.Response[v1.ReadResponse], error)
 }
@@ -109,6 +120,18 @@ func NewDocumentServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(documentServiceMethods.ByName("Rename")),
 			connect.WithClientOptions(opts...),
 		),
+		copy: connect.NewClient[v1.CopyRequest, v1.CopyResponse](
+			httpClient,
+			baseURL+DocumentServiceCopyProcedure,
+			connect.WithSchema(documentServiceMethods.ByName("Copy")),
+			connect.WithClientOptions(opts...),
+		),
+		move: connect.NewClient[v1.MoveRequest, v1.MoveResponse](
+			httpClient,
+			baseURL+DocumentServiceMoveProcedure,
+			connect.WithSchema(documentServiceMethods.ByName("Move")),
+			connect.WithClientOptions(opts...),
+		),
 		read: connect.NewClient[v1.ReadRequest, v1.ReadResponse](
 			httpClient,
 			baseURL+DocumentServiceReadProcedure,
@@ -125,6 +148,8 @@ type documentServiceClient struct {
 	inspect *connect.Client[v1.InspectRequest, v1.InspectResponse]
 	remove  *connect.Client[v1.RemoveRequest, v1.RemoveResponse]
 	rename  *connect.Client[v1.RenameRequest, v1.RenameResponse]
+	copy    *connect.Client[v1.CopyRequest, v1.CopyResponse]
+	move    *connect.Client[v1.MoveRequest, v1.MoveResponse]
 	read    *connect.Client[v1.ReadRequest, v1.ReadResponse]
 }
 
@@ -153,6 +178,16 @@ func (c *documentServiceClient) Rename(ctx context.Context, req *connect.Request
 	return c.rename.CallUnary(ctx, req)
 }
 
+// Copy calls docsearch.document.v1.DocumentService.Copy.
+func (c *documentServiceClient) Copy(ctx context.Context, req *connect.Request[v1.CopyRequest]) (*connect.Response[v1.CopyResponse], error) {
+	return c.copy.CallUnary(ctx, req)
+}
+
+// Move calls docsearch.document.v1.DocumentService.Move.
+func (c *documentServiceClient) Move(ctx context.Context, req *connect.Request[v1.MoveRequest]) (*connect.Response[v1.MoveResponse], error) {
+	return c.move.CallUnary(ctx, req)
+}
+
 // Read calls docsearch.document.v1.DocumentService.Read.
 func (c *documentServiceClient) Read(ctx context.Context, req *connect.Request[v1.ReadRequest]) (*connect.Response[v1.ReadResponse], error) {
 	return c.read.CallUnary(ctx, req)
@@ -173,6 +208,13 @@ type DocumentServiceHandler interface {
 	Remove(context.Context, *connect.Request[v1.RemoveRequest]) (*connect.Response[v1.RemoveResponse], error)
 	// Rename changes what a document is called. Its doc_id stays as it was.
 	Rename(context.Context, *connect.Request[v1.RenameRequest]) (*connect.Response[v1.RenameResponse], error)
+	// Copy queues a copy of a document into another library, read again
+	// from its original. It needs reader where the document is and editor
+	// where the copy goes.
+	Copy(context.Context, *connect.Request[v1.CopyRequest]) (*connect.Response[v1.CopyResponse], error)
+	// Move is Copy followed by removing the document once its copy is ready.
+	// It needs editor in both libraries.
+	Move(context.Context, *connect.Request[v1.MoveRequest]) (*connect.Response[v1.MoveResponse], error)
 	// Read is a run of a document's chunks in order, as agents receive them.
 	Read(context.Context, *connect.Request[v1.ReadRequest]) (*connect.Response[v1.ReadResponse], error)
 }
@@ -214,6 +256,18 @@ func NewDocumentServiceHandler(svc DocumentServiceHandler, opts ...connect.Handl
 		connect.WithSchema(documentServiceMethods.ByName("Rename")),
 		connect.WithHandlerOptions(opts...),
 	)
+	documentServiceCopyHandler := connect.NewUnaryHandler(
+		DocumentServiceCopyProcedure,
+		svc.Copy,
+		connect.WithSchema(documentServiceMethods.ByName("Copy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	documentServiceMoveHandler := connect.NewUnaryHandler(
+		DocumentServiceMoveProcedure,
+		svc.Move,
+		connect.WithSchema(documentServiceMethods.ByName("Move")),
+		connect.WithHandlerOptions(opts...),
+	)
 	documentServiceReadHandler := connect.NewUnaryHandler(
 		DocumentServiceReadProcedure,
 		svc.Read,
@@ -232,6 +286,10 @@ func NewDocumentServiceHandler(svc DocumentServiceHandler, opts ...connect.Handl
 			documentServiceRemoveHandler.ServeHTTP(w, r)
 		case DocumentServiceRenameProcedure:
 			documentServiceRenameHandler.ServeHTTP(w, r)
+		case DocumentServiceCopyProcedure:
+			documentServiceCopyHandler.ServeHTTP(w, r)
+		case DocumentServiceMoveProcedure:
+			documentServiceMoveHandler.ServeHTTP(w, r)
 		case DocumentServiceReadProcedure:
 			documentServiceReadHandler.ServeHTTP(w, r)
 		default:
@@ -261,6 +319,14 @@ func (UnimplementedDocumentServiceHandler) Remove(context.Context, *connect.Requ
 
 func (UnimplementedDocumentServiceHandler) Rename(context.Context, *connect.Request[v1.RenameRequest]) (*connect.Response[v1.RenameResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.document.v1.DocumentService.Rename is not implemented"))
+}
+
+func (UnimplementedDocumentServiceHandler) Copy(context.Context, *connect.Request[v1.CopyRequest]) (*connect.Response[v1.CopyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.document.v1.DocumentService.Copy is not implemented"))
+}
+
+func (UnimplementedDocumentServiceHandler) Move(context.Context, *connect.Request[v1.MoveRequest]) (*connect.Response[v1.MoveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.document.v1.DocumentService.Move is not implemented"))
 }
 
 func (UnimplementedDocumentServiceHandler) Read(context.Context, *connect.Request[v1.ReadRequest]) (*connect.Response[v1.ReadResponse], error) {

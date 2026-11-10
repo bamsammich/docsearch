@@ -271,6 +271,7 @@ func newDocumentRoute(libs *library.Libraries) route {
 		func(scope pgsession.Scope) (connectapi.Documents, error) { return libs.Documents(scope) },
 		libs.Readable,
 		postgres.ErrNotFound,
+		func(user string) (connectapi.Copies, error) { return libs.Copies(user) },
 	))
 }
 

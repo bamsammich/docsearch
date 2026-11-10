@@ -14,6 +14,8 @@ docsearch jobs    [--all] [--limit N]              # queue state
 docsearch cancel  <job_id>                         # ask a job to stop
 docsearch list
 docsearch remove  <doc_id>
+docsearch copy    <doc_id> --to LIBRARY [--as ID]   # into another library
+docsearch move    <doc_id> --to LIBRARY [--as ID]
 docsearch verify  <doc_id>                         # did it chunk well enough?
 ```
 

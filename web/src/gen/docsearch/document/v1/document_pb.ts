@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file docsearch/document/v1/document.proto.
  */
 export const file_docsearch_document_v1_document: GenFile = /*@__PURE__*/
-  fileDesc("CiRkb2NzZWFyY2gvZG9jdW1lbnQvdjEvZG9jdW1lbnQucHJvdG8SFWRvY3NlYXJjaC5kb2N1bWVudC52MSLPAgoIRG9jdW1lbnQSDgoGZG9jX2lkGAEgASgJEg0KBXRpdGxlGAIgASgJEg4KBmZvcm1hdBgDIAEoCRIyCgtzb3VyY2Vfa2luZBgEIAEoDjIdLmRvY3NlYXJjaC50eXBlLnYxLlNvdXJjZUtpbmQSDgoGc3RhdHVzGAUgASgJEhcKCnBhZ2VfY291bnQYBiABKANIAIgBARIYCgtjaHVua19jb3VudBgHIAEoA0gBiAEBEisKB3F1YWxpdHkYCCABKA4yGi5kb2NzZWFyY2gudHlwZS52MS5RdWFsaXR5EhAKCHdhcm5pbmdzGAkgAygJEg4KBnNvdXJjZRgKIAEoCRIvCgtpbmdlc3RlZF9hdBgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCDQoLX3BhZ2VfY291bnRCDgoMX2NodW5rX2NvdW50ImEKC1Rva2VuU3ByZWFkEgsKA21pbhgBIAEoAxIOCgZtZWRpYW4YAiABKAMSCwoDcDk1GAMgASgDEgsKA21heBgEIAEoAxIMCgRtZWFuGAUgASgDEg0KBXRvdGFsGAYgASgDIkMKClNpemVkQ2h1bmsSDwoHb3JkaW5hbBgBIAEoAxIOCgZ0b2tlbnMYAiABKAMSFAoMaGVhZGluZ19wYXRoGAMgASgJItkCCgxNZWFzdXJlbWVudHMSEwoLY2h1bmtfY291bnQYASABKAMSMgoGdG9rZW5zGAIgASgLMiIuZG9jc2VhcmNoLmRvY3VtZW50LnYxLlRva2VuU3ByZWFkEjIKB2xvbmdlc3QYAyADKAsyIS5kb2NzZWFyY2guZG9jdW1lbnQudjEuU2l6ZWRDaHVuaxIzCghzaG9ydGVzdBgEIAMoCzIhLmRvY3NlYXJjaC5kb2N1bWVudC52MS5TaXplZENodW5rEhcKD3VuY292ZXJlZF9wYWdlcxgFIAMoAxIUCgxvcmRpbmFsX2dhcHMYBiADKAMSGgoSc2NhdHRlcmVkX3NlY3Rpb25zGAcgAygJEhcKD21pc3NpbmdfbG9jYXRvchgIIAEoAxIaChJjaHVua3Nfd2l0aF9pbWFnZXMYCSABKAMSFwoPaGVhZGxlc3NfY2h1bmtzGAogASgDIlUKB0ZpbmRpbmcSDAoEY29kZRgBIAEoCRIsCghzZXZlcml0eRgCIAEoDjIaLmRvY3NlYXJjaC50eXBlLnYxLlZlcmRpY3QSDgoGZGV0YWlsGAMgASgJIp8CCgxWZXJpZnlSZXBvcnQSMQoIZG9jdW1lbnQYASABKAsyHy5kb2NzZWFyY2guZG9jdW1lbnQudjEuRG9jdW1lbnQSOQoMbWVhc3VyZW1lbnRzGAIgASgLMiMuZG9jc2VhcmNoLmRvY3VtZW50LnYxLk1lYXN1cmVtZW50cxIQCghwcm9ibGVtcxgDIAMoCRIwCghmaW5kaW5ncxgEIAMoCzIeLmRvY3NlYXJjaC5kb2N1bWVudC52MS5GaW5kaW5nEisKB3ZlcmRpY3QYBSABKA4yGi5kb2NzZWFyY2gudHlwZS52MS5WZXJkaWN0EhMKC2luZGV4X3Rlcm1zGAYgASgDEhsKE3Vuam9pbmFibGVfc2VjdGlvbnMYByADKAkiWAoOSW5zcGVjdEZpbmRpbmcSJwoFbGV2ZWwYASABKA4yGC5kb2NzZWFyY2gudHlwZS52MS5MZXZlbBINCgVsYWJlbBgCIAEoCRIOCgZkZXRhaWwYAyABKAki0wEKDUluc3BlY3RSZXBvcnQSDgoGdGFyZ2V0GAEgASgJEg4KBmZvcm1hdBgCIAEoCRIYChBwcmVkaWN0ZWRfc291cmNlGAMgASgJEhYKDnByZWRpY3RlZF90aWVyGAQgASgJEhcKCnBhZ2VfY291bnQYBSABKANIAIgBARI3CghmaW5kaW5ncxgGIAMoCzIlLmRvY3NlYXJjaC5kb2N1bWVudC52MS5JbnNwZWN0RmluZGluZxIPCgdibG9ja2VkGAcgASgIQg0KC19wYWdlX2NvdW50Ih4KC0xpc3RSZXF1ZXN0Eg8KB2xpYnJhcnkYASABKAkiQgoMTGlzdFJlc3BvbnNlEjIKCWRvY3VtZW50cxgBIAMoCzIfLmRvY3NlYXJjaC5kb2N1bWVudC52MS5Eb2N1bWVudCIfCg1WZXJpZnlSZXF1ZXN0Eg4KBmRvY19pZBgBIAEoCSJFCg5WZXJpZnlSZXNwb25zZRIzCgZyZXBvcnQYASABKAsyIy5kb2NzZWFyY2guZG9jdW1lbnQudjEuVmVyaWZ5UmVwb3J0IiAKDkluc3BlY3RSZXF1ZXN0Eg4KBnRhcmdldBgBIAEoCSJHCg9JbnNwZWN0UmVzcG9uc2USNAoGcmVwb3J0GAEgASgLMiQuZG9jc2VhcmNoLmRvY3VtZW50LnYxLkluc3BlY3RSZXBvcnQiHwoNUmVtb3ZlUmVxdWVzdBIOCgZkb2NfaWQYASABKAkiEAoOUmVtb3ZlUmVzcG9uc2UiLgoNUmVuYW1lUmVxdWVzdBIOCgZkb2NfaWQYASABKAkSDQoFdGl0bGUYAiABKAkiEAoOUmVuYW1lUmVzcG9uc2UibAoLUmVhZFJlcXVlc3QSDgoGZG9jX2lkGAEgASgJEhQKDGZyb21fb3JkaW5hbBgCIAEoAxIYCgthdF9jaHVua19pZBgDIAEoA0gAiAEBEg0KBWxpbWl0GAQgASgDQg4KDF9hdF9jaHVua19pZCLaAQoJUmVhZENodW5rEhAKCGNodW5rX2lkGAEgASgDEg8KB29yZGluYWwYAiABKAMSFAoMaGVhZGluZ19wYXRoGAMgASgJEhQKB3NlY3Rpb24YBCABKAlIAIgBARIXCgpwYWdlX3N0YXJ0GAUgASgDSAGIAQESEAoDdXJsGAYgASgJSAKIAQESFQoIZnJhZ21lbnQYByABKAlIA4gBARIMCgR0ZXh0GAggASgJQgoKCF9zZWN0aW9uQg0KC19wYWdlX3N0YXJ0QgYKBF91cmxCCwoJX2ZyYWdtZW50ImsKDFJlYWRSZXNwb25zZRIwCgZjaHVua3MYASADKAsyIC5kb2NzZWFyY2guZG9jdW1lbnQudjEuUmVhZENodW5rEhQKDGZyb21fb3JkaW5hbBgCIAEoAxITCgtjaHVua19jb3VudBgDIAEoAzKeBAoPRG9jdW1lbnRTZXJ2aWNlElEKBExpc3QSIi5kb2NzZWFyY2guZG9jdW1lbnQudjEuTGlzdFJlcXVlc3QaIy5kb2NzZWFyY2guZG9jdW1lbnQudjEuTGlzdFJlc3BvbnNlIgASVwoGVmVyaWZ5EiQuZG9jc2VhcmNoLmRvY3VtZW50LnYxLlZlcmlmeVJlcXVlc3QaJS5kb2NzZWFyY2guZG9jdW1lbnQudjEuVmVyaWZ5UmVzcG9uc2UiABJaCgdJbnNwZWN0EiUuZG9jc2VhcmNoLmRvY3VtZW50LnYxLkluc3BlY3RSZXF1ZXN0GiYuZG9jc2VhcmNoLmRvY3VtZW50LnYxLkluc3BlY3RSZXNwb25zZSIAElcKBlJlbW92ZRIkLmRvY3NlYXJjaC5kb2N1bWVudC52MS5SZW1vdmVSZXF1ZXN0GiUuZG9jc2VhcmNoLmRvY3VtZW50LnYxLlJlbW92ZVJlc3BvbnNlIgASVwoGUmVuYW1lEiQuZG9jc2VhcmNoLmRvY3VtZW50LnYxLlJlbmFtZVJlcXVlc3QaJS5kb2NzZWFyY2guZG9jdW1lbnQudjEuUmVuYW1lUmVzcG9uc2UiABJRCgRSZWFkEiIuZG9jc2VhcmNoLmRvY3VtZW50LnYxLlJlYWRSZXF1ZXN0GiMuZG9jc2VhcmNoLmRvY3VtZW50LnYxLlJlYWRSZXNwb25zZSIAYgZwcm90bzM", [file_docsearch_type_v1_common, file_google_protobuf_timestamp]);
+  fileDesc("CiRkb2NzZWFyY2gvZG9jdW1lbnQvdjEvZG9jdW1lbnQucHJvdG8SFWRvY3NlYXJjaC5kb2N1bWVudC52MSLPAgoIRG9jdW1lbnQSDgoGZG9jX2lkGAEgASgJEg0KBXRpdGxlGAIgASgJEg4KBmZvcm1hdBgDIAEoCRIyCgtzb3VyY2Vfa2luZBgEIAEoDjIdLmRvY3NlYXJjaC50eXBlLnYxLlNvdXJjZUtpbmQSDgoGc3RhdHVzGAUgASgJEhcKCnBhZ2VfY291bnQYBiABKANIAIgBARIYCgtjaHVua19jb3VudBgHIAEoA0gBiAEBEisKB3F1YWxpdHkYCCABKA4yGi5kb2NzZWFyY2gudHlwZS52MS5RdWFsaXR5EhAKCHdhcm5pbmdzGAkgAygJEg4KBnNvdXJjZRgKIAEoCRIvCgtpbmdlc3RlZF9hdBgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCDQoLX3BhZ2VfY291bnRCDgoMX2NodW5rX2NvdW50ImEKC1Rva2VuU3ByZWFkEgsKA21pbhgBIAEoAxIOCgZtZWRpYW4YAiABKAMSCwoDcDk1GAMgASgDEgsKA21heBgEIAEoAxIMCgRtZWFuGAUgASgDEg0KBXRvdGFsGAYgASgDIkMKClNpemVkQ2h1bmsSDwoHb3JkaW5hbBgBIAEoAxIOCgZ0b2tlbnMYAiABKAMSFAoMaGVhZGluZ19wYXRoGAMgASgJItkCCgxNZWFzdXJlbWVudHMSEwoLY2h1bmtfY291bnQYASABKAMSMgoGdG9rZW5zGAIgASgLMiIuZG9jc2VhcmNoLmRvY3VtZW50LnYxLlRva2VuU3ByZWFkEjIKB2xvbmdlc3QYAyADKAsyIS5kb2NzZWFyY2guZG9jdW1lbnQudjEuU2l6ZWRDaHVuaxIzCghzaG9ydGVzdBgEIAMoCzIhLmRvY3NlYXJjaC5kb2N1bWVudC52MS5TaXplZENodW5rEhcKD3VuY292ZXJlZF9wYWdlcxgFIAMoAxIUCgxvcmRpbmFsX2dhcHMYBiADKAMSGgoSc2NhdHRlcmVkX3NlY3Rpb25zGAcgAygJEhcKD21pc3NpbmdfbG9jYXRvchgIIAEoAxIaChJjaHVua3Nfd2l0aF9pbWFnZXMYCSABKAMSFwoPaGVhZGxlc3NfY2h1bmtzGAogASgDIlUKB0ZpbmRpbmcSDAoEY29kZRgBIAEoCRIsCghzZXZlcml0eRgCIAEoDjIaLmRvY3NlYXJjaC50eXBlLnYxLlZlcmRpY3QSDgoGZGV0YWlsGAMgASgJIp8CCgxWZXJpZnlSZXBvcnQSMQoIZG9jdW1lbnQYASABKAsyHy5kb2NzZWFyY2guZG9jdW1lbnQudjEuRG9jdW1lbnQSOQoMbWVhc3VyZW1lbnRzGAIgASgLMiMuZG9jc2VhcmNoLmRvY3VtZW50LnYxLk1lYXN1cmVtZW50cxIQCghwcm9ibGVtcxgDIAMoCRIwCghmaW5kaW5ncxgEIAMoCzIeLmRvY3NlYXJjaC5kb2N1bWVudC52MS5GaW5kaW5nEisKB3ZlcmRpY3QYBSABKA4yGi5kb2NzZWFyY2gudHlwZS52MS5WZXJkaWN0EhMKC2luZGV4X3Rlcm1zGAYgASgDEhsKE3Vuam9pbmFibGVfc2VjdGlvbnMYByADKAkiWAoOSW5zcGVjdEZpbmRpbmcSJwoFbGV2ZWwYASABKA4yGC5kb2NzZWFyY2gudHlwZS52MS5MZXZlbBINCgVsYWJlbBgCIAEoCRIOCgZkZXRhaWwYAyABKAki0wEKDUluc3BlY3RSZXBvcnQSDgoGdGFyZ2V0GAEgASgJEg4KBmZvcm1hdBgCIAEoCRIYChBwcmVkaWN0ZWRfc291cmNlGAMgASgJEhYKDnByZWRpY3RlZF90aWVyGAQgASgJEhcKCnBhZ2VfY291bnQYBSABKANIAIgBARI3CghmaW5kaW5ncxgGIAMoCzIlLmRvY3NlYXJjaC5kb2N1bWVudC52MS5JbnNwZWN0RmluZGluZxIPCgdibG9ja2VkGAcgASgIQg0KC19wYWdlX2NvdW50Ih4KC0xpc3RSZXF1ZXN0Eg8KB2xpYnJhcnkYASABKAkiQgoMTGlzdFJlc3BvbnNlEjIKCWRvY3VtZW50cxgBIAMoCzIfLmRvY3NlYXJjaC5kb2N1bWVudC52MS5Eb2N1bWVudCIfCg1WZXJpZnlSZXF1ZXN0Eg4KBmRvY19pZBgBIAEoCSJFCg5WZXJpZnlSZXNwb25zZRIzCgZyZXBvcnQYASABKAsyIy5kb2NzZWFyY2guZG9jdW1lbnQudjEuVmVyaWZ5UmVwb3J0IiAKDkluc3BlY3RSZXF1ZXN0Eg4KBnRhcmdldBgBIAEoCSJHCg9JbnNwZWN0UmVzcG9uc2USNAoGcmVwb3J0GAEgASgLMiQuZG9jc2VhcmNoLmRvY3VtZW50LnYxLkluc3BlY3RSZXBvcnQiHwoNUmVtb3ZlUmVxdWVzdBIOCgZkb2NfaWQYASABKAkiEAoOUmVtb3ZlUmVzcG9uc2UiOgoLQ29weVJlcXVlc3QSDgoGZG9jX2lkGAEgASgJEg8KB2xpYnJhcnkYAiABKAkSCgoCYXMYAyABKAkiLgoMQ29weVJlc3BvbnNlEg4KBmpvYl9pZBgBIAEoAxIOCgZkb2NfaWQYAiABKAkiOgoLTW92ZVJlcXVlc3QSDgoGZG9jX2lkGAEgASgJEg8KB2xpYnJhcnkYAiABKAkSCgoCYXMYAyABKAkiLgoMTW92ZVJlc3BvbnNlEg4KBmpvYl9pZBgBIAEoAxIOCgZkb2NfaWQYAiABKAkiLgoNUmVuYW1lUmVxdWVzdBIOCgZkb2NfaWQYASABKAkSDQoFdGl0bGUYAiABKAkiEAoOUmVuYW1lUmVzcG9uc2UibAoLUmVhZFJlcXVlc3QSDgoGZG9jX2lkGAEgASgJEhQKDGZyb21fb3JkaW5hbBgCIAEoAxIYCgthdF9jaHVua19pZBgDIAEoA0gAiAEBEg0KBWxpbWl0GAQgASgDQg4KDF9hdF9jaHVua19pZCLaAQoJUmVhZENodW5rEhAKCGNodW5rX2lkGAEgASgDEg8KB29yZGluYWwYAiABKAMSFAoMaGVhZGluZ19wYXRoGAMgASgJEhQKB3NlY3Rpb24YBCABKAlIAIgBARIXCgpwYWdlX3N0YXJ0GAUgASgDSAGIAQESEAoDdXJsGAYgASgJSAKIAQESFQoIZnJhZ21lbnQYByABKAlIA4gBARIMCgR0ZXh0GAggASgJQgoKCF9zZWN0aW9uQg0KC19wYWdlX3N0YXJ0QgYKBF91cmxCCwoJX2ZyYWdtZW50ImsKDFJlYWRSZXNwb25zZRIwCgZjaHVua3MYASADKAsyIC5kb2NzZWFyY2guZG9jdW1lbnQudjEuUmVhZENodW5rEhQKDGZyb21fb3JkaW5hbBgCIAEoAxITCgtjaHVua19jb3VudBgDIAEoAzLEBQoPRG9jdW1lbnRTZXJ2aWNlElEKBExpc3QSIi5kb2NzZWFyY2guZG9jdW1lbnQudjEuTGlzdFJlcXVlc3QaIy5kb2NzZWFyY2guZG9jdW1lbnQudjEuTGlzdFJlc3BvbnNlIgASVwoGVmVyaWZ5EiQuZG9jc2VhcmNoLmRvY3VtZW50LnYxLlZlcmlmeVJlcXVlc3QaJS5kb2NzZWFyY2guZG9jdW1lbnQudjEuVmVyaWZ5UmVzcG9uc2UiABJaCgdJbnNwZWN0EiUuZG9jc2VhcmNoLmRvY3VtZW50LnYxLkluc3BlY3RSZXF1ZXN0GiYuZG9jc2VhcmNoLmRvY3VtZW50LnYxLkluc3BlY3RSZXNwb25zZSIAElcKBlJlbW92ZRIkLmRvY3NlYXJjaC5kb2N1bWVudC52MS5SZW1vdmVSZXF1ZXN0GiUuZG9jc2VhcmNoLmRvY3VtZW50LnYxLlJlbW92ZVJlc3BvbnNlIgASVwoGUmVuYW1lEiQuZG9jc2VhcmNoLmRvY3VtZW50LnYxLlJlbmFtZVJlcXVlc3QaJS5kb2NzZWFyY2guZG9jdW1lbnQudjEuUmVuYW1lUmVzcG9uc2UiABJRCgRDb3B5EiIuZG9jc2VhcmNoLmRvY3VtZW50LnYxLkNvcHlSZXF1ZXN0GiMuZG9jc2VhcmNoLmRvY3VtZW50LnYxLkNvcHlSZXNwb25zZSIAElEKBE1vdmUSIi5kb2NzZWFyY2guZG9jdW1lbnQudjEuTW92ZVJlcXVlc3QaIy5kb2NzZWFyY2guZG9jdW1lbnQudjEuTW92ZVJlc3BvbnNlIgASUQoEUmVhZBIiLmRvY3NlYXJjaC5kb2N1bWVudC52MS5SZWFkUmVxdWVzdBojLmRvY3NlYXJjaC5kb2N1bWVudC52MS5SZWFkUmVzcG9uc2UiAGIGcHJvdG8z", [file_docsearch_type_v1_common, file_google_protobuf_timestamp]);
 
 /**
  * Document is one document the index holds.
@@ -574,6 +574,124 @@ export const RemoveResponseSchema: GenMessage<RemoveResponse> = /*@__PURE__*/
   messageDesc(file_docsearch_document_v1_document, 15);
 
 /**
+ * CopyRequest names a document and the library its copy goes to.
+ *
+ * @generated from message docsearch.document.v1.CopyRequest
+ */
+export type CopyRequest = Message<"docsearch.document.v1.CopyRequest"> & {
+  /**
+   * DocId is the document to copy, in the form every request takes.
+   *
+   * @generated from field: string doc_id = 1;
+   */
+  docId: string;
+
+  /**
+   * Library is the label of the library the copy goes to.
+   *
+   * @generated from field: string library = 2;
+   */
+  library: string;
+
+  /**
+   * As is the doc_id the copy takes there. Empty keeps the document's own.
+   *
+   * @generated from field: string as = 3;
+   */
+  as: string;
+};
+
+/**
+ * Describes the message docsearch.document.v1.CopyRequest.
+ * Use `create(CopyRequestSchema)` to create a new message.
+ */
+export const CopyRequestSchema: GenMessage<CopyRequest> = /*@__PURE__*/
+  messageDesc(file_docsearch_document_v1_document, 16);
+
+/**
+ * CopyResponse is the queued job that writes the copy, and where it lands.
+ *
+ * @generated from message docsearch.document.v1.CopyResponse
+ */
+export type CopyResponse = Message<"docsearch.document.v1.CopyResponse"> & {
+  /**
+   * @generated from field: int64 job_id = 1;
+   */
+  jobId: bigint;
+
+  /**
+   * DocId is the copy's identifier once its job is done, in the form every
+   * response uses.
+   *
+   * @generated from field: string doc_id = 2;
+   */
+  docId: string;
+};
+
+/**
+ * Describes the message docsearch.document.v1.CopyResponse.
+ * Use `create(CopyResponseSchema)` to create a new message.
+ */
+export const CopyResponseSchema: GenMessage<CopyResponse> = /*@__PURE__*/
+  messageDesc(file_docsearch_document_v1_document, 17);
+
+/**
+ * MoveRequest names a document and the library it moves to.
+ *
+ * @generated from message docsearch.document.v1.MoveRequest
+ */
+export type MoveRequest = Message<"docsearch.document.v1.MoveRequest"> & {
+  /**
+   * @generated from field: string doc_id = 1;
+   */
+  docId: string;
+
+  /**
+   * @generated from field: string library = 2;
+   */
+  library: string;
+
+  /**
+   * As is the doc_id the document takes there. Empty keeps its own.
+   *
+   * @generated from field: string as = 3;
+   */
+  as: string;
+};
+
+/**
+ * Describes the message docsearch.document.v1.MoveRequest.
+ * Use `create(MoveRequestSchema)` to create a new message.
+ */
+export const MoveRequestSchema: GenMessage<MoveRequest> = /*@__PURE__*/
+  messageDesc(file_docsearch_document_v1_document, 18);
+
+/**
+ * MoveResponse is the queued job that writes the copy, and where it lands.
+ * The original goes once that job is done.
+ *
+ * @generated from message docsearch.document.v1.MoveResponse
+ */
+export type MoveResponse = Message<"docsearch.document.v1.MoveResponse"> & {
+  /**
+   * @generated from field: int64 job_id = 1;
+   */
+  jobId: bigint;
+
+  /**
+   * @generated from field: string doc_id = 2;
+   */
+  docId: string;
+};
+
+/**
+ * Describes the message docsearch.document.v1.MoveResponse.
+ * Use `create(MoveResponseSchema)` to create a new message.
+ */
+export const MoveResponseSchema: GenMessage<MoveResponse> = /*@__PURE__*/
+  messageDesc(file_docsearch_document_v1_document, 19);
+
+/**
  * @generated from message docsearch.document.v1.RenameRequest
  */
 export type RenameRequest = Message<"docsearch.document.v1.RenameRequest"> & {
@@ -593,7 +711,7 @@ export type RenameRequest = Message<"docsearch.document.v1.RenameRequest"> & {
  * Use `create(RenameRequestSchema)` to create a new message.
  */
 export const RenameRequestSchema: GenMessage<RenameRequest> = /*@__PURE__*/
-  messageDesc(file_docsearch_document_v1_document, 16);
+  messageDesc(file_docsearch_document_v1_document, 20);
 
 /**
  * @generated from message docsearch.document.v1.RenameResponse
@@ -606,7 +724,7 @@ export type RenameResponse = Message<"docsearch.document.v1.RenameResponse"> & {
  * Use `create(RenameResponseSchema)` to create a new message.
  */
 export const RenameResponseSchema: GenMessage<RenameResponse> = /*@__PURE__*/
-  messageDesc(file_docsearch_document_v1_document, 17);
+  messageDesc(file_docsearch_document_v1_document, 21);
 
 /**
  * @generated from message docsearch.document.v1.ReadRequest
@@ -645,7 +763,7 @@ export type ReadRequest = Message<"docsearch.document.v1.ReadRequest"> & {
  * Use `create(ReadRequestSchema)` to create a new message.
  */
 export const ReadRequestSchema: GenMessage<ReadRequest> = /*@__PURE__*/
-  messageDesc(file_docsearch_document_v1_document, 18);
+  messageDesc(file_docsearch_document_v1_document, 22);
 
 /**
  * ReadChunk is one chunk exactly as the index holds it.
@@ -699,7 +817,7 @@ export type ReadChunk = Message<"docsearch.document.v1.ReadChunk"> & {
  * Use `create(ReadChunkSchema)` to create a new message.
  */
 export const ReadChunkSchema: GenMessage<ReadChunk> = /*@__PURE__*/
-  messageDesc(file_docsearch_document_v1_document, 19);
+  messageDesc(file_docsearch_document_v1_document, 23);
 
 /**
  * @generated from message docsearch.document.v1.ReadResponse
@@ -730,7 +848,7 @@ export type ReadResponse = Message<"docsearch.document.v1.ReadResponse"> & {
  * Use `create(ReadResponseSchema)` to create a new message.
  */
 export const ReadResponseSchema: GenMessage<ReadResponse> = /*@__PURE__*/
-  messageDesc(file_docsearch_document_v1_document, 20);
+  messageDesc(file_docsearch_document_v1_document, 24);
 
 /**
  * DocumentService reads and reports on what the index holds.
@@ -790,6 +908,29 @@ export const DocumentService: GenService<{
     methodKind: "unary";
     input: typeof RenameRequestSchema;
     output: typeof RenameResponseSchema;
+  },
+  /**
+   * Copy queues a copy of a document into another library, read again
+   * from its original. It needs reader where the document is and editor
+   * where the copy goes.
+   *
+   * @generated from rpc docsearch.document.v1.DocumentService.Copy
+   */
+  copy: {
+    methodKind: "unary";
+    input: typeof CopyRequestSchema;
+    output: typeof CopyResponseSchema;
+  },
+  /**
+   * Move is Copy followed by removing the document once its copy is ready.
+   * It needs editor in both libraries.
+   *
+   * @generated from rpc docsearch.document.v1.DocumentService.Move
+   */
+  move: {
+    methodKind: "unary";
+    input: typeof MoveRequestSchema;
+    output: typeof MoveResponseSchema;
   },
   /**
    * Read is a run of a document's chunks in order, as agents receive them.

@@ -83,6 +83,14 @@ func (l *Libraries) Ready(ctx context.Context) error {
 	return pgstore.New(l.db, pgsession.Scope{}).Ready(ctx)
 }
 
+// Copies starts copies and moves between libraries, as one user.
+func (l *Libraries) Copies(user string) (*postgres.Copies, error) {
+	if user == "" {
+		return nil, errors.New("no user: a copy is started by someone")
+	}
+	return postgres.NewCopies(l.db, user), nil
+}
+
 // Documents is the document service over one library.
 func (l *Libraries) Documents(scope pgsession.Scope) (*document.Service, error) {
 	if err := check(scope); err != nil {

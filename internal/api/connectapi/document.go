@@ -57,6 +57,9 @@ type DocumentServer struct {
 	// asking about one gets NotFound rather than Internal. The repository
 	// owns the error; this only has to be told which it is.
 	notFound error
+	// copies starts copies and moves, which span two libraries and so take
+	// a user rather than a scope.
+	copies CopiesFor
 }
 
 // NewDocumentServer returns the path to mount the handler on, and the
@@ -66,10 +69,13 @@ func NewDocumentServer(
 	documents DocumentsFor,
 	readable ReadableFor,
 	notFound error,
+	copies CopiesFor,
 	opts ...connect.HandlerOption,
 ) (string, http.Handler) {
 	return documentv1connect.NewDocumentServiceHandler(
-		&DocumentServer{documents: documents, readable: readable, notFound: notFound},
+		&DocumentServer{
+			documents: documents, readable: readable, notFound: notFound, copies: copies,
+		},
 		opts...,
 	)
 }

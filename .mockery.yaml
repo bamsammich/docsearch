@@ -23,6 +23,7 @@ packages:
       Admin:
       Settings:
       Groups:
+      Copies:
   github.com/bamsammich/docsearch/internal/service/settings:
     interfaces:
       Store:

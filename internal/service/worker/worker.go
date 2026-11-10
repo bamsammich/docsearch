@@ -53,11 +53,18 @@ type Job struct {
 	// they left it to name itself.
 	Title string
 	// Source is the path or URL to read.
-	Source   string
+	Source string
+	// DocID is the identifier a copy keeps in its new library, and empty
+	// for anything else, which takes one from its title.
+	DocID    string
 	ID       int64
 	Attempts int
 	// Force re-reads bytes the index already holds.
 	Force bool
+	// Copy is a document copied from another library. A copied site is
+	// re-indexed from the responses copied with it, without asking the
+	// site again.
+	Copy bool
 }
 
 // Outcome is how a job ended, as the queue records it.
@@ -213,7 +220,7 @@ func (s *Service) Next(ctx context.Context) (bool, error) {
 // could not be written to, which is not something the next job would
 // survive either.
 func (s *Service) execute(ctx context.Context, job *Job) error {
-	source, err := s.sources.For(job.Source, true)
+	source, err := s.sources.For(job.Source, !job.Copy)
 	if err != nil {
 		// A target no source can be built from is refused the same way every
 		// time, except a file inside a root that is not there yet: a volume
@@ -232,6 +239,7 @@ func (s *Service) execute(ctx context.Context, job *Job) error {
 
 	result, err := s.ingester.Run(runCtx, source, ingest.Options{
 		Title:      job.Title,
+		DocID:      job.DocID,
 		JobID:      &job.ID,
 		JobAttempt: job.Attempts,
 		Force:      job.Force,
@@ -428,8 +436,9 @@ func (s *Service) fail(ctx context.Context, job *Job, cause error, permanent boo
 // target, a host that did not resolve included.
 func permanent(err error) bool {
 	var structure *ingest.StructureError
+	var taken ingest.Taken
 	return errors.As(err, &structure) || errors.Is(err, ingest.ErrUnsupportedFormat) ||
-		refused(err)
+		errors.As(err, &taken) || refused(err)
 }
 
 // refused is an address the guard refuses by policy, which it will refuse on

@@ -107,6 +107,8 @@ func (j *Jobs) Claim(
 	return &worker.Job{
 		Title:    row.Title.String,
 		Source:   row.SourcePath,
+		DocID:    row.CopyAs.String,
+		Copy:     row.CopyFrom.Valid,
 		ID:       row.ID,
 		Attempts: int(row.Attempts),
 		Force:    row.Force,
@@ -245,11 +247,17 @@ func (j *Jobs) Finish(
 
 func (j *Jobs) CompleteWithoutDocument(ctx context.Context, id int64, docID string) error {
 	err := j.inTx(ctx, func(q *pgdbgen.Queries) error {
-		return fenced(q.CompleteJobWithoutDocument(ctx, pgdbgen.CompleteJobWithoutDocumentParams{
+		err := fenced(q.CompleteJobWithoutDocument(ctx, pgdbgen.CompleteJobWithoutDocumentParams{
 			DocID:   nullString(docID),
 			ID:      id,
 			Attempt: j.attemptOf(id),
 		}))
+		if err != nil {
+			return err
+		}
+		// A copy that found its bytes already in the target is still in
+		// the target, so a move finishes as it would have.
+		return finishMove(ctx, q, j.scope.Library, id)
 	})
 	if err != nil {
 		return fmt.Errorf("complete job %d: %w", id, err)
@@ -282,7 +290,7 @@ func dropPartial(ctx context.Context, q *pgdbgen.Queries, id int64) error {
 	if err := deleteRows(ctx, q, ingest.Staging(docID.String)); err != nil {
 		return err
 	}
-	if status == "ready" {
+	if status == statusReady {
 		return nil
 	}
 	return deleteRows(ctx, q, docID.String)
