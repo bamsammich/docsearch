@@ -321,11 +321,14 @@ type Event struct {
 	At    *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=at,proto3" json:"at,omitempty"`
 	Actor string                 `protobuf:"bytes,2,opt,name=actor,proto3" json:"actor,omitempty"`
 	// Action is 'create', 'rename', 'invite', 'accept', 'decline',
-	// 'withdraw', 'role' or 'remove'.
+	// 'withdraw', 'role', 'remove', 'force', 'link', 'unlink',
+	// 'provider_join' or 'provider_leave'. Actor is empty for a change the
+	// provider group made.
 	Action  string `protobuf:"bytes,3,opt,name=action,proto3" json:"action,omitempty"`
 	Subject string `protobuf:"bytes,4,opt,name=subject,proto3" json:"subject,omitempty"`
 	Role    string `protobuf:"bytes,5,opt,name=role,proto3" json:"role,omitempty"`
-	// Detail is a rename's old name, and empty otherwise.
+	// Detail is a rename's old name, the provider group of a link, unlink,
+	// provider_join or provider_leave, and empty otherwise.
 	Detail        string `protobuf:"bytes,6,opt,name=detail,proto3" json:"detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1477,6 +1480,196 @@ func (x *EventsResponse) GetEvents() []*Event {
 	return nil
 }
 
+type ProviderLinkRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Group         string                 `protobuf:"bytes,1,opt,name=group,proto3" json:"group,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProviderLinkRequest) Reset() {
+	*x = ProviderLinkRequest{}
+	mi := &file_docsearch_group_v1_group_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProviderLinkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProviderLinkRequest) ProtoMessage() {}
+
+func (x *ProviderLinkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_group_v1_group_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProviderLinkRequest.ProtoReflect.Descriptor instead.
+func (*ProviderLinkRequest) Descriptor() ([]byte, []int) {
+	return file_docsearch_group_v1_group_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ProviderLinkRequest) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+type ProviderLinkResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ProviderGroup is the provider group the group follows, and empty for
+	// none.
+	ProviderGroup string `protobuf:"bytes,1,opt,name=provider_group,json=providerGroup,proto3" json:"provider_group,omitempty"`
+	// CanLink is whether the caller may change the link: an administrator,
+	// on a deployment that reads its provider's groups.
+	CanLink       bool `protobuf:"varint,2,opt,name=can_link,json=canLink,proto3" json:"can_link,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProviderLinkResponse) Reset() {
+	*x = ProviderLinkResponse{}
+	mi := &file_docsearch_group_v1_group_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProviderLinkResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProviderLinkResponse) ProtoMessage() {}
+
+func (x *ProviderLinkResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_group_v1_group_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProviderLinkResponse.ProtoReflect.Descriptor instead.
+func (*ProviderLinkResponse) Descriptor() ([]byte, []int) {
+	return file_docsearch_group_v1_group_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *ProviderLinkResponse) GetProviderGroup() string {
+	if x != nil {
+		return x.ProviderGroup
+	}
+	return ""
+}
+
+func (x *ProviderLinkResponse) GetCanLink() bool {
+	if x != nil {
+		return x.CanLink
+	}
+	return false
+}
+
+type LinkRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Group string                 `protobuf:"bytes,1,opt,name=group,proto3" json:"group,omitempty"`
+	// ProviderGroup is the group name the provider puts in its tokens.
+	// Empty stops the group following one.
+	ProviderGroup string `protobuf:"bytes,2,opt,name=provider_group,json=providerGroup,proto3" json:"provider_group,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LinkRequest) Reset() {
+	*x = LinkRequest{}
+	mi := &file_docsearch_group_v1_group_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LinkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LinkRequest) ProtoMessage() {}
+
+func (x *LinkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_group_v1_group_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LinkRequest.ProtoReflect.Descriptor instead.
+func (*LinkRequest) Descriptor() ([]byte, []int) {
+	return file_docsearch_group_v1_group_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *LinkRequest) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+func (x *LinkRequest) GetProviderGroup() string {
+	if x != nil {
+		return x.ProviderGroup
+	}
+	return ""
+}
+
+type LinkResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LinkResponse) Reset() {
+	*x = LinkResponse{}
+	mi := &file_docsearch_group_v1_group_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LinkResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LinkResponse) ProtoMessage() {}
+
+func (x *LinkResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_docsearch_group_v1_group_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LinkResponse.ProtoReflect.Descriptor instead.
+func (*LinkResponse) Descriptor() ([]byte, []int) {
+	return file_docsearch_group_v1_group_proto_rawDescGZIP(), []int{32}
+}
+
 var File_docsearch_group_v1_group_proto protoreflect.FileDescriptor
 
 const file_docsearch_group_v1_group_proto_rawDesc = "" +
@@ -1560,7 +1753,16 @@ const file_docsearch_group_v1_group_proto_rawDesc = "" +
 	"\rEventsRequest\x12\x14\n" +
 	"\x05group\x18\x01 \x01(\tR\x05group\"C\n" +
 	"\x0eEventsResponse\x121\n" +
-	"\x06events\x18\x01 \x03(\v2\x19.docsearch.group.v1.EventR\x06events2\x8a\b\n" +
+	"\x06events\x18\x01 \x03(\v2\x19.docsearch.group.v1.EventR\x06events\"+\n" +
+	"\x13ProviderLinkRequest\x12\x14\n" +
+	"\x05group\x18\x01 \x01(\tR\x05group\"X\n" +
+	"\x14ProviderLinkResponse\x12%\n" +
+	"\x0eprovider_group\x18\x01 \x01(\tR\rproviderGroup\x12\x19\n" +
+	"\bcan_link\x18\x02 \x01(\bR\acanLink\"J\n" +
+	"\vLinkRequest\x12\x14\n" +
+	"\x05group\x18\x01 \x01(\tR\x05group\x12%\n" +
+	"\x0eprovider_group\x18\x02 \x01(\tR\rproviderGroup\"\x0e\n" +
+	"\fLinkResponse2\xbc\t\n" +
 	"\fGroupService\x12K\n" +
 	"\x04List\x12\x1f.docsearch.group.v1.ListRequest\x1a .docsearch.group.v1.ListResponse\"\x00\x12Q\n" +
 	"\x06Create\x12!.docsearch.group.v1.CreateRequest\x1a\".docsearch.group.v1.CreateResponse\"\x00\x12Q\n" +
@@ -1573,7 +1775,9 @@ const file_docsearch_group_v1_group_proto_rawDesc = "" +
 	"\vInvitations\x12&.docsearch.group.v1.InvitationsRequest\x1a'.docsearch.group.v1.InvitationsResponse\"\x00\x12T\n" +
 	"\aMembers\x12\".docsearch.group.v1.MembersRequest\x1a#.docsearch.group.v1.MembersResponse\"\x00\x12Z\n" +
 	"\tLibraries\x12$.docsearch.group.v1.LibrariesRequest\x1a%.docsearch.group.v1.LibrariesResponse\"\x00\x12Q\n" +
-	"\x06Events\x12!.docsearch.group.v1.EventsRequest\x1a\".docsearch.group.v1.EventsResponse\"\x00B\xd7\x01\n" +
+	"\x06Events\x12!.docsearch.group.v1.EventsRequest\x1a\".docsearch.group.v1.EventsResponse\"\x00\x12c\n" +
+	"\fProviderLink\x12'.docsearch.group.v1.ProviderLinkRequest\x1a(.docsearch.group.v1.ProviderLinkResponse\"\x00\x12K\n" +
+	"\x04Link\x12\x1f.docsearch.group.v1.LinkRequest\x1a .docsearch.group.v1.LinkResponse\"\x00B\xd7\x01\n" +
 	"\x16com.docsearch.group.v1B\n" +
 	"GroupProtoP\x01ZGgithub.com/bamsammich/docsearch/internal/api/docsearch/group/v1;groupv1\xa2\x02\x03DGX\xaa\x02\x12Docsearch.Group.V1\xca\x02\x12Docsearch\\Group\\V1\xe2\x02\x1eDocsearch\\Group\\V1\\GPBMetadata\xea\x02\x14Docsearch::Group::V1b\x06proto3"
 
@@ -1589,7 +1793,7 @@ func file_docsearch_group_v1_group_proto_rawDescGZIP() []byte {
 	return file_docsearch_group_v1_group_proto_rawDescData
 }
 
-var file_docsearch_group_v1_group_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_docsearch_group_v1_group_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_docsearch_group_v1_group_proto_goTypes = []any{
 	(*Group)(nil),                 // 0: docsearch.group.v1.Group
 	(*Member)(nil),                // 1: docsearch.group.v1.Member
@@ -1620,11 +1824,15 @@ var file_docsearch_group_v1_group_proto_goTypes = []any{
 	(*LibrariesResponse)(nil),     // 26: docsearch.group.v1.LibrariesResponse
 	(*EventsRequest)(nil),         // 27: docsearch.group.v1.EventsRequest
 	(*EventsResponse)(nil),        // 28: docsearch.group.v1.EventsResponse
-	(*timestamppb.Timestamp)(nil), // 29: google.protobuf.Timestamp
+	(*ProviderLinkRequest)(nil),   // 29: docsearch.group.v1.ProviderLinkRequest
+	(*ProviderLinkResponse)(nil),  // 30: docsearch.group.v1.ProviderLinkResponse
+	(*LinkRequest)(nil),           // 31: docsearch.group.v1.LinkRequest
+	(*LinkResponse)(nil),          // 32: docsearch.group.v1.LinkResponse
+	(*timestamppb.Timestamp)(nil), // 33: google.protobuf.Timestamp
 }
 var file_docsearch_group_v1_group_proto_depIdxs = []int32{
-	29, // 0: docsearch.group.v1.Invitation.at:type_name -> google.protobuf.Timestamp
-	29, // 1: docsearch.group.v1.Event.at:type_name -> google.protobuf.Timestamp
+	33, // 0: docsearch.group.v1.Invitation.at:type_name -> google.protobuf.Timestamp
+	33, // 1: docsearch.group.v1.Event.at:type_name -> google.protobuf.Timestamp
 	0,  // 2: docsearch.group.v1.ListResponse.groups:type_name -> docsearch.group.v1.Group
 	0,  // 3: docsearch.group.v1.CreateResponse.group:type_name -> docsearch.group.v1.Group
 	2,  // 4: docsearch.group.v1.InvitationsResponse.invitations:type_name -> docsearch.group.v1.Invitation
@@ -1643,20 +1851,24 @@ var file_docsearch_group_v1_group_proto_depIdxs = []int32{
 	23, // 17: docsearch.group.v1.GroupService.Members:input_type -> docsearch.group.v1.MembersRequest
 	25, // 18: docsearch.group.v1.GroupService.Libraries:input_type -> docsearch.group.v1.LibrariesRequest
 	27, // 19: docsearch.group.v1.GroupService.Events:input_type -> docsearch.group.v1.EventsRequest
-	6,  // 20: docsearch.group.v1.GroupService.List:output_type -> docsearch.group.v1.ListResponse
-	8,  // 21: docsearch.group.v1.GroupService.Create:output_type -> docsearch.group.v1.CreateResponse
-	10, // 22: docsearch.group.v1.GroupService.Rename:output_type -> docsearch.group.v1.RenameResponse
-	12, // 23: docsearch.group.v1.GroupService.Delete:output_type -> docsearch.group.v1.DeleteResponse
-	14, // 24: docsearch.group.v1.GroupService.Invite:output_type -> docsearch.group.v1.InviteResponse
-	16, // 25: docsearch.group.v1.GroupService.Accept:output_type -> docsearch.group.v1.AcceptResponse
-	18, // 26: docsearch.group.v1.GroupService.Decline:output_type -> docsearch.group.v1.DeclineResponse
-	20, // 27: docsearch.group.v1.GroupService.Remove:output_type -> docsearch.group.v1.RemoveResponse
-	22, // 28: docsearch.group.v1.GroupService.Invitations:output_type -> docsearch.group.v1.InvitationsResponse
-	24, // 29: docsearch.group.v1.GroupService.Members:output_type -> docsearch.group.v1.MembersResponse
-	26, // 30: docsearch.group.v1.GroupService.Libraries:output_type -> docsearch.group.v1.LibrariesResponse
-	28, // 31: docsearch.group.v1.GroupService.Events:output_type -> docsearch.group.v1.EventsResponse
-	20, // [20:32] is the sub-list for method output_type
-	8,  // [8:20] is the sub-list for method input_type
+	29, // 20: docsearch.group.v1.GroupService.ProviderLink:input_type -> docsearch.group.v1.ProviderLinkRequest
+	31, // 21: docsearch.group.v1.GroupService.Link:input_type -> docsearch.group.v1.LinkRequest
+	6,  // 22: docsearch.group.v1.GroupService.List:output_type -> docsearch.group.v1.ListResponse
+	8,  // 23: docsearch.group.v1.GroupService.Create:output_type -> docsearch.group.v1.CreateResponse
+	10, // 24: docsearch.group.v1.GroupService.Rename:output_type -> docsearch.group.v1.RenameResponse
+	12, // 25: docsearch.group.v1.GroupService.Delete:output_type -> docsearch.group.v1.DeleteResponse
+	14, // 26: docsearch.group.v1.GroupService.Invite:output_type -> docsearch.group.v1.InviteResponse
+	16, // 27: docsearch.group.v1.GroupService.Accept:output_type -> docsearch.group.v1.AcceptResponse
+	18, // 28: docsearch.group.v1.GroupService.Decline:output_type -> docsearch.group.v1.DeclineResponse
+	20, // 29: docsearch.group.v1.GroupService.Remove:output_type -> docsearch.group.v1.RemoveResponse
+	22, // 30: docsearch.group.v1.GroupService.Invitations:output_type -> docsearch.group.v1.InvitationsResponse
+	24, // 31: docsearch.group.v1.GroupService.Members:output_type -> docsearch.group.v1.MembersResponse
+	26, // 32: docsearch.group.v1.GroupService.Libraries:output_type -> docsearch.group.v1.LibrariesResponse
+	28, // 33: docsearch.group.v1.GroupService.Events:output_type -> docsearch.group.v1.EventsResponse
+	30, // 34: docsearch.group.v1.GroupService.ProviderLink:output_type -> docsearch.group.v1.ProviderLinkResponse
+	32, // 35: docsearch.group.v1.GroupService.Link:output_type -> docsearch.group.v1.LinkResponse
+	22, // [22:36] is the sub-list for method output_type
+	8,  // [8:22] is the sub-list for method input_type
 	8,  // [8:8] is the sub-list for extension type_name
 	8,  // [8:8] is the sub-list for extension extendee
 	0,  // [0:8] is the sub-list for field type_name
@@ -1673,7 +1885,7 @@ func file_docsearch_group_v1_group_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_docsearch_group_v1_group_proto_rawDesc), len(file_docsearch_group_v1_group_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   29,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

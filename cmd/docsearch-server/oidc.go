@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"time"
 
 	"github.com/bamsammich/docsearch/internal/account"
@@ -15,6 +16,7 @@ import (
 	"github.com/bamsammich/docsearch/internal/resource"
 	"github.com/bamsammich/docsearch/internal/resource/introspect"
 	"github.com/bamsammich/docsearch/internal/resource/signed"
+	"github.com/bamsammich/docsearch/internal/resource/userinfo"
 )
 
 // discoveryTimeout bounds asking the provider for its endpoints and keys at
@@ -55,10 +57,12 @@ func oidcAccessFor(cfg config.Config, db *sql.DB, log *slog.Logger) (access, err
 	return oidcAccess(cfg.OIDC, readers, pgaccount.New(db), log)
 }
 
-// readers are the two ways a token is read, found at the provider.
+// readers are the two ways a token is read, found at the provider, and
+// where a claim the token leaves out is read instead.
 type readers struct {
-	signed resource.Reader
-	opaque resource.Reader
+	signed   resource.Reader
+	opaque   resource.Reader
+	userinfo account.Userinfo
 }
 
 // discover asks the provider for what both readers need. Introspection is
@@ -69,6 +73,12 @@ func discover(ctx context.Context, cfg config.OIDC) (readers, error) {
 		return readers{}, err
 	}
 	found := readers{signed: jwt, opaque: resource.Unintrospected{}}
+	if cfg.GroupsClaim != "" {
+		found.userinfo, err = userinfo.Discover(ctx, cfg.Issuer)
+		if err != nil {
+			return readers{}, err
+		}
+	}
 	if cfg.ClientID == "" {
 		return found, nil
 	}
@@ -97,6 +107,10 @@ func oidcAccess(
 	if err != nil {
 		return access{}, fmt.Errorf("auth mode oidc: %w", err)
 	}
+	provider, err := providerLink(cfg, found.userinfo, log)
+	if err != nil {
+		return access{}, err
+	}
 	accounts := account.New(store, account.Policy{
 		DefaultOwner: defaultOwner(cfg),
 		Required: account.RequiredClaim{
@@ -104,6 +118,7 @@ func oidcAccess(
 		},
 		SignUp:        cfg.SignUp,
 		UsernameClaim: cfg.UsernameClaim,
+		Provider:      provider,
 	}, log)
 	return access{
 		guard: func(next http.Handler) http.Handler {
@@ -111,6 +126,42 @@ func oidcAccess(
 		},
 		public: []route{{path: server.MetadataPath(), handler: server.Metadata()}},
 	}, nil
+}
+
+// providerLink is how groups and administrators follow the provider's
+// groups. An admin group or auto-creation with no groups claim to read
+// does nothing, and says so, rather than stopping the server: the admin
+// group can be stored from the Sign-in page, and a server that will not
+// start locks everyone out.
+func providerLink(
+	cfg config.OIDC,
+	info account.Userinfo,
+	log *slog.Logger,
+) (account.Provider, error) {
+	if cfg.GroupsClaim == "" {
+		if cfg.AdminGroup != "" || cfg.GroupAutoCreate {
+			log.Warn(
+				"no groups claim is set, so the admin group and group auto-creation do nothing",
+				"set",
+				flagGroupsClaim,
+			)
+		}
+		return account.Provider{}, nil
+	}
+	provider := account.Provider{
+		Userinfo:    info,
+		GroupsClaim: cfg.GroupsClaim,
+		AdminGroup:  cfg.AdminGroup,
+		AutoCreate:  cfg.GroupAutoCreate,
+	}
+	if cfg.GroupFilter != "" {
+		filter, err := regexp.Compile(cfg.GroupFilter)
+		if err != nil {
+			return account.Provider{}, fmt.Errorf("--%s: %w", flagGroupFilter, err)
+		}
+		provider.Filter = filter
+	}
+	return provider, nil
 }
 
 // defaultOwner is the configured subject at the configured issuer. A subject

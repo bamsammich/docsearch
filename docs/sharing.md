@@ -75,6 +75,18 @@ To add someone at once, with no invitation to accept, an administrator runs
 log of each library it holds record it, and it is the only way an
 administrator joins a group they are not in.
 
+In `oidc` mode an administrator can make a group follow a provider group:
+
+```bash
+docsearch group link platform-team platform-engineers
+docsearch group link platform-team            # shows the link
+docsearch group link platform-team --unlink   # members it gave leave
+```
+
+Members then come from the provider's groups claim, with no invitation, as
+[configuration](configuration.md#signing-in-through-your-own-provider)
+describes. Only the provider removes them.
+
 Everyone may create groups unless `--group-creators administrators`
 (`DOCSEARCH_GROUP_CREATORS`, `groups.creators` in `docsearch.yaml`) leaves it
 to docsearch administrators.

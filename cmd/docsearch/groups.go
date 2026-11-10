@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	argGroup  = "<group>"
-	flagGroup = "group"
+	argGroup   = "<group>"
+	flagGroup  = "group"
+	flagUnlink = "unlink"
 )
 
 var errNoGroup = errors.New("name the group: its slug, as `docsearch group list` shows it")
@@ -109,6 +110,21 @@ func groupCommand() *cli.Command {
 			{
 				Name: "log", Usage: "show the changes to a group you maintain",
 				ArgsUsage: argGroup, Flags: serverFlags(), Action: showGroupEvents,
+			},
+			{
+				Name:      "link",
+				Usage:     "administrators only: make a group follow a provider group",
+				ArgsUsage: argGroup + " [<provider-group>]",
+				Description: "Whoever's token carries the provider group is a member, with " +
+					"no invitation, and leaves when their token stops carrying it. Members " +
+					"invited by hand stay. With no provider group named, it shows the link. " +
+					"--unlink stops the group following one, and takes out the members the " +
+					"link gave. The server reads provider groups only once " +
+					"--oidc-groups-claim is set.",
+				Flags: append(serverFlags(), &cli.BoolFlag{
+					Name: flagUnlink, Usage: "stop the group following a provider group",
+				}),
+				Action: linkGroup,
 			},
 		},
 	}
@@ -325,6 +341,45 @@ func showGroupEvents(ctx context.Context, cmd *cli.Command) error {
 			dash(e.Actor), e.Action, dash(e.Subject), dash(e.Role), dash(e.Detail))
 	}
 	return w.Flush()
+}
+
+func linkGroup(ctx context.Context, cmd *cli.Command) error {
+	slug, err := groupArg(cmd)
+	if err != nil {
+		return err
+	}
+	provider := cmd.Args().Get(1)
+	switch {
+	case cmd.Bool(flagUnlink) && provider != "":
+		return errors.New("name a provider group or pass --unlink, not both")
+	case cmd.Bool(flagUnlink):
+		if err := clientFor(cmd).LinkGroup(ctx, slug, ""); err != nil {
+			return err
+		}
+		fmt.Printf("%s follows no provider group; the members it gave are out\n", slug)
+		return nil
+	case provider != "":
+		if err := clientFor(cmd).LinkGroup(ctx, slug, provider); err != nil {
+			return err
+		}
+		fmt.Printf("%s follows %s; each member joins with their next token\n", slug, provider)
+		return nil
+	}
+	return showLink(ctx, cmd, slug)
+}
+
+// showLink prints the provider group a group follows.
+func showLink(ctx context.Context, cmd *cli.Command, slug string) error {
+	linked, _, err := clientFor(cmd).GroupProviderLink(ctx, slug)
+	if err != nil {
+		return err
+	}
+	if linked == "" {
+		fmt.Printf("%s follows no provider group\n", slug)
+		return nil
+	}
+	fmt.Printf("%s follows %s\n", slug, linked)
+	return nil
 }
 
 // grantGroup is library grant with --group.

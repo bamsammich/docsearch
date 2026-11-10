@@ -447,8 +447,12 @@ func (*ListRequest) Descriptor() ([]byte, []int) {
 }
 
 type ListResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Accounts      []*Account             `protobuf:"bytes,1,rep,name=accounts,proto3" json:"accounts,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Accounts []*Account             `protobuf:"bytes,1,rep,name=accounts,proto3" json:"accounts,omitempty"`
+	// AdminGroup is the provider group administrators come from, when the
+	// deployment names one. Each sign-in then grants or removes the role, so
+	// a change made here lasts only until that account next signs in.
+	AdminGroup    string `protobuf:"bytes,2,opt,name=admin_group,json=adminGroup,proto3" json:"admin_group,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -488,6 +492,13 @@ func (x *ListResponse) GetAccounts() []*Account {
 		return x.Accounts
 	}
 	return nil
+}
+
+func (x *ListResponse) GetAdminGroup() string {
+	if x != nil {
+		return x.AdminGroup
+	}
+	return ""
 }
 
 type AddRequest struct {
@@ -1152,9 +1163,11 @@ const file_docsearch_account_v1_account_proto_rawDesc = "" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x14\n" +
 	"\x05admin\x18\x02 \x01(\bR\x05admin\x12\x12\n" +
 	"\x04auth\x18\x03 \x01(\tR\x04auth\"\r\n" +
-	"\vListRequest\"I\n" +
+	"\vListRequest\"j\n" +
 	"\fListResponse\x129\n" +
-	"\baccounts\x18\x01 \x03(\v2\x1d.docsearch.account.v1.AccountR\baccounts\"(\n" +
+	"\baccounts\x18\x01 \x03(\v2\x1d.docsearch.account.v1.AccountR\baccounts\x12\x1f\n" +
+	"\vadmin_group\x18\x02 \x01(\tR\n" +
+	"adminGroup\"(\n" +
 	"\n" +
 	"AddRequest\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\")\n" +

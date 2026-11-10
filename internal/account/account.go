@@ -40,6 +40,9 @@ type Store interface {
 	// whether the name is now the account's: one another account already
 	// holds stays with that account.
 	Name(ctx context.Context, userID, username string) (bool, error)
+	// Sync makes an account's provider group memberships, and its
+	// administrator role when the provider decides it, match one token.
+	Sync(ctx context.Context, userID string, sync ProviderSync) error
 }
 
 // RequiredClaim is a claim every token must carry. A claim that is a list
@@ -60,6 +63,9 @@ type Policy struct {
 	// UsernameClaim names the one claim a username is taken from. Empty
 	// takes a verified email, else preferred_username.
 	UsernameClaim string
+	// Provider links groups, and the administrator role, to the groups the
+	// provider puts in its tokens.
+	Provider Provider
 	// SignUp creates an account for an identity that has none.
 	SignUp bool
 }
@@ -76,15 +82,16 @@ type Accounts struct {
 	// named is each account whose username this process has recorded, and
 	// the name it recorded, so a request writes the name only when it is new
 	// or has changed.
-	named  sync.Map
-	store  Store
-	log    *slog.Logger
-	policy Policy
+	named    sync.Map
+	store    Store
+	log      *slog.Logger
+	provider *syncer
+	policy   Policy
 }
 
 // New returns the resolver.
 func New(store Store, policy Policy, log *slog.Logger) *Accounts {
-	return &Accounts{store: store, policy: policy, log: log}
+	return &Accounts{store: store, policy: policy, log: log, provider: newSyncer(policy.Provider)}
 }
 
 // Resolve is the user an identity acts as, creating the account when the
@@ -257,6 +264,31 @@ func (a *Accounts) Middleware(next http.Handler) http.Handler {
 			return
 		}
 		a.remember(r.Context(), user, info)
+		if !a.followProvider(w, r, user) {
+			return
+		}
 		next.ServeHTTP(w, r.WithContext(owner.With(r.Context(), user)))
 	})
+}
+
+// followProvider applies the provider's groups for a new token, and answers
+// whether the request may go on. A token whose groups cannot be read or
+// applied is refused: the groups decide what the person may reach, and
+// administering, so guessing either way would be wrong.
+func (a *Accounts) followProvider(w http.ResponseWriter, r *http.Request, user string) bool {
+	if !a.provider.on() {
+		return true
+	}
+	err := a.provider.sync(r.Context(), a.store, user, r)
+	switch {
+	case err == nil:
+		return true
+	case errors.Is(err, ErrGroupsUnread):
+		a.log.WarnContext(r.Context(), "provider groups not read", "user", user, "err", err)
+		http.Error(w, ErrGroupsUnread.Error(), http.StatusBadGateway)
+	default:
+		a.log.ErrorContext(r.Context(), "provider groups not applied", "user", user, "err", err)
+		http.Error(w, "provider groups not applied", http.StatusInternalServerError)
+	}
+	return false
 }

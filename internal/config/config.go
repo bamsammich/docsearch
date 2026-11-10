@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -105,11 +106,23 @@ type OIDC struct {
 	RequiredClaimValue string
 	// UsernameClaim names the claim usernames come from. Empty takes a
 	// verified email, else preferred_username.
-	UsernameClaim   string
+	UsernameClaim string
+	// GroupsClaim names the claim listing the provider groups a person is
+	// in. Empty turns the provider link off.
+	GroupsClaim string
+	// GroupFilter is a regular expression limiting which provider groups
+	// GroupAutoCreate makes a group for. Empty matches every one.
+	GroupFilter string
+	// AdminGroup is the provider group whose members administer docsearch.
+	// Empty leaves administrators to docsearch.
+	AdminGroup      string
 	ScopesSupported []string
 	RequiredScopes  []string
 	// SignUp creates an account for an identity that has none.
 	SignUp bool
+	// GroupAutoCreate makes a linked group for each provider group a token
+	// carries that GroupFilter matches.
+	GroupAutoCreate bool
 }
 
 const (
@@ -157,6 +170,10 @@ const (
 	EnvOIDCUsernameClaim      = "DOCSEARCH_OIDC_USERNAME_CLAIM"
 	EnvOIDCRequiredClaimName  = "DOCSEARCH_OIDC_REQUIRED_CLAIM_NAME"
 	EnvOIDCRequiredClaimValue = "DOCSEARCH_OIDC_REQUIRED_CLAIM_VALUE"
+	EnvOIDCGroupsClaim        = "DOCSEARCH_OIDC_GROUPS_CLAIM"
+	EnvOIDCGroupAutoCreate    = "DOCSEARCH_OIDC_GROUP_AUTO_CREATE"
+	EnvOIDCGroupFilter        = "DOCSEARCH_OIDC_GROUP_FILTER"
+	EnvOIDCAdminGroup         = "DOCSEARCH_OIDC_ADMIN_GROUP"
 
 	// EnvGroupCreators says who may create groups.
 	EnvGroupCreators = "DOCSEARCH_GROUP_CREATORS"
@@ -440,6 +457,9 @@ func (o OIDC) validate() error {
 	if (o.RequiredClaimName == "") != (o.RequiredClaimValue == "") {
 		return fmt.Errorf("a required claim needs both %s and %s",
 			EnvOIDCRequiredClaimName, EnvOIDCRequiredClaimValue)
+	}
+	if _, err := regexp.Compile(o.GroupFilter); err != nil {
+		return fmt.Errorf("%s: %w", EnvOIDCGroupFilter, err)
 	}
 	return nil
 }

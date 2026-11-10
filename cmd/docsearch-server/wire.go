@@ -294,7 +294,8 @@ func newLibraryRoute(db *sql.DB) route {
 // checks every rule but one: who may create a group is the deployment's
 // setting, which it holds and the database does not.
 func newGroupRoute(cfg config.Config, db *sql.DB) route {
-	return mount(connectapi.NewGroupServer(groupsFor(db), mayCreateGroups(cfg, db)))
+	return mount(connectapi.NewGroupServer(groupsFor(db), mayCreateGroups(cfg, db),
+		cfg.Auth == owner.OIDC && cfg.OIDC.GroupsClaim != ""))
 }
 
 func groupsFor(db *sql.DB) connectapi.GroupsFor {

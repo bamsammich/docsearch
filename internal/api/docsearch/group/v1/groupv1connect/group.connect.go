@@ -64,6 +64,11 @@ const (
 	GroupServiceLibrariesProcedure = "/docsearch.group.v1.GroupService/Libraries"
 	// GroupServiceEventsProcedure is the fully-qualified name of the GroupService's Events RPC.
 	GroupServiceEventsProcedure = "/docsearch.group.v1.GroupService/Events"
+	// GroupServiceProviderLinkProcedure is the fully-qualified name of the GroupService's ProviderLink
+	// RPC.
+	GroupServiceProviderLinkProcedure = "/docsearch.group.v1.GroupService/ProviderLink"
+	// GroupServiceLinkProcedure is the fully-qualified name of the GroupService's Link RPC.
+	GroupServiceLinkProcedure = "/docsearch.group.v1.GroupService/Link"
 )
 
 // GroupServiceClient is a client for the docsearch.group.v1.GroupService service.
@@ -97,6 +102,14 @@ type GroupServiceClient interface {
 	// Events is the record of changes to a group, oldest first. Maintainers
 	// only.
 	Events(context.Context, *connect.Request[v1.EventsRequest]) (*connect.Response[v1.EventsResponse], error)
+	// ProviderLink is the provider group a group follows. Anyone but an
+	// administrator is refused.
+	ProviderLink(context.Context, *connect.Request[v1.ProviderLinkRequest]) (*connect.Response[v1.ProviderLinkResponse], error)
+	// Link makes a group follow a provider group: whoever's token carries
+	// the name is a member, and leaves when it no longer does. Changing or
+	// removing the link takes out the members it gave. Administrators only,
+	// and only on a deployment that reads its provider's groups.
+	Link(context.Context, *connect.Request[v1.LinkRequest]) (*connect.Response[v1.LinkResponse], error)
 }
 
 // NewGroupServiceClient constructs a client for the docsearch.group.v1.GroupService service. By
@@ -182,23 +195,37 @@ func NewGroupServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(groupServiceMethods.ByName("Events")),
 			connect.WithClientOptions(opts...),
 		),
+		providerLink: connect.NewClient[v1.ProviderLinkRequest, v1.ProviderLinkResponse](
+			httpClient,
+			baseURL+GroupServiceProviderLinkProcedure,
+			connect.WithSchema(groupServiceMethods.ByName("ProviderLink")),
+			connect.WithClientOptions(opts...),
+		),
+		link: connect.NewClient[v1.LinkRequest, v1.LinkResponse](
+			httpClient,
+			baseURL+GroupServiceLinkProcedure,
+			connect.WithSchema(groupServiceMethods.ByName("Link")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // groupServiceClient implements GroupServiceClient.
 type groupServiceClient struct {
-	list        *connect.Client[v1.ListRequest, v1.ListResponse]
-	create      *connect.Client[v1.CreateRequest, v1.CreateResponse]
-	rename      *connect.Client[v1.RenameRequest, v1.RenameResponse]
-	delete      *connect.Client[v1.DeleteRequest, v1.DeleteResponse]
-	invite      *connect.Client[v1.InviteRequest, v1.InviteResponse]
-	accept      *connect.Client[v1.AcceptRequest, v1.AcceptResponse]
-	decline     *connect.Client[v1.DeclineRequest, v1.DeclineResponse]
-	remove      *connect.Client[v1.RemoveRequest, v1.RemoveResponse]
-	invitations *connect.Client[v1.InvitationsRequest, v1.InvitationsResponse]
-	members     *connect.Client[v1.MembersRequest, v1.MembersResponse]
-	libraries   *connect.Client[v1.LibrariesRequest, v1.LibrariesResponse]
-	events      *connect.Client[v1.EventsRequest, v1.EventsResponse]
+	list         *connect.Client[v1.ListRequest, v1.ListResponse]
+	create       *connect.Client[v1.CreateRequest, v1.CreateResponse]
+	rename       *connect.Client[v1.RenameRequest, v1.RenameResponse]
+	delete       *connect.Client[v1.DeleteRequest, v1.DeleteResponse]
+	invite       *connect.Client[v1.InviteRequest, v1.InviteResponse]
+	accept       *connect.Client[v1.AcceptRequest, v1.AcceptResponse]
+	decline      *connect.Client[v1.DeclineRequest, v1.DeclineResponse]
+	remove       *connect.Client[v1.RemoveRequest, v1.RemoveResponse]
+	invitations  *connect.Client[v1.InvitationsRequest, v1.InvitationsResponse]
+	members      *connect.Client[v1.MembersRequest, v1.MembersResponse]
+	libraries    *connect.Client[v1.LibrariesRequest, v1.LibrariesResponse]
+	events       *connect.Client[v1.EventsRequest, v1.EventsResponse]
+	providerLink *connect.Client[v1.ProviderLinkRequest, v1.ProviderLinkResponse]
+	link         *connect.Client[v1.LinkRequest, v1.LinkResponse]
 }
 
 // List calls docsearch.group.v1.GroupService.List.
@@ -261,6 +288,16 @@ func (c *groupServiceClient) Events(ctx context.Context, req *connect.Request[v1
 	return c.events.CallUnary(ctx, req)
 }
 
+// ProviderLink calls docsearch.group.v1.GroupService.ProviderLink.
+func (c *groupServiceClient) ProviderLink(ctx context.Context, req *connect.Request[v1.ProviderLinkRequest]) (*connect.Response[v1.ProviderLinkResponse], error) {
+	return c.providerLink.CallUnary(ctx, req)
+}
+
+// Link calls docsearch.group.v1.GroupService.Link.
+func (c *groupServiceClient) Link(ctx context.Context, req *connect.Request[v1.LinkRequest]) (*connect.Response[v1.LinkResponse], error) {
+	return c.link.CallUnary(ctx, req)
+}
+
 // GroupServiceHandler is an implementation of the docsearch.group.v1.GroupService service.
 type GroupServiceHandler interface {
 	// List is every group, with the caller's role in each.
@@ -292,6 +329,14 @@ type GroupServiceHandler interface {
 	// Events is the record of changes to a group, oldest first. Maintainers
 	// only.
 	Events(context.Context, *connect.Request[v1.EventsRequest]) (*connect.Response[v1.EventsResponse], error)
+	// ProviderLink is the provider group a group follows. Anyone but an
+	// administrator is refused.
+	ProviderLink(context.Context, *connect.Request[v1.ProviderLinkRequest]) (*connect.Response[v1.ProviderLinkResponse], error)
+	// Link makes a group follow a provider group: whoever's token carries
+	// the name is a member, and leaves when it no longer does. Changing or
+	// removing the link takes out the members it gave. Administrators only,
+	// and only on a deployment that reads its provider's groups.
+	Link(context.Context, *connect.Request[v1.LinkRequest]) (*connect.Response[v1.LinkResponse], error)
 }
 
 // NewGroupServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -373,6 +418,18 @@ func NewGroupServiceHandler(svc GroupServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(groupServiceMethods.ByName("Events")),
 		connect.WithHandlerOptions(opts...),
 	)
+	groupServiceProviderLinkHandler := connect.NewUnaryHandler(
+		GroupServiceProviderLinkProcedure,
+		svc.ProviderLink,
+		connect.WithSchema(groupServiceMethods.ByName("ProviderLink")),
+		connect.WithHandlerOptions(opts...),
+	)
+	groupServiceLinkHandler := connect.NewUnaryHandler(
+		GroupServiceLinkProcedure,
+		svc.Link,
+		connect.WithSchema(groupServiceMethods.ByName("Link")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/docsearch.group.v1.GroupService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case GroupServiceListProcedure:
@@ -399,6 +456,10 @@ func NewGroupServiceHandler(svc GroupServiceHandler, opts ...connect.HandlerOpti
 			groupServiceLibrariesHandler.ServeHTTP(w, r)
 		case GroupServiceEventsProcedure:
 			groupServiceEventsHandler.ServeHTTP(w, r)
+		case GroupServiceProviderLinkProcedure:
+			groupServiceProviderLinkHandler.ServeHTTP(w, r)
+		case GroupServiceLinkProcedure:
+			groupServiceLinkHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -454,4 +515,12 @@ func (UnimplementedGroupServiceHandler) Libraries(context.Context, *connect.Requ
 
 func (UnimplementedGroupServiceHandler) Events(context.Context, *connect.Request[v1.EventsRequest]) (*connect.Response[v1.EventsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.group.v1.GroupService.Events is not implemented"))
+}
+
+func (UnimplementedGroupServiceHandler) ProviderLink(context.Context, *connect.Request[v1.ProviderLinkRequest]) (*connect.Response[v1.ProviderLinkResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.group.v1.GroupService.ProviderLink is not implemented"))
+}
+
+func (UnimplementedGroupServiceHandler) Link(context.Context, *connect.Request[v1.LinkRequest]) (*connect.Response[v1.LinkResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("docsearch.group.v1.GroupService.Link is not implemented"))
 }

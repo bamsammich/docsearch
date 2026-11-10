@@ -57,11 +57,14 @@ message Event {
   google.protobuf.Timestamp at = 1;
   string actor = 2;
   // Action is 'create', 'rename', 'invite', 'accept', 'decline',
-  // 'withdraw', 'role' or 'remove'.
+  // 'withdraw', 'role', 'remove', 'force', 'link', 'unlink',
+  // 'provider_join' or 'provider_leave'. Actor is empty for a change the
+  // provider group made.
   string action = 3;
   string subject = 4;
   string role = 5;
-  // Detail is a rename's old name, and empty otherwise.
+  // Detail is a rename's old name, the provider group of a link, unlink,
+  // provider_join or provider_leave, and empty otherwise.
   string detail = 6;
 }
 
@@ -166,6 +169,28 @@ message EventsResponse {
   repeated Event events = 1;
 }
 
+message ProviderLinkRequest {
+  string group = 1;
+}
+
+message ProviderLinkResponse {
+  // ProviderGroup is the provider group the group follows, and empty for
+  // none.
+  string provider_group = 1;
+  // CanLink is whether the caller may change the link: an administrator,
+  // on a deployment that reads its provider's groups.
+  bool can_link = 2;
+}
+
+message LinkRequest {
+  string group = 1;
+  // ProviderGroup is the group name the provider puts in its tokens.
+  // Empty stops the group following one.
+  string provider_group = 2;
+}
+
+message LinkResponse {}
+
 // GroupService creates groups and runs them. The database decides every
 // rule: that a group keeps a maintainer, and that a group the caller cannot
 // act on answers as one that does not exist.
@@ -210,4 +235,14 @@ service GroupService {
   // Events is the record of changes to a group, oldest first. Maintainers
   // only.
   rpc Events(EventsRequest) returns (EventsResponse) {}
+
+  // ProviderLink is the provider group a group follows. Anyone but an
+  // administrator is refused.
+  rpc ProviderLink(ProviderLinkRequest) returns (ProviderLinkResponse) {}
+
+  // Link makes a group follow a provider group: whoever's token carries
+  // the name is a member, and leaves when it no longer does. Changing or
+  // removing the link takes out the members it gave. Administrators only,
+  // and only on a deployment that reads its provider's groups.
+  rpc Link(LinkRequest) returns (LinkResponse) {}
 }

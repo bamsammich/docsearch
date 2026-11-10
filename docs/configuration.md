@@ -156,6 +156,10 @@ audience names docsearch.
 | claim usernames come from | `--oidc-username-claim` | `DOCSEARCH_OIDC_USERNAME_CLAIM` | `auth.oidc.username_claim` |
 | claim every token must carry | `--oidc-required-claim-name` | `DOCSEARCH_OIDC_REQUIRED_CLAIM_NAME` | `auth.oidc.required_claim.name` |
 | value that claim must hold | `--oidc-required-claim-value` | `DOCSEARCH_OIDC_REQUIRED_CLAIM_VALUE` | `auth.oidc.required_claim.value` |
+| claim listing provider groups | `--oidc-groups-claim` | `DOCSEARCH_OIDC_GROUPS_CLAIM` | `auth.oidc.groups_claim` |
+| create a group for each provider group | `--oidc-group-auto-create` | `DOCSEARCH_OIDC_GROUP_AUTO_CREATE` | `auth.oidc.group_auto_create` |
+| provider groups that get one | `--oidc-group-filter` | `DOCSEARCH_OIDC_GROUP_FILTER` | `auth.oidc.group_filter` |
+| provider group of administrators | `--oidc-admin-group` | `DOCSEARCH_OIDC_ADMIN_GROUP` | `auth.oidc.admin_group` |
 
 Scope lists are comma-separated. A signed JWT is checked against the keys the
 issuer publishes. An opaque token is sent back to the issuer for
@@ -177,6 +181,31 @@ people choose their own `preferred_username`, so name the claim your
 provider controls with `--oidc-username-claim` where you can: only that
 claim is then read. An account that has never signed in has no username
 yet. A name another account already holds stays with that account.
+
+**Provider groups** reach docsearch once `--oidc-groups-claim` names the
+claim that lists them, such as `groups`. A claim may be a list of names, one
+name, or an object keyed by name. docsearch receives access tokens alone, so
+when the access token leaves the claim out, it asks the provider's userinfo
+endpoint, once for each new token. A token whose groups cannot be read is
+refused with 502.
+
+An administrator links a docsearch group to a provider group with `docsearch
+group link <group> <provider-group>`, or on the group's page. Whoever's token
+carries the name is a member, and leaves with their first token that does
+not. Members invited by hand stay. `--oidc-group-auto-create` creates a
+linked group for each provider group a token carries, limited to the names
+the regular expression in `--oidc-group-filter` matches. It is off by
+default, so fifty provider groups do not become fifty groups.
+
+**Administrators from a provider group:** with `--oidc-admin-group` set,
+each new token grants or removes the administrator role for its account, as
+Grafana, Gitea and Miniflux do. A promotion made in docsearch lasts until
+that account next signs in, and the People page shows the role with no
+toggle. The provider may take the role from the last administrator. If a
+wrong group name leaves nobody able to administer, set the right group in
+the environment or `docsearch.yaml`, which outrank a value stored from the
+Sign-in page, and restart. Without a groups claim the admin group does
+nothing, and the server logs a warning at startup.
 
 **Switching an existing install** keeps its library. Name your own subject
 with `--oidc-default-owner`, and your first sign-in takes the library the

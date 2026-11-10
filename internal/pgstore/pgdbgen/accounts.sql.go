@@ -108,3 +108,19 @@ func (q *Queries) SetUsername(ctx context.Context, arg SetUsernameParams) (bool,
 	err := row.Scan(&named)
 	return named, err
 }
+
+const syncProviderAdmin = `-- name: SyncProviderAdmin :one
+SELECT sync_provider_admin($1::text, $2::boolean)::boolean AS changed
+`
+
+type SyncProviderAdminParams struct {
+	UserID string
+	Make   bool
+}
+
+func (q *Queries) SyncProviderAdmin(ctx context.Context, arg SyncProviderAdminParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, syncProviderAdmin, arg.UserID, arg.Make)
+	var changed bool
+	err := row.Scan(&changed)
+	return changed, err
+}

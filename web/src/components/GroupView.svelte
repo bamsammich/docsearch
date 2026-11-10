@@ -34,6 +34,14 @@
   let deleting = $state(false);
   let busy = $state(false);
 
+  /** The provider group this group follows, read only by administrators. */
+  let providerGroup = $state("");
+  /** Whether this administrator may change the link on this deployment. */
+  let canLink = $state(false);
+  let linkDraft = $state("");
+  let linkError = $state("");
+  let unlinking = $state(false);
+
   const slug = $derived(router.docId);
   const group = $derived(groups.byId(slug));
   const invitation = $derived(groups.invitations.find((i) => i.group === slug));
@@ -53,8 +61,14 @@
       const logged = maintains
         ? await service.events({ group: of }).catch(() => ({ events: [] as Event[] }))
         : { events: [] as Event[] };
+      const link = admin.isAdmin
+        ? await service.providerLink({ group: of }).catch(() => ({ providerGroup: "", canLink: false }))
+        : { providerGroup: "", canLink: false };
       if (of !== router.docId) return;
       outside = false;
+      providerGroup = link.providerGroup;
+      canLink = link.canLink;
+      linkDraft = link.providerGroup;
       members = m.members;
       libraries = l.libraries;
       events = logged.events;
@@ -88,6 +102,8 @@
     leaving = false;
     deleting = false;
     forced = false;
+    unlinking = false;
+    linkError = "";
     void load(of);
   });
 
@@ -117,8 +133,29 @@
       const self = e.actor !== "" && e.actor === e.subject;
       switch (e.action) {
         case "create":
+          if (!e.actor && e.detail) {
+            lines.push({ what: `Created for the provider group ${e.detail}`, when: whenOf(e) });
+            break;
+          }
           lines.push({ what: `${actor} created ${group?.name ?? slug}`, when: whenOf(e) });
           since.set(e.actor, `Created the group ${dayOf(e)}`);
+          break;
+        case "link":
+          lines.push({ what: `${actor} linked it to the provider group ${e.detail}`, when: whenOf(e) });
+          break;
+        case "unlink":
+          lines.push({ what: `${actor} stopped it following the provider group ${e.detail}`, when: whenOf(e) });
+          break;
+        case "provider_join":
+          lines.push({ what: `${subject} joined through the provider group`, when: whenOf(e) });
+          since.set(e.subject, `From the provider group ${dayOf(e)}`);
+          break;
+        case "provider_leave":
+          lines.push({
+            what: e.actor ? `${subject} left when ${actor} changed the link` : `${subject} left the provider group`,
+            when: whenOf(e),
+          });
+          since.delete(e.subject);
           break;
         case "rename":
           lines.push({ what: e.detail ? `${actor} renamed it from ${e.detail}` : `${actor} renamed it`, when: whenOf(e) });
@@ -315,6 +352,30 @@
     }
   }
 
+  async function link(event: SubmitEvent | null, to: string): Promise<void> {
+    event?.preventDefault();
+    linkError = "";
+    const wanted = to.trim();
+    if (event && !wanted) {
+      linkError = "Name the provider group, as your provider puts it in sign-ins.";
+      return;
+    }
+    busy = true;
+    try {
+      await service.link({ group: slug, providerGroup: wanted });
+      toast.show(wanted ? `${group?.name ?? slug} follows ${wanted}.` : `${group?.name ?? slug} follows no provider group.`);
+      unlinking = false;
+      await Promise.all([load(slug), groups.load()]);
+    } catch (err) {
+      if (await lost(err)) return;
+      linkError = err instanceof ConnectError && err.code === Code.AlreadyExists
+        ? `Another group already follows ${wanted}.`
+        : problem(err);
+    } finally {
+      busy = false;
+    }
+  }
+
   async function deleteGroup(): Promise<void> {
     const name = group?.name ?? slug;
     // Where to land is decided by the role held before the group is gone.
@@ -383,6 +444,44 @@
           {/if}
           {#if inviteError}<p class="err" role="alert">{inviteError}</p>{/if}
           <p class="hint">Maintainers also invite and remove people, and share libraries they administer with the group.</p>
+        </form>
+      {/if}
+
+      {#if admin.isAdmin && (canLink || providerGroup)}
+        <form class="invite" onsubmit={(e) => link(e, linkDraft)} novalidate>
+          <label class="lbl" for="glink">Provider group</label>
+          {#if canLink}
+            <div class="invite-row">
+              <input class="input" id="glink" type="text" placeholder="Group name in sign-ins" autocomplete="off"
+                spellcheck="false" bind:value={linkDraft} oninput={() => (linkError = "")}
+                aria-invalid={linkError ? "true" : undefined} />
+              <button class="btn primary" type="submit" disabled={busy || linkDraft.trim() === providerGroup}>
+                {providerGroup ? "Change" : "Link"}
+              </button>
+            </div>
+          {:else}
+            <p class="mono">{providerGroup}</p>
+          {/if}
+          {#if linkError}<p class="err" role="alert">{linkError}</p>{/if}
+          {#if canLink}
+            <p class="hint">Anyone whose sign-in carries it joins, and leaves when it stops. Members invited by hand stay.</p>
+          {:else}
+            <p class="hint">This server reads no provider groups, so the link does nothing until --oidc-groups-claim is set.</p>
+          {/if}
+          {#if canLink && providerGroup}
+            <div class="leave">
+              {#if unlinking}
+                <span><strong>Stop following {providerGroup}?</strong> Members from the provider leave now.</span>
+                <span class="row-btns">
+                  <button class="btn danger-solid small" type="button" onclick={() => link(null, "")} disabled={busy} {@attach focus}>Stop following</button>
+                  <button class="btn quiet small" type="button" onclick={() => (unlinking = false)}>Cancel</button>
+                </span>
+              {:else}
+                <span>Members from the provider leave when the link stops.</span>
+                <button class="btn danger small" type="button" onclick={() => (unlinking = true)} disabled={busy}>Stop following</button>
+              {/if}
+            </div>
+          {/if}
         </form>
       {/if}
 

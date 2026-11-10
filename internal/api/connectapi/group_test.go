@@ -37,7 +37,7 @@ func (s *GroupAPISuite) SetupTest() {
 	s.mayCreate = true
 	groupsFor := func(string) (connectapi.Groups, error) { return s.groups, nil }
 	groupPath, groupHandler := connectapi.NewGroupServer(groupsFor,
-		func(context.Context, string) (bool, error) { return s.mayCreate, nil })
+		func(context.Context, string) (bool, error) { return s.mayCreate, nil }, true)
 	libraryPath, libraryHandler := connectapi.NewLibraryServer(
 		func(string) (connectapi.Libraries, error) { return nil, nil }, groupsFor)
 	mux := http.NewServeMux()
@@ -89,6 +89,7 @@ func (s *GroupAPISuite) TestEachRefusalAnswersWithItsCode() {
 		sharing.ErrJoinByForce:       connect.CodeFailedPrecondition,
 		sharing.ErrGroupName:         connect.CodeInvalidArgument,
 		sharing.ErrGroupRole:         connect.CodeInvalidArgument,
+		sharing.ErrProviderTaken:     connect.CodeAlreadyExists,
 	} {
 		s.SetupTest()
 		s.groups.EXPECT().Remove(mock.Anything, "eng", "ben").Return(refusal)
@@ -96,6 +97,54 @@ func (s *GroupAPISuite) TestEachRefusalAnswersWithItsCode() {
 			connect.NewRequest(&groupv1.RemoveRequest{Group: "eng", Username: "ben"}))
 		s.Equal(want, connect.CodeOf(err), refusal.Error())
 	}
+}
+
+func (s *GroupAPISuite) TestALinkIsPassedOnTrimmed() {
+	s.groups.EXPECT().Link(mock.Anything, "eng", "eng-team").Return(nil)
+	_, err := s.client.Link(s.T().Context(),
+		connect.NewRequest(&groupv1.LinkRequest{Group: "eng", ProviderGroup: " eng-team "}))
+	s.Require().NoError(err)
+}
+
+func (s *GroupAPISuite) TestOnlyAnAdministratorSeesTheLink() {
+	s.groups.EXPECT().ProviderLink(mock.Anything, "eng").
+		Return(sharing.ProviderLink{}, nil).Once()
+	_, err := s.client.ProviderLink(s.T().Context(),
+		connect.NewRequest(&groupv1.ProviderLinkRequest{Group: "eng"}))
+	s.Equal(connect.CodePermissionDenied, connect.CodeOf(err))
+
+	s.groups.EXPECT().ProviderLink(mock.Anything, "eng").
+		Return(sharing.ProviderLink{ProviderGroup: "eng-team", Admin: true}, nil).Once()
+	res, err := s.client.ProviderLink(s.T().Context(),
+		connect.NewRequest(&groupv1.ProviderLinkRequest{Group: "eng"}))
+	s.Require().NoError(err)
+	s.Equal("eng-team", res.Msg.GetProviderGroup())
+	s.True(res.Msg.GetCanLink())
+}
+
+// A deployment that reads no provider groups refuses a link, and tells an
+// administrator they cannot make one.
+func (s *GroupAPISuite) TestALinkNeedsTheGroupsClaim() {
+	path, handler := connectapi.NewGroupServer(
+		func(string) (connectapi.Groups, error) { return s.groups, nil },
+		func(context.Context, string) (bool, error) { return true, nil }, false)
+	mux := http.NewServeMux()
+	mux.Handle(path, owner.Middleware(owner.Builtin, handler))
+	server := httptest.NewServer(mux)
+	s.T().Cleanup(server.Close)
+	client := groupv1connect.NewGroupServiceClient(server.Client(), server.URL)
+
+	_, err := client.Link(s.T().Context(),
+		connect.NewRequest(&groupv1.LinkRequest{Group: "eng", ProviderGroup: "eng"}))
+	s.Equal(connect.CodeFailedPrecondition, connect.CodeOf(err))
+	s.groups.AssertNotCalled(s.T(), "Link", mock.Anything, mock.Anything, mock.Anything)
+
+	s.groups.EXPECT().ProviderLink(mock.Anything, "eng").
+		Return(sharing.ProviderLink{Admin: true}, nil)
+	res, err := client.ProviderLink(s.T().Context(),
+		connect.NewRequest(&groupv1.ProviderLinkRequest{Group: "eng"}))
+	s.Require().NoError(err)
+	s.False(res.Msg.GetCanLink())
 }
 
 func (s *GroupAPISuite) TestALibraryIsGrantedToAGroup() {

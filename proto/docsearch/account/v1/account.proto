@@ -75,6 +75,10 @@ message ListRequest {}
 
 message ListResponse {
   repeated Account accounts = 1;
+  // AdminGroup is the provider group administrators come from, when the
+  // deployment names one. Each sign-in then grants or removes the role, so
+  // a change made here lasts only until that account next signs in.
+  string admin_group = 2;
 }
 
 message AddRequest {

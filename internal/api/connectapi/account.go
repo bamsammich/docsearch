@@ -67,9 +67,12 @@ type AccountServer struct {
 	// auth is the sign-in mode, file is the docsearch.yaml the server read
 	// if any, and settings are how its sign-in is configured. All three are
 	// fixed when the server starts.
-	auth  string
-	file  string
-	shown []Setting
+	auth string
+	file string
+	// adminGroup is the provider group administrators come from, and
+	// empty when docsearch makes them.
+	adminGroup string
+	shown      []Setting
 }
 
 // NewAccountServer returns the path to mount the handler on, and the handler.
@@ -79,10 +82,12 @@ func NewAccountServer(
 	auth string,
 	shown []Setting,
 	file string,
+	adminGroup string,
 	opts ...connect.HandlerOption,
 ) (string, http.Handler) {
 	return accountv1connect.NewAccountServiceHandler(&AccountServer{
 		admins: admins, settings: settings, auth: auth, shown: shown, file: file,
+		adminGroup: adminGroup,
 	}, opts...)
 }
 
@@ -115,7 +120,10 @@ func (s *AccountServer) List(
 	if err != nil {
 		return nil, adminError(err)
 	}
-	out := &accountv1.ListResponse{Accounts: make([]*accountv1.Account, 0, len(accounts))}
+	out := &accountv1.ListResponse{
+		Accounts:   make([]*accountv1.Account, 0, len(accounts)),
+		AdminGroup: s.adminGroup,
+	}
 	for _, a := range accounts {
 		out.Accounts = append(out.Accounts, &accountv1.Account{
 			Username:    a.Username,

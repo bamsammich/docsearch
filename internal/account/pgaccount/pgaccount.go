@@ -8,9 +8,11 @@ package pgaccount
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
+	"github.com/bamsammich/docsearch/internal/account"
 	"github.com/bamsammich/docsearch/internal/pgsession"
 	"github.com/bamsammich/docsearch/internal/pgstore/pgdbgen"
 	"github.com/bamsammich/docsearch/internal/resource"
@@ -91,4 +93,50 @@ func (s *Store) Name(ctx context.Context, userID, username string) (bool, error)
 		return false, fmt.Errorf("record username: %w", err)
 	}
 	return named, nil
+}
+
+// Sync makes the account's provider group memberships, and its
+// administrator role when the provider decides it, match one token, in one
+// transaction that names the account.
+func (s *Store) Sync(ctx context.Context, userID string, sync account.ProviderSync) error {
+	carried, err := names(sync.Carried)
+	if err != nil {
+		return err
+	}
+	create, err := names(sync.Create)
+	if err != nil {
+		return err
+	}
+	err = pgsession.Run(ctx, s.db, s.queries, pgsession.Personal(userID),
+		func(q *pgdbgen.Queries) error {
+			if _, err := q.SyncProviderGroups(ctx, pgdbgen.SyncProviderGroupsParams{
+				UserID: userID, Carried: carried, CreateMissing: create,
+			}); err != nil {
+				return err
+			}
+			if !sync.SetAdmin {
+				return nil
+			}
+			_, err := q.SyncProviderAdmin(ctx, pgdbgen.SyncProviderAdminParams{
+				UserID: userID, Make: sync.Admin,
+			})
+			return err
+		})
+	if err != nil {
+		return fmt.Errorf("sync provider groups: %w", err)
+	}
+	return nil
+}
+
+// names is a list of group names as the JSON array the query reads, with
+// none spelled [] rather than null.
+func names(list []string) (json.RawMessage, error) {
+	if list == nil {
+		list = []string{}
+	}
+	raw, err := json.Marshal(list)
+	if err != nil {
+		return nil, fmt.Errorf("encode group names: %w", err)
+	}
+	return raw, nil
 }

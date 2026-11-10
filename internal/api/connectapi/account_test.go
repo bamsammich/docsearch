@@ -66,6 +66,7 @@ func (s *AccountAPISuite) SetupTest() {
 			},
 		},
 		"/etc/docsearch.yaml",
+		"",
 	)
 	mux := http.NewServeMux()
 	mux.Handle(path, owner.Middleware(owner.Builtin, handler))

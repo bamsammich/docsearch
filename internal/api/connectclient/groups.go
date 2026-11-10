@@ -183,6 +183,25 @@ func (c *Client) LibraryGroups(ctx context.Context, library string) ([]sharing.G
 	return out, nil
 }
 
+// LinkGroup makes a group follow providerGroup, or stops it following one
+// when providerGroup is empty.
+func (c *Client) LinkGroup(ctx context.Context, slug, providerGroup string) error {
+	_, err := c.groups.Link(ctx, connect.NewRequest(
+		&groupv1.LinkRequest{Group: slug, ProviderGroup: providerGroup}))
+	return err
+}
+
+// GroupProviderLink is the provider group a group follows, and whether the
+// caller may change it.
+func (c *Client) GroupProviderLink(ctx context.Context, slug string) (string, bool, error) {
+	resp, err := c.groups.ProviderLink(ctx,
+		connect.NewRequest(&groupv1.ProviderLinkRequest{Group: slug}))
+	if err != nil {
+		return "", false, err
+	}
+	return resp.Msg.GetProviderGroup(), resp.Msg.GetCanLink(), nil
+}
+
 func groupOf(g *groupv1.Group) sharing.Group {
 	return sharing.Group{
 		Slug: g.GetGroup(), Name: g.GetName(), Role: g.GetRole(), Members: g.GetMembers(),

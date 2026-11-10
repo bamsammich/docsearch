@@ -23,15 +23,19 @@ var configPath string
 
 // Flags and keys that share a spelling.
 const (
-	flagAddr       = "addr"
-	flagDSN        = "dsn"
-	flagPublicURL  = "public-url"
-	flagOIDCIssuer = "oidc-issuer"
-	flagClaimName  = "oidc-required-claim-name"
-	flagClaimValue = "oidc-required-claim-value"
-	flagSignUp     = "oidc-sign-up"
-	flagUsername   = "oidc-username-claim"
-	flagCreators   = "group-creators"
+	flagAddr        = "addr"
+	flagDSN         = "dsn"
+	flagPublicURL   = "public-url"
+	flagOIDCIssuer  = "oidc-issuer"
+	flagClaimName   = "oidc-required-claim-name"
+	flagClaimValue  = "oidc-required-claim-value"
+	flagSignUp      = "oidc-sign-up"
+	flagUsername    = "oidc-username-claim"
+	flagCreators    = "group-creators"
+	flagGroupsClaim = "oidc-groups-claim"
+	flagAutoCreate  = "oidc-group-auto-create"
+	flagGroupFilter = "oidc-group-filter"
+	flagAdminGroup  = "oidc-admin-group"
 )
 
 // fileKeys are where each setting lives in docsearch.yaml. A flag missing
@@ -61,21 +65,40 @@ var fileKeys = map[string]string{
 	flagClaimValue:          "auth.oidc.required_claim.value",
 	flagSignUp:              "auth.oidc.sign_up",
 	flagUsername:            "auth.oidc.username_claim",
+	flagGroupsClaim:         "auth.oidc.groups_claim",
+	flagAutoCreate:          "auth.oidc.group_auto_create",
+	flagGroupFilter:         "auth.oidc.group_filter",
+	flagAdminGroup:          "auth.oidc.admin_group",
 }
 
 // editable are the settings an administrator changes from the library UI:
 // how people sign in, short of the sign-in mode itself, whose wrong value
 // would lock everyone out.
 var editable = map[string]settings.Editable{
-	flagPublicURL:  {Key: fileKeys[flagPublicURL], URL: true},
-	flagOIDCIssuer: {Key: fileKeys[flagOIDCIssuer], URL: true},
-	flagClaimName:  {Key: fileKeys[flagClaimName]},
-	flagClaimValue: {Key: fileKeys[flagClaimValue]},
-	flagSignUp:     {Key: fileKeys[flagSignUp], Boolean: true},
+	flagPublicURL:   {Key: fileKeys[flagPublicURL], URL: true},
+	flagOIDCIssuer:  {Key: fileKeys[flagOIDCIssuer], URL: true},
+	flagClaimName:   {Key: fileKeys[flagClaimName]},
+	flagClaimValue:  {Key: fileKeys[flagClaimValue]},
+	flagSignUp:      {Key: fileKeys[flagSignUp], Boolean: true},
+	flagGroupsClaim: {Key: fileKeys[flagGroupsClaim]},
+	flagAdminGroup:  {Key: fileKeys[flagAdminGroup]},
 	flagCreators: {
 		Key:     fileKeys[flagCreators],
 		Choices: []string{config.GroupsByEveryone, config.GroupsByAdministrators},
 	},
+}
+
+// storedSetters put a value the database keeps into the configuration, for
+// each editable setting.
+var storedSetters = map[string]func(cfg *config.Config, value string){
+	flagPublicURL:   func(cfg *config.Config, value string) { cfg.PublicURL = value },
+	flagOIDCIssuer:  func(cfg *config.Config, value string) { cfg.OIDC.Issuer = value },
+	flagClaimName:   func(cfg *config.Config, value string) { cfg.OIDC.RequiredClaimName = value },
+	flagClaimValue:  func(cfg *config.Config, value string) { cfg.OIDC.RequiredClaimValue = value },
+	flagSignUp:      func(cfg *config.Config, value string) { cfg.OIDC.SignUp = value == "true" },
+	flagCreators:    func(cfg *config.Config, value string) { cfg.GroupCreators = value },
+	flagGroupsClaim: func(cfg *config.Config, value string) { cfg.OIDC.GroupsClaim = value },
+	flagAdminGroup:  func(cfg *config.Config, value string) { cfg.OIDC.AdminGroup = value },
 }
 
 // applyStored takes what the database keeps for every editable setting
@@ -88,20 +111,7 @@ func applyStored(cfg *config.Config, stored map[string]string) {
 		if !kept || origin.Kind != config.FromDefault {
 			continue
 		}
-		switch flag {
-		case flagPublicURL:
-			cfg.PublicURL = value
-		case flagOIDCIssuer:
-			cfg.OIDC.Issuer = value
-		case flagClaimName:
-			cfg.OIDC.RequiredClaimName = value
-		case flagClaimValue:
-			cfg.OIDC.RequiredClaimValue = value
-		case flagSignUp:
-			cfg.OIDC.SignUp = value == "true"
-		case flagCreators:
-			cfg.GroupCreators = value
-		}
+		storedSetters[flag](cfg, value)
 		cfg.Origins[flag] = config.Origin{Kind: config.FromDatabase, Where: "database", Key: e.Key}
 	}
 }

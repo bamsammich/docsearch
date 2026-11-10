@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -33,6 +34,8 @@ type Groups interface {
 	GrantLibrary(ctx context.Context, library, slug, role string) error
 	RevokeLibrary(ctx context.Context, library, slug string) error
 	OnLibrary(ctx context.Context, library string) ([]sharing.GroupGrant, error)
+	Link(ctx context.Context, slug, providerGroup string) error
+	ProviderLink(ctx context.Context, slug string) (sharing.ProviderLink, error)
 }
 
 // GroupsFor builds the group manager of the user a request acts for.
@@ -42,23 +45,36 @@ type GroupsFor func(user string) (Groups, error)
 // which is an administrator's setting rather than a database rule.
 type MayCreate func(ctx context.Context, user string) (bool, error)
 
-// ErrMayNotCreate is a user the deployment does not let create groups.
-var ErrMayNotCreate = errors.New("only docsearch administrators create groups here")
+var (
+	// ErrMayNotCreate is a user the deployment does not let create groups.
+	ErrMayNotCreate = errors.New("only docsearch administrators create groups here")
+	// ErrNotAdministrator is a provider link asked for by someone who is
+	// not an administrator.
+	ErrNotAdministrator = errors.New("only a docsearch administrator sees a group's provider link")
+	// ErrNotLinking is a link asked of a deployment that reads no groups
+	// from its provider.
+	ErrNotLinking = errors.New("this deployment reads no groups from its provider: " +
+		"set --oidc-groups-claim to link groups")
+)
 
 // GroupServer implements the generated group handler.
 type GroupServer struct {
 	groups    GroupsFor
 	mayCreate MayCreate
+	linking   bool
 }
 
 // NewGroupServer returns the path to mount the handler on, and the handler.
+// linking is whether the deployment reads its provider's groups, which a
+// link needs.
 func NewGroupServer(
 	groups GroupsFor,
 	mayCreate MayCreate,
+	linking bool,
 	opts ...connect.HandlerOption,
 ) (string, http.Handler) {
 	return groupv1connect.NewGroupServiceHandler(
-		&GroupServer{groups: groups, mayCreate: mayCreate}, opts...)
+		&GroupServer{groups: groups, mayCreate: mayCreate, linking: linking}, opts...)
 }
 
 // List is every group, and whether the caller may create one.
@@ -301,6 +317,48 @@ func (s *GroupServer) Events(
 		})
 	}
 	return connect.NewResponse(out), nil
+}
+
+// ProviderLink is the provider group a group follows, for an
+// administrator.
+func (s *GroupServer) ProviderLink(
+	ctx context.Context,
+	req *connect.Request[groupv1.ProviderLinkRequest],
+) (*connect.Response[groupv1.ProviderLinkResponse], error) {
+	_, groups, err := s.forOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	link, err := groups.ProviderLink(ctx, req.Msg.GetGroup())
+	if err != nil {
+		return nil, sharingError(err)
+	}
+	if !link.Admin {
+		return nil, connect.NewError(connect.CodePermissionDenied, ErrNotAdministrator)
+	}
+	return connect.NewResponse(&groupv1.ProviderLinkResponse{
+		ProviderGroup: link.ProviderGroup,
+		CanLink:       s.linking && link.Admin,
+	}), nil
+}
+
+// Link makes a group follow a provider group, or stops it following one.
+func (s *GroupServer) Link(
+	ctx context.Context,
+	req *connect.Request[groupv1.LinkRequest],
+) (*connect.Response[groupv1.LinkResponse], error) {
+	if !s.linking {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, ErrNotLinking)
+	}
+	_, groups, err := s.forOwner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	err = groups.Link(ctx, req.Msg.GetGroup(), strings.TrimSpace(req.Msg.GetProviderGroup()))
+	if err != nil {
+		return nil, sharingError(err)
+	}
+	return connect.NewResponse(&groupv1.LinkResponse{}), nil
 }
 
 //nolint:ireturn // a factory for a port returns that port; a concrete type here would defeat it.
