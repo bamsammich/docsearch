@@ -1,0 +1,110 @@
+# docsearch from published images, with no checkout and no build.
+#
+#   curl -fsSLO https://raw.githubusercontent.com/bamsammich/docsearch/main/compose.yaml
+#   echo "DOCSEARCH_TOKEN=$(openssl rand -hex 32)" > .env
+#   docker compose up -d
+#
+# Then open http://127.0.0.1:8765 and sign in with the token from .env.
+# To update: docker compose pull && docker compose up -d
+#
+# To build from a checkout instead, use deploy/docker/compose.yaml through
+# scripts/docsearch-up.
+#
+# Settings, all read from .env beside this file:
+#
+#   DOCSEARCH_TOKEN    required; the bearer token for MCP clients and the UI,
+#                      at least 32 characters
+#   DOCSEARCH_VERSION  image tag, default 2 (the newest 2.x release)
+#   DOCSEARCH_PORT     host port on 127.0.0.1, default 8765
+#   DOCSEARCH_LIBRARY  folder that add_document may read files from, default
+#                      ~/Documents/docsearch-library
+
+services:
+  db:
+    image: timescale/timescaledb-ha:pg17
+    environment:
+      POSTGRES_PASSWORD: docsearch
+    volumes:
+      - pgdata:/home/postgres/pgdata
+    configs:
+      - source: roles
+        target: /docker-entrypoint-initdb.d/00-roles.sql
+    healthcheck:
+      # Named database and role, because the bootstrap database answers ready
+      # before the roles script has run.
+      test: ["CMD-SHELL", "pg_isready -U docsearch_owner -d docsearch"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  # Applies the schema before the server or worker starts. A migration that
+  # fails stops both, rather than serving through a schema the code does not
+  # match.
+  migrate:
+    image: ghcr.io/bamsammich/docsearch-worker:${DOCSEARCH_VERSION:-2}
+    entrypoint: ["docsearch"]
+    command: ["migrate"]
+    environment:
+      DOCSEARCH_DSN: postgres://docsearch_owner:docsearch@db:5432/docsearch?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  server:
+    image: ghcr.io/bamsammich/docsearch-server:${DOCSEARCH_VERSION:-2}
+    # 0.0.0.0 is inside the container. The published port binds host
+    # loopback only, so nothing outside this machine can reach the server.
+    command:
+      - --root=${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}
+      - --addr=0.0.0.0:8765
+    environment:
+      DOCSEARCH_ALLOW_PUBLIC_BIND: "true"
+      DOCSEARCH_PUBLIC_URL: http://127.0.0.1:${DOCSEARCH_PORT:-8765}
+      DOCSEARCH_DSN: postgres://docsearch_app:docsearch@db:5432/docsearch?sslmode=disable
+      DOCSEARCH_TOKEN: ${DOCSEARCH_TOKEN:?set DOCSEARCH_TOKEN in .env, for example with openssl rand -hex 32}
+    ports:
+      - "127.0.0.1:${DOCSEARCH_PORT:-8765}:8765"
+    # The library sits at the same path inside the container as on the host,
+    # because add_document receives a host path from the MCP client.
+    volumes:
+      - ${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}:${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    image: ghcr.io/bamsammich/docsearch-worker:${DOCSEARCH_VERSION:-2}
+    command: ["--root", "${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}"]
+    environment:
+      DOCSEARCH_DSN: postgres://docsearch_app:docsearch@db:5432/docsearch?sslmode=disable
+      # Read only by the docsearch CLI in this image, for
+      # docker compose exec -e DOCSEARCH_TOKEN worker docsearch ...
+      DOCSEARCH_SERVER: http://server:8765
+    volumes:
+      - ${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}:${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # A large PDF can hold one unit of work for minutes, and the worker
+    # finishes or rolls back that unit on SIGTERM.
+    stop_grace_period: 900s
+    restart: unless-stopped
+
+# The same roles and extension as deploy/docker/initdb/00-roles.sql, inline so
+# this file runs on its own. Postgres runs it once, on an empty volume. The
+# passwords never leave the compose network, because db publishes no port.
+configs:
+  roles:
+    content: |
+      CREATE ROLE docsearch_owner LOGIN PASSWORD 'docsearch' NOSUPERUSER NOBYPASSRLS;
+      CREATE ROLE docsearch_app LOGIN PASSWORD 'docsearch' NOSUPERUSER NOBYPASSRLS;
+      CREATE DATABASE docsearch OWNER docsearch_owner;
+      \connect docsearch
+      GRANT USAGE ON SCHEMA public TO docsearch_app;
+      CREATE EXTENSION pg_textsearch;
+
+volumes:
+  pgdata:

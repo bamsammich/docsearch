@@ -122,6 +122,11 @@ macOS, since it brings its own.
 
 ### Docker, on the same machine
 
+Two compose files run the same stack. `compose.yaml` at the repository root
+pulls the release images from GHCR and needs nothing but a `.env` file beside
+it, which is the route the README quickstart takes. The rest of this section
+covers `deploy/docker/compose.yaml`, for running a checkout's own code.
+
 `deploy/docker/compose.yaml` runs the same two processes as containers built
 from the checkout, and replaces the agents above rather than joining them —
 both bind `127.0.0.1:8765` and both write the same database, so run one or the
