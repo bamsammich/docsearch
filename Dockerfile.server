@@ -3,21 +3,26 @@
 
 # The library UI the server embeds. Built first, because go:embed reads the
 # finished files at compile time.
-FROM node:22-alpine AS web
+# The UI is plain static files, so it builds once on the build host's own
+# platform whatever the target is.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY web ./
 RUN npm run build
 
-FROM golang:1.26-alpine AS build
+# Go cross-compiles, so the build stage runs on the build host's platform and
+# targets TARGETARCH. A multi-arch build then needs no emulation.
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 COPY --from=web /src/internal/webui/dist ./internal/webui/dist
-RUN CGO_ENABLED=0 GOOS=linux go build \
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
       -trimpath -ldflags="-s -w" \
       -o /out/docsearch-server ./cmd/docsearch-server
 
