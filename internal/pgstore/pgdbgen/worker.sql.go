@@ -51,7 +51,7 @@ UPDATE ingest_jobs
         ORDER BY next.created_at, next.id
         LIMIT 1
         FOR UPDATE SKIP LOCKED)
-RETURNING id, source_path, title, doc_id, status, phase, progress_cur, progress_tot, attempts, permanent, cancel_req, error, warnings, lease_until, created_at, updated_at, library_id, force, requested_by
+RETURNING id, source_path, title, doc_id, status, phase, progress_cur, progress_tot, attempts, permanent, cancel_req, error, warnings, lease_until, created_at, updated_at, library_id, force, requested_by, copy_from, copy_doc_id, copy_as, move
 `
 
 type ClaimJobParams struct {
@@ -109,6 +109,10 @@ func (q *Queries) ClaimJob(ctx context.Context, arg ClaimJobParams) (IngestJob, 
 		&i.LibraryID,
 		&i.Force,
 		&i.RequestedBy,
+		&i.CopyFrom,
+		&i.CopyDocID,
+		&i.CopyAs,
+		&i.Move,
 	)
 	return i, err
 }

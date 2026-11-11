@@ -16,6 +16,9 @@ import (
 // ErrNotFound reports a document the index does not hold.
 var ErrNotFound = errors.New("no such document")
 
+// statusReady is a document search can see.
+const statusReady = "ready"
+
 // Documents reads stored documents for verification and reporting.
 type Documents struct {
 	db *sql.DB
@@ -78,7 +81,7 @@ func (d *Documents) List(ctx context.Context) ([]document.Document, error) {
 			Title:      row.Title,
 			Format:     row.Format,
 			SourceKind: sourceKind(row.SourceKind),
-			Status:     "ready",
+			Status:     statusReady,
 			Source:     row.SourcePath,
 			IngestedAt: timeOf(row.IngestedAt),
 		}

@@ -48,6 +48,74 @@ func (_m *MockDocumentServiceHandler) EXPECT() *MockDocumentServiceHandler_Expec
 	return &MockDocumentServiceHandler_Expecter{mock: &_m.Mock}
 }
 
+// Copy provides a mock function for the type MockDocumentServiceHandler
+func (_mock *MockDocumentServiceHandler) Copy(context1 context.Context, request *connect.Request[documentv1.CopyRequest]) (*connect.Response[documentv1.CopyResponse], error) {
+	ret := _mock.Called(context1, request)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Copy")
+	}
+
+	var r0 *connect.Response[documentv1.CopyResponse]
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *connect.Request[documentv1.CopyRequest]) (*connect.Response[documentv1.CopyResponse], error)); ok {
+		return returnFunc(context1, request)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *connect.Request[documentv1.CopyRequest]) *connect.Response[documentv1.CopyResponse]); ok {
+		r0 = returnFunc(context1, request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*connect.Response[documentv1.CopyResponse])
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *connect.Request[documentv1.CopyRequest]) error); ok {
+		r1 = returnFunc(context1, request)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockDocumentServiceHandler_Copy_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Copy'
+type MockDocumentServiceHandler_Copy_Call struct {
+	*mock.Call
+}
+
+// Copy is a helper method to define mock.On call
+//   - context1 context.Context
+//   - request *connect.Request[documentv1.CopyRequest]
+func (_e *MockDocumentServiceHandler_Expecter) Copy(context1 any, request any) *MockDocumentServiceHandler_Copy_Call {
+	return &MockDocumentServiceHandler_Copy_Call{Call: _e.mock.On("Copy", context1, request)}
+}
+
+func (_c *MockDocumentServiceHandler_Copy_Call) Run(run func(context1 context.Context, request *connect.Request[documentv1.CopyRequest])) *MockDocumentServiceHandler_Copy_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *connect.Request[documentv1.CopyRequest]
+		if args[1] != nil {
+			arg1 = args[1].(*connect.Request[documentv1.CopyRequest])
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDocumentServiceHandler_Copy_Call) Return(response *connect.Response[documentv1.CopyResponse], err error) *MockDocumentServiceHandler_Copy_Call {
+	_c.Call.Return(response, err)
+	return _c
+}
+
+func (_c *MockDocumentServiceHandler_Copy_Call) RunAndReturn(run func(context1 context.Context, request *connect.Request[documentv1.CopyRequest]) (*connect.Response[documentv1.CopyResponse], error)) *MockDocumentServiceHandler_Copy_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Inspect provides a mock function for the type MockDocumentServiceHandler
 func (_mock *MockDocumentServiceHandler) Inspect(context1 context.Context, request *connect.Request[documentv1.InspectRequest]) (*connect.Response[documentv1.InspectResponse], error) {
 	ret := _mock.Called(context1, request)
@@ -180,6 +248,74 @@ func (_c *MockDocumentServiceHandler_List_Call) Return(response *connect.Respons
 }
 
 func (_c *MockDocumentServiceHandler_List_Call) RunAndReturn(run func(context1 context.Context, request *connect.Request[documentv1.ListRequest]) (*connect.Response[documentv1.ListResponse], error)) *MockDocumentServiceHandler_List_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Move provides a mock function for the type MockDocumentServiceHandler
+func (_mock *MockDocumentServiceHandler) Move(context1 context.Context, request *connect.Request[documentv1.MoveRequest]) (*connect.Response[documentv1.MoveResponse], error) {
+	ret := _mock.Called(context1, request)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Move")
+	}
+
+	var r0 *connect.Response[documentv1.MoveResponse]
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *connect.Request[documentv1.MoveRequest]) (*connect.Response[documentv1.MoveResponse], error)); ok {
+		return returnFunc(context1, request)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *connect.Request[documentv1.MoveRequest]) *connect.Response[documentv1.MoveResponse]); ok {
+		r0 = returnFunc(context1, request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*connect.Response[documentv1.MoveResponse])
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *connect.Request[documentv1.MoveRequest]) error); ok {
+		r1 = returnFunc(context1, request)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockDocumentServiceHandler_Move_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Move'
+type MockDocumentServiceHandler_Move_Call struct {
+	*mock.Call
+}
+
+// Move is a helper method to define mock.On call
+//   - context1 context.Context
+//   - request *connect.Request[documentv1.MoveRequest]
+func (_e *MockDocumentServiceHandler_Expecter) Move(context1 any, request any) *MockDocumentServiceHandler_Move_Call {
+	return &MockDocumentServiceHandler_Move_Call{Call: _e.mock.On("Move", context1, request)}
+}
+
+func (_c *MockDocumentServiceHandler_Move_Call) Run(run func(context1 context.Context, request *connect.Request[documentv1.MoveRequest])) *MockDocumentServiceHandler_Move_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *connect.Request[documentv1.MoveRequest]
+		if args[1] != nil {
+			arg1 = args[1].(*connect.Request[documentv1.MoveRequest])
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDocumentServiceHandler_Move_Call) Return(response *connect.Response[documentv1.MoveResponse], err error) *MockDocumentServiceHandler_Move_Call {
+	_c.Call.Return(response, err)
+	return _c
+}
+
+func (_c *MockDocumentServiceHandler_Move_Call) RunAndReturn(run func(context1 context.Context, request *connect.Request[documentv1.MoveRequest]) (*connect.Response[documentv1.MoveResponse], error)) *MockDocumentServiceHandler_Move_Call {
 	_c.Call.Return(run)
 	return _c
 }

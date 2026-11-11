@@ -70,6 +70,8 @@ func command() *cli.Command {
 			inspectCommand(),
 			refreshCommand(),
 			removeCommand(),
+			copyCommand(),
+			moveCommand(),
 			migrateCommand(),
 			importCommand(),
 			accountCommand(),

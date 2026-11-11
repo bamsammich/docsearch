@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/bamsammich/docsearch/internal/domain"
@@ -256,11 +257,25 @@ type Options struct {
 	JobID *int64
 	// Title overrides the name the document is given.
 	Title string
+	// DocID files a new document under this identifier rather than one
+	// from its title, and fails with Taken when another document holds it.
+	// A copy keeps its identifier this way.
+	DocID string
 	// JobAttempt is the attempt JobID was claimed as.
 	JobAttempt int
 	// Force re-reads bytes the index already holds. Without it, held bytes
 	// are read again only when an older pipeline read them.
 	Force bool
+}
+
+// Taken is a requested identifier another document holds. A copy is refused
+// it when it is queued; this is the document that took it meanwhile.
+type Taken struct {
+	DocID string
+}
+
+func (e Taken) Error() string {
+	return e.DocID + " was taken in this library while the copy waited"
 }
 
 // Service runs ingests against one repository.
@@ -388,7 +403,7 @@ func (s *Service) prepare(
 	}
 
 	title := pystr.Strip(firstNonEmpty(opts.Title, dest.title, extraction.Title, dest.identity))
-	docID, err := s.uniqueDocID(ctx, title, dest.replacing)
+	docID, err := s.uniqueDocID(ctx, title, dest.replacing, opts.DocID)
 	if err != nil {
 		return nil, err
 	}
@@ -484,11 +499,21 @@ func (s *Service) fill(ctx context.Context, p *prepared, writeID string, opts Op
 }
 
 // uniqueDocID is the identifier a document is filed under: the one it already
-// had where it is being replaced, and otherwise its title's slug, numbered
-// past whatever is taken.
-func (s *Service) uniqueDocID(ctx context.Context, title, replacing string) (string, error) {
+// had where it is being replaced, then the one a copy asked to keep, and
+// otherwise its title's slug, numbered past whatever is taken.
+func (s *Service) uniqueDocID(ctx context.Context, title, replacing, want string) (string, error) {
 	if replacing != "" {
 		return replacing, nil
+	}
+	if want != "" {
+		taken, err := s.repo.DocIDsWithPrefix(ctx, want)
+		if err != nil {
+			return "", fmt.Errorf("look up %q: %w", want, err)
+		}
+		if slices.Contains(taken, want) {
+			return "", Taken{DocID: want}
+		}
+		return want, nil
 	}
 	base := Slugify(title)
 	taken, err := s.repo.DocIDsWithPrefix(ctx, base)

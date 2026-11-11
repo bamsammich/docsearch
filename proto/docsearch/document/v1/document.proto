@@ -160,6 +160,39 @@ message RemoveRequest {
 
 message RemoveResponse {}
 
+// CopyRequest names a document and the library its copy goes to.
+message CopyRequest {
+  // DocId is the document to copy, in the form every request takes.
+  string doc_id = 1;
+  // Library is the label of the library the copy goes to.
+  string library = 2;
+  // As is the doc_id the copy takes there. Empty keeps the document's own.
+  string as = 3;
+}
+
+// CopyResponse is the queued job that writes the copy, and where it lands.
+message CopyResponse {
+  int64 job_id = 1;
+  // DocId is the copy's identifier once its job is done, in the form every
+  // response uses.
+  string doc_id = 2;
+}
+
+// MoveRequest names a document and the library it moves to.
+message MoveRequest {
+  string doc_id = 1;
+  string library = 2;
+  // As is the doc_id the document takes there. Empty keeps its own.
+  string as = 3;
+}
+
+// MoveResponse is the queued job that writes the copy, and where it lands.
+// The original goes once that job is done.
+message MoveResponse {
+  int64 job_id = 1;
+  string doc_id = 2;
+}
+
 message RenameRequest {
   string doc_id = 1;
   string title = 2;
@@ -217,6 +250,15 @@ service DocumentService {
 
   // Rename changes what a document is called. Its doc_id stays as it was.
   rpc Rename(RenameRequest) returns (RenameResponse) {}
+
+  // Copy queues a copy of a document into another library, read again
+  // from its original. It needs reader where the document is and editor
+  // where the copy goes.
+  rpc Copy(CopyRequest) returns (CopyResponse) {}
+
+  // Move is Copy followed by removing the document once its copy is ready.
+  // It needs editor in both libraries.
+  rpc Move(MoveRequest) returns (MoveResponse) {}
 
   // Read is a run of a document's chunks in order, as agents receive them.
   rpc Read(ReadRequest) returns (ReadResponse) {}

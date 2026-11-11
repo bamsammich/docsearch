@@ -1814,7 +1814,11 @@ CREATE TABLE public.ingest_jobs (
     updated_at timestamp with time zone NOT NULL,
     library_id text NOT NULL,
     force boolean DEFAULT false NOT NULL,
-    requested_by text
+    requested_by text,
+    copy_from text,
+    copy_doc_id text,
+    copy_as text,
+    move boolean DEFAULT false NOT NULL
 );
 
 ALTER TABLE ONLY public.ingest_jobs FORCE ROW LEVEL SECURITY;

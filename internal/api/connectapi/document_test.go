@@ -47,7 +47,7 @@ func (s *DocumentAPISuite) SetupTest() {
 			s.scopes = append(s.scopes, scope)
 			return s.documents, nil
 		},
-		shelves, errNotFound)
+		shelves, errNotFound, noCopies)
 	mux := http.NewServeMux()
 	mux.Handle(path, owner.Middleware(owner.Builtin, handler))
 	server := httptest.NewServer(mux)
@@ -223,7 +223,7 @@ func (s *DocumentAPISuite) TestAListWithNoOwnerIsRefused() {
 		func(pgsession.Scope) (connectapi.Documents, error) {
 			s.FailNow("the handler asked for a library without a user")
 			return nil, nil
-		}, shelves, errNotFound)
+		}, shelves, errNotFound, noCopies)
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
 	server := httptest.NewServer(mux)
