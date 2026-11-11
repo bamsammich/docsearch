@@ -7,6 +7,7 @@ package pgdbgen
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 )
 
@@ -251,6 +252,26 @@ func (q *Queries) GroupMembers(ctx context.Context, slug string) ([]GroupMembers
 	return items, nil
 }
 
+const groupProviderLink = `-- name: GroupProviderLink :one
+SELECT COALESCE(group_provider_link($1::text), '')::text AS provider_group,
+       COALESCE((SELECT admin FROM users WHERE user_id = current_setting('app.user_id', true)),
+                false)::boolean AS admin
+`
+
+type GroupProviderLinkRow struct {
+	ProviderGroup string
+	Admin         bool
+}
+
+// The provider group a group follows, for an administrator; admin is
+// false for anyone else, and provider_group then empty.
+func (q *Queries) GroupProviderLink(ctx context.Context, slug string) (GroupProviderLinkRow, error) {
+	row := q.db.QueryRowContext(ctx, groupProviderLink, slug)
+	var i GroupProviderLinkRow
+	err := row.Scan(&i.ProviderGroup, &i.Admin)
+	return i, err
+}
+
 const inviteToGroup = `-- name: InviteToGroup :one
 SELECT invite_to_group($1::text, $2::text, $3::text)::text
   AS outcome
@@ -307,6 +328,20 @@ func (q *Queries) LibraryGroups(ctx context.Context, library string) ([]LibraryG
 		return nil, err
 	}
 	return items, nil
+}
+
+const linkGroup = `-- name: LinkGroup :exec
+SELECT link_group($1::text, $2::text)
+`
+
+type LinkGroupParams struct {
+	Slug          string
+	ProviderGroup string
+}
+
+func (q *Queries) LinkGroup(ctx context.Context, arg LinkGroupParams) error {
+	_, err := q.db.ExecContext(ctx, linkGroup, arg.Slug, arg.ProviderGroup)
+	return err
 }
 
 const myGroupInvitations = `-- name: MyGroupInvitations :many
@@ -392,4 +427,26 @@ type RevokeLibraryGroupParams struct {
 func (q *Queries) RevokeLibraryGroup(ctx context.Context, arg RevokeLibraryGroupParams) error {
 	_, err := q.db.ExecContext(ctx, revokeLibraryGroup, arg.Library, arg.Slug)
 	return err
+}
+
+const syncProviderGroups = `-- name: SyncProviderGroups :one
+SELECT sync_provider_groups(
+  $1::text,
+  ARRAY(SELECT jsonb_array_elements_text($2::jsonb)),
+  ARRAY(SELECT jsonb_array_elements_text($3::jsonb)))::integer AS changed
+`
+
+type SyncProviderGroupsParams struct {
+	UserID        string
+	Carried       json.RawMessage
+	CreateMissing json.RawMessage
+}
+
+// The two lists of names arrive as JSON arrays, which database/sql passes
+// as one value.
+func (q *Queries) SyncProviderGroups(ctx context.Context, arg SyncProviderGroupsParams) (int32, error) {
+	row := q.db.QueryRowContext(ctx, syncProviderGroups, arg.UserID, arg.Carried, arg.CreateMissing)
+	var changed int32
+	err := row.Scan(&changed)
+	return changed, err
 }

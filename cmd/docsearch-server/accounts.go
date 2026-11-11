@@ -48,7 +48,17 @@ func newAccountRoute(cfg config.Config, db *sql.DB) (route, error) {
 		cfg.Auth.String(),
 		signInSettings(cfg),
 		cfg.File,
+		providerAdminGroup(cfg),
 	)), nil
+}
+
+// providerAdminGroup is the provider group administrators come from: only
+// in oidc mode, and only once docsearch reads the provider's groups.
+func providerAdminGroup(cfg config.Config) string {
+	if cfg.Auth != owner.OIDC || cfg.OIDC.GroupsClaim == "" {
+		return ""
+	}
+	return cfg.OIDC.AdminGroup
 }
 
 // passwordAccounts are password mode's accounts as an administrator changes
@@ -130,6 +140,15 @@ func signInOnly(cfg config.Config) []connectapi.Setting {
 				strconv.FormatBool(cfg.OIDC.SignUp), flagSignUp, config.EnvOIDCSignUp),
 			configured(cfg, "Usernames come from", usernameSource(cfg.OIDC.UsernameClaim),
 				flagUsername, config.EnvOIDCUsernameClaim),
+			configured(cfg, "Claim listing provider groups", cfg.OIDC.GroupsClaim,
+				flagGroupsClaim, config.EnvOIDCGroupsClaim),
+			configured(cfg, "Administrators come from the provider group", cfg.OIDC.AdminGroup,
+				flagAdminGroup, config.EnvOIDCAdminGroup),
+			configured(cfg, "Create a group for each provider group",
+				strconv.FormatBool(cfg.OIDC.GroupAutoCreate), flagAutoCreate,
+				config.EnvOIDCGroupAutoCreate),
+			configured(cfg, "Provider groups that get a group", cfg.OIDC.GroupFilter,
+				flagGroupFilter, config.EnvOIDCGroupFilter),
 		}
 	case owner.None:
 		method.Value = "No sign-in: local access only"

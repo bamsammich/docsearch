@@ -61,6 +61,7 @@ packages:
   github.com/bamsammich/docsearch/internal/account:
     interfaces:
       Store:
+      Userinfo:
   github.com/bamsammich/docsearch/internal/v1import:
     interfaces:
       Enqueuer:

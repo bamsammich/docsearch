@@ -13,6 +13,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/bamsammich/docsearch/internal/config"
+	"github.com/bamsammich/docsearch/internal/owner"
 )
 
 // SettingsSuite parses the real command against a docsearch.yaml, to hold
@@ -208,4 +209,46 @@ func (s *SettingsSuite) TestTheFileWinsOverTheDatabase() {
 	s.Equal(config.FromFile, cfg.Origins["public-url"].Kind)
 	s.True(cfg.OIDC.SignUp)
 	s.Equal(config.FromDatabase, cfg.Origins["oidc-sign-up"].Kind)
+}
+
+// A wrong admin group stored from the Sign-in page can leave nobody an
+// administrator. The way back is the right group in the environment, which
+// outranks the stored one, and the groups claim stored beside it still
+// applies.
+func (s *SettingsSuite) TestAnAdminGroupInTheEnvironmentOutranksAStoredOne() {
+	s.T().Setenv(config.EnvOIDCAdminGroup, "docsearch-admins")
+
+	cfg, err := s.parse()
+	s.Require().NoError(err)
+	applyStored(&cfg, map[string]string{
+		"auth.oidc.admin_group":  "a-group-nobody-is-in",
+		"auth.oidc.groups_claim": "groups",
+	})
+
+	s.Equal("docsearch-admins", cfg.OIDC.AdminGroup)
+	s.Equal(config.FromEnv, cfg.Origins[flagAdminGroup].Kind)
+	s.Equal("groups", cfg.OIDC.GroupsClaim)
+	s.Equal(config.FromDatabase, cfg.Origins[flagGroupsClaim].Kind)
+	s.Equal("docsearch-admins", providerAdminGroup(config.Config{Auth: owner.OIDC, OIDC: cfg.OIDC}))
+}
+
+// The provider settings live under auth.oidc in docsearch.yaml.
+func (s *SettingsSuite) TestTheFileHoldsTheProviderSettings() {
+	s.write("auth:\n  oidc:\n    groups_claim: groups\n    group_auto_create: true\n" +
+		"    group_filter: ^team-\n    admin_group: docsearch-admins\n")
+
+	cfg, err := s.parse("--config", s.file)
+	s.Require().NoError(err)
+	s.Equal("groups", cfg.OIDC.GroupsClaim)
+	s.True(cfg.OIDC.GroupAutoCreate)
+	s.Equal("^team-", cfg.OIDC.GroupFilter)
+	s.Equal("docsearch-admins", cfg.OIDC.AdminGroup)
+}
+
+// Every setting the Sign-in page edits has a way into the configuration, so
+// a stored value is never dropped, or a missing setter reached.
+func (s *SettingsSuite) TestEveryEditableSettingCanBeStored() {
+	for flag := range editable {
+		s.Contains(storedSetters, flag)
+	}
 }

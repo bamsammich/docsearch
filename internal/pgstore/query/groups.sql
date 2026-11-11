@@ -61,3 +61,21 @@ SELECT revoke_library_group(sqlc.arg(library)::text, sqlc.arg(slug)::text);
 -- name: LibraryGroups :many
 SELECT g.slug::text AS slug, g.name::text AS name, g.role::text AS role, g.members::bigint AS members
   FROM library_groups(sqlc.arg(library)::text) AS g(slug, name, role, members);
+
+-- name: LinkGroup :exec
+SELECT link_group(sqlc.arg(slug)::text, sqlc.arg(provider_group)::text);
+
+-- The provider group a group follows, for an administrator; admin is
+-- false for anyone else, and provider_group then empty.
+-- name: GroupProviderLink :one
+SELECT COALESCE(group_provider_link(sqlc.arg(slug)::text), '')::text AS provider_group,
+       COALESCE((SELECT admin FROM users WHERE user_id = current_setting('app.user_id', true)),
+                false)::boolean AS admin;
+
+-- The two lists of names arrive as JSON arrays, which database/sql passes
+-- as one value.
+-- name: SyncProviderGroups :one
+SELECT sync_provider_groups(
+  sqlc.arg(user_id)::text,
+  ARRAY(SELECT jsonb_array_elements_text(sqlc.arg(carried)::jsonb)),
+  ARRAY(SELECT jsonb_array_elements_text(sqlc.arg(create_missing)::jsonb)))::integer AS changed;

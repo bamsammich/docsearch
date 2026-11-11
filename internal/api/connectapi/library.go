@@ -416,6 +416,7 @@ var sharingCodes = map[error]connect.Code{
 	sharing.ErrGroupTaken:        connect.CodeAlreadyExists,
 	sharing.ErrGroupRole:         connect.CodeInvalidArgument,
 	sharing.ErrGroupName:         connect.CodeInvalidArgument,
+	sharing.ErrProviderTaken:     connect.CodeAlreadyExists,
 	sharing.ErrJoinByForce:       connect.CodeFailedPrecondition,
 	sharing.ErrLastAdmin:         connect.CodeFailedPrecondition,
 	sharing.ErrNameTaken:         connect.CodeAlreadyExists,

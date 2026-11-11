@@ -22,3 +22,6 @@ SELECT user_id FROM users ORDER BY user_id;
 -- account holds stays with that account.
 -- name: SetUsername :one
 SELECT set_username(sqlc.arg(user_id)::text, sqlc.arg(username)::text)::boolean AS named;
+
+-- name: SyncProviderAdmin :one
+SELECT sync_provider_admin(sqlc.arg(user_id)::text, sqlc.arg(make)::boolean)::boolean AS changed;

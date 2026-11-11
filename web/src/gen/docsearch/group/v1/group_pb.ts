@@ -19,7 +19,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file docsearch/group/v1/group.proto.
  */
 export const file_docsearch_group_v1_group: GenFile = /*@__PURE__*/
-  fileDesc("Ch5kb2NzZWFyY2gvZ3JvdXAvdjEvZ3JvdXAucHJvdG8SEmRvY3NlYXJjaC5ncm91cC52MSJDCgVHcm91cBINCgVncm91cBgBIAEoCRIMCgRuYW1lGAIgASgJEgwKBHJvbGUYAyABKAkSDwoHbWVtYmVycxgEIAEoAyJQCgZNZW1iZXISEAoIdXNlcm5hbWUYASABKAkSDAoEcm9sZRgCIAEoCRIVCg1mcm9tX3Byb3ZpZGVyGAMgASgIEg8KB2ludml0ZWQYBCABKAgicwoKSW52aXRhdGlvbhINCgVncm91cBgBIAEoCRIMCgRuYW1lGAIgASgJEgwKBHJvbGUYAyABKAkSEgoKaW52aXRlZF9ieRgEIAEoCRImCgJhdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiNgoHTGlicmFyeRIPCgdsaWJyYXJ5GAEgASgJEgwKBG5hbWUYAiABKAkSDAoEcm9sZRgDIAEoCSJ9CgVFdmVudBImCgJhdBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDQoFYWN0b3IYAiABKAkSDgoGYWN0aW9uGAMgASgJEg8KB3N1YmplY3QYBCABKAkSDAoEcm9sZRgFIAEoCRIOCgZkZXRhaWwYBiABKAkiDQoLTGlzdFJlcXVlc3QiTQoMTGlzdFJlc3BvbnNlEikKBmdyb3VwcxgBIAMoCzIZLmRvY3NlYXJjaC5ncm91cC52MS5Hcm91cBISCgpjYW5fY3JlYXRlGAIgASgIIiwKDUNyZWF0ZVJlcXVlc3QSDQoFZ3JvdXAYASABKAkSDAoEbmFtZRgCIAEoCSI6Cg5DcmVhdGVSZXNwb25zZRIoCgVncm91cBgBIAEoCzIZLmRvY3NlYXJjaC5ncm91cC52MS5Hcm91cCIsCg1SZW5hbWVSZXF1ZXN0Eg0KBWdyb3VwGAEgASgJEgwKBG5hbWUYAiABKAkiEAoOUmVuYW1lUmVzcG9uc2UiHgoNRGVsZXRlUmVxdWVzdBINCgVncm91cBgBIAEoCSIQCg5EZWxldGVSZXNwb25zZSJNCg1JbnZpdGVSZXF1ZXN0Eg0KBWdyb3VwGAEgASgJEhAKCHVzZXJuYW1lGAIgASgJEgwKBHJvbGUYAyABKAkSDQoFZm9yY2UYBCABKAgiIQoOSW52aXRlUmVzcG9uc2USDwoHaW52aXRlZBgBIAEoCCIeCg1BY2NlcHRSZXF1ZXN0Eg0KBWdyb3VwGAEgASgJIh4KDkFjY2VwdFJlc3BvbnNlEgwKBHJvbGUYASABKAkiHwoORGVjbGluZVJlcXVlc3QSDQoFZ3JvdXAYASABKAkiEQoPRGVjbGluZVJlc3BvbnNlIjAKDVJlbW92ZVJlcXVlc3QSDQoFZ3JvdXAYASABKAkSEAoIdXNlcm5hbWUYAiABKAkiEAoOUmVtb3ZlUmVzcG9uc2UiFAoSSW52aXRhdGlvbnNSZXF1ZXN0IkoKE0ludml0YXRpb25zUmVzcG9uc2USMwoLaW52aXRhdGlvbnMYASADKAsyHi5kb2NzZWFyY2guZ3JvdXAudjEuSW52aXRhdGlvbiIfCg5NZW1iZXJzUmVxdWVzdBINCgVncm91cBgBIAEoCSI+Cg9NZW1iZXJzUmVzcG9uc2USKwoHbWVtYmVycxgBIAMoCzIaLmRvY3NlYXJjaC5ncm91cC52MS5NZW1iZXIiIQoQTGlicmFyaWVzUmVxdWVzdBINCgVncm91cBgBIAEoCSJDChFMaWJyYXJpZXNSZXNwb25zZRIuCglsaWJyYXJpZXMYASADKAsyGy5kb2NzZWFyY2guZ3JvdXAudjEuTGlicmFyeSIeCg1FdmVudHNSZXF1ZXN0Eg0KBWdyb3VwGAEgASgJIjsKDkV2ZW50c1Jlc3BvbnNlEikKBmV2ZW50cxgBIAMoCzIZLmRvY3NlYXJjaC5ncm91cC52MS5FdmVudDKKCAoMR3JvdXBTZXJ2aWNlEksKBExpc3QSHy5kb2NzZWFyY2guZ3JvdXAudjEuTGlzdFJlcXVlc3QaIC5kb2NzZWFyY2guZ3JvdXAudjEuTGlzdFJlc3BvbnNlIgASUQoGQ3JlYXRlEiEuZG9jc2VhcmNoLmdyb3VwLnYxLkNyZWF0ZVJlcXVlc3QaIi5kb2NzZWFyY2guZ3JvdXAudjEuQ3JlYXRlUmVzcG9uc2UiABJRCgZSZW5hbWUSIS5kb2NzZWFyY2guZ3JvdXAudjEuUmVuYW1lUmVxdWVzdBoiLmRvY3NlYXJjaC5ncm91cC52MS5SZW5hbWVSZXNwb25zZSIAElEKBkRlbGV0ZRIhLmRvY3NlYXJjaC5ncm91cC52MS5EZWxldGVSZXF1ZXN0GiIuZG9jc2VhcmNoLmdyb3VwLnYxLkRlbGV0ZVJlc3BvbnNlIgASUQoGSW52aXRlEiEuZG9jc2VhcmNoLmdyb3VwLnYxLkludml0ZVJlcXVlc3QaIi5kb2NzZWFyY2guZ3JvdXAudjEuSW52aXRlUmVzcG9uc2UiABJRCgZBY2NlcHQSIS5kb2NzZWFyY2guZ3JvdXAudjEuQWNjZXB0UmVxdWVzdBoiLmRvY3NlYXJjaC5ncm91cC52MS5BY2NlcHRSZXNwb25zZSIAElQKB0RlY2xpbmUSIi5kb2NzZWFyY2guZ3JvdXAudjEuRGVjbGluZVJlcXVlc3QaIy5kb2NzZWFyY2guZ3JvdXAudjEuRGVjbGluZVJlc3BvbnNlIgASUQoGUmVtb3ZlEiEuZG9jc2VhcmNoLmdyb3VwLnYxLlJlbW92ZVJlcXVlc3QaIi5kb2NzZWFyY2guZ3JvdXAudjEuUmVtb3ZlUmVzcG9uc2UiABJgCgtJbnZpdGF0aW9ucxImLmRvY3NlYXJjaC5ncm91cC52MS5JbnZpdGF0aW9uc1JlcXVlc3QaJy5kb2NzZWFyY2guZ3JvdXAudjEuSW52aXRhdGlvbnNSZXNwb25zZSIAElQKB01lbWJlcnMSIi5kb2NzZWFyY2guZ3JvdXAudjEuTWVtYmVyc1JlcXVlc3QaIy5kb2NzZWFyY2guZ3JvdXAudjEuTWVtYmVyc1Jlc3BvbnNlIgASWgoJTGlicmFyaWVzEiQuZG9jc2VhcmNoLmdyb3VwLnYxLkxpYnJhcmllc1JlcXVlc3QaJS5kb2NzZWFyY2guZ3JvdXAudjEuTGlicmFyaWVzUmVzcG9uc2UiABJRCgZFdmVudHMSIS5kb2NzZWFyY2guZ3JvdXAudjEuRXZlbnRzUmVxdWVzdBoiLmRvY3NlYXJjaC5ncm91cC52MS5FdmVudHNSZXNwb25zZSIAYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("Ch5kb2NzZWFyY2gvZ3JvdXAvdjEvZ3JvdXAucHJvdG8SEmRvY3NlYXJjaC5ncm91cC52MSJDCgVHcm91cBINCgVncm91cBgBIAEoCRIMCgRuYW1lGAIgASgJEgwKBHJvbGUYAyABKAkSDwoHbWVtYmVycxgEIAEoAyJQCgZNZW1iZXISEAoIdXNlcm5hbWUYASABKAkSDAoEcm9sZRgCIAEoCRIVCg1mcm9tX3Byb3ZpZGVyGAMgASgIEg8KB2ludml0ZWQYBCABKAgicwoKSW52aXRhdGlvbhINCgVncm91cBgBIAEoCRIMCgRuYW1lGAIgASgJEgwKBHJvbGUYAyABKAkSEgoKaW52aXRlZF9ieRgEIAEoCRImCgJhdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiNgoHTGlicmFyeRIPCgdsaWJyYXJ5GAEgASgJEgwKBG5hbWUYAiABKAkSDAoEcm9sZRgDIAEoCSJ9CgVFdmVudBImCgJhdBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDQoFYWN0b3IYAiABKAkSDgoGYWN0aW9uGAMgASgJEg8KB3N1YmplY3QYBCABKAkSDAoEcm9sZRgFIAEoCRIOCgZkZXRhaWwYBiABKAkiDQoLTGlzdFJlcXVlc3QiTQoMTGlzdFJlc3BvbnNlEikKBmdyb3VwcxgBIAMoCzIZLmRvY3NlYXJjaC5ncm91cC52MS5Hcm91cBISCgpjYW5fY3JlYXRlGAIgASgIIiwKDUNyZWF0ZVJlcXVlc3QSDQoFZ3JvdXAYASABKAkSDAoEbmFtZRgCIAEoCSI6Cg5DcmVhdGVSZXNwb25zZRIoCgVncm91cBgBIAEoCzIZLmRvY3NlYXJjaC5ncm91cC52MS5Hcm91cCIsCg1SZW5hbWVSZXF1ZXN0Eg0KBWdyb3VwGAEgASgJEgwKBG5hbWUYAiABKAkiEAoOUmVuYW1lUmVzcG9uc2UiHgoNRGVsZXRlUmVxdWVzdBINCgVncm91cBgBIAEoCSIQCg5EZWxldGVSZXNwb25zZSJNCg1JbnZpdGVSZXF1ZXN0Eg0KBWdyb3VwGAEgASgJEhAKCHVzZXJuYW1lGAIgASgJEgwKBHJvbGUYAyABKAkSDQoFZm9yY2UYBCABKAgiIQoOSW52aXRlUmVzcG9uc2USDwoHaW52aXRlZBgBIAEoCCIeCg1BY2NlcHRSZXF1ZXN0Eg0KBWdyb3VwGAEgASgJIh4KDkFjY2VwdFJlc3BvbnNlEgwKBHJvbGUYASABKAkiHwoORGVjbGluZVJlcXVlc3QSDQoFZ3JvdXAYASABKAkiEQoPRGVjbGluZVJlc3BvbnNlIjAKDVJlbW92ZVJlcXVlc3QSDQoFZ3JvdXAYASABKAkSEAoIdXNlcm5hbWUYAiABKAkiEAoOUmVtb3ZlUmVzcG9uc2UiFAoSSW52aXRhdGlvbnNSZXF1ZXN0IkoKE0ludml0YXRpb25zUmVzcG9uc2USMwoLaW52aXRhdGlvbnMYASADKAsyHi5kb2NzZWFyY2guZ3JvdXAudjEuSW52aXRhdGlvbiIfCg5NZW1iZXJzUmVxdWVzdBINCgVncm91cBgBIAEoCSI+Cg9NZW1iZXJzUmVzcG9uc2USKwoHbWVtYmVycxgBIAMoCzIaLmRvY3NlYXJjaC5ncm91cC52MS5NZW1iZXIiIQoQTGlicmFyaWVzUmVxdWVzdBINCgVncm91cBgBIAEoCSJDChFMaWJyYXJpZXNSZXNwb25zZRIuCglsaWJyYXJpZXMYASADKAsyGy5kb2NzZWFyY2guZ3JvdXAudjEuTGlicmFyeSIeCg1FdmVudHNSZXF1ZXN0Eg0KBWdyb3VwGAEgASgJIjsKDkV2ZW50c1Jlc3BvbnNlEikKBmV2ZW50cxgBIAMoCzIZLmRvY3NlYXJjaC5ncm91cC52MS5FdmVudCIkChNQcm92aWRlckxpbmtSZXF1ZXN0Eg0KBWdyb3VwGAEgASgJIkAKFFByb3ZpZGVyTGlua1Jlc3BvbnNlEhYKDnByb3ZpZGVyX2dyb3VwGAEgASgJEhAKCGNhbl9saW5rGAIgASgIIjQKC0xpbmtSZXF1ZXN0Eg0KBWdyb3VwGAEgASgJEhYKDnByb3ZpZGVyX2dyb3VwGAIgASgJIg4KDExpbmtSZXNwb25zZTK8CQoMR3JvdXBTZXJ2aWNlEksKBExpc3QSHy5kb2NzZWFyY2guZ3JvdXAudjEuTGlzdFJlcXVlc3QaIC5kb2NzZWFyY2guZ3JvdXAudjEuTGlzdFJlc3BvbnNlIgASUQoGQ3JlYXRlEiEuZG9jc2VhcmNoLmdyb3VwLnYxLkNyZWF0ZVJlcXVlc3QaIi5kb2NzZWFyY2guZ3JvdXAudjEuQ3JlYXRlUmVzcG9uc2UiABJRCgZSZW5hbWUSIS5kb2NzZWFyY2guZ3JvdXAudjEuUmVuYW1lUmVxdWVzdBoiLmRvY3NlYXJjaC5ncm91cC52MS5SZW5hbWVSZXNwb25zZSIAElEKBkRlbGV0ZRIhLmRvY3NlYXJjaC5ncm91cC52MS5EZWxldGVSZXF1ZXN0GiIuZG9jc2VhcmNoLmdyb3VwLnYxLkRlbGV0ZVJlc3BvbnNlIgASUQoGSW52aXRlEiEuZG9jc2VhcmNoLmdyb3VwLnYxLkludml0ZVJlcXVlc3QaIi5kb2NzZWFyY2guZ3JvdXAudjEuSW52aXRlUmVzcG9uc2UiABJRCgZBY2NlcHQSIS5kb2NzZWFyY2guZ3JvdXAudjEuQWNjZXB0UmVxdWVzdBoiLmRvY3NlYXJjaC5ncm91cC52MS5BY2NlcHRSZXNwb25zZSIAElQKB0RlY2xpbmUSIi5kb2NzZWFyY2guZ3JvdXAudjEuRGVjbGluZVJlcXVlc3QaIy5kb2NzZWFyY2guZ3JvdXAudjEuRGVjbGluZVJlc3BvbnNlIgASUQoGUmVtb3ZlEiEuZG9jc2VhcmNoLmdyb3VwLnYxLlJlbW92ZVJlcXVlc3QaIi5kb2NzZWFyY2guZ3JvdXAudjEuUmVtb3ZlUmVzcG9uc2UiABJgCgtJbnZpdGF0aW9ucxImLmRvY3NlYXJjaC5ncm91cC52MS5JbnZpdGF0aW9uc1JlcXVlc3QaJy5kb2NzZWFyY2guZ3JvdXAudjEuSW52aXRhdGlvbnNSZXNwb25zZSIAElQKB01lbWJlcnMSIi5kb2NzZWFyY2guZ3JvdXAudjEuTWVtYmVyc1JlcXVlc3QaIy5kb2NzZWFyY2guZ3JvdXAudjEuTWVtYmVyc1Jlc3BvbnNlIgASWgoJTGlicmFyaWVzEiQuZG9jc2VhcmNoLmdyb3VwLnYxLkxpYnJhcmllc1JlcXVlc3QaJS5kb2NzZWFyY2guZ3JvdXAudjEuTGlicmFyaWVzUmVzcG9uc2UiABJRCgZFdmVudHMSIS5kb2NzZWFyY2guZ3JvdXAudjEuRXZlbnRzUmVxdWVzdBoiLmRvY3NlYXJjaC5ncm91cC52MS5FdmVudHNSZXNwb25zZSIAEmMKDFByb3ZpZGVyTGluaxInLmRvY3NlYXJjaC5ncm91cC52MS5Qcm92aWRlckxpbmtSZXF1ZXN0GiguZG9jc2VhcmNoLmdyb3VwLnYxLlByb3ZpZGVyTGlua1Jlc3BvbnNlIgASSwoETGluaxIfLmRvY3NlYXJjaC5ncm91cC52MS5MaW5rUmVxdWVzdBogLmRvY3NlYXJjaC5ncm91cC52MS5MaW5rUmVzcG9uc2UiAGIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * Group is one group, as the caller sees it.
@@ -192,7 +192,9 @@ export type Event = Message<"docsearch.group.v1.Event"> & {
 
   /**
    * Action is 'create', 'rename', 'invite', 'accept', 'decline',
-   * 'withdraw', 'role' or 'remove'.
+   * 'withdraw', 'role', 'remove', 'force', 'link', 'unlink',
+   * 'provider_join' or 'provider_leave'. Actor is empty for a change the
+   * provider group made.
    *
    * @generated from field: string action = 3;
    */
@@ -209,7 +211,8 @@ export type Event = Message<"docsearch.group.v1.Event"> & {
   role: string;
 
   /**
-   * Detail is a rename's old name, and empty otherwise.
+   * Detail is a rename's old name, the provider group of a link, unlink,
+   * provider_join or provider_leave, and empty otherwise.
    *
    * @generated from field: string detail = 6;
    */
@@ -659,6 +662,89 @@ export const EventsResponseSchema: GenMessage<EventsResponse> = /*@__PURE__*/
   messageDesc(file_docsearch_group_v1_group, 28);
 
 /**
+ * @generated from message docsearch.group.v1.ProviderLinkRequest
+ */
+export type ProviderLinkRequest = Message<"docsearch.group.v1.ProviderLinkRequest"> & {
+  /**
+   * @generated from field: string group = 1;
+   */
+  group: string;
+};
+
+/**
+ * Describes the message docsearch.group.v1.ProviderLinkRequest.
+ * Use `create(ProviderLinkRequestSchema)` to create a new message.
+ */
+export const ProviderLinkRequestSchema: GenMessage<ProviderLinkRequest> = /*@__PURE__*/
+  messageDesc(file_docsearch_group_v1_group, 29);
+
+/**
+ * @generated from message docsearch.group.v1.ProviderLinkResponse
+ */
+export type ProviderLinkResponse = Message<"docsearch.group.v1.ProviderLinkResponse"> & {
+  /**
+   * ProviderGroup is the provider group the group follows, and empty for
+   * none.
+   *
+   * @generated from field: string provider_group = 1;
+   */
+  providerGroup: string;
+
+  /**
+   * CanLink is whether the caller may change the link: an administrator,
+   * on a deployment that reads its provider's groups.
+   *
+   * @generated from field: bool can_link = 2;
+   */
+  canLink: boolean;
+};
+
+/**
+ * Describes the message docsearch.group.v1.ProviderLinkResponse.
+ * Use `create(ProviderLinkResponseSchema)` to create a new message.
+ */
+export const ProviderLinkResponseSchema: GenMessage<ProviderLinkResponse> = /*@__PURE__*/
+  messageDesc(file_docsearch_group_v1_group, 30);
+
+/**
+ * @generated from message docsearch.group.v1.LinkRequest
+ */
+export type LinkRequest = Message<"docsearch.group.v1.LinkRequest"> & {
+  /**
+   * @generated from field: string group = 1;
+   */
+  group: string;
+
+  /**
+   * ProviderGroup is the group name the provider puts in its tokens.
+   * Empty stops the group following one.
+   *
+   * @generated from field: string provider_group = 2;
+   */
+  providerGroup: string;
+};
+
+/**
+ * Describes the message docsearch.group.v1.LinkRequest.
+ * Use `create(LinkRequestSchema)` to create a new message.
+ */
+export const LinkRequestSchema: GenMessage<LinkRequest> = /*@__PURE__*/
+  messageDesc(file_docsearch_group_v1_group, 31);
+
+/**
+ * @generated from message docsearch.group.v1.LinkResponse
+ */
+export type LinkResponse = Message<"docsearch.group.v1.LinkResponse"> & {
+};
+
+/**
+ * Describes the message docsearch.group.v1.LinkResponse.
+ * Use `create(LinkResponseSchema)` to create a new message.
+ */
+export const LinkResponseSchema: GenMessage<LinkResponse> = /*@__PURE__*/
+  messageDesc(file_docsearch_group_v1_group, 32);
+
+/**
  * GroupService creates groups and runs them. The database decides every
  * rule: that a group keeps a maintainer, and that a group the caller cannot
  * act on answers as one that does not exist.
@@ -790,6 +876,30 @@ export const GroupService: GenService<{
     methodKind: "unary";
     input: typeof EventsRequestSchema;
     output: typeof EventsResponseSchema;
+  },
+  /**
+   * ProviderLink is the provider group a group follows. Anyone but an
+   * administrator is refused.
+   *
+   * @generated from rpc docsearch.group.v1.GroupService.ProviderLink
+   */
+  providerLink: {
+    methodKind: "unary";
+    input: typeof ProviderLinkRequestSchema;
+    output: typeof ProviderLinkResponseSchema;
+  },
+  /**
+   * Link makes a group follow a provider group: whoever's token carries
+   * the name is a member, and leaves when it no longer does. Changing or
+   * removing the link takes out the members it gave. Administrators only,
+   * and only on a deployment that reads its provider's groups.
+   *
+   * @generated from rpc docsearch.group.v1.GroupService.Link
+   */
+  link: {
+    methodKind: "unary";
+    input: typeof LinkRequestSchema;
+    output: typeof LinkResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_docsearch_group_v1_group, 0);

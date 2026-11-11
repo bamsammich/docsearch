@@ -23,6 +23,8 @@
   let resetting = $state("");
   let rowError = $state<Record<string, string>>({});
   let busy = $state(false);
+  /** The provider group administrators come from, when the server names one. */
+  let adminGroup = $state("");
 
   const wanted = $derived(find.trim().toLowerCase());
   const shown = $derived(people.filter((p) => !wanted || p.username.includes(wanted)));
@@ -37,6 +39,7 @@
     try {
       const out = await accounts.list({});
       people = out.accounts;
+      adminGroup = out.adminGroup;
       loadError = "";
     } catch (err) {
       loadError = problem(err);
@@ -182,6 +185,7 @@
         {@const self = p.username === admin.username}
         {@const since = dateOf(p.createdAt)}
         {@const until = dateOf(p.lockedUntil)}
+        {@const canPromote = !adminGroup && !(p.admin && admins === 1)}
         <li class="mrow prow">
           <span class="mavatar" aria-hidden="true">{initialOf(p.username || "?")}</span>
           <span class="mwho">
@@ -189,7 +193,7 @@
             {#if until}
               <span class="msince">Locked until {clock.format(until)}</span>
             {:else if since}
-              <span class="msince">{admin.passwords ? "Added" : "First signed in"} on {day.format(since)}</span>
+              <span class="msince">{admin.passwords ? "Added" : "First signed in"} on {day.format(since)}{#if p.admin && adminGroup}{` · administrator through ${adminGroup}`}{/if}</span>
             {/if}
             {#if rowError[p.username]}<span class="err" role="alert">{rowError[p.username]}</span>{/if}
           </span>
@@ -201,7 +205,7 @@
             {:else if resetting === p.username}
               <button class="btn primary small" onclick={() => reset(p)} disabled={busy}>Reset {p.username}'s password</button>
               <button class="btn quiet small" onclick={() => (resetting = "")}>Cancel</button>
-            {:else if p.username && (p.password || !(p.admin && admins === 1))}
+            {:else if p.username && (p.password || canPromote)}
               <button class="btn quiet small icon" id={`acct-btn-${p.username}`} popovertarget={`acct-${p.username}`}
                 aria-label={`Actions for ${p.username}`} disabled={busy}>
                 <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
@@ -210,7 +214,7 @@
                 onbeforetoggle={(e) => placing(e, document.getElementById(`acct-btn-${p.username}`))}>
                 {#if p.password && locked(p)}<button role="menuitem" onclick={() => unlock(p)}>Unlock</button>{/if}
                 {#if p.password}<button role="menuitem" onclick={() => { document.getElementById(`acct-${p.username}`)?.hidePopover(); removing = ""; resetting = p.username; }}>Reset password</button>{/if}
-                {#if !(p.admin && admins === 1)}
+                {#if canPromote}
                   <button role="menuitem" onclick={() => promote(p)}>{p.admin ? "Remove administrator" : "Make administrator"}</button>
                 {/if}
                 {#if p.password && !self}
@@ -228,6 +232,9 @@
       <p class="hint">Resetting a password or removing someone signs them out everywhere at once. A removed account's own library stays, and a shared library only they administer passes to you.</p>
     {:else}
       <p class="hint">Someone appears here the first time they sign in. To remove someone, remove them at your provider.</p>
+    {/if}
+    {#if adminGroup}
+      <p class="hint">Administrators are the members of the provider group <span class="mono">{adminGroup}</span>, set at each sign-in. Change who administers at your provider.</p>
     {/if}
   </div>
 </div>

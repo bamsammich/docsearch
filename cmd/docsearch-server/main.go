@@ -177,6 +177,19 @@ func oidcFlags() []cli.Flag {
 		text(flagUsername, config.EnvOIDCUsernameClaim,
 			"the `CLAIM` usernames come from; a verified email, else preferred_username, "+
 				"when unset"),
+		text(flagGroupsClaim, config.EnvOIDCGroupsClaim,
+			"the `CLAIM` listing a person's provider groups; groups follow provider groups "+
+				"only when it is set"),
+		&cli.BoolFlag{
+			Name:    flagAutoCreate,
+			Usage:   "create a group for each provider group a token carries that --oidc-group-filter matches",
+			Sources: from(flagAutoCreate, config.EnvOIDCGroupAutoCreate),
+		},
+		text(flagGroupFilter, config.EnvOIDCGroupFilter,
+			"a regular `EXPRESSION` naming the provider groups --oidc-group-auto-create makes "+
+				"a group for; every one when unset"),
+		text(flagAdminGroup, config.EnvOIDCAdminGroup,
+			"the provider `GROUP` whose members administer docsearch, decided at each sign-in"),
 	}
 }
 
@@ -247,6 +260,10 @@ func configFrom(cmd *cli.Command, args []string) (config.Config, error) {
 			RequiredScopes:     commaList(cmd.String("oidc-required-scopes")),
 			SignUp:             cmd.Bool(flagSignUp),
 			UsernameClaim:      strings.TrimSpace(cmd.String(flagUsername)),
+			GroupsClaim:        strings.TrimSpace(cmd.String(flagGroupsClaim)),
+			GroupAutoCreate:    cmd.Bool(flagAutoCreate),
+			GroupFilter:        cmd.String(flagGroupFilter),
+			AdminGroup:         strings.TrimSpace(cmd.String(flagAdminGroup)),
 		},
 		File:    configPath,
 		Origins: origins(cmd, args),

@@ -211,6 +211,26 @@ func (g *Groups) OnLibrary(ctx context.Context, library string) ([]sharing.Group
 	return out, err
 }
 
+// Link makes the group slug names follow providerGroup, or stops it
+// following one when providerGroup is empty. Only an administrator may.
+func (g *Groups) Link(ctx context.Context, slug, providerGroup string) error {
+	return g.run(ctx, func(q *pgdbgen.Queries) error {
+		return q.LinkGroup(ctx, pgdbgen.LinkGroupParams{Slug: slug, ProviderGroup: providerGroup})
+	})
+}
+
+// ProviderLink is the provider group the group slug names follows, and
+// whether the user is an administrator. Anyone else learns no link.
+func (g *Groups) ProviderLink(ctx context.Context, slug string) (sharing.ProviderLink, error) {
+	var out sharing.ProviderLink
+	err := g.run(ctx, func(q *pgdbgen.Queries) error {
+		row, err := q.GroupProviderLink(ctx, slug)
+		out = sharing.ProviderLink{ProviderGroup: row.ProviderGroup, Admin: row.Admin}
+		return err
+	})
+	return out, err
+}
+
 // run calls one group function as the user, and names its refusal.
 func (g *Groups) run(ctx context.Context, call func(*pgdbgen.Queries) error) error {
 	err := pgsession.Run(ctx, g.db, g.q, pgsession.Personal(g.user), call)

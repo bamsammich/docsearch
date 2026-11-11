@@ -690,6 +690,30 @@ $$;
 
 
 --
+-- Name: group_provider_link(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.group_provider_link(grp_slug text) RETURNS text
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  grp groups;
+BEGIN
+  SELECT * INTO grp FROM groups WHERE slug = grp_slug
+     AND NULLIF(current_setting('app.user_id', true), '') IS NOT NULL;
+  IF grp.group_id IS NULL THEN
+    RAISE EXCEPTION 'no group named %', grp_slug USING ERRCODE = 'DSG01';
+  END IF;
+  IF NOT caller_is_administrator() THEN
+    RETURN NULL;
+  END IF;
+  RETURN COALESCE(grp.provider_group, '');
+END;
+$$;
+
+
+--
 -- Name: holds_library_role(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -910,6 +934,53 @@ $$;
 
 
 --
+-- Name: link_group(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.link_group(grp_slug text, provider_name text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  actor  text := current_setting('app.user_id', true);
+  grp    groups;
+  wanted text := NULLIF(provider_name, '');
+  gone   record;
+BEGIN
+  IF NOT caller_is_administrator() THEN
+    RAISE EXCEPTION 'only an administrator links a group to a provider group' USING ERRCODE = 'DSG01';
+  END IF;
+  SELECT * INTO grp FROM groups WHERE slug = grp_slug FOR UPDATE;
+  IF grp.group_id IS NULL THEN
+    RAISE EXCEPTION 'no group named %', grp_slug USING ERRCODE = 'DSG01';
+  END IF;
+  IF wanted IS NOT DISTINCT FROM grp.provider_group THEN
+    RETURN;
+  END IF;
+  IF wanted IS NOT NULL
+     AND EXISTS (SELECT 1 FROM groups WHERE provider_group = wanted AND group_id <> grp.group_id) THEN
+    RAISE EXCEPTION 'another group already follows %', wanted USING ERRCODE = 'DSG09';
+  END IF;
+  -- The old link's members came from it, so they go with it.
+  FOR gone IN
+    DELETE FROM group_members WHERE group_id = grp.group_id AND source = 'provider' RETURNING user_id
+  LOOP
+    INSERT INTO group_events (group_id, actor, action, subject, detail)
+      VALUES (grp.group_id, actor, 'provider_leave', gone.user_id, grp.provider_group);
+  END LOOP;
+  BEGIN
+    UPDATE groups SET provider_group = wanted WHERE group_id = grp.group_id;
+  EXCEPTION WHEN unique_violation THEN
+    RAISE EXCEPTION 'another group already follows %', wanted USING ERRCODE = 'DSG09';
+  END;
+  INSERT INTO group_events (group_id, actor, action, detail)
+    VALUES (grp.group_id, actor, CASE WHEN wanted IS NULL THEN 'unlink' ELSE 'link' END,
+            COALESCE(wanted, grp.provider_group));
+END;
+$$;
+
+
+--
 -- Name: maintainers_left(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -955,6 +1026,23 @@ CREATE FUNCTION public.my_invitations() RETURNS TABLE(slug text, name text, role
    WHERE i.user_id = current_setting('app.user_id', true)
      AND l.deleted_at IS NULL
    ORDER BY i.invited_at DESC, l.slug;
+$$;
+
+
+--
+-- Name: names_only_caller(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.names_only_caller(target_user text) RETURNS void
+    LANGUAGE plpgsql STABLE
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+BEGIN
+  IF session_user <> current_user
+     AND target_user IS DISTINCT FROM NULLIF(current_setting('app.user_id', true), '') THEN
+    RAISE EXCEPTION 'an account names only itself' USING ERRCODE = '42501';
+  END IF;
+END;
 $$;
 
 
@@ -1036,6 +1124,19 @@ BEGIN
   UPDATE users SET username = NEW.username WHERE user_id = NEW.user_id;
   RETURN NEW;
 END;
+$$;
+
+
+--
+-- Name: provider_slug(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.provider_slug(provider_name text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT COALESCE(NULLIF(btrim(left(btrim(regexp_replace(lower(provider_name), '[^a-z0-9]+', '-', 'g'),
+                                          '-'), 36), '-'), ''), 'group');
 $$;
 
 
@@ -1480,6 +1581,99 @@ $$;
 
 
 --
+-- Name: sync_provider_admin(text, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sync_provider_admin(target_user text, make boolean) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+BEGIN
+  PERFORM names_only_caller(target_user);
+  UPDATE users SET admin = make WHERE user_id = target_user AND admin IS DISTINCT FROM make;
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+  INSERT INTO account_events (action, subject)
+    VALUES (CASE WHEN make THEN 'provider_admin' ELSE 'provider_unadmin' END, target_user);
+  RETURN true;
+END;
+$$;
+
+
+--
+-- Name: sync_provider_groups(text, text[], text[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sync_provider_groups(target_user text, carried text[], create_missing text[]) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  pname   text;
+  pslug   text;
+  n       integer;
+  changed integer := 0;
+  moved   record;
+BEGIN
+  PERFORM names_only_caller(target_user);
+  carried := COALESCE(carried, '{}');
+  FOREACH pname IN ARRAY COALESCE(create_missing, '{}') LOOP
+    CONTINUE WHEN NOT pname = ANY(carried)
+               OR char_length(pname) NOT BETWEEN 1 AND 255
+               OR pname ~ '[[:cntrl:]]'
+               OR NOT group_name_ok(left(pname, 120))
+               OR EXISTS (SELECT 1 FROM groups g WHERE g.provider_group = pname);
+    pslug := provider_slug(pname);
+    n := 1;
+    WHILE EXISTS (SELECT 1 FROM groups g WHERE g.slug = pslug) LOOP
+      n := n + 1;
+      pslug := provider_slug(pname) || '-' || n;
+    END LOOP;
+    BEGIN
+      WITH made AS (
+        INSERT INTO groups (group_id, slug, name, provider_group)
+          VALUES ('grp_' || substr(md5(random()::text || clock_timestamp()::text), 1, 20),
+                  pslug, btrim(left(pname, 120)), pname)
+        RETURNING group_id
+      )
+      INSERT INTO group_events (group_id, action, detail) SELECT group_id, 'create', pname FROM made;
+    EXCEPTION WHEN unique_violation THEN
+      -- Another sign-in made it first, which is the group wanted.
+      NULL;
+    END;
+  END LOOP;
+
+  FOR moved IN
+    DELETE FROM group_members m USING groups g
+     WHERE m.group_id = g.group_id AND m.user_id = target_user AND m.source = 'provider'
+       AND (g.provider_group IS NULL OR NOT g.provider_group = ANY(carried))
+    RETURNING g.group_id, g.provider_group
+  LOOP
+    INSERT INTO group_events (group_id, action, subject, detail)
+      VALUES (moved.group_id, 'provider_leave', target_user, moved.provider_group);
+    changed := changed + 1;
+  END LOOP;
+
+  FOR moved IN
+    INSERT INTO group_members (group_id, user_id, role, source)
+      SELECT g.group_id, target_user, 'member', 'provider' FROM groups g
+       WHERE g.provider_group = ANY(carried)
+    ON CONFLICT (group_id, user_id) DO NOTHING
+    RETURNING group_id
+  LOOP
+    DELETE FROM group_invitations WHERE group_id = moved.group_id AND user_id = target_user;
+    INSERT INTO group_events (group_id, action, subject, detail)
+      VALUES (moved.group_id, 'provider_join', target_user,
+              (SELECT g.provider_group FROM groups g WHERE g.group_id = moved.group_id));
+    changed := changed + 1;
+  END LOOP;
+  RETURN changed;
+END;
+$$;
+
+
+--
 -- Name: upload_link_open(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1571,7 +1765,7 @@ CREATE TABLE public.account_events (
     actor text,
     action text NOT NULL,
     subject text,
-    CONSTRAINT account_events_action_check CHECK ((action = ANY (ARRAY['add'::text, 'reset'::text, 'unlock'::text, 'remove'::text, 'admin'::text, 'unadmin'::text])))
+    CONSTRAINT account_events_action_check CHECK ((action = ANY (ARRAY['add'::text, 'reset'::text, 'unlock'::text, 'remove'::text, 'admin'::text, 'unadmin'::text, 'provider_admin'::text, 'provider_unadmin'::text])))
 );
 
 
@@ -1713,7 +1907,7 @@ CREATE TABLE public.group_events (
     subject_name text,
     role text,
     detail text,
-    CONSTRAINT group_events_action_check CHECK ((action = ANY (ARRAY['create'::text, 'rename'::text, 'invite'::text, 'accept'::text, 'decline'::text, 'withdraw'::text, 'role'::text, 'remove'::text, 'force'::text])))
+    CONSTRAINT group_events_action_check CHECK ((action = ANY (ARRAY['create'::text, 'rename'::text, 'invite'::text, 'accept'::text, 'decline'::text, 'withdraw'::text, 'role'::text, 'remove'::text, 'force'::text, 'link'::text, 'unlink'::text, 'provider_join'::text, 'provider_leave'::text])))
 );
 
 
@@ -1773,6 +1967,7 @@ CREATE TABLE public.groups (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT groups_group_id_check CHECK ((group_id ~ '^grp_[a-z0-9]{1,36}$'::text)),
     CONSTRAINT groups_name_check CHECK ((((char_length(btrim(name)) >= 1) AND (char_length(btrim(name)) <= 120)) AND (name !~ '[[:cntrl:]]'::text))),
+    CONSTRAINT groups_provider_group_printable CHECK (((provider_group IS NULL) OR (((char_length(provider_group) >= 1) AND (char_length(provider_group) <= 255)) AND (provider_group !~ '[[:cntrl:]]'::text)))),
     CONSTRAINT groups_slug_check CHECK ((slug ~ '^[a-z0-9-]{1,40}$'::text))
 );
 

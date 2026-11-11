@@ -99,6 +99,15 @@ type GroupInvitation struct {
 	InvitedBy string
 }
 
+// ProviderLink is the provider group a group follows, as one user sees it.
+type ProviderLink struct {
+	// ProviderGroup is empty for a group that follows none, and for anyone
+	// who is not an administrator.
+	ProviderGroup string
+	// Admin is whether the user is a docsearch administrator.
+	Admin bool
+}
+
 // GroupGrant is a group's role on a library.
 type GroupGrant struct {
 	Group   string
@@ -154,6 +163,8 @@ var (
 	// the provider can take away.
 	ErrFromProvider = errors.New("that membership comes from the provider group: " +
 		"remove them from the group at the provider")
+	// ErrProviderTaken is a provider group another group already follows.
+	ErrProviderTaken = errors.New("another group already follows that provider group")
 	// ErrLibraryName is a library name holding a control character, which a
 	// terminal would obey when the CLI prints it.
 	ErrLibraryName = errors.New("a library name holds no control characters")
