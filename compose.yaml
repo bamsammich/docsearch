@@ -18,6 +18,9 @@
 #   DOCSEARCH_PORT     host port on 127.0.0.1, default 8765
 #   DOCSEARCH_LIBRARY  folder that add_document may read files from, default
 #                      ~/Documents/docsearch-library
+#   DOCSEARCH_JUDGE_URL    optional; a heading judge that the server and worker
+#                          send PDF heading candidates to (docs/judge.md)
+#   DOCSEARCH_JUDGE_TOKEN  optional; the bearer token sent to that judge
 
 services:
   db:
@@ -64,6 +67,8 @@ services:
       DOCSEARCH_PUBLIC_URL: http://127.0.0.1:${DOCSEARCH_PORT:-8765}
       DOCSEARCH_DSN: postgres://docsearch_app:docsearch@db:5432/docsearch?sslmode=disable
       DOCSEARCH_TOKEN: ${DOCSEARCH_TOKEN:?set DOCSEARCH_TOKEN in .env, for example with openssl rand -hex 32}
+      DOCSEARCH_JUDGE_URL: ${DOCSEARCH_JUDGE_URL:-}
+      DOCSEARCH_JUDGE_TOKEN: ${DOCSEARCH_JUDGE_TOKEN:-}
     ports:
       - "127.0.0.1:${DOCSEARCH_PORT:-8765}:8765"
     # The library sits at the same path inside the container as on the host,
@@ -83,6 +88,8 @@ services:
       # Read only by the docsearch CLI in this image, for
       # docker compose exec -e DOCSEARCH_TOKEN worker docsearch ...
       DOCSEARCH_SERVER: http://server:8765
+      DOCSEARCH_JUDGE_URL: ${DOCSEARCH_JUDGE_URL:-}
+      DOCSEARCH_JUDGE_TOKEN: ${DOCSEARCH_JUDGE_TOKEN:-}
     volumes:
       - ${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}:${DOCSEARCH_LIBRARY:-$HOME/Documents/docsearch-library}:ro
     depends_on:

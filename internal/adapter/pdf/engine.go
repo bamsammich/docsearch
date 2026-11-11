@@ -31,6 +31,18 @@ const instanceTimeout = 30 * time.Second
 // one Extractor serves a process; Close releases it.
 type Extractor struct {
 	pool pdfium.Pool
+	// judge is asked about heading candidates, and nil when none is
+	// configured.
+	judge HeadingJudge
+}
+
+// Option configures an Extractor.
+type Option func(*Extractor)
+
+// WithJudge has the extractor ask j about the heading candidates it finds
+// from type sizes and numbering.
+func WithJudge(j HeadingJudge) Option {
+	return func(e *Extractor) { e.judge = j }
 }
 
 // New starts PDFium with room for instances documents at once. A caller past
@@ -38,7 +50,7 @@ type Extractor struct {
 // a document's whole working set, so the count is a memory budget as much as
 // a concurrency one; one instance is kept warm and the rest are made as
 // needed.
-func New(instances int) (*Extractor, error) {
+func New(instances int, opts ...Option) (*Extractor, error) {
 	instances = max(instances, 1)
 	pool, err := webassembly.Init(webassembly.Config{
 		MinIdle: 1, MaxIdle: instances, MaxTotal: instances,
@@ -46,7 +58,11 @@ func New(instances int) (*Extractor, error) {
 	if err != nil {
 		return nil, fmt.Errorf("start pdfium: %w", err)
 	}
-	return &Extractor{pool: pool}, nil
+	e := &Extractor{pool: pool}
+	for _, opt := range opts {
+		opt(e)
+	}
+	return e, nil
 }
 
 // Close stops PDFium.
@@ -63,7 +79,7 @@ func (e *Extractor) Extract(ctx context.Context, path string) (*domain.Extractio
 	if err != nil {
 		return nil, err
 	}
-	return Build(doc, filepath.Base(path))
+	return BuildJudged(ctx, doc, filepath.Base(path), e.judge)
 }
 
 // Read reads the primitives Build needs from the PDF at path.

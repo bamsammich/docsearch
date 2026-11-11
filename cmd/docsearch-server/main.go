@@ -130,6 +130,13 @@ func command() *cli.Command {
 				Usage:   "refuse an upload larger than `MB` megabytes",
 				Sources: from("upload-max-mb", config.EnvUploadMaxMB),
 			},
+			&cli.StringFlag{
+				Name: flagJudgeURL,
+				Usage: "base `URL` of a judge to ask which heading candidates in a PDF are " +
+					"not headings; it receives document text. Its token is read from " +
+					config.EnvJudgeToken + " only.",
+				Sources: from(flagJudgeURL, config.EnvJudgeURL),
+			},
 		}, oidcFlags()...),
 		Action: run,
 	}
@@ -238,6 +245,8 @@ func configFrom(cmd *cli.Command, args []string) (config.Config, error) {
 		UIClientID:      cmd.String("ui-client-id"),
 		InstanceLabel:   strings.TrimSpace(cmd.String("instance-label")),
 		GroupCreators:   strings.TrimSpace(cmd.String(flagCreators)),
+		JudgeURL:        strings.TrimSpace(cmd.String(flagJudgeURL)),
+		JudgeToken:      os.Getenv(config.EnvJudgeToken),
 		OIDC: config.OIDC{
 			Issuer:             cmd.String(flagOIDCIssuer),
 			Resource:           cmd.String("oidc-resource"),

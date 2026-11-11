@@ -16,6 +16,8 @@ Every server setting, the four authentication modes, the security boundaries, an
 | library UI's client at the oidc provider | `--ui-client-id` | `DOCSEARCH_UI_CLIENT_ID` | `ui.client_id` |
 | label the library UI shows on every page, such as `Test instance` | `--instance-label` | `DOCSEARCH_INSTANCE_LABEL` | `ui.instance_label` |
 | permit public bind | `--allow-public-bind` | `DOCSEARCH_ALLOW_PUBLIC_BIND=true` | `allow_public_bind` |
+| [heading judge](judge.md), on the server and the worker | `--judge-url` | `DOCSEARCH_JUDGE_URL` | `ingest.judge_url` |
+| heading judge's bearer token | — | `DOCSEARCH_JUDGE_TOKEN` | — |
 
 `docsearch-server --config docsearch.yaml` (or `DOCSEARCH_CONFIG`) reads the
 server's settings from a file, so a deployment repository can hold them.
@@ -47,8 +49,8 @@ roots:
 
 A key no setting reads is refused at startup rather than ignored, so a typo
 cannot leave a setting at its default. Secrets come from the environment or
-the command line alone: the bearer token, the oidc client secret, and the
-database DSN, which carries the request role's password. A file is shown to
+the command line alone: the bearer token, the oidc client secret, the heading
+judge's token, and the database DSN, which carries the request role's password. A file is shown to
 administrators on the Sign-in page, so it never holds one. An administrator sees
 on the Sign-in page where each sign-in setting came from.
 
