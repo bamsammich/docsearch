@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"maps"
@@ -29,6 +30,19 @@ const figureCaptionMaxTokens = 25
 // Build turns a PDF's primitives into an extraction. name is the file name,
 // for the title fallback and error messages.
 func Build(doc *Document, name string) (*domain.Extraction, error) {
+	return BuildJudged(context.Background(), doc, name, nil)
+}
+
+// BuildJudged is Build with a judge asked about the heading candidates the
+// rules found from type sizes and numbering, and nil is no judge. A PDF whose
+// outline declares its sections asks nothing: the outline is the author's
+// own word.
+func BuildJudged(
+	ctx context.Context,
+	doc *Document,
+	name string,
+	judge HeadingJudge,
+) (*domain.Extraction, error) {
 	pages := doc.Pages
 	figureTops, figures := filterFigures(pages)
 	// Fonts first: boilerplate detection needs the heading sizes to leave
@@ -69,6 +83,7 @@ func Build(doc *Document, name string) (*domain.Extraction, error) {
 		n := numbered{
 			pages: pages, entries: entries, titles: titles, headingSizes: headingSizes,
 			boiler: boiler, figureTops: figureTops, tocPageMax: tocPageMax,
+			veto: newVetoer(ctx, judge, name, pages, diagnostics),
 		}
 		blocks, indexTerms = n.blocks(diagnostics)
 	}

@@ -82,8 +82,16 @@ type StructureReport struct {
 	// UnreachablePages and PlacedByPath are site ingest only: pages that
 	// produced nothing, and pages no declared hierarchy mentioned, nested by
 	// URL path instead.
-	UnreachablePages        []string `json:"unreachable_pages"`
-	PlacedByPath            []string `json:"placed_by_path"`
+	UnreachablePages []string `json:"unreachable_pages"`
+	PlacedByPath     []string `json:"placed_by_path"`
+	// Judge, JudgedNotHeadings and JudgeUnused are set only when a heading
+	// judge was asked: the name it answered under, the candidates it took
+	// out as "id text", and why its answer was not used when it was not.
+	// Absent otherwise, so a report built without a judge persists exactly
+	// as it did before judges existed.
+	Judge                   string   `json:"judge,omitempty"`
+	JudgeUnused             string   `json:"judge_unused,omitempty"`
+	JudgedNotHeadings       []string `json:"judged_not_headings,omitempty"`
 	TOCSections             int      `json:"toc_sections"`
 	BodySections            int      `json:"body_sections"`
 	Chunks                  int      `json:"chunks"`
@@ -131,7 +139,11 @@ func NewStructureReport(diagnostics map[string]any) *StructureReport {
 		}
 	}
 	xv := mapOf(diagnostics["cross_validation"])
+	judged := mapOf(diagnostics["heading_judge"])
 	return &StructureReport{
+		Judge:                        stringOf(judged["judge"]),
+		JudgeUnused:                  stringOf(judged["unused"]),
+		JudgedNotHeadings:            stringsOf(judged["vetoed"]),
 		PipelineVersion:              PipelineVersion,
 		StructureSource:              source,
 		TOCSections:                  intOf(xv["toc_sections"]),
@@ -324,7 +336,23 @@ func (r *StructureReport) Notes() []string {
 	if note := r.addressabilityNote(); note != "" {
 		notes = append(notes, note)
 	}
+	notes = append(notes, r.judgeNotes()...)
 	return append(notes, r.scaleNotes()...)
+}
+
+// judgeNotes say what a heading judge changed, or why it changed nothing.
+func (r *StructureReport) judgeNotes() []string {
+	var notes []string
+	if len(r.JudgedNotHeadings) > 0 {
+		notes = append(notes, fmt.Sprintf(
+			"the heading judge %s ruled that %d line(s) the type sizes took for headings "+
+				"are not, and they are read as body text: %s",
+			pystr.Repr(r.Judge), len(r.JudgedNotHeadings), listed(r.JudgedNotHeadings)))
+	}
+	if r.JudgeUnused != "" {
+		notes = append(notes, "headings come from the rules alone, because "+r.JudgeUnused)
+	}
+	return notes
 }
 
 // addressabilityNote says why the structure does not separate the chunks, or
@@ -535,6 +563,14 @@ func intOf(v any) int {
 		return int(n)
 	}
 	return 0
+}
+
+// stringOf reads a diagnostics string, empty when it is absent.
+func stringOf(v any) string {
+	if v == nil {
+		return ""
+	}
+	return fmt.Sprint(v)
 }
 
 // stringsOf reads a diagnostics list, stringifying its items.

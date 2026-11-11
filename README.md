@@ -208,6 +208,7 @@ Read the figures as BM25 on those corpora, not as a forecast for your documents.
 | `--allowed-origins` | `DOCSEARCH_ALLOWED_ORIGINS` | | comma-separated browser origins; native MCP clients send none |
 | `--public-url` | `DOCSEARCH_PUBLIC_URL` | loopback on the listen port; in `oidc` mode the origin of `--oidc-resource` | where a browser reaches the server, for upload links and sign-in |
 | `--upload-max-mb` | `DOCSEARCH_UPLOAD_MAX_MB` | `100` | largest upload accepted |
+| `--judge-url` | `DOCSEARCH_JUDGE_URL` | | an optional service that docsearch asks which heading candidates in a PDF are not headings; see [Heading judge](docs/judge.md) |
 
 `docsearch-server` exits at startup on any of these unsafe combinations:
 
@@ -230,6 +231,7 @@ Without Docker, docsearch needs Postgres with the `pg_textsearch` extension and 
 | [Sharing libraries](docs/sharing.md) | shared libraries, roles, groups, the library web UI |
 | [Configuration](docs/configuration.md) | every setting, password and OIDC sign-in, registering clients |
 | [Deployment](docs/deployment.md) | systemd, launchd, Docker, Kubernetes, migrations, backups, upgrading from v1 |
+| [Heading judge](docs/judge.md) | the optional service that checks a PDF's inferred headings, and the contract it answers |
 | [Retrieval quality](docs/retrieval.md) | the measured figures in full, and what was tried and rejected |
 | [Contributing](CONTRIBUTING.md) | building from source with mise, tests, adding a format adapter |
 

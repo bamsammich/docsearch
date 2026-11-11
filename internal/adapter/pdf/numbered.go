@@ -10,6 +10,9 @@ import (
 // numbered builds blocks from body headings found by font and number, for a
 // document with printed contents or with font sizes alone.
 type numbered struct {
+	// veto asks a judge which candidates are not headings, and is nil
+	// when no judge is configured.
+	veto         vetoer
 	pages        []Page
 	entries      []tocEntry
 	titles       map[string]string
@@ -19,8 +22,18 @@ type numbered struct {
 	tocPageMax   int
 }
 
+// judged is what n.veto rules out of candidates, and nothing when n has no
+// judge, so a build without one never collects candidates.
+func (n numbered) judged(candidates func() []candidate) map[pagePoint]bool {
+	if n.veto == nil {
+		return nil
+	}
+	return n.veto(candidates())
+}
+
 func (n numbered) blocks(diagnostics map[string]any) ([]domain.Block, [][2]string) {
-	scan := findBodyHeadings(n.pages, n.headingSizes, n.boiler, n.tocPageMax)
+	vetoed := n.judged(n.numberedCandidates)
+	scan := findBodyHeadings(n.pages, n.headingSizes, n.boiler, n.tocPageMax, vetoed)
 	diagnostics["body_headings_found"] = len(scan.headings)
 	diagnostics["candidates_rejected_by_ordering"] = scan.rejected
 	if len(scan.lists) > 0 {
@@ -70,9 +83,13 @@ func (n numbered) titled(scan headingScan, diagnostics map[string]any) ([]domain
 	if len(n.entries) > 0 || len(scan.headings) > 0 {
 		return nil, false
 	}
-	placements, titles := titlePlacements(n.pages, n.headingSizes, n.boiler)
+	placements, titles := titlePlacements(n.pages, n.headingSizes, n.boiler, nil)
 	if len(placements) == 0 {
 		return nil, false
+	}
+	asked := func() []candidate { return titleCandidates(placements) }
+	if vetoed := n.judged(asked); len(vetoed) > 0 {
+		placements, titles = titlePlacements(n.pages, n.headingSizes, n.boiler, vetoed)
 	}
 	diagnostics["headings_from"] = "unnumbered_titles"
 	diagnostics["unnumbered_titles"] = len(placements)

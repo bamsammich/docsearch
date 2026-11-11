@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -91,6 +92,13 @@ func command() *cli.Command {
 				Value: worker.DefaultMaxAttempts,
 				Usage: "how many times a job is tried before it is left failed",
 			},
+			&cli.StringFlag{
+				Name: "judge-url",
+				Usage: "base `URL` of a judge to ask which heading candidates in a PDF are " +
+					"not headings; it receives document text. Its token is read from " +
+					config.EnvJudgeToken + " only.",
+				Sources: cli.EnvVars(config.EnvJudgeURL),
+			},
 			&cli.BoolFlag{
 				Name: "once",
 				Usage: "with --user, run one job or exit on an empty queue; without it, " +
@@ -133,8 +141,13 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("open database: %w", err)
 	}
 
+	judged, err := pdf.Judged(strings.TrimSpace(cmd.String("judge-url")),
+		os.Getenv(config.EnvJudgeToken))
+	if err != nil {
+		return err
+	}
 	// One job runs at a time, so one document is ever open.
-	extractor, err := pdf.New(1)
+	extractor, err := pdf.New(1, judged...)
 	if err != nil {
 		return fmt.Errorf("start the PDF engine: %w", err)
 	}

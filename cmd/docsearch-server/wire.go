@@ -134,9 +134,14 @@ func newPool(lc fx.Lifecycle, cfg config.Config) (*sql.DB, error) {
 // inspect wait out the instance timeout.
 const serverPDFInstances = 2
 
-// newExtractor starts the PDF engine.
-func newExtractor(lc fx.Lifecycle) (*pdf.Extractor, error) {
-	extractor, err := pdf.New(serverPDFInstances)
+// newExtractor starts the PDF engine, asking the judge the configuration
+// names about heading candidates when it names one.
+func newExtractor(lc fx.Lifecycle, cfg config.Config) (*pdf.Extractor, error) {
+	opts, err := pdf.Judged(cfg.JudgeURL, cfg.JudgeToken)
+	if err != nil {
+		return nil, err
+	}
+	extractor, err := pdf.New(serverPDFInstances, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("start the PDF engine: %w", err)
 	}

@@ -32,6 +32,7 @@ const (
 	flagSignUp     = "oidc-sign-up"
 	flagUsername   = "oidc-username-claim"
 	flagCreators   = "group-creators"
+	flagJudgeURL   = "judge-url"
 )
 
 // fileKeys are where each setting lives in docsearch.yaml. A flag missing
@@ -50,6 +51,7 @@ var fileKeys = map[string]string{
 	"instance-label":        "ui.instance_label",
 	flagCreators:            "groups.creators",
 	"upload-max-mb":         "upload_max_mb",
+	flagJudgeURL:            "ingest.judge_url",
 	flagOIDCIssuer:          "auth.oidc.issuer",
 	"oidc-resource":         "auth.oidc.resource",
 	"oidc-audience":         "auth.oidc.audience",
