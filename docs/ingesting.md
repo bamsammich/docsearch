@@ -213,6 +213,10 @@ web link points at no page, places no heading, and is skipped. Tier 2 is equally
 but recovered by parsing a printed page, so the parse is verified against the
 body and a disagreement fails the ingest. Tier 3 is inference all the way down.
 
+An operator can name a [heading judge](judge.md) to check tiers 2 and 3. The
+judge can only take out a heading the rules found, such as a procedure step
+set at a heading size, and never a section the printed contents declare.
+
 **A source that wins also supplies positions.** An outline's page numbers place
 its sections directly, with the entry title matched against that page to find
 the offset within it, over two lines when the title wraps. This matters for documents that style headings by weight

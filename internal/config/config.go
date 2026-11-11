@@ -52,6 +52,13 @@ type Config struct {
 	// GroupCreators says who may create groups: GroupsByEveryone, the
 	// default, or GroupsByAdministrators.
 	GroupCreators string
+	// JudgeURL is the base URL of the judge an ingest asks which heading
+	// candidates are not headings, and empty asks no one. The server sends
+	// it document text, so only the operator sets it.
+	JudgeURL string
+	// JudgeToken is sent to the judge as a bearer token, and is read from
+	// the environment alone.
+	JudgeToken string
 	// File is the docsearch.yaml the server read, and empty when it read
 	// none.
 	File string
@@ -171,6 +178,11 @@ const (
 	// EnvConfig names the docsearch.yaml the server reads beneath the
 	// environment.
 	EnvConfig = "DOCSEARCH_CONFIG"
+	// EnvJudgeURL is the base URL of a judge that ingest asks about heading
+	// candidates. Unset, nothing is asked.
+	EnvJudgeURL = "DOCSEARCH_JUDGE_URL"
+	// EnvJudgeToken is the bearer token sent to the judge.
+	EnvJudgeToken = "DOCSEARCH_JUDGE_TOKEN" //nolint:gosec // name of a variable, not a credential
 )
 
 // DefaultUploadMaxMB is large enough for the biggest manual docsearch has

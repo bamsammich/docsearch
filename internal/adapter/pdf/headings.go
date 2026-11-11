@@ -49,11 +49,16 @@ type headingScan struct {
 // a candidate that does not sort after the last accepted heading is a list
 // item. Without the rule a stray "1." resets the section mid-book and
 // scatters one section across the document.
+//
+// A line in vetoed is body text, whatever its size and number: a judge ruled
+// it out before the scan, so it neither heads a section nor advances the
+// numbering the next candidate is ordered against.
 func findBodyHeadings(
 	pages []Page,
 	headingSizes []float64,
 	boiler boilerplate,
 	tocPageMax int,
+	vetoed map[pagePoint]bool,
 ) headingScan {
 	s := headingScanner{
 		headingScan: headingScan{
@@ -61,6 +66,7 @@ func findBodyHeadings(
 		},
 		sizes:  headingSizes,
 		boiler: boiler,
+		vetoed: vetoed,
 	}
 	for pno, p := range pages {
 		if pno <= tocPageMax {
@@ -137,6 +143,8 @@ func (s *headingScanner) numberedText(ln Line) (string, bool) {
 type headingScanner struct {
 	headingScan
 	boiler boilerplate
+	// vetoed are the numbered lines a judge ruled out.
+	vetoed map[pagePoint]bool
 	sizes  []float64
 	last   []int
 	// onList is whether the page being read is a numbered list, whose
@@ -156,7 +164,7 @@ func (s *headingScanner) line(pno int, lines []Line, i int) int {
 		s.subdivisions[pagePoint{page: pno, line: i}] = true
 		return i
 	}
-	if s.onList {
+	if s.onList || s.vetoed[pagePoint{page: pno, line: i}] {
 		return i
 	}
 	key := sectionKey(m[1])

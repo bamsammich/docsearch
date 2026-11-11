@@ -35,11 +35,13 @@ const besideOffset = 10
 // larger than the chapters still names what follows it. Each title is a
 // section numbered in document order, a number the document never prints,
 // so the heading path carries the title alone. It returns the placements and
-// the titles by section, or none when no line is at a title size.
+// the titles by section, or none when no line is at a title size. A title
+// whose first line is in vetoed is body text, and so are the lines it takes.
 func titlePlacements(
 	pages []Page,
 	headingSizes []float64,
 	boiler boilerplate,
+	vetoed map[pagePoint]bool,
 ) ([]placement, map[string]string) {
 	size, ok := titleSize(pages, headingSizes, boiler)
 	if !ok {
@@ -52,20 +54,22 @@ func titlePlacements(
 	var placements []placement
 	titles := map[string]string{}
 	for pno, p := range pages {
-		placements = pageTitles(placements, titles, p.Lines, pno, isTitle)
+		placements = pageTitles(placements, titles, p.Lines, pno, isTitle, vetoed)
 	}
 	return placements, titles
 }
 
 // pageTitles appends the titles on one page to placements, numbering each
 // in document order and recording it in titles. A line that carries on a
-// title already placed is not a title of its own.
+// title already placed is not a title of its own, and neither is one that
+// carries on a vetoed title.
 func pageTitles(
 	placements []placement,
 	titles map[string]string,
 	lines []Line,
 	pno int,
 	isTitle func(Line) bool,
+	vetoed map[pagePoint]bool,
 ) []placement {
 	taken := map[int]bool{}
 	for i, ln := range lines {
@@ -73,17 +77,25 @@ func pageTitles(
 			continue
 		}
 		title, rest := joinTitle(lines, i)
+		take(taken, rest)
+		if vetoed[pagePoint{page: pno, line: i}] {
+			continue
+		}
 		section := strconv.Itoa(len(placements) + 1)
 		placements = append(placements, placement{
 			section: section, title: title, page: pno, line: i,
 			rest: rest, matched: true,
 		})
 		titles[section] = title
-		for _, k := range rest {
-			taken[k] = true
-		}
 	}
 	return placements
+}
+
+// take marks the lines a title carries on onto as read.
+func take(taken map[int]bool, lines []int) {
+	for _, k := range lines {
+		taken[k] = true
+	}
 }
 
 // titleSize is the heading size whose unnumbered lines head the most pages,
